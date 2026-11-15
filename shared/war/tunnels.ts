@@ -16,7 +16,8 @@ import { caravanOffLimits } from "./caravans";
 import { CLANS, CLAN_KEYS, type ClanKey } from "./clans";
 import { patrolOf } from "./patrols";
 import { cleanOrders, supplyMap, targetsOf, type Orders, type WarState } from "./rules";
-import { HOLD_FORT_PX, HOLDS, STANDARD, STANDARDS } from "./standards";
+import { anyHoldWall, holdReachPx } from "./holdWalls";
+import { HOLDS, STANDARD, STANDARDS } from "./standards";
 import { TERRITORIES } from "./territories";
 import { troopStats } from "./troops";
 
@@ -105,13 +106,13 @@ export function tunnelLandmarks(): { x: number; y: number }[] {
   }
   return marks;
 }
-/** Tile (tx, ty) can carry a mouth: its 3x3 free of solids, not off limits (safe squares, stockade, monster-free ground), no door, no portal stone or landmark near. */
+/** Tile (tx, ty) can carry a mouth: its 3x3 free of solids and of any clan's Hold walls, not off limits (safe squares, stockade, monster-free ground), no door, no portal stone or landmark near. */
 function clearTile(tx: number, ty: number): boolean {
   if (nearDoor(tx, ty) || PORTAL_SPOTS.some((p) => Math.hypot(p.x - tx, p.y - ty) < 6)) return false;
   if (tunnelLandmarks().some((p) => Math.hypot(p.x - (tx + 0.5), p.y - (ty + 0.5)) < TUNNEL.keepTiles)) return false;
   for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
     const x = (tx + dx + 0.5) * TILE, y = (ty + dy + 0.5) * TILE;
-    if (isSolidAt(x, y) || caravanOffLimits(x, y)) return false;
+    if (isSolidAt(x, y) || caravanOffLimits(x, y) || anyHoldWall(tx + dx, ty + dy)) return false;
   }
   return true;
 }
@@ -124,7 +125,7 @@ function reachOf(t: number): Set<number> | undefined {
   let out: Set<number> | undefined;
   if (T && p) {
     const M = 2, x0 = T.x - M, y0 = T.y - M, x1 = T.x + T.w - 1 + M, y1 = T.y + T.h - 1 + M;
-    const ok = (tx: number, ty: number) => tx >= x0 && ty >= y0 && tx <= x1 && ty <= y1 && !isSolidAt((tx + 0.5) * TILE, (ty + 0.5) * TILE) && !caravanOffLimits((tx + 0.5) * TILE, (ty + 0.5) * TILE);
+    const ok = (tx: number, ty: number) => tx >= x0 && ty >= y0 && tx <= x1 && ty <= y1 && !anyHoldWall(tx, ty) && !isSolidAt((tx + 0.5) * TILE, (ty + 0.5) * TILE) && !caravanOffLimits((tx + 0.5) * TILE, (ty + 0.5) * TILE);
     const sx = Math.floor(p.pts[0].x / TILE), sy = Math.floor(p.pts[0].y / TILE);
     if (ok(sx, sy)) {
       out = new Set([sy * MAP_W + sx]);
@@ -165,7 +166,7 @@ export function tunnelMouth(t: number, from: number): { x: number; y: number } |
       if ((tx + 0.5 - T.cx) * ux + (ty + 0.5 - T.cy) * uy <= 0) return false; // on the side facing `from`
       if (!clearTile(tx, ty)) return false;
       const x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE;
-      if (HOLDS.some((h) => Math.max(Math.abs(h.x - x), Math.abs(h.y - y)) < HOLD_FORT_PX + (strict ? 2 * TILE : TILE))) return false;
+      if (HOLDS.some((h) => Math.max(Math.abs(h.x - x), Math.abs(h.y - y)) < holdReachPx(h.t) + (strict ? 2 * TILE : 0))) return false; // (clearTile keeps it off the walls)
       return !STANDARDS.some((s) => Math.hypot(s.x - x, s.y - y) < STANDARD.range + (strict ? 2 * TILE : TILE));
     };
     for (const strict of [true, false]) {

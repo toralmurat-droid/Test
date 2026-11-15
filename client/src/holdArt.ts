@@ -1,24 +1,32 @@
 import { CLANS, type ClanKey } from "../../shared/war/clans";
+import type { FortCell, FortKind, HoldFort } from "../../shared/war/holdWalls";
 import { dith, hsh, IsoPaint, mat, ramp, type Mat, type V3 } from "./isoPaint";
-import { BONER, BRASSR, IRONR, OLDR, REDR, ROPER, STONER, STRAWR, WOODR, wood } from "./isoProps";
+import { BONER, BRASSR, IRONR, OLDR, ROPER, STONER, STRAWR, WOODR, wood } from "./isoProps";
 import type { Pen } from "./worldProps";
-import { HOLD_H, HOLD_OX, HOLD_OY, HOLD_W } from "./holdAssets";
 
 /**
- * The clan war Holds as true isometric forts and camps (Murat 2026-11-14: "the holds look terrible, they should be in
- * full isometric style, or even like an encampment"). Each clan's compound is built from volumes with the depth-buffered
- * iso painter (isoPaint.ts: lit and shaded faces, like the bonfire): Wardens a palisade fort with gate and watchtower,
- * Redfang a hide-tent war camp, the Ossuary Host a crooked bone-and-stone keep, the Hide-Kin earthworks round a burrow
- * mound, the Veiled Circle a walled sandstone shrine. About 7 tiles across on the ground.
+ * The clan war Holds as true isometric forts (Murat 2026-11-14: "full isometric style, or even like an encampment";
+ * 2026-11-15: "the encampments all look similar in size and shape and my hero can walk through their walls").
  *
- * Two layers: the trampled ground (its own image, drawn under heroes so they can walk the compound) and the standing
- * parts (outlined, sorted by the Hold's foot). Only tools/art/holds.ts imports this file; the game loads the baked PNGs. Units are texels, 1.5 per world px (a tile is 48 units); the compound's
- * centre is the origin. Cosmetic only: a Hold has no collision. Seeded hashes only (deterministic).
+ * A Hold is no longer one baked picture. shared/war/holdWalls.ts says what each cell of a clan's fort is (wall, tower,
+ * tent, fence, mound, gate, gap, court) and the server makes the wall cells solid, so the art is built from the same
+ * cells: `fortLayout(fort)` turns them into pieces, one per cell (a tower or mound that spans several cells is one
+ * piece), and `paintPiece` draws each piece once per look with the depth-buffered iso painter (isoPaint.ts: lit and
+ * shaded faces, like the bonfire). Walls pick their shape from which neighbours they join (a 4-bit mask, plus diagonals
+ * for stair-stepped walls), so a wall is straight, a corner, a T or an end. The pieces are baked at art time into one atlas per clan
+ * (tools/art/holds.ts, `npm run art`) and the client only loads it (holdAssets.ts), puts one image on every cell, sorted by depth with heroes, and lays the trampled ground of the
+ * whole compound under them as one image (`paintGround` tiles, `groundPlan`).
+ *
+ * Every piece is painted a little past its cell and then clipped to the cell by the model point each pixel shows, so
+ * neighbours meet without a seam and the outline only rings the real silhouette. Units are texels, 1.5 per world px
+ * (a tile is 48 units); a piece's origin is the middle of its cell on the ground, u runs east (+x), v south (+y).
+ * The walls ARE solid (server and client prediction, shared/war/holdWalls.ts): what is drawn as a wall blocks, gate
+ * cells and gaps are open. Art is still cosmetic: nothing here changes what the server sees. Seeded hashes only.
  */
-const TX = 1.5, T = 48;
+const T = 48, HALF = 24, PAD = 4, E = HALF + PAD;
+/** Corner-only joins reach this far into the diagonal neighbour's corner, so a stair-stepped wall does not pinch to a point. */
+const DG = HALF + 8;
 const OUTLINE = 0x15100d;
-
-const hex = (n: number) => n;
 const mixc = (a: number, b: number, t: number) => {
   const m = (s: number) => Math.round(((a >> s) & 255) * (1 - t) + ((b >> s) & 255) * t) << s;
   return m(16) | m(8) | m(0);
@@ -48,15 +56,11 @@ const cloth = (pal: number[], stripe?: number[], n = 0, bias = 0): Mat => (l, s,
   return ramp(st && stripe ? stripe : pal, l + bias + Math.sin(s * 30 + t * 3) * 0.05 + (hsh(x, y, 2) - 0.5) * 0.08, x, y);
 };
 
-/** One clan's compound is drawn through this: a ground layer and a standing layer sharing a coordinate system. */
+
+/** The painter every piece is drawn through: helpers for posts, tents, banners and so on over one IsoPaint. */
 class Scene {
-  q: IsoPaint; g: IsoPaint;
   glows: { u: number; v: number; r: number; col: number; a: number }[] = [];
-  holes: ((u: number, v: number) => boolean)[] = [];
-  constructor(pg: Pen, pq: Pen) {
-    this.g = new IsoPaint(pg, HOLD_W, HOLD_H, HOLD_OX, HOLD_OY);
-    this.q = new IsoPaint(pq, HOLD_W, HOLD_H, HOLD_OX, HOLD_OY);
-  }
+  constructor(public q: IsoPaint) {}
   rod(a: V3, b: V3, r: number, m: Mat) { this.q.rod(a, b, r, m); }
   box(u0: number, u1: number, v0: number, v1: number, z0: number, z1: number, m: Mat, f = 7) { this.q.box(u0, u1, v0, v1, z0, z1, m, f); }
   /** A post with a sharpened (or flat) top. */
@@ -204,39 +208,6 @@ class Scene {
     for (const o of [-0.45, 0.45]) this.q.blob([u + s * 0.82 + 0.2, v + s * 0.82 * (o > 0 ? 0.1 : 0.9) - s * 0.4 + 0.1, z + s * 0.1], s * 0.3, s * 0.3, s * 0.32, mat([0x050403, 0x0a0806], 0));
     if (horn) for (const sg of [-1, 1]) this.rod([u - sg * s * 0.4, v + sg * s * 0.4, z + s * 0.7], [u - sg * s * 1.6, v + sg * s * 1.6, z + s * 2.6], 1, mat(BONER, 0.05));
   }
-  /** Soft warm/cold pools on the ground, applied when the ground is painted. */
-  light(u: number, v: number, r: number, col: number, a = 0.5) { this.glows.push({ u, v, r, col, a }); }
-  /** The trampled ground: a rounded patch with ragged dithered edges; `hole` carves trenches. */
-  floor(R: number, pal: number[], edge: number[], inner?: (u: number, v: number) => number | undefined) {
-    this.g.surf((s, t) => [[(s - 0.5) * 2 * R, (t - 0.5) * 2 * R, 0], [0, 0, 1]], Math.ceil(R * 5), Math.ceil(R * 5), (l, s, t, x, y) => {
-      const u = (s - 0.5) * 2 * R, v = (t - 0.5) * 2 * R;
-      const d = Math.hypot(u, v) / R, rr = Math.max(Math.abs(u), Math.abs(v)) / R, e = Math.min(1, (d * 0.7 + rr * 0.3));
-      const noise = (hsh(Math.floor(u / 9), Math.floor(v / 9), 3) - 0.5) * 0.14 + (hsh(Math.floor(u / 3), Math.floor(v / 3), 4) - 0.5) * 0.1;
-      if (e + noise > 0.97 || e + noise + (dith(x, y) - 0.5) * 0.12 > 0.92) return undefined;
-      if (this.holes.some((h) => h(u, v))) return undefined;
-      const special = inner?.(u, v);
-      if (special !== undefined) return special;
-      let c = ramp(pal, 0.45 + noise * 2.5 + (hsh(x, y, 7) < 0.06 ? 0.2 : 0) - (hsh(x, y, 8) < 0.05 ? 0.15 : 0), x, y);
-      if (e > 0.78) c = ramp(edge, 0.4 + noise * 2 + (0.92 - e) * 2, x, y);
-      for (const g of this.glows) {
-        const dd = Math.hypot(u - g.u, v - g.v) / g.r;
-        if (dd < 1 && dith(x, y) < (1 - dd) * g.a * 1.7) c = mixc(c, g.col, 0.35 + 0.3 * (1 - dd));
-      }
-      return c;
-    });
-  }
-  /** Sparse ground litter drawn on the standing layer: pebbles, bones, tufts. */
-  litter(R: number, n: number, kinds: ("pebble" | "bone" | "tuft" | "straw")[], seed: number, avoid: (u: number, v: number) => boolean = () => false) {
-    for (let i = 0; i < n; i++) {
-      const a = hsh(i, seed, 1) * 6.283, d = Math.sqrt(hsh(i, seed, 2)) * R * 0.95, u = Math.cos(a) * d, v = Math.sin(a) * d * 0.95;
-      if (avoid(u, v) || this.holes.some((h) => h(u, v))) continue;
-      const k = kinds[i % kinds.length], s = 1 + hsh(i, seed, 3) * 1.4;
-      if (k === "pebble") this.q.blob([u, v, 0.5], s * 1.3, s, s * 0.7, rough(STONER, 0.05));
-      else if (k === "bone") this.rod([u, v, 0.6], [u + 5 * (hsh(i, seed, 4) - 0.5) * 2, v + 4 * (hsh(i, seed, 5) - 0.5) * 2, 0.6], 0.8, mat(BONER));
-      else if (k === "straw") this.rod([u, v, 0.4], [u + 6, v + 2 * (hsh(i, seed, 5) - 0.5), 0.4], 0.4, mat(STRAWR));
-      else for (let b = 0; b < 3; b++) this.rod([u + b - 1, v, 0], [u + b * 1.6 - 2.2, v - 1, 3 + hsh(i, b, seed) * 3], 0.35, mat([0x2a3a14, 0x4a5c20, 0x6c8030]));
-    }
-  }
   /** Spear/weapon rack. */
   rack(u: number, v: number, axis: 0 | 1 = 0, n = 5) {
     const P = (a: number, b: number, z: number): V3 => (axis === 0 ? [u + a, v + b, z] : [u + b, v + a, z]);
@@ -263,7 +234,7 @@ class Scene {
   shadowAt(u: number, v: number, r: number, a = 0.4) { this.q.shadow(u, v, r, a); }
 }
 
-// ---- Wardens: palisade fort ---------------------------------------------------------------------------------
+// ---- Wardens: timber watchtower ----------------------------------------------------------------------------
 /** A square wooden tower: four legs, X braces, a deck with rails and a shingle roof. */
 function woodTower(s: Scene, u: number, v: number, h: number, half: number, k: ClanKey, rooftop = true) {
   const A = half, B = half * 0.72;
@@ -301,322 +272,308 @@ function woodTower(s: Scene, u: number, v: number, h: number, half: number, k: C
   s.shadowAt(u, v, A * 1.1, 0.4);
 }
 
-function wardens(s: Scene) {
-  const k: ClanKey = "wardens", R = 138, clan = CLANS.wardens;
-  s.holes = [];
-  s.light(0, 10, 60, 0xff9a30, 0.45);
-  const gate: [number, number] = [-0.5, 0.5];
-  s.floor(R + 22, [0x1c140c, 0x2c2014, 0x40301e, 0x584428, 0x6e5a34, 0x846e44], [0x242a14, 0x34401c, 0x4a5a24, 0x5e7230],
-    (u, v) => (Math.abs(v) < 16 && u > 0 ? ramp([0x2a2014, 0x3a2c1c, 0x4e3c26, 0x66503a], 0.4 + (hsh(Math.floor(u / 4), Math.floor(v / 6), 2) - 0.5) * 0.3, Math.floor(u), Math.floor(v)) : undefined));
-  s.litter(R + 10, 40, ["straw", "pebble", "tuft"], 11);
-  // palisade: back sides full, the front (u = +R) with a gate, the v = +R side short
-  const o = { h: 60, r: 3.6, rails: [18, 40], seed: 3 };
-  s.row([-R, -R], [-R, R], o); s.row([-R, -R], [R, -R], { ...o, seed: 4 });
-  s.row([R, -R], [R, R], { ...o, seed: 5, skip: [[0.4, 0.62]] });
-  s.row([-R, R], [-30, R], { ...o, seed: 6 });
-  s.row([70, R], [R, R], { ...o, seed: 7 });
-  // the gate: two tall posts, a lintel and open doors, a gate tower pair with banners
-  const gv = [-R * 0.2 - 0 + 6, R * 0.1 + 6];
-  for (const v of [gv[0] - 4, gv[1] + 4]) { s.post(R, v, 88, 4.4, wood(WOODR, 0.05, 40), false); s.box(R - 5, R + 5, v - 5, v + 5, 84, 92, wood(OLDR, 0.1, 10)); }
-  s.box(R - 3, R + 3, gv[0] - 6, gv[1] + 6, 78, 86, wood(WOODR, 0.1, 30));
-  s.skull(R + 3.5, (gv[0] + gv[1]) / 2, 90, 4.4);
-  for (const sg of [0, 1]) { const v0 = sg ? gv[1] + 2 : gv[0] - 2; s.q.quad([R + 1, v0, 0], [14, sg ? 14 : -14, 0], [0, 0, 64], wood(WOODR, -0.1, 10)); }
-  woodTower(s, R - 14, gv[0] - 40, 86, 14, k, true);
-  woodTower(s, R - 14, gv[1] + 40, 86, 14, k, true);
-  s.brazier(R + 22, gv[0] - 14); s.brazier(R + 22, gv[1] + 14);
-  s.banner(R + 36, gv[0] - 34, 100, k, 22, 46, 1); s.banner(R + 36, gv[1] + 30, 100, k, 22, 46, 1);
-  // the great watchtower in the back corner
-  woodTower(s, -R + 26, -R + 26, 140, 20, k, true);
-  // tents (olive canvas with amber stripes), a store hut with crates, a training dummy
-  const cl = cr(clan.cloth), amb = cr(clan.trim);
-  s.tent(-52, 34, 26, 17, 34, cl.map((c) => mixc(c, 0x4a5a30, 0.2)), amb, 0);
-  s.tent(-14, -60, 26, 17, 34, cl.map((c) => mixc(c, 0x4a5a30, 0.2)), amb, 1);
-  s.tent(-78, -34, 22, 15, 30, cl.map((c) => mixc(c, 0x4a5a30, 0.2)), amb, 0);
-  s.crate(26, -52, 7, 12); s.crate(38, -46, 6, 9); s.barrel(30, -34); s.barrel(42, -32, 5.5, 11);
-  s.crate(-100, 60, 7, 12); s.barrel(-90, 72); s.barrel(-110, 76, 5.5, 11);
-  s.rack(44, 70, 0, 5);
-  // a hearth fire in the middle with log seats, a banner pole beside it
-  s.cookfire(8, 18);
-  s.rod([-10, 40, 2], [20, 42, 2], 3, wood(WOODR, 0, 12)); s.rod([-20, 6, 2], [-18, 30, 2], 3, wood(WOODR, 0, 12));
-  s.banner(34, -8, 96, k, 24, 50, 1);
-  // outside: a sharpened-stake ditch edge at the front corners
-  for (let i = 0; i < 6; i++) s.post(R + 26 + i * 4, -R + 8 + i * 6 - 0, 20, 1.6, wood(WOODR, 0, 10), true, [0.4, 0]);
+// ---- pieces ----------------------------------------------------------------------------------------------------
+export type PieceKind = "wall" | "fence" | "tower" | "tent" | "mound" | "gate" | "rubble" | "pit";
+/** Which neighbours a wall or fence joins (an arm to that cell's edge): +u (east), -u, +v (south), -v; and corner-only joins. */
+export const J = { E: 1, W: 2, S: 4, N: 8, SE: 16, NE: 32, SW: 64, NW: 128 } as const;
+/** One look of one piece. Unused fields stay 0 so equal looks share one texture. */
+export interface PieceSpec {
+  clan: ClanKey; kind: PieceKind;
+  /** wall / fence: joined neighbours (J bits). */
+  mask: number;
+  /** Look variant 0..2 (log heights, tent colour, rubble). */
+  v: number;
+  /** Cluster size in cells (tower, mound); 1x1 for the rest. */
+  cw: number; ch: number;
+  /** gate: 0 = posts at -v and +v (the way runs along u), 1 = posts at -u and +u. `part` 0 = back post and lintel, 1 = front post. */
+  axis: 0 | 1; part: 0 | 1;
+  /** wall or fence beside a gap: a broken stub. */
+  broken: boolean;
 }
+export const pieceKey = (s: PieceSpec) => `hp_${s.clan}_${s.kind}_${s.mask}_${s.v}_${s.cw}x${s.ch}_${s.axis}${s.part}${s.broken ? 1 : 0}`;
 
-// ---- Redfang: hide-tent war camp ---------------------------------------------------------------------------
-function redfang(s: Scene) {
-  const R = 132, red = [0x1e0606, 0x380c0a, 0x561410, 0x761e16, 0x962a1e, 0xb43c28], hide = [0x241810, 0x3c281a, 0x5a3c24, 0x7a5434, 0x9a7048, 0xb8905e];
-  s.light(14, 20, 70, 0xff7a20, 0.55);
-  s.floor(R + 24, [0x1a0f0a, 0x2a1810, 0x3e2616, 0x54351e, 0x6c4a2c, 0x84603a], [0x2a2a14, 0x3a4018, 0x4e5a20, 0x627030],
-    (u, v) => (hsh(Math.floor(u / 5), Math.floor(v / 5), 9) < 0.07 && Math.hypot(u, v) < 90 ? ramp([0x2a0c08, 0x4a1810, 0x6a2418], 0.5, Math.floor(u), Math.floor(v)) : undefined));
-  s.litter(R + 8, 50, ["bone", "pebble", "straw", "bone"], 23);
-  // stake line: leaning sharpened stakes, with a gap for the way in, plus crossed stakes at the gap
-  const st = { h: 44, r: 2.4, step: 6.2, seed: 7, jag: 0.4, lean: [0.22, 0.22] as [number, number], pal: OLDR, rails: [14] };
-  s.row([-R, -R], [-R, R * 0.7], { ...st, lean: [0.28, 0], seed: 1 });
-  s.row([-R, -R], [R * 0.7, -R], { ...st, lean: [0, 0.28], seed: 2 });
-  s.row([R, -R], [R, -20], { ...st, lean: [-0.28, 0], seed: 3 });
-  s.row([-R * 0.5, R], [R * 0.35, R], { ...st, lean: [0, -0.28], seed: 4 });
-  for (const [u, v] of [[R - 6, 6], [R - 6, 40], [R - 8, 70]] as const) {
-    s.rod([u - 8, v - 8, 0], [u + 8, v + 8, 36], 1.4, wood(OLDR, 0, 30)); s.rod([u + 8, v - 8, 0], [u - 8, v + 8, 36], 1.4, wood(OLDR, 0, 30));
-    s.rod([u, v - 9, 16], [u, v + 9, 16], 1, wood(OLDR, 0.05, 10));
-  }
-  // crude lookout tower: lashed poles, a ragged deck, a rag banner
-  const TU = -R + 20, TV = -R + 32, D = 38, A = 15, B = 9;
-  for (const [su, sv] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) s.rod([TU + su * A, TV + sv * A, 0], [TU + su * B + su * 1.2, TV + sv * B, D * 3], 2, wood(OLDR, -0.05, 60));
-  for (const z of [30, 62, 94]) { const a = A + (B - A) * z / (D * 3); for (const [p, q] of [[[-1, 1], [1, 1]], [[1, 1], [1, -1]], [[-1, -1], [1, -1]], [[-1, -1], [-1, 1]]]) s.rod([TU + p[0] * a, TV + p[1] * a, z], [TU + q[0] * a, TV + q[1] * a, z + (hsh(z, p[0] + 3, 1) - 0.5) * 4], 1, mat(ROPER)); }
-  for (let i = 0; i < 5; i++) s.rod([TU - A, TV + A + 4, 8 + i * 22], [TU + A * 0.5, TV + A + 4, 8 + i * 22], 0.8, wood(WOODR, 0.1, 8));
-  const DZ = D * 3;
-  for (let i = 0; i < 8; i++) { const o = -B - 2 + i * 3.4; s.rod([TU + o, TV - B - 3, DZ], [TU + o, TV + B + 3, DZ + (hsh(i, 5, 2) - 0.5) * 2], 1.7, wood(i % 3 ? WOODR : OLDR, 0, 14)); }
-  for (const [pu, pv] of [[-B - 2, -B - 2], [B + 2, -B - 2], [-B - 2, B + 2], [B + 2, B + 2]]) s.post(TU + pu, TV + pv, DZ + 26, 1.2, wood(OLDR, 0, 18), true);
-  s.rod([TU - B - 2, TV + B + 2, DZ + 12], [TU + B + 2, TV + B + 2, DZ + 12], 0.7, wood(OLDR, 0.05, 10));
-  s.rod([TU + B + 2, TV - B - 2, DZ + 12], [TU + B + 2, TV + B + 2, DZ + 12], 0.7, wood(OLDR, 0.05, 10));
-  s.q.sheet((a, b) => [TU - B - 4 + a * (2 * B + 8), TV - B - 4 + b * (2 * B + 8), DZ + 24 + Math.sin(a * 6 + b * 4) * 1.4 - a * 3], 24, 24, (l, a, b, x, y) => ramp(hide, l * 0.9 - 0.15 + (hsh(x, y, 2) - 0.5) * 0.15, x, y));
-  s.banner(TU + B + 2, TV + B + 2, DZ + 28, "redfang", 16, 30, 1);
-  s.shadowAt(TU, TV, 24, 0.4);
-  // hide tents with painted fangs, one big war-chief tent with a skull crown
-  s.cone(-34, 10, 30, 62, red, 1); s.cone(-70, -40, 24, 50, hide, 2); s.cone(-14, -64, 26, 54, red, 3); s.cone(40, -56, 22, 46, hide, 4);
-  s.cone(-64, 62, 22, 44, hide, 5);
-  s.skull(-34, 10, 74, 5, true);
-  // cook fire in the open middle, weapon racks, loot crates
-  s.cookfire(38, 24);
-  s.rack(70, -12, 1, 6); s.rack(-6, 60, 0, 5);
-  s.crate(78, 40, 7, 12); s.crate(90, 50, 6, 9); s.barrel(80, 60, 5, 10); s.crate(-96, 20, 7, 11);
-  // skull totems on lashed poles at the entrance and the corners
-  const tot = (u: number, v: number, h: number) => {
-    s.post(u, v, h, 2.2, wood(OLDR, 0, 40), false);
-    s.rod([u - 8, v + 8, h - 16], [u + 8, v - 8, h - 16], 1, wood(OLDR, 0.05, 10));
-    s.skull(u, v, h + 3, 4.6, true); s.skull(u - 6, v + 6, h - 16, 3.2); s.skull(u + 6, v - 6, h - 16, 3.2); s.skull(u, v, h - 30, 3.6);
-    s.q.shadow(u, v, 5, 0.3);
+const armsOf = (mask: number) => ({ e: !!(mask & J.E), w: !!(mask & J.W), s: !!(mask & J.S), n: !!(mask & J.N) });
+/** Calls `f` for the boxes of a wall of half-thickness `th`: the middle, an arm to every joined side, a corner block to every corner-only join. */
+function armBoxes(mask: number, th: number, f: (u0: number, u1: number, v0: number, v1: number) => void) {
+  f(-th, th, -th, th);
+  if (mask & J.E) f(0, E, -th, th);
+  if (mask & J.W) f(-E, 0, -th, th);
+  if (mask & J.S) f(-th, th, 0, E);
+  if (mask & J.N) f(-th, th, -E, 0);
+  if (mask & J.SE) f(10, DG, 10, DG);
+  if (mask & J.NE) f(10, DG, -DG, -10);
+  if (mask & J.SW) f(-DG, -10, 10, DG);
+  if (mask & J.NW) f(-DG, -10, -DG, -10);
+}
+/** Unit directions of the arms of a mask. */
+function armDirs(mask: number): [number, number][] {
+  const d: [number, number][] = [];
+  if (mask & J.E) d.push([1, 0]); if (mask & J.W) d.push([-1, 0]); if (mask & J.S) d.push([0, 1]); if (mask & J.N) d.push([0, -1]);
+  if (mask & J.SE) d.push([1, 1]); if (mask & J.NE) d.push([1, -1]); if (mask & J.SW) d.push([-1, 1]); if (mask & J.NW) d.push([-1, -1]);
+  return d;
+}
+const BANKR = [0x120c06, 0x22160c, 0x362416, 0x4c3622, 0x62492e, 0x7c5e3c];
+const MOSS = [0x1a2410, 0x2a3a18, 0x3e5424, 0x546c30];
+const SANDWALL = [0x4a3624, 0x6e5336, 0x93724a, 0xb8955f, 0xd4b378, 0xe8cd94];
+
+// ---- wall materials -----------------------------------------------------------------------------------------
+/** Wardens: a double row of sharpened logs on a rammed-earth foot, two rails; a stub beside a gap. */
+function palisade(s: Scene, sp: PieceSpec) {
+  const base = sp.broken ? 40 : 72, r = 3.2, m = wood(WOODR, 0, 40), seen = new Set<string>(), logs: [number, number, number][] = [];
+  const add = (u: number, v: number, seam: boolean, i: number) => {
+    const k = `${u},${v}`; if (seen.has(k)) return; seen.add(k);
+    const jag = sp.broken ? 0.5 : 0.17;
+    logs.push([u, v, base * (seam ? 1 : 1 - jag * hsh(i + Math.round(u), Math.round(v) + sp.v * 7, 1))]);
   };
-  tot(R + 12, -20, 100); tot(R + 12, 100, 92); tot(-R + 10, R - 10, 84);
-  s.brazier(R + 4, 24, 20); s.brazier(R + 4, 80, 20);
-  s.banner(R - 18, 52, 104, "redfang", 22, 44, 1);
+  armBoxes(sp.mask, 13, (u0, u1, v0, v1) => s.box(u0, u1, v0, v1, 0, 4, rough(BANKR, 0.1, 0.3), 7));
+  for (const off of [-5, 5]) {
+    add(0, off, false, 0); add(off, 0, false, 1);
+  }
+  for (const [du, dv] of armDirs(sp.mask)) for (let i = 1; i <= 4; i++) {
+    const seam = i === 4;
+    if (du && dv) add(du * i * 6, dv * i * 6, seam, i);
+    else for (const off of [-5, 5]) add(du ? du * i * 6 : off, dv ? dv * i * 6 : off, seam, i + 3);
+  }
+  logs.sort((a, b) => a[0] + a[1] - b[0] - b[1]);
+  if (!sp.broken) for (const z of [20, 44]) for (const [du, dv] of armDirs(sp.mask)) for (const off of du && dv ? [0] : [-5, 5]) {
+    const a: V3 = [0, 0, z], b: V3 = [du * E, dv * E, z];
+    if (du && !dv) { a[1] = off; b[1] = off; } else if (dv && !du) { a[0] = off; b[0] = off; }
+    s.rod(a, b, 1.1, wood(OLDR, 0.1, 10));
+  }
+  for (const [u, v, h] of logs) s.post(u, v, h, r, m, true);
 }
 
-// ---- Ossuary Host: bone-and-stone keep ---------------------------------------------------------------------
-function host(s: Scene) {
-  const R = 136;
-  s.light(-50, -50, 80, 0x4fc9a0, 0.5); s.light(R, 40, 56, 0x4fc9a0, 0.45);
-  s.floor(R + 24, [0x0e1110, 0x1a1f1e, 0x262d2c, 0x343e3c, 0x465250, 0x5a6866], [0x1a2018, 0x242c20, 0x303a2a, 0x3c4834],
-    (u, v) => (Math.abs(((u + 300) % 22) - 11) < 0.6 || Math.abs(((v + 300) % 22) - 11) < 0.6) && Math.hypot(u, v) < 100 ? ramp(GREYB, 0.18 + hsh(Math.floor(u / 22), Math.floor(v / 22), 4) * 0.2, Math.floor(u), Math.floor(v)) : undefined);
-  s.litter(R + 8, 60, ["bone", "pebble", "bone", "tuft"], 31);
-  // bone palisade: tall pale stakes with skull caps, in rows with ribs
-  const bone = (h: number, seed: number, skip?: [number, number][]) => ({ h, r: 2.6, step: 5.6, jag: 0.35, seed, skip, mat: mat(BONER, 0.05) as Mat, rails: [] as number[] });
-  s.row([-R, -R], [-R, R], bone(58, 1)); s.row([-R, -R], [R, -R], bone(58, 2));
-  s.row([R, -R], [R, R], bone(54, 3, [[0.34, 0.66]])); s.row([-R, R], [R * 0.2, R], bone(46, 4));
-  for (let i = 0; i < 14; i++) { const u = -R + 12 + i * 18, v = -R; s.skull(u, v, 60 + hsh(i, 4, 1) * 8, 3.6, i % 4 === 0); }
-  for (let i = 0; i < 9; i++) { const v = -R + 14 + i * 28; s.skull(-R, v, 58 + hsh(i, 5, 1) * 8, 3.6, i % 3 === 0); }
-  // ribbed gate: a great arch of two curved rib bones
-  const gv0 = -R * 0.32, gv1 = R * 0.32;
-  for (const v of [gv0, gv1]) { s.post(R, v, 96, 5, mat(BONER, 0), false); s.skull(R, v, 100, 6, true); s.q.blob([R, v, 4], 8, 8, 5, rough(GREYB, 0.1)); }
-  for (let i = 0; i < 16; i++) { const t = i / 15, a = t * Math.PI; s.q.blob([R, (gv0 + gv1) / 2 + Math.cos(a) * (gv1 - gv0) / 2, 92 + Math.sin(a) * 20], 2.6, 2.6, 2.6, mat(BONER, 0.05)); }
-  s.brazier(R + 14, gv0 - 12, 26, GHOST, 0x4fc9a0); s.brazier(R + 14, gv1 + 12, 26, GHOST, 0x4fc9a0);
-  // the crooked keep: a leaning round stone tower with a broken crown, teal-lit windows, a lower broken wall run
-  const lean: [number, number] = [0.22, 0.12], TH = 190;
-  const rad = (t: number) => 34 - t * 9 + (t < 0.08 ? 4 : 0) + (t > 0.9 ? 5 : 0);
-  const tm = (l: number, sx: number, t: number, x: number, y: number) => {
-    const row = Math.floor(t * TH / 8), col = Math.floor(sx * 26 + (row % 2) * 0.5), fy = (t * TH / 8) % 1, fx = (sx * 26 + (row % 2) * 0.5) % 1;
-    const win = [0.3, 0.55, 0.78].some((tt) => Math.abs(t - tt) < 0.035) && Math.abs(((sx * 5 + t * 0.7) % 1) - 0.5) < 0.09 && sx > 0.1 && sx < 0.45;
-    if (win) return ramp(GHOST, 0.55 + hsh(col, row, 3) * 0.35, x, y);
-    return ramp(GREYB, l + (hsh(col, row, 8) - 0.5) * 0.3 + (hsh(x, y, 4) - 0.5) * 0.1 - (fy < 0.12 || fx < 0.07 ? 0.28 : 0) - (hsh(col, row, 6) < 0.05 ? 0.3 : 0), x, y);
+/** Host and Veiled: blocks of stone or sandstone. `th` = half thickness (24 fills the cell), `cren` merlons on the open sides. */
+function blockWall(s: Scene, sp: PieceSpec, o: { pal: number[]; h: number; th: number; cren?: boolean; cornice?: number[]; skulls?: boolean }) {
+  const h = sp.broken ? o.h * 0.5 : o.h, m = blocks(o.pal, 2 * E, h, 8, 12);
+  armBoxes(sp.mask, o.th, (u0, u1, v0, v1) => s.box(u0, u1, v0, v1, 0, h, m, 6));
+  armBoxes(sp.mask, o.th, (u0, u1, v0, v1) => s.box(u0, u1, v0, v1, h, h + 1, rough(o.pal, 0.08, 0.2), 1));
+  if (o.cornice && !sp.broken) { const cm = mat(o.cornice, 0); armBoxes(sp.mask, o.th + 1.5, (u0, u1, v0, v1) => s.box(u0, u1, v0, v1, h - 2, h + 4, cm, 7)); }
+  const a = armsOf(sp.mask);
+  if (sp.broken) { // jagged broken top
+    for (let i = 0; i < 5; i++) { const u = -o.th + 4 + hsh(i, sp.v, 40) * (2 * o.th - 8), v = -o.th + 4 + hsh(i, sp.v, 41) * (2 * o.th - 8), w = 4 + hsh(i, sp.v, 42) * 4; s.box(u - w, u + w, v - w, v + w, h, h + 6 + hsh(i, sp.v, 43) * 12, blocks(o.pal, 2 * w, 12, 6, 8)); }
+    return;
+  }
+  if (o.cren) {
+    const mer = (u: number, v: number) => s.box(u - 4, u + 4, v - 4, v + 4, h + 1, h + 10, blocks(o.pal, 8, 9, 5, 6));
+    const t = o.th - 5;
+    if (!a.e) for (const v of [-t + 2, 0, t - 2]) mer(t, v);
+    if (!a.w) for (const v of [-t + 2, 0, t - 2]) mer(-t, v);
+    if (!a.s) for (const u of [-t + 2, 0, t - 2]) mer(u, t);
+    if (!a.n) for (const u of [-t + 2, 0, t - 2]) mer(u, -t);
+  }
+  if (o.skulls && sp.v === 0) s.skull(o.th - 6, o.th - 6, h + 5, 3.8, hsh(sp.mask, 3, 9) < 0.4);
+}
+
+/** Hide-Kin: a rounded bank of earth (a height field following the arms), grassed on top, stones and a few stakes. */
+function bank(s: Scene, sp: PieceSpec) {
+  const segs = armDirs(sp.mask).map(([du, dv]) => (du && dv ? [du * DG, dv * DG] : [du * E, dv * E])), W = 21, H = sp.broken ? 18 : 36;
+  const zf = (u: number, v: number) => {
+    let d = Math.hypot(u, v);
+    for (const [x, y] of segs) { const t = Math.max(0, Math.min(1, (u * x + v * y) / (x * x + y * y))); d = Math.min(d, Math.hypot(u - x * t, v - y * t)); }
+    const t = 1 - d / W;
+    return t <= 0 ? 0 : H * Math.min(1, t * 1.9) ** 0.8;
   };
-  void tm;
-  const TU = -52, TV = -46;
-  s.lathe(TU, TV, 0, TH, rad, (l, sx, t, x, y) => {
-    const row = Math.floor(t * TH / 8), col = Math.floor(sx * 26 + (row % 2) * 0.5), fy = (t * TH / 8) % 1, fx = (sx * 26 + (row % 2) * 0.5) % 1;
-    const win = [0.3, 0.52, 0.74].some((tt) => Math.abs(t - tt) < 0.03) && Math.abs(sx - 0.14) < 0.022;
-    if (win) return ramp(GHOST, 0.55 + hsh(col, row, 3) * 0.4, x, y);
-    return ramp(GREYB, l + (hsh(col, row, 8) - 0.5) * 0.3 + (hsh(x, y, 4) - 0.5) * 0.1 - (fy < 0.12 || fx < 0.07 ? 0.28 : 0) - (hsh(col, row, 6) < 0.05 ? 0.3 : 0), x, y);
-  }, lean, 0.01);
-  // a broken battlement: only some merlons left
-  for (let i = 0; i < 12; i++) {
-    if (hsh(i, 2, 77) < 0.35) continue;
-    const a = (i / 12) * 6.283, r = rad(1) - 2, z = TH, bu = TU + lean[0] * z + Math.cos(a) * r, bv = TV + lean[1] * z + Math.sin(a) * r;
-    s.box(bu - 4, bu + 4, bv - 4, bv + 4, z - 2, z + 8 + hsh(i, 9, 2) * 8, blocks(GREYB, 8, 10, 5, 6));
-  }
-  s.disc(TU, TV, TH - 6, 26, rough(GREYB, -0.1), lean);
-  s.flame(TU + lean[0] * TH, TV + lean[1] * TH, TH - 2, 6, 20, GHOST);
-  s.light(TU, TV, 90, 0x4fc9a0, 0.4);
-  s.shadowAt(TU + 30, TV + 24, 44, 0.45);
-  // buttressing bone ribs against the tower
-  for (let i = 0; i < 5; i++) { const a = 0.4 + i * 0.35; s.rod([TU + Math.cos(a) * 46, TV + Math.sin(a) * 46, 0], [TU + Math.cos(a) * 28 + lean[0] * 70, TV + Math.sin(a) * 28 + lean[1] * 70, 78], 3, mat(BONER, 0)); }
-  // broken stone wall pieces and a ruined shed
-  s.wall([-R + 6, 40], [-R + 6, 112], 34, 5, GREYB, true, [[0.35, 0.5]]);
-  s.wall([-100, R - 6], [-20, R - 6], 22, 5, GREYB, false, [[0.5, 0.7]]);
-  s.box(30, 78, -90, -50, 0, 22, blocks(GREYB, 48, 22, 7, 12)); s.box(34, 74, -86, -54, 22, 25, rough(GREYB, -0.1));
-  s.box(30, 52, -90, -72, 22, 36, blocks(GREYB, 20, 14, 7, 10));
-  // spikes with skulls on the ground, grave markers, bone piles
-  for (const [u, v, h] of [[40, 30, 46], [62, 6, 38], [54, 62, 42], [18, 86, 40], [-30, 70, 36], [90, -10, 40]] as const) {
-    s.rod([u, v, 0], [u, v, h], 1.2, mat(IRONR, 0)); s.skull(u, v, h + 3, 3.8); s.q.shadow(u, v, 3, 0.3);
-  }
-  for (const [u, v] of [[-8, 36], [10, 54], [-22, 18], [96, 60], [70, 90]] as const) {
-    s.box(u - 4, u + 4, v - 2, v + 2, 0, 18, rough(GREYB, 0.05)); s.box(u - 5, u + 5, v - 2.5, v + 2.5, 18, 20, rough(GREYB, 0.1));
-    s.q.blob([u + 8, v + 8, 0], 8, 6, 3, mat(BONER, -0.1), 0, 0.6);
-  }
-  s.banner(R - 24, gv0 - 50, 108, "host", 20, 46, 1);
-  s.banner(R - 24, gv1 + 50, 108, "host", 20, 46, 1);
-  for (let i = 0; i < 7; i++) s.skull(-30 + i * 9, 100 + (i % 2) * 6, 4, 3.4);
-}
-
-// ---- Hide-Kin: earthworks and burrow ------------------------------------------------------------------------
-function hidekin(s: Scene) {
-  const R = 136, hide = HIDE;
-  // trenches (ground carved) in a broken ring, one along each front side
-  const tr: [number, number, number, number][] = [[-96, 96, 66, 78], [90, 102, -80, 40], [-110, -98, -90, 30]]; // u0,u1,v0,v1
-  const inTr = (u: number, v: number) => tr.some(([a, b, c, d]) => u > a && u < b && v > c && v < d);
-  s.holes = [inTr];
-  s.light(10, 10, 60, 0xff8a30, 0.25);
-  s.floor(R + 24, [0x16100a, 0x241a10, 0x382816, 0x4e3a20, 0x645030, 0x7c6640], [0x24280e, 0x343c14, 0x485220, 0x5c6a2c],
-    (u, v) => (Math.hypot(u + 40, v + 20) < 66 ? ramp(SOIL, 0.3 + hsh(Math.floor(u / 3), Math.floor(v / 3), 3) * 0.3, Math.floor(u), Math.floor(v)) : undefined));
-  s.litter(R + 8, 50, ["bone", "pebble", "tuft", "pebble"], 41, inTr);
-  // trench floors and walls, berms of heaped earth on the near lips
-  for (const [a, b, c, d] of tr) {
-    s.q.surf((ss, t) => [[a + (b - a) * ss, c + (d - c) * t, -9], [0, 0, 1]], Math.ceil((b - a) * 2), Math.ceil((d - c) * 2), (l, ss, t, x, y) => ramp([0x0a0705, 0x140d08, 0x201610], 0.4 + (hsh(x, y, 1) - 0.5) * 0.4, x, y));
-    s.q.surf((ss, t) => [[a + (b - a) * ss, c, -9 + t * 9], [0, 1, 0]], Math.ceil((b - a) * 2), 24, rough(SOIL, 0.05, 0.3));
-    s.q.surf((ss, t) => [[a, c + (d - c) * ss, -9 + t * 9], [1, 0, 0]], Math.ceil((d - c) * 2), 24, rough(SOIL, 0.1, 0.3));
-    // sharpened stakes at the bottom
-    for (let i = 0; i < Math.floor((b - a) / 14); i++) s.rod([a + 7 + i * 14, (c + d) / 2, -9], [a + 7 + i * 14, (c + d) / 2, 0], 0.9, wood(OLDR, 0, 8));
-    for (let i = 0; i < Math.floor((b - a) / 9); i++) { const u = a + 3 + i * 9 + hsh(i, c, 1) * 4; s.q.blob([u, d + 4, 0], 6, 4, 4 + hsh(i, c, 2) * 3, rough(SOIL, 0.1, 0.3), 0.45, 1); }
-  }
-  // burrow mound with a tunnel mouth facing the viewer
-  const MU = -40, MV = -20, MR = 76, MH = 70;
-  s.q.sheet((ss, t) => {
-    const a = ss * Math.PI * 2, r = MR * t, h = MH * Math.pow(Math.max(0, 1 - t * t), 0.8) * (1 + (hsh(Math.floor(a * 6), Math.floor(t * 8), 3) - 0.5) * 0.12);
-    return [MU + Math.cos(a) * r * 1.05, MV + Math.sin(a) * r, h];
-  }, 520, 140, (l, ss, t, x, y) => {
-    const a = ss * Math.PI * 2, c = Math.cos(a), sn = Math.sin(a);
-    const mouth = c > 0.55 && sn > 0.45 && t > 0.3 && t < 0.88 && Math.abs(a - 0.78) < 0.2 - (0.88 - t) * 0.12 && false;
-    void mouth;
-    const grass = t < 0.35 && hsh(Math.floor(a * 9), Math.floor(t * 12), 1) < 0.3;
-    if (t > 0.9) return ramp([0x1a2610, 0x2a3a18, 0x3a4c20], 0.3 + (t - 0.9) * 3, x, y);
-    return ramp(grass ? [0x2a3a14, 0x44581e, 0x62802c] : [0x1a1009, 0x2e2014, 0x46321f, 0x5e4630, 0x78603f], l * 1.1 + 0.02 + (hsh(x >> 1, y >> 1, 3) - 0.5) * 0.3 - (hsh(x, y, 5) < 0.06 ? 0.2 : 0), x, y);
+  const N = Math.ceil(DG * 2 * 4.6);
+  s.q.sheet((a, b) => { const u = -DG + a * 2 * DG, v = -DG + b * 2 * DG; return [u, v, zf(u, v)]; }, N, N, (l, a, b, x, y) => {
+    const u = -DG + a * 2 * DG, v = -DG + b * 2 * DG, z = zf(u, v);
+    if (z < 0.7) return undefined;
+    const top = z / H, n = hsh(Math.floor(u / 3), Math.floor(v / 3), sp.v + 3);
+    if (hsh(Math.floor(u / 5), Math.floor(v / 5), 21) < 0.09 && top < 0.95) return ramp(STONER, l + 0.05 + n * 0.2, x, y);
+    if (top > 0.72) return ramp(MOSS, l * 0.95 + (n - 0.5) * 0.4, x, y);
+    return ramp(BANKR, l + (n - 0.5) * 0.3 + (hsh(x, y, 5) - 0.5) * 0.1, x, y);
   });
-  // the tunnel mouth: a timber-framed black opening on the +u/+v face, with a spoil apron
-  const mu = MU + Math.cos(0.8) * MR * 0.8 * 1.05, mv = MV + Math.sin(0.8) * MR * 0.8;
-  const dark: Mat = (l, ss, t, x, y) => ramp([0x020101, 0x080504, 0x120b07], t * 0.9, x, y);
-  s.box(mu - 4, mu + 9, mv - 17, mv + 17, 0, 34, dark, 6);
-  s.box(mu + 8, mu + 12, mv - 17, mv + 17, 0, 1.2, rough(SOIL, 0.2, 0.3), 1);
-  for (const v of [mv - 19, mv + 19]) s.rod([mu + 9.5, v, 0], [mu + 9.5, v, 38], 2.6, wood(WOODR, 0.05, 30));
-  s.rod([mu + 9.5, mv - 20, 36], [mu + 9.5, mv + 20, 36], 2.8, wood(WOODR, 0.1, 20));
-  s.rod([mu + 9.5, mv - 17, 33], [mu + 9.5, mv - 9, 36], 1.6, wood(OLDR, 0.05, 20)); s.rod([mu + 9.5, mv + 17, 33], [mu + 9.5, mv + 9, 36], 1.6, wood(OLDR, 0.05, 20));
-  for (const v of [mv - 16, mv + 16]) { s.q.blob([mu + 8, v, 38], 3, 3, 4, mat(BONER, 0), 0.4, 1); }
-  s.skull(mu + 10, mv, 44, 5, true);
-  s.q.shadow(mu + 8, mv, 26, 0.25);
-  // root-and-log barricades: criss-crossed logs and roots on the east and south edges
-  const barr = (u0: number, v0: number, u1: number, v1: number, seed: number) => {
-    const n = Math.floor(Math.hypot(u1 - u0, v1 - v0) / 10);
-    for (let i = 0; i <= n; i++) {
-      const t = i / n, u = u0 + (u1 - u0) * t, v = v0 + (v1 - v0) * t;
-      s.rod([u - 8, v - 6, 0], [u + 8, v + 6, 22 + hsh(i, seed, 1) * 8], 2.6, wood(i % 2 ? WOODR : OLDR, 0, 20));
-      s.rod([u + 8, v - 6, 0], [u - 8, v + 6, 20 + hsh(i, seed, 2) * 8], 2.4, wood(i % 2 ? OLDR : WOODR, 0, 20));
+  if (!sp.broken) for (let i = 0; i < 3; i++) { // a few bone-white stakes on the crest
+    const ang = hsh(i, sp.v, 50) * 6.283, d = 6 + hsh(i, sp.v, 51) * 8, u = Math.cos(ang) * d, v = Math.sin(ang) * d;
+    if (zf(u, v) > H * 0.6) s.rod([u, v, zf(u, v) - 2], [u + 1.4, v, zf(u, v) + 16 + hsh(i, 2, 52) * 8], 1.1, mat(BONER, 0.05));
+  }
+}
+
+/** A low fence of leaning stakes with one rail (Redfang). */
+function fence(s: Scene, sp: PieceSpec) {
+  const base = sp.broken ? 14 : 28, seen = new Set<string>(), m = wood(OLDR, 0.05, 30);
+  const add = (u: number, v: number, seam: boolean, i: number) => {
+    const k = `${u},${v}`; if (seen.has(k)) return; seen.add(k);
+    const h = base * (seam ? 1 : 1 - 0.3 * hsh(i + u, v + sp.v * 5, 2)), lean = (hsh(i + u, v, 3) - 0.5) * 0.5;
+    s.post(u, v, h, 2.1, m, true, [lean, (hsh(u, v + i, 4) - 0.5) * 0.5]);
+  };
+  add(0, 0, false, 0);
+  for (const [du, dv] of armDirs(sp.mask)) for (let i = 1; i <= 4; i++) add(du * i * 6, dv * i * 6, i === 4, i);
+  if (!sp.broken) for (const [du, dv] of armDirs(sp.mask)) s.rod([0, 0, 12], [du * E, dv * E, 12], 0.8, wood(WOODR, 0.1, 10));
+  if (!sp.mask) { s.rod([-8, -8, 0], [8, 8, 22], 1.2, m); s.rod([8, -8, 0], [-8, 8, 22], 1.2, m); }
+}
+
+// ---- towers (a cluster of cells, drawn as one) -----------------------------------------------------------------
+function woodTowerPiece(s: Scene, sp: PieceSpec) {
+  const hu = sp.cw * HALF, hv = sp.ch * HALF, A = Math.min(hu, hv) - 4;
+  s.box(-hu - PAD, hu + PAD, -hv - PAD, hv + PAD, 0, 9, rough(STONER, -0.05, 0.3)); // a stone footing that meets the walls
+  woodTower(s, 0, 0, sp.cw > 1 ? 116 : 90, A, sp.clan, true);
+}
+function stoneTowerPiece(s: Scene, sp: PieceSpec) {
+  const hu = sp.cw * HALF - 1, hv = sp.ch * HALF - 1, H = 92, m = (): Mat => (l, a, t, x, y) => {
+    const row = Math.floor(t * H / 8), col = Math.floor(a * 10 + (row % 2) * 0.5), fy = (t * H / 8) % 1, fx = (a * 10 + (row % 2) * 0.5) % 1;
+    const win = t > 0.42 && t < 0.62 && Math.abs(a - 0.5) < 0.05 + (sp.cw > 1 ? 0 : 0.03);
+    if (win) return ramp(GHOST, 0.5 + hsh(col, row, 3) * 0.4, x, y);
+    return ramp(GREYB, l + (hsh(col, row, 8) - 0.5) * 0.3 + (hsh(x, y, 4) - 0.5) * 0.1 - (fy < 0.12 || fx < 0.07 ? 0.28 : 0) - (hsh(col, row, 6) < 0.05 ? 0.3 : 0), x, y);
+  };
+  s.box(-hu - PAD, hu, -hv - PAD, hv, 0, H, m(), 6);
+  s.box(-hu - 3, hu + 3, -hv - 3, hv + 3, H, H + 8, blocks(GREYB, 40, 8, 8, 10, 0.05), 7); // corbel
+  s.box(-hu, hu, -hv, hv, H + 8, H + 9, rough(GREYB, -0.1), 1);
+  for (let i = 0; i < 2 * (sp.cw + sp.ch) * 2; i++) { // merlons all round, some broken off
+    if (hsh(i, sp.cw, 60) < 0.22) continue;
+    const per = 2 * (hu + hv), d = (i / (2 * (sp.cw + sp.ch) * 2)) * per; let u: number, v: number;
+    if (d < 2 * hu) { u = -hu + d; v = hv - 3; } else if (d < 2 * hu + 2 * hv) { u = hu - 3; v = hv - (d - 2 * hu); } else if (d < 4 * hu + 2 * hv) { u = hu - (d - 2 * hu - 2 * hv); v = -hv + 3; } else { u = -hu + 3; v = -hv + (d - 4 * hu - 2 * hv); }
+    s.box(u - 4, u + 4, v - 4, v + 4, H + 9, H + 19 - hsh(i, 2, 61) * 5, blocks(GREYB, 8, 10, 5, 6));
+  }
+  s.flame(0, 0, H + 8, 6, 20, GHOST);
+  for (const [u, v] of [[hu - 8, hv - 8], [-hu + 8, hv - 8]]) s.skull(u, v, H + 12, 4.2, true);
+  s.banner(hu - 4, -hv + 6, H + 12, sp.clan, 18, 38, 1);
+}
+function pylonPiece(s: Scene, sp: PieceSpec) {
+  s.box(-22, 22, -22, 22, 0, 8, blocks(SAND, 44, 8, 8, 12), 7);
+  s.box(-17, 17, -17, 17, 8, 14, blocks(SAND, 34, 6, 6, 10, 0.05), 7);
+  s.stone(0, 0, 13, 96, SAND, [0x9a6a10, 0xd9a030, 0xf6d26b], 4 + sp.v);
+  s.q.blob([0, 0, 98], 5, 5, 8, mat(GOLDR, 0.1), 0.35, 1);
+  s.rod([0, 0, 104], [0, 0, 122], 0.9, mat(GOLDR));
+  s.q.blob([0, 0, 124], 3, 3, 4, mat(GOLDR, 0.2));
+}
+
+// ---- gates -------------------------------------------------------------------------------------------------------
+function gatePiece(s: Scene, sp: PieceSpec) {
+  const sg = sp.part === 0 ? -1 : 1, P = (a: number): [number, number] => (sp.axis === 0 ? [0, sg * a] : [sg * a, 0]);
+  const [pu, pv] = P(18), c = sp.clan, back = sp.part === 0;
+  const lintel = (z: number, th: number, m: Mat) => { const a = P(-18), b = P(18); s.rod([a[0], a[1], z], [b[0], b[1], z], th, m); };
+  if (c === "wardens") {
+    s.post(pu, pv, 92, 4.4, wood(WOODR, 0.05, 40), false); s.box(pu - 5, pu + 5, pv - 5, pv + 5, 84, 92, wood(OLDR, 0.1, 10));
+    if (back) { s.box(sp.axis === 0 ? -3 : -22, sp.axis === 0 ? 3 : 22, sp.axis === 0 ? -22 : -3, sp.axis === 0 ? 22 : 3, 78, 86, wood(WOODR, 0.1, 30)); s.skull(0, 0, 91, 4.4); }
+    else s.brazier(pu + (sp.axis === 0 ? 0 : 0), pv, 28);
+  } else if (c === "redfang") {
+    s.post(pu, pv, 100, 2.6, wood(OLDR, 0, 40), false);
+    s.rod([pu - 8, pv + 8, 84], [pu + 8, pv - 8, 84], 1, wood(OLDR, 0.05, 10));
+    s.skull(pu, pv, 103, 4.6, true); s.skull(pu - 6, pv + 6, 84, 3.2); s.skull(pu + 6, pv - 6, 84, 3.2);
+    if (back) { lintel(80, 1.3, wood(OLDR, 0.05, 20)); s.banner(0.01, 0, 92, c, 16, 34, 1); }
+  } else if (c === "host") {
+    s.box(pu - 6, pu + 6, pv - 6, pv + 6, 0, 94, blocks(GREYB, 12, 94, 8, 6), 7); s.box(pu - 7, pu + 7, pv - 7, pv + 7, 94, 100, blocks(GREYB, 14, 6, 6, 6, 0.1), 7);
+    s.skull(pu, pv, 107, 5.6, true);
+    if (back) for (let i = 0; i < 12; i++) { const t = i / 11, a = P(-18 + 36 * t); s.q.blob([a[0], a[1], 88 + Math.sin(t * Math.PI) * 14], 2.5, 2.5, 2.5, mat(BONER, 0.05)); }
+    else s.flame(pu, pv, 100, 4.5, 14, GHOST);
+  } else if (c === "hidekin") {
+    s.post(pu, pv, 84, 3.6, wood(OLDR, -0.05, 40), false, [0, 0]);
+    s.skull(pu, pv, 88, 5, true);
+    s.rod([pu, pv, 50], [pu + (sp.axis === 0 ? 0 : -sg * 7), pv + (sp.axis === 0 ? -sg * 7 : 0), 66], 1.1, mat(BONER, 0));
+    if (back) lintel(76, 1.6, mat(BONER, -0.05));
+    s.q.blob([pu, pv, 3], 7, 7, 4, rough(BANKR, 0.1), 0, 0.6);
+  } else {
+    s.box(pu - 5, pu + 5, pv - 5, pv + 5, 0, 88, blocks(SAND, 10, 88, 8, 6), 7);
+    s.q.blob([pu, pv, 90], 6, 6, 7, mat(GOLDR, 0.05), 0.3, 1);
+    s.rod([pu, pv, 96], [pu, pv, 110], 0.9, mat(GOLDR));
+    if (back) { lintel(78, 2.4, mat(GOLDR, 0)); const a = P(-18), b = P(18); s.q.quad([a[0], a[1], 78], [b[0] - a[0], b[1] - a[1], 0], [0, 0, -14], cloth(ARCANE, cr(CLANS.veiled.trim), 7)); }
+  }
+}
+
+// ---- tents, mounds, rubble, hearth -----------------------------------------------------------------------------
+function tentPiece(s: Scene, sp: PieceSpec) {
+  const red = [0x1e0606, 0x380c0a, 0x561410, 0x761e16, 0x962a1e, 0xb43c28], hide = [0x241810, 0x3c281a, 0x5a3c24, 0x7a5434, 0x9a7048, 0xb8905e];
+  const pal = sp.clan === "redfang" ? (sp.v === 1 ? hide : red) : sp.v === 1 ? hide : cr(CLANS[sp.clan].cloth);
+  s.cone(0, 0, 19 + sp.v * 1.5, 46 + sp.v * 6, pal, sp.v + 1, true);
+  if (sp.v === 2) s.skull(0, 0, 60, 4.2, true);
+}
+function moundPiece(s: Scene, sp: PieceSpec) {
+  const a = sp.cw * HALF + 2, b = sp.ch * HALF + 2, H = 58, dome = (u: number, v: number) => { const q = 1 - (u / a) ** 2 - (v / b) ** 2; return q <= 0 ? 0 : H * Math.sqrt(q); };
+  const mouth = (u: number, v: number) => Math.hypot(u - a * 0.5, v - b * 0.55) < 11 && dome(u, v) > 8;
+  const NU = Math.ceil(a * 2 * 6), NV = Math.ceil(b * 2 * 6);
+  s.q.sheet((p, t) => { const u = -a + p * 2 * a, v = -b + t * 2 * b; return [u, v, dome(u, v)]; }, NU, NV, (l, p, t, x, y) => {
+    const u = -a + p * 2 * a, v = -b + t * 2 * b, z = dome(u, v);
+    if (z < 0.7) return undefined;
+    if (mouth(u, v)) return ramp([0x050403, 0x120c08, 0x24180e], 0.25 + z / H * 0.4 + hsh(x, y, 2) * 0.2, x, y);
+    const n = hsh(Math.floor(u / 3), Math.floor(v / 3), 3);
+    if (hsh(Math.floor(u / 6), Math.floor(v / 6), 7) < 0.1) return ramp(HIDE, l * 0.9 + 0.05, x, y);
+    return ramp(z / H > 0.6 ? MOSS : SOIL, l * 1.05 + (n - 0.5) * 0.3, x, y);
+  });
+  s.rod([a * 0.5 - 8, b * 0.55 + 4, 12], [a * 0.5 - 8, b * 0.55 + 4, 36], 1.6, mat(BONER, 0)); // a bone frame by the burrow mouth
+  s.skull(a * 0.5 - 8, b * 0.55 + 4, 39, 4, true);
+}
+function rubblePiece(s: Scene, sp: PieceSpec) {
+  const wooden = sp.clan === "wardens" || sp.clan === "redfang", pal = wooden ? OLDR : sp.clan === "veiled" ? SAND : sp.clan === "hidekin" ? BANKR : GREYB;
+  for (let i = 0; i < 6; i++) {
+    const u = (hsh(i, sp.v, 70) - 0.5) * 34, v = (hsh(i, sp.v, 71) - 0.5) * 34, r = 2 + hsh(i, sp.v, 72) * 3;
+    if (wooden && i < 2) s.post(u, v, 6 + hsh(i, sp.v, 73) * 8, 3, wood(WOODR, 0, 20), false);
+    else s.q.blob([u, v, r * 0.4], r * 1.3, r, r * 0.7, rough(pal, 0.05));
+  }
+}
+function hearthPiece(s: Scene, sp: PieceSpec) {
+  const fire = sp.clan === "host" ? GHOST : sp.clan === "veiled" ? ARCANE : FIRE;
+  for (let i = 0; i < 9; i++) { const a = i * 0.698; s.q.blob([Math.cos(a) * 11, Math.sin(a) * 11, 1.6], 3.4, 3.2, 2.6, rough(STONER, 0)); }
+  s.rod([-6, -3, 2], [6, 3, 3], 1.5, wood([0x0a0605, 0x1c1410, 0x30241a, 0x46362a], 0, 6));
+  s.rod([-5, 4, 2], [5, -4, 3], 1.5, wood([0x0a0605, 0x1c1410, 0x30241a, 0x46362a], 0, 6));
+  s.flame(0, 0, 3, 5, 12, fire);
+}
+
+const ZMAX: Record<PieceKind, number> = { wall: 104, fence: 48, tower: 215, tent: 84, mound: 70, gate: 124, rubble: 24, pit: 40 };
+function zmax(sp: PieceSpec) {
+  if (sp.kind === "tower") return sp.clan === "host" ? 160 : sp.clan === "veiled" ? 132 : sp.cw > 1 ? 215 : 190;
+  if (sp.kind === "wall") return sp.clan === "hidekin" ? 70 : sp.clan === "veiled" ? 84 : ZMAX.wall;
+  return ZMAX[sp.kind];
+}
+
+function paintBody(s: Scene, sp: PieceSpec) {
+  switch (sp.kind) {
+    case "wall":
+      if (sp.clan === "wardens") return palisade(s, sp);
+      if (sp.clan === "host") return blockWall(s, sp, { pal: GREYB, h: 62, th: 24, cren: true, skulls: true });
+      if (sp.clan === "veiled") return blockWall(s, sp, { pal: SANDWALL, h: 66, th: 15, cornice: GOLDR });
+      if (sp.clan === "hidekin") return bank(s, sp);
+      return fence(s, sp);
+    case "fence": return fence(s, sp);
+    case "tower": return sp.clan === "host" ? stoneTowerPiece(s, sp) : sp.clan === "veiled" ? pylonPiece(s, sp) : woodTowerPiece(s, sp);
+    case "gate": return gatePiece(s, sp);
+    case "tent": return tentPiece(s, sp);
+    case "mound": return moundPiece(s, sp);
+    case "rubble": return rubblePiece(s, sp);
+    case "pit": return hearthPiece(s, sp);
+  }
+}
+
+/** A painted piece as RGBA, with the cell's middle on the ground at pixel (ox, oy). */
+export interface Painted { w: number; h: number; ox: number; oy: number; data: Uint8ClampedArray }
+const up4 = (n: number) => Math.ceil(n / 4) * 4;
+
+/** Draws one piece (art-time or run-time; no DOM): painted a little past its cell, outlined, then clipped to the cell. */
+export function paintPiece(sp: PieceSpec): Painted {
+  const sizeU = sp.cw + sp.ch, hu = sp.cw * HALF, hv = sp.ch * HALF;
+  const w = up4(2 * (sizeU * HALF + 22)), ox = w / 2, oy = up4(zmax(sp) + sizeU * 12 + 8), h = up4(oy + sizeU * 12 + 14);
+  const buf = new Uint32Array(w * h), own = new Float32Array(w * h * 2);
+  const q = new IsoPaint(bufPen(buf, w, h), w, h, ox, oy);
+  q.onPlot = (x, y, u, v) => { const i = (y * w + x) * 2; own[i] = u; own[i + 1] = v; };
+  paintBody(new Scene(q), sp);
+  const solid = (x: number, y: number) => x >= 0 && y >= 0 && x < w && y < h && buf[y * w + x] >>> 24 > 140;
+  const out = new Uint32Array(buf), oo = new Float32Array(own);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = y * w + x;
+    if (solid(x, y) || (buf[i] >>> 24) > 0) continue;
+    const nb = solid(x - 1, y) ? i - 1 : solid(x + 1, y) ? i + 1 : solid(x, y - 1) ? i - w : solid(x, y + 1) ? i + w : -1;
+    if (nb < 0) continue;
+    out[i] = (0xe0 << 24 | OUTLINE) >>> 0; oo[i * 2] = own[nb * 2]; oo[i * 2 + 1] = own[nb * 2 + 1];
+  }
+  const data = new Uint8ClampedArray(w * h * 4);
+  for (let i = 0; i < w * h; i++) {
+    const c = out[i];
+    if (!(c >>> 24)) continue;
+    const u = oo[i * 2], v = oo[i * 2 + 1];
+    if (u < -hu || u >= hu || v < -hv || v >= hv) { // the neighbouring cell's piece draws this pixel, except a diagonal join's corner overlap
+      const corner = sp.mask & 0xf0 && Math.abs(u) > hu - 10 && Math.abs(v) > hv - 10 && Math.abs(u) < hu + 9 && Math.abs(v) < hv + 9;
+      if (!corner) continue;
     }
-    for (let i = 0; i < n; i++) s.rod([u0 + (u1 - u0) * i / n, v0 + (v1 - v0) * i / n, 10], [u0 + (u1 - u0) * (i + 1) / n + 2, v0 + (v1 - v0) * (i + 1) / n, 11], 1.1, mat([0x1e1408, 0x34220e, 0x4a3414]));
-  };
-  barr(R - 2, -R + 20, R - 2, -30, 1); barr(R - 2, 36, R - 2, R - 10, 2); barr(-R + 30, R - 4, 30, R - 4, 3); barr(-R + 4, -R + 30, -R + 4, 10, 4);
-  // totems: carved posts with tusks, hide banners and a horned beast skull
-  const tot = (u: number, v: number, h: number) => {
-    s.post(u, v, h, 3.8, wood(WOODR, -0.05, 40), false);
-    for (const [dz, w] of [[0.3, 7], [0.55, 6], [0.8, 5]]) { s.q.blob([u + 2, v + 2, h * dz], w * 0.55, w * 0.55, 4, mat(HIDE, -0.1), 0, 1); s.rod([u - w * 0.5, v + w * 0.5, h * dz - 2], [u - w * 1.4, v + w * 1.4, h * dz + 6], 1.2, mat(BONER, 0.05)); s.rod([u + w * 0.5, v - w * 0.5, h * dz - 2], [u + w * 1.4, v - w * 1.4, h * dz + 6], 1.2, mat(BONER, 0.05)); }
-    s.skull(u, v, h + 4, 6, true);
-    s.q.shadow(u, v, 6, 0.3);
-  };
-  tot(R - 14, 10, 96); tot(-R + 20, R - 24, 84); tot(30, -R + 20, 92);
-  // hide windbreaks (lean-tos) and fires, burrow holes with spoil heaps
-  s.tent(-30, 104, 20, 14, 28, cr(CLANS.hidekin.cloth), cr(CLANS.hidekin.trim), 0);
-  s.tent(70, -40, 18, 13, 26, cr(CLANS.hidekin.cloth), undefined, 1);
-  s.cone(-84, 56, 20, 36, hide, 7);
-  for (const [u, v] of [[20, 20], [-90, -60], [60, 100], [100, 20]] as const) {
-    s.q.blob([u, v, 0], 9, 7, 5, rough(SOIL, 0.1, 0.3), 0.45, 1);
-    s.q.surf((ss, t) => { const a = ss * Math.PI * 2; return [[u + Math.cos(a) * 5 * t + 2, v + Math.sin(a) * 4 * t + 2, 4.6], [0, 0, 1]]; }, 12, 4, mat([0x030201, 0x0a0705]));
+    data[i * 4] = (c >> 16) & 255; data[i * 4 + 1] = (c >> 8) & 255; data[i * 4 + 2] = c & 255; data[i * 4 + 3] = c >>> 24;
   }
-  s.cookfire(84, 78); s.brazier(R - 6, 60, 20);
-  s.banner(R - 30, -40, 90, "hidekin", 22, 42, 1);
-  s.crate(-100, 20, 6, 10); s.barrel(-110, 34, 5, 10);
+  return { w, h, ox, oy, data };
 }
 
-// ---- Veiled Circle: walled shrine camp ---------------------------------------------------------------------
-function veiled(s: Scene) {
-  const R = 136, clan = CLANS.veiled, indigo = cr(clan.cloth).map((c, i) => (i > 2 ? mixc(c, 0x6a6ad0, 0.25) : c));
-  s.light(0, -30, 70, 0xa890ff, 0.4); s.light(R - 10, 60, 50, 0xf6d26b, 0.35);
-  s.floor(R + 24, [0x4a3a24, 0x6a5232, 0x8a6e44, 0xa8885a, 0xc4a672, 0xdcc48c], [0x6a5a32, 0x84743c, 0x9c8a4a, 0xb0a058],
-    (u, v) => (Math.hypot(u, v - 0) < 60 ? ramp([0x4a3a28, 0x6a5238, 0x8a6e48, 0xa88a5a], 0.35 + ((Math.floor(u / 12) + Math.floor(v / 12)) % 2) * 0.2, Math.floor(u), Math.floor(v)) : undefined));
-  s.litter(R + 8, 40, ["pebble", "pebble", "tuft"], 51);
-  // sandstone walls: back sides full with crenels, the front sides broken with a gate arch
-  s.wall([-R, -R], [-R, R], 44, 8, SAND, true); s.wall([-R, -R], [R, -R], 44, 8, SAND, true);
-  s.wall([R, -R], [R, R], 36, 7, SAND, true, [[0.36, 0.66]]);
-  s.wall([-R, R], [R * 0.1, R], 30, 7, SAND, true, [[0.55, 0.8]]);
-  // corner turrets with domes
-  for (const [u, v] of [[-R, -R], [R, -R], [-R, R]] as const) {
-    s.lathe(u, v, 0, 60, () => 16, blocks(SAND, 100, 60, 8, 12), [0, 0], 0);
-    s.q.blob([u, v, 60], 17, 17, 18, (l, ss, t, x, y) => ramp(indigo, l * 1.05 + (t > 0.95 ? 0.15 : 0), x, y), 0.5, 1);
-    s.rod([u, v, 76], [u, v, 90], 0.9, mat(GOLDR)); s.q.blob([u, v, 92], 2.4, 2.4, 3, mat(GOLDR, 0.1));
-  }
-  // the gate: two pillars with a pointed arch, gold trim, hanging silk
-  const gv0 = -R * 0.18, gv1 = R * 0.3, gm = (gv0 + gv1) / 2;
-  for (const v of [gv0, gv1]) { s.box(R - 8, R + 8, v - 8, v + 8, 0, 78, blocks(SAND, 16, 78, 8, 12, 0.05)); s.box(R - 10, R + 10, v - 10, v + 10, 78, 86, rough(SAND, 0.1)); s.q.blob([R, v, 86], 7, 7, 14, mat(indigo), 0.5, 1); s.rod([R, v, 98], [R, v, 108], 0.8, mat(GOLDR)); }
-  for (let i = 0; i <= 24; i++) { const t = i / 24, v = gv0 + (gv1 - gv0) * t, z = 78 + Math.sin(t * Math.PI) ** 0.7 * 26; s.q.blob([R, v, z], 5, 5, 4.2, blocks(SAND, 10, 10, 5, 6, 0.08), 0.1, 0.9); s.q.blob([R + 4, v, z + 0.5], 1.8, 1.8, 2, mat(GOLDR)); }
-  s.q.sheet((ss, t) => [R + 6, gv0 + 6 + ss * (gv1 - gv0 - 12), 84 - t * 30 + Math.sin(ss * 12) * 0.8 * t], 30, 14, cloth(indigo, cr(clan.trim), 7, -0.05));
-  s.brazier(R + 18, gv0 - 14, 24, ARCANE, 0xa890ff); s.brazier(R + 18, gv1 + 14, 24, ARCANE, 0xa890ff);
-  // the shrine: a stepped sandstone base, a drum and a gilded dome, a lit doorway
-  const SU = -34, SV = -34;
-  s.box(SU - 44, SU + 44, SV - 44, SV + 44, 0, 8, blocks(SAND, 88, 8, 8, 14)); s.box(SU - 36, SU + 36, SV - 36, SV + 36, 8, 16, blocks(SAND, 72, 8, 8, 14, 0.05));
-  s.lathe(SU, SV, 16, 74, (t) => 26 + (t < 0.06 ? 3 : 0) + (t > 0.94 ? 3 : 0), (l, ss, t, x, y) => {
-    const door = Math.abs(ss - 0.125) < 0.05 && t < 0.52;
-    if (door) return ramp([0x2a1a5a, 0x5a40b0, 0xa890ff, 0xe8e0ff], 0.5 + t * 0.9 + hsh(x, y, 1) * 0.2, x, y);
-    const win = [0.18, 0.4].some((a) => Math.abs(ss - a) < 0.014) && t > 0.6 && t < 0.86;
-    if (win) return ramp(GOLDR, 0.7 + hsh(x, y, 2) * 0.3, x, y);
-    return ramp(SAND, l + (hsh(Math.floor(ss * 36), Math.floor(t * 8), 3) - 0.5) * 0.25 - ((t * 58) % 8 < 1 ? 0.2 : 0) + (hsh(x, y, 4) - 0.5) * 0.1, x, y);
-  });
-  s.q.blob([SU, SV, 74], 30, 30, 38, (l, ss, t, x, y) => ramp(indigo, l * 1.1 + (Math.floor(ss * 16) % 2 ? 0.04 : -0.04) + (t > 0.5 && ((t * 11) % 1) < 0.1 ? 0.12 : 0), x, y), 0.5, 1);
-  s.rod([SU, SV, 108], [SU, SV, 132], 1, mat(GOLDR)); s.q.blob([SU, SV, 118], 3.4, 3.4, 3.4, mat(GOLDR, 0.1)); s.q.blob([SU, SV, 134], 2.8, 2.8, 4, mat(GOLDR, 0.2));
-  for (const [du, dv] of [[-30, -30], [30, -30], [-30, 30], [30, 30]]) { s.rod([SU + du, SV + dv, 16], [SU + du, SV + dv, 50], 1.8, mat(SAND, 0.05)); s.q.blob([SU + du, SV + dv, 50], 2.2, 2.2, 6, mat(GOLDR, 0), 0.4, 1); }
-  s.light(SU + 24, SV + 24, 40, 0xa890ff, 0.5);
-  s.shadowAt(SU + 10, SV + 10, 50, 0.4);
-  // silk awnings on poles, with cushions and a low table
-  const awning = (cu: number, cv: number, w: number, d: number, h: number, seed: number) => {
-    for (const [a, b] of [[-w, -d], [w, -d], [-w, d], [w, d]]) s.rod([cu + a, cv + b, 0], [cu + a, cv + b, h + (a > 0 ? 0 : 8)], 1.1, wood(WOODR, 0.05, 20));
-    s.q.sheet((ss, t) => [cu - w - 3 + ss * (2 * w + 6), cv - d - 3 + t * (2 * d + 6), h + 8 - ss * 8 + Math.sin(ss * 8 + t * 5 + seed) * 1.6], 36, 30, cloth(indigo, cr(clan.trim), 8, 0.02));
-    s.q.shadow(cu, cv, w * 0.9, 0.3);
-    for (let i = 0; i < 3; i++) s.q.blob([cu - w * 0.5 + i * w * 0.5, cv + d * 0.2, 3.4], 5, 4, 3, mat(cr(i % 2 ? clan.trim : 0x8a3a5a)), 0, 1);
-  };
-  awning(52, -64, 24, 16, 38, 1); awning(-76, 52, 22, 15, 34, 2); awning(66, 58, 18, 13, 32, 3);
-  // standing stones with glowing runes in a half ring, the shrine well between
-  s.stone(8, 52, 9, 62, GREYB, ARCANE, 1); s.stone(-30, 74, 8, 52, GREYB, ARCANE, 2); s.stone(-70, 38, 7.5, 58, GREYB, ARCANE, 3);
-  s.stone(100, -28, 8, 54, GREYB, [0x9a6a10, 0xd9a030, 0xf6d26b], 4); s.stone(86, 86, 7, 46, GREYB, [0x9a6a10, 0xd9a030, 0xf6d26b], 5);
-  s.q.blob([20, 8, 2], 14, 14, 5, blocks(SAND, 60, 14, 6, 10), 0, 0.5); s.q.blob([20, 8, 5], 10, 10, 1, (l, ss, t, x, y) => ramp(ARCANE, 0.5 + hsh(x, y, 2) * 0.4, x, y), 0.6, 1);
-  s.light(20, 8, 40, 0xa890ff, 0.45);
-  s.banner(R - 26, gv0 - 46, 112, "veiled", 22, 48, 1); s.banner(R - 26, gv1 + 46, 112, "veiled", 22, 48, 1);
-  s.crate(-104, -4, 6, 11); s.barrel(-100, 14, 5, 10);
-}
-
-const PAINT: Record<ClanKey, (s: Scene) => void> = { wardens, redfang, host, hidekin, veiled };
-
-/** Painted Hold as two RGBA layers (art-time only: tools/art/holds.ts bakes them to PNG, the client loads those) (ground and standing), HOLD_W x HOLD_H each, standing layer with its outline. */
-export function paintHoldLayers(k: ClanKey): { ground: Uint8ClampedArray; stand: Uint8ClampedArray } {
-  const make = () => { const buf = new Uint32Array(HOLD_W * HOLD_H); return { buf, pen: bufPen(buf) }; };
-  const g = make(), q = make();
-  const s = new Scene(g.pen, q.pen);
-  PAINT[k](s);
-  // outline the standing layer
-  const { buf } = q, solid = (x: number, y: number) => x >= 0 && y >= 0 && x < HOLD_W && y < HOLD_H && buf[y * HOLD_W + x] >>> 24 > 140;
-  const ol = new Uint32Array(buf);
-  for (let y = 0; y < HOLD_H; y++) for (let x = 0; x < HOLD_W; x++) {
-    if (solid(x, y) || (buf[y * HOLD_W + x] >>> 24) > 0) continue;
-    if (solid(x - 1, y) || solid(x + 1, y) || solid(x, y - 1) || solid(x, y + 1)) ol[y * HOLD_W + x] = (0xe0 << 24 | OUTLINE) >>> 0;
-  }
-  const toRGBA = (b: Uint32Array) => {
-    const out = new Uint8ClampedArray(b.length * 4);
-    for (let i = 0; i < b.length; i++) { const v = b[i]; out[i * 4] = (v >> 16) & 255; out[i * 4 + 1] = (v >> 8) & 255; out[i * 4 + 2] = v & 255; out[i * 4 + 3] = v >>> 24; }
-    return out;
-  };
-  return { ground: toRGBA(g.buf), stand: toRGBA(ol) };
-}
-
-function bufPen(buf: Uint32Array): Pen {
+function bufPen(buf: Uint32Array, W: number, H: number): Pen {
   const px = (x: number, y: number, c: number, a = 1) => {
     x = Math.round(x); y = Math.round(y);
-    if (x < 0 || y < 0 || x >= HOLD_W || y >= HOLD_H) return;
-    const i = y * HOLD_W + x;
+    if (x < 0 || y < 0 || x >= W || y >= H) return;
+    const i = y * W + x;
     if (a >= 1) { buf[i] = (0xff000000 | c) >>> 0; return; }
     const o = buf[i], oa = o >>> 24;
     if (!oa) { buf[i] = ((Math.round(a * 255) << 24) | c) >>> 0; return; }
@@ -624,4 +581,155 @@ function bufPen(buf: Uint32Array): Pen {
   };
   return { px } as Pen;
 }
-void hex;
+
+// ---- the trampled ground ---------------------------------------------------------------------------------------
+interface GroundLook { pal: number[]; edge: number[] }
+const GROUND: Record<ClanKey, GroundLook> = {
+  wardens: { pal: [0x1c140c, 0x2c2014, 0x40301e, 0x584428, 0x6e5a34, 0x846e44], edge: [0x242a14, 0x34401c, 0x4a5a24, 0x5e7230] },
+  redfang: { pal: [0x1a0f0a, 0x2a1810, 0x3e2616, 0x54351e, 0x6c4a2c, 0x84603a], edge: [0x2a2a14, 0x3a4018, 0x4e5a20, 0x627030] },
+  host: { pal: [0x0e1110, 0x1a1f1e, 0x262d2c, 0x343e3c, 0x465250, 0x5a6866], edge: [0x1a2018, 0x242c20, 0x303a2a, 0x3c4834] },
+  hidekin: { pal: [0x16100a, 0x241a10, 0x382816, 0x4e3a20, 0x645030, 0x7c6640], edge: [0x24280e, 0x343c14, 0x485220, 0x5c6a2c] },
+  veiled: { pal: [0x2a2014, 0x44341e, 0x624c2c, 0x80663c, 0xa08450, 0xbea06a], edge: [0x2c3216, 0x3e481e, 0x566428, 0x6c7c32] },
+};
+export const GROUND_W = 112, GROUND_H = 64, GROUND_OX = 56, GROUND_OY = 32;
+
+/** One cell of the compound's ground. `mask`: which of E, W, S, N continue the compound (J bits); `road`: a gate's packed way. */
+export function paintGround(clan: ClanKey, mask: number, v: number, road: boolean): Painted {
+  const { pal, edge } = GROUND[clan], W = GROUND_W, H = GROUND_H, buf = new Uint32Array(W * H), g = new IsoPaint(bufPen(buf, W, H), W, H, GROUND_OX, GROUND_OY);
+  const open = [!(mask & J.E), !(mask & J.W), !(mask & J.S), !(mask & J.N)];
+  const R = HALF + PAD;
+  g.surf((s, t) => [[(s - 0.5) * 2 * R, (t - 0.5) * 2 * R, 0], [0, 0, 1]], Math.ceil(R * 5.2), Math.ceil(R * 5.2), (_l, s, t, x, y) => {
+    const u = (s - 0.5) * 2 * R, w = (t - 0.5) * 2 * R;
+    // ragged dithered edges on the sides where the compound ends
+    let e = 99;
+    const rag = (c: number, k: number) => 2 + 5 * hsh(Math.floor(c / 3), k, 11 + v);
+    if (open[0]) e = Math.min(e, HALF - u - rag(w, 1)); if (open[1]) e = Math.min(e, u + HALF - rag(w, 2));
+    if (open[2]) e = Math.min(e, HALF - w - rag(u, 3)); if (open[3]) e = Math.min(e, w + HALF - rag(u, 4));
+    if (e < 0 || e + (dith(x, y) - 0.5) * 3 < 0.2) return undefined;
+    const noise = (hsh(Math.floor(u / 9), Math.floor(w / 9), 3 + v) - 0.5) * 0.14 + (hsh(Math.floor(u / 3), Math.floor(w / 3), 4) - 0.5) * 0.1;
+    if (e < 4.5) return ramp(edge, 0.35 + noise * 2 + e * 0.12, x, y);
+    let c = ramp(pal, 0.45 + noise * 2.5 + (road ? 0.18 : 0) + (hsh(x, y, 7) < 0.06 ? 0.2 : 0) - (hsh(x, y, 8) < 0.05 ? 0.15 : 0), x, y);
+    const fu = ((u + 600) % 24), fw = ((w + 600) % 24);
+    if (clan === "host" && (fu < 0.9 || fw < 0.9)) c = ramp(GREYB, 0.12 + hsh(Math.floor(u / 24), Math.floor(w / 24), 4) * 0.2, x, y);
+    else if (clan === "host") c = ramp(GREYB, 0.34 + hsh(Math.floor((u + 600) / 24), Math.floor((w + 600) / 24), 5 + v) * 0.35 + noise, x, y);
+    if (clan === "veiled" && (((u + 600) % 16) < 0.8 || ((w + 600) % 16) < 0.8)) c = ramp(SAND, 0.22 + noise, x, y);
+    if (clan === "redfang" && hsh(Math.floor(u / 5), Math.floor(w / 5), 9 + v) < 0.07) c = ramp([0x2a0c08, 0x4a1810, 0x6a2418], 0.5, x, y);
+    if (clan === "hidekin" && Math.abs(Math.sin(u * 0.19 + w * 0.07 + v * 3)) < 0.05 && hsh(Math.floor(u / 8), 3, v) < 0.6) c = ramp(SOIL, 0.15, x, y);
+    if (clan === "wardens" && hsh(x, y, 12) < 0.025) c = ramp(STRAWR, 0.55, x, y);
+    return c;
+  });
+  // litter: pebbles, bones, straw (flat, nothing to bump into)
+  const kinds = clan === "host" || clan === "redfang" ? ["bone", "pebble", "bone"] : clan === "wardens" ? ["straw", "pebble", "straw"] : ["pebble", "straw", "pebble"];
+  for (let i = 0; i < 3; i++) {
+    const u = (hsh(i, v, 80) - 0.5) * 30, w = (hsh(i, v, 81) - 0.5) * 30, k = kinds[i], s1 = 1 + hsh(i, v, 82) * 1.2;
+    if (open[0] && u > 14 || open[1] && u < -14 || open[2] && w > 14 || open[3] && w < -14) continue;
+    if (k === "pebble") g.blob([u, w, 0.4], s1 * 1.3, s1, s1 * 0.6, rough(STONER, 0.05));
+    else if (k === "bone") g.rod([u, w, 0.6], [u + 5 * (hsh(i, v, 83) - 0.5) * 2, w + 4 * (hsh(i, v, 84) - 0.5) * 2, 0.6], 0.8, mat(BONER));
+    else g.rod([u, w, 0.4], [u + 6, w + 2 * (hsh(i, v, 85) - 0.5), 0.4], 0.4, mat(STRAWR));
+  }
+  const data = new Uint8ClampedArray(W * H * 4);
+  for (let i = 0; i < W * H; i++) { const c = buf[i]; data[i * 4] = (c >> 16) & 255; data[i * 4 + 1] = (c >> 8) & 255; data[i * 4 + 2] = c & 255; data[i * 4 + 3] = c >>> 24; }
+  return { w: W, h: H, ox: GROUND_OX, oy: GROUND_OY, data };
+}
+
+/** Key of one ground tile look (atlas frame name). */
+export const groundKey = (clan: ClanKey, mask: number, v: number, road: boolean) => `hg_${clan}_${mask}_${v}_${road ? 1 : 0}`;
+export interface GroundPlan {
+  /** Size and origin (the middle cell's centre) of the compound's ground image, in texels. */
+  w: number; h: number; ox: number; oy: number;
+  /** The tiles to lay, back to front, at pixel (x, y) of that image. */
+  tiles: { key: string; clan: ClanKey; mask: number; v: number; road: boolean; x: number; y: number }[];
+}
+/** Which ground tiles, where, make up a fort's compound (tile offsets (dx, dy) sit at ((dx - dy) * 48, (dx + dy) * 24)). */
+export function groundPlan(f: HoldFort): GroundPlan {
+  const cell = new Set(f.cells.map((c) => `${c.dx},${c.dy}`)), at = (dx: number, dy: number) => cell.has(`${dx},${dy}`);
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (const c of f.cells) {
+    const px = (c.dx - c.dy) * T, py = (c.dx + c.dy) * T / 2;
+    x0 = Math.min(x0, px - GROUND_OX); x1 = Math.max(x1, px - GROUND_OX + GROUND_W); y0 = Math.min(y0, py - GROUND_OY); y1 = Math.max(y1, py - GROUND_OY + GROUND_H);
+  }
+  const tiles: GroundPlan["tiles"] = [];
+  for (const c of [...f.cells].sort((a, b) => a.dy + a.dx - b.dy - b.dx)) {
+    const mask = (at(c.dx + 1, c.dy) ? J.E : 0) | (at(c.dx - 1, c.dy) ? J.W : 0) | (at(c.dx, c.dy + 1) ? J.S : 0) | (at(c.dx, c.dy - 1) ? J.N : 0);
+    const v = Math.floor(hsh(f.cx + c.dx, f.cy + c.dy, 19) * 3), road = c.kind === "gate";
+    tiles.push({ key: groundKey(f.clan, mask, v, road), clan: f.clan, mask, v, road, x: (c.dx - c.dy) * T - GROUND_OX - x0, y: (c.dx + c.dy) * T / 2 - GROUND_OY - y0 });
+  }
+  return { w: x1 - x0, h: y1 - y0, ox: -x0, oy: -y0, tiles };
+}
+
+const groundCache = new Map<string, Painted>();
+/** The whole compound's ground painted now (previews; the game blits the baked tiles of the atlas instead). */
+export function composeGround(f: HoldFort): Painted {
+  const plan = groundPlan(f), { w, h } = plan, data = new Uint8ClampedArray(w * h * 4);
+  for (const g of plan.tiles) {
+    let t = groundCache.get(g.key); if (!t) groundCache.set(g.key, t = paintGround(g.clan, g.mask, g.v, g.road));
+    for (let y = 0; y < t.h; y++) for (let x = 0; x < t.w; x++) {
+      const si = (y * t.w + x) * 4;
+      if (!t.data[si + 3]) continue;
+      const di = ((g.y + y) * w + g.x + x) * 4;
+      data[di] = t.data[si]; data[di + 1] = t.data[si + 1]; data[di + 2] = t.data[si + 2]; data[di + 3] = t.data[si + 3];
+    }
+  }
+  return { w, h, ox: plan.ox, oy: plan.oy, data };
+}
+
+// ---- the baked atlas (tools/art/holds.ts writes it, holdAssets.ts loads it) -------------------------------------
+export const ATLAS_W = 1024, ATLAS_PAD = 2;
+/** One clan's atlas: the frame of every piece (`pieceKey`) and ground tile (`groundKey`), with the cell's middle at (ox, oy) in the frame. */
+export interface AtlasMeta { w: number; h: number; frames: Record<string, { x: number; y: number; w: number; h: number; ox: number; oy: number }> }
+export const atlasFile = (k: ClanKey, ext: "png" | "json") => `atlas_${k}.${ext}`;
+
+// ---- layout: a fort's cells to pieces -----------------------------------------------------------------------
+/** A piece placed at a fort: offset in tiles from the Hold's middle tile (clusters sit on a half tile), and `foot` screen px added to its depth. */
+export interface PieceInst { spec: PieceSpec; key: string; dx: number; dy: number; foot: number }
+
+const BLOCK_KINDS: ReadonlySet<FortKind> = new Set<FortKind>(["wall", "tower", "tent", "fence", "mound"]);
+const WALL_JOIN: ReadonlySet<FortKind> = new Set<FortKind>(["wall", "tower", "gate", "fence"]);
+const FENCE_JOIN: ReadonlySet<FortKind> = new Set<FortKind>(["wall", "tower", "gate", "fence", "tent"]);
+
+/**
+ * What to draw for the fort as built at one Hold: the pieces for its cells (gate cells are two posts and a lintel,
+ * gap cells a little rubble beside a wall, the middle cell a hearth). Same cells the server makes solid.
+ */
+export function fortLayout(f: HoldFort): PieceInst[] {
+  const kinds = new Map<number, FortKind>(), id = (dx: number, dy: number) => (dy + 40) * 96 + dx + 40;
+  for (const c of f.cells) kinds.set(id(c.dx, c.dy), c.kind);
+  const at = (dx: number, dy: number) => kinds.get(id(dx, dy));
+  const mk = (clan: ClanKey, kind: PieceKind, o: Partial<PieceSpec> = {}): PieceSpec => ({ clan, kind, mask: 0, v: 0, cw: 1, ch: 1, axis: 0, part: 0, broken: false, ...o });
+  const out: PieceInst[] = [], seen = new Set<number>(), clan = f.clan;
+  const push = (spec: PieceSpec, dx: number, dy: number, foot = 0) => out.push({ spec, key: pieceKey(spec), dx, dy, foot });
+  const joined = (dx: number, dy: number, join: ReadonlySet<FortKind>) => {
+    const j = (a: number, b: number) => { const k = at(dx + a, dy + b); return !!k && join.has(k); };
+    let m = (j(1, 0) ? J.E : 0) | (j(-1, 0) ? J.W : 0) | (j(0, 1) ? J.S : 0) | (j(0, -1) ? J.N : 0);
+    if (!(m & (J.E | J.S)) && j(1, 1)) m |= J.SE;
+    if (!(m & (J.E | J.N)) && j(1, -1)) m |= J.NE;
+    if (!(m & (J.W | J.S)) && j(-1, 1)) m |= J.SW;
+    if (!(m & (J.W | J.N)) && j(-1, -1)) m |= J.NW;
+    return m;
+  };
+  const beside = (dx: number, dy: number, what: FortKind) => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, b]) => at(dx + a, dy + b) === what);
+  const blockAt = (dx: number, dy: number) => { const k = at(dx, dy); return !!k && BLOCK_KINDS.has(k); };
+  for (const c of f.cells) {
+    const { dx, dy, kind } = c, variant = Math.floor(hsh(f.cx + dx, f.cy + dy, 17) * 3);
+    if (kind === "wall" || kind === "fence") {
+      push(mk(clan, kind, { mask: joined(dx, dy, kind === "wall" ? WALL_JOIN : FENCE_JOIN), v: variant, broken: beside(dx, dy, "gap") }), dx, dy);
+    } else if (kind === "tent") push(mk(clan, "tent", { v: variant }), dx, dy);
+    else if (kind === "gate") {
+      const ns = blockAt(dx, dy - 1) && blockAt(dx, dy + 1), ew = blockAt(dx - 1, dy) && blockAt(dx + 1, dy);
+      const axis: 0 | 1 = ns ? 0 : ew ? 1 : blockAt(dx, dy - 1) || blockAt(dx, dy + 1) ? 0 : blockAt(dx - 1, dy) || blockAt(dx + 1, dy) ? 1 : 0;
+      push(mk(clan, "gate", { axis, part: 0 }), dx, dy, -7); push(mk(clan, "gate", { axis, part: 1 }), dx, dy, 7);
+    } else if (kind === "gap") { if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, b]) => blockAt(dx + a, dy + b))) push(mk(clan, "rubble", { v: variant }), dx, dy); }
+    else if (kind === "court") { if (dx === 0 && dy === 0) push(mk(clan, "pit"), dx, dy); }
+    else if ((kind === "tower" || kind === "mound") && !seen.has(id(dx, dy))) {
+      // a connected block of cells of this kind is one piece when it is a full rectangle, else one piece per cell
+      const comp: [number, number][] = [], q: [number, number][] = [[dx, dy]]; seen.add(id(dx, dy));
+      while (q.length) { const [x, y] = q.pop()!; comp.push([x, y]); for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (at(x + a, y + b) === kind && !seen.has(id(x + a, y + b))) { seen.add(id(x + a, y + b)); q.push([x + a, y + b]); } }
+      const xs = comp.map((p) => p[0]), ys = comp.map((p) => p[1]), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+      const cw = x1 - x0 + 1, ch = y1 - y0 + 1;
+      if (cw * ch === comp.length && cw <= 3 && ch <= 3) push(mk(clan, kind, { cw, ch, v: kind === "tower" ? variant : 0 }), (x0 + x1) / 2, (y0 + y1) / 2);
+      else for (const [x, y] of comp) push(mk(clan, kind, { v: Math.floor(hsh(f.cx + x, f.cy + y, 17) * 3) }), x, y);
+    }
+  }
+  return out;
+}
+

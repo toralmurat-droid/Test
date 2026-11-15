@@ -16,6 +16,7 @@ import { blocked, moveStep } from "../shared/movement";
 import { noMobsAt } from "../shared/spawns";
 import { inVillage } from "../shared/wrath";
 import { CLAN_KEYS, type ClanKey } from "../shared/war/clans";
+import { fortDetour } from "../shared/war/holdRoutes";
 import { garrisonCount, garrisonSpots, patrolCount, patrolOf, patrolPos, TROOP } from "../shared/war/patrols";
 import { RENOWN_RANKS, rankOf } from "../shared/war/renown";
 import { TERRITORIES } from "../shared/war/territories";
@@ -371,7 +372,7 @@ export class WarTroops {
 
   /** One step toward (gx, gy) at `pace` px/s, never into the safe squares, the stockade or monster-free ground. */
   walk(m: TroopMob, gx: number, gy: number, dt: number, pace: number) {
-    const dx = gx - m.x, dy = gy - m.y, d = Math.hypot(dx, dy);
+    const to = fortDetour(m.x, m.y, gx, gy), dx = to.x - m.x, dy = to.y - m.y, d = Math.hypot(dx, dy); // round a Hold's walls, not into them
     const r = moveStep(m.x, m.y, dirInput(dx, dy), dt, Math.min(pace, d / Math.max(dt, 1e-3)));
     if (!offLimits(r.x, r.y)) { m.x = r.x; m.y = r.y; m.moving = r.moving; } else m.moving = false;
     m.homeX = m.x; m.homeY = m.y;

@@ -7,7 +7,8 @@
 import { TILE } from "../constants";
 import { isSolidAt, isSolidTile } from "../map";
 import type { ClanKey } from "./clans";
-import { HOLD_FORT_PX, HOLDS, STANDARDS } from "./standards";
+import { anyHoldWall, holdReachPx } from "./holdWalls";
+import { HOLDS, STANDARDS } from "./standards";
 import { TERRITORIES } from "./territories";
 
 export const TROOP = {
@@ -119,8 +120,9 @@ interface Box { x0: number; y0: number; x1: number; y1: number; w: number; walk:
 function box(x0: number, y0: number, x1: number, y1: number): Box {
   const w = x1 - x0 + 1, h = y1 - y0 + 1, walk = new Uint8Array(w * h), open = new Uint8Array(w * h);
   for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) {
-    walk[(ty - y0) * w + tx - x0] = isSolidAt((tx + 0.5) * TILE, (ty + 0.5) * TILE) ? 0 : 1; // a hero can stand on its centre
-    open[(ty - y0) * w + tx - x0] = isSolidTile(tx, ty) ? 0 : 1; // nothing on it at all (segments may cross it anywhere)
+    const wall = anyHoldWall(tx, ty); // any holder's Hold wall: a route must suit every fort the land may get
+    walk[(ty - y0) * w + tx - x0] = wall || isSolidAt((tx + 0.5) * TILE, (ty + 0.5) * TILE) ? 0 : 1; // a hero can stand on its centre
+    open[(ty - y0) * w + tx - x0] = wall || isSolidTile(tx, ty) ? 0 : 1; // nothing on it at all (segments may cross it anywhere)
   }
   return { x0, y0, x1, y1, w, walk, open };
 }
@@ -187,9 +189,9 @@ function simplify(b: Box, path: [number, number][]): { x: number; y: number }[] 
 /** Slack between the fort's walls and the soldiers outside them (px). */
 const FORT_MARGIN = 28;
 
-/** Spots on a square just outside the Hold's walls, the front gate (+x side, toward the viewer in iso) first, then outwards round it. */
-function gateSpots(h: { x: number; y: number }): { x: number; y: number }[] {
-  const d0 = HOLD_FORT_PX + FORT_MARGIN, out: { x: number; y: number }[] = [];
+/** Spots on a square just outside the Hold's walls (any clan's fort), the front gate (+x side, toward the viewer in iso) first, then outwards round it. */
+function gateSpots(h: { t: number; x: number; y: number }): { x: number; y: number }[] {
+  const d0 = holdReachPx(h.t) + FORT_MARGIN, out: { x: number; y: number }[] = [];
   for (let d = d0; d <= d0 + 3 * TILE; d += TILE / 2)
     for (let o = -d; o <= d; o += TILE / 2) out.push({ x: h.x + d, y: h.y + o }, { x: h.x - d, y: h.y + o }, { x: h.x + o, y: h.y + d }, { x: h.x + o, y: h.y - d });
   const g = { x: h.x + d0, y: h.y + 8 };
@@ -264,10 +266,11 @@ export function garrisonSpots(t: number, n: number): { x: number; y: number; fx:
   if (!spots.has(t)) {
     const hold = HOLDS.find((h) => h.t === t), out: { x: number; y: number; fx: number; fy: number }[] = [];
     if (hold) for (let k = 0; k < 64 && out.length < TROOP.garrisonMax; k++) {
-      // a square ring outside the fort's walls: Chebyshev distance from the Hold, so no guard stands in the compound
-      const a = k * 2.399963 + t * 0.7, fx = Math.cos(a), fy = Math.sin(a), r = (HOLD_FORT_PX + FORT_MARGIN + (k % 3) * 18) / Math.max(Math.abs(fx), Math.abs(fy));
+      // a square ring outside the fort's walls (any clan's): Chebyshev distance from the Hold, so no guard stands in the compound
+      const a = k * 2.399963 + t * 0.7, fx = Math.cos(a), fy = Math.sin(a), r = (holdReachPx(t) + FORT_MARGIN + (k % 3) * 18) / Math.max(Math.abs(fx), Math.abs(fy));
       const x = hold.x + fx * r, y = hold.y + fy * r;
       if (isSolidAt(x, y) || isSolidAt(x + 8, y) || isSolidAt(x - 8, y) || isSolidAt(x, y + 8) || isSolidAt(x, y - 8)) continue;
+      if (anyHoldWall(Math.floor(x / TILE), Math.floor(y / TILE))) continue; // (a neighbour's fort)
       if (out.some((o) => Math.hypot(o.x - x, o.y - y) < 28)) continue;
       out.push({ x, y, fx, fy });
     }

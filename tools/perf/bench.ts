@@ -12,6 +12,7 @@
 //   SIEGE=1 (with WAR=1): a siege is called on an Act 1 land and the first bot stands at its gate, so a siege battle runs (server/warSieges.ts)
 //   SIEGE=host: the same, led by the Ossuary Host, so its bone ram and crew roll too (server/warWorks.ts)
 //   TUNNEL=1 (with WAR=1): the Hide-Kin are ordered through a tunnel and the last bot stands at its mouth (server/warTunnels.ts)
+//   HOLDFIGHT=1 (with WAR=1): the bots, sworn to the Redfang, hop about the courtyards of three Wardens Holds; the troopers chase them round the walls (shared/war/holdRoutes.ts)
 //   RITUAL=1 (with WAR=1): the rituals run on a clock shifted to noon and the second bot stands at the circle (server/warRituals.ts)
 //   CAST=1 SPREAD=1: the Summoner bots cast wisps, blades, black holes and the Void Arsenal non-stop (tools/perf/bots.ts)
 //   TIDE=1: a Gloam Tide march is out the whole time, its last wave all at once (TIDE.maxAlive marchers, server/tide.ts)
@@ -124,6 +125,20 @@ async function main() {
       const pl = [...room.state.players.values()][1];
       if (pl) { pl.x = at.x + 48; pl.y = at.y; }
     }
+  }
+  if (process.env.HOLDFIGHT && process.env.WAR) {
+    // heroes sworn to another clan stand about in the courtyards of three Act 1 Holds (moving tile to tile); the holders' troopers chase them
+    const { warState } = await import("../../server/war"), { TERRITORIES } = await import("../../shared/war/territories");
+    const { fortOf } = await import("../../shared/war/holdWalls"), { patrolOf } = await import("../../shared/war/patrols"), { SAFE_ZONE } = await import("../../shared/map");
+    const st = warState()!, lands = TERRITORIES.filter((t) => t.act === 1 && !t.capitalOf && patrolOf(t.id) && Math.hypot(t.cx - SAFE_ZONE.x, t.cy - SAFE_ZONE.y) > 40).slice(0, 3);
+    const yards = lands.map((t) => { st.owner[t.id] = "wardens"; st.control[t.id] = 100; const f = fortOf(t.id, "wardens")!; return f.cells.filter((c) => c.kind === "court").map((c) => ({ x: (f.cx + c.dx + 0.5) * TILE, y: (f.cy + c.dy + 0.5) * TILE })); });
+    const heroes = [...room.state.players.values()];
+    const pin = () => heroes.forEach((p: any, i: number) => {
+      const yard = yards[i % yards.length], c = yard[Math.floor(Math.random() * yard.length)];
+      p.clan = "redfang"; p.level = Math.max(p.level, 30); p.hp = p.maxHp = 1e7; p.x = c.x; p.y = c.y;
+    });
+    pin();
+    setInterval(pin, 300).unref();
   }
   await new Promise((r) => setTimeout(r, 3000));
   ticks.length = 0; patches.length = 0; bytes = 0; wire = 0; backlog = 0; for (const r of ph.values()) r.n = r.incl = r.self = 0;

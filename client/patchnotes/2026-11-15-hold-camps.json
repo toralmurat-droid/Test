@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-15",
+  "title": "Camps with walls",
+  "changes": [
+    "Each clan now builds its camp its own way: Wardens a big palisade fort with a watchtower, Redfang a loose ring of tents and stakes, the Ossuary Host a stone keep with corner towers, the Hide-Kin an earth bank round a burrow, the Veiled a sandstone shrine with pylons.",
+    "Camp walls, towers, tents and fences are solid now: you can no longer walk through them. Enter through the gates and gaps.",
+    "When a land changes hands, its camp is rebuilt in the new holder's style."
+  ]
+}

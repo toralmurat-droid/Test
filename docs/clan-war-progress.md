@@ -758,6 +758,13 @@ Sims (`npx tsx tools/balance/war.ts 200 30 [--clever=<clan>]`):
   far from Hidehall); not rallied (10 of 62 is just over the line). Gnawed Bank, Scratchroot Burrows and Rushmere Hollows
   still have no quest.
 
+- Hold art rebuilt from the fort cells (2026-11-15): `client/src/holdArt.ts` paints per-cell pieces (`fortLayout`, `paintPiece`,
+  `paintGround`) from `fortOf(t, owner)`; `tools/art/holds.ts` (`npm run art`) bakes every look any Hold
+  can need into one atlas per clan (`client/public/assets/holds/atlas_<clan>.png/.json`; `tests/holdatlas.test.ts` fails
+  when a fort change needs a look the atlas lacks: re-run the bake). `client/src/holdAssets.ts` (`HoldDraw`) loads the
+  clan's atlas lazily and builds a Hold in one call, one image per cell sorted by foot depth; `warStandards.ts` shows flat
+  cell blocks while an atlas loads and swaps the art in the same frame when a Hold's owner changes. Preview: `npx tsx tools/art/preview/holds-sheet.ts out.png`.
+
 ## War table as a continent (2026-11-15, PR #458)
 Murat: the in-game war table "looks like a long rectangle, not like the design". It painted the territories over the
 real world map, whose acts are bands stacked down a 288-wide map. Now the War table toggle shows a schematic continent

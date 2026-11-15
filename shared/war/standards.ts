@@ -69,9 +69,9 @@ export const STANDARDS: Standard[] = build();
 
 
 export interface Hold { t: number; x: number; y: number }
-/** Tiles the Hold's compound covers round its middle (client/src/holdArt.ts paints about 7 tiles across). */
+/** Tiles round its middle a Hold's placement keeps clear (each clan's fort plan is in shared/war/holdWalls.ts). */
 export const HOLD_RADIUS = 3;
-/** Half-size of the fort in px (its 7x7 clearing): troops and guards keep outside this square. */
+/** Half-size in px of the 7x7 clearing a Hold is placed on. The forts themselves differ by clan and are bigger: troops, guards, rituals and tunnels keep outside holdWalls.ts holdReachPx. */
 export const HOLD_FORT_PX = (HOLD_RADIUS + 0.5) * TILE;
 /** Where each territory's Hold stands (px, the middle of its fort). */
 function buildHolds(): Hold[] {
