@@ -14,11 +14,12 @@ import { _resetWar, warState } from "../server/war";
 import { WarTroops, type TroopHero, type TroopMob } from "../server/warTroops";
 
 test("troops: the clan rides in Mob.weapon and round-trips; nothing else parses as a trooper", () => {
-  for (const k of CLAN_KEYS) for (const officer of [false, true]) {
-    const w = troopWeapon(k, officer);
-    assert.deepEqual(parseTroop(w), { clan: k, officer });
+  for (const k of CLAN_KEYS) {
+    for (const officer of [false, true]) assert.deepEqual(parseTroop(troopWeapon(k, officer)), { clan: k, officer, cart: false });
+    assert.equal(troopWeapon(k, false, true), `${k}^`, "a caravan cart");
+    assert.deepEqual(parseTroop(troopWeapon(k, false, true)), { clan: k, officer: false, cart: true });
   }
-  for (const w of ["", "folk", "sword", "*", "__proto__", "constructor*", "wardens**", 5, undefined]) assert.equal(parseTroop(w), undefined, String(w));
+  for (const w of ["", "folk", "sword", "*", "^", "__proto__", "constructor*", "constructor^", "wardens**", "wardens^^", "wardens^*", "wardens*^", 5, undefined]) assert.equal(parseTroop(w), undefined, String(w));
 });
 
 test("troops: stance table (own clan, other clan, unsworn, under the oath level)", () => {

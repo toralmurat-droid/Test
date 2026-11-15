@@ -188,3 +188,47 @@ Open points for M1:
 - Message contract: client -> server `"writ"`: `{}` | `{take: 0|1|2}` (at a board, sworn) | `{drop: true}`, anything
   else ignored, through `allow("ask")`. Server -> client `"writ"`: `{board?, offers?, active?, left?, note?, done?, err?}`.
 - Next: caravans on supply roads.
+
+## M2: Caravans (2026-11-15)
+
+- Rules and numbers: `shared/war/caravans.ts` (`CARAVAN`), server: `server/warCaravans.ts` (`WarCaravans` behind a narrow
+  `CaravanHost`, the escorts borrow `WarTroops.think / fight / walk`, refactored out of `WarTroops.step`), room wiring in
+  `TownRoom.ts` (field, 1 s tick before the troops, trooper branch of `updateMob`, `hit`, `mobDied`, `forget`).
+- Lines: `caravanLines(owner)` takes the edges of each clan's supply tree (the BFS of `supplyMap` from its held capitals,
+  first parent wins) that lead to a border land, directed outward, same act only (the waygate link carries none). Takes
+  the owner array only, so the client can call it with the `WarView`.
+- Roads: `caravanRoute(a, b)` (lazy, cached; b -> a is the same road reversed) from a's Hold gate to b's (the patrol
+  loops' `pts[0]`), a weighted 8-way tile search (road ground DIRT / COBBLE / BRIDGE cost 1, the rest 3) over both lands'
+  bounding box + 3 tiles (+15 if that fails), never on solid tiles, dungeon door walls (open or shut), the safe squares,
+  the stockade or monster-free ground; simplified with line of sight on fully open tiles. 14 of the 15 opening lines
+  have a road (Saltwind Coast -> Brinewood is a fallback link across the map: none). No map edits.
+- Clock: departure slot = `floor((now + caravanPhase(a, b)) / everyMs)` (7 min, phase from a hash of the ends), id
+  `"a-b-slot"`, position = (now - departure) x `speed` (26 px/s) along the road; trips are 15-175 s, so one cart per road.
+  Every room and client agrees; an unseen cart travels virtually.
+- Spawn: a cart within `wakeTiles` (26) of a living hero above ground becomes real monsters, nearest first, at most
+  `maxLive` (4) carts; carts claim 1 + `escorts` of `WAR_TROOPS.maxTroops` first (the troops get `maxTroops - reserved`).
+  Back to virtual after `sleepMs` (30 s) with no hero near; the trip keeps the cart's wounds and its fallen escorts.
+- Representation: no new MobKind, no schema change. The cart is a `"trooper"` with weapon `"<clan>^"` (`troopWeapon(k,
+  false, true)`, `parseTroop(w).cart`), HP = its clan's soldier HP x `hpMult` (5) at the destination's soldier level, no
+  attack; it rolls exactly where the clock puts it (stun / knockback don't move it). All trooper gates hold: only
+  rival-sworn heroes hurt it, no XP / loot / quest credit, charm / devour skip it, the watch ignores it. Patrol troopers
+  never target carts. 3 escorts (plain soldiers, weapon `"<clan>"`) march in formation (one ahead, two behind on the
+  sides), fight anything within `leashPx` (6 tiles) of the cart and wild monsters within `huntPx` (3 tiles); a hit on
+  the cart turns idle escorts on the hero. Fallen escorts give no valor and are not replaced on that trip.
+- Raided (a rival-sworn hero fells the cart): gold `20 + 5 x level` dropped at the cart (the normal gold drop), valor
+  `raidValor` (8) for his clan in the land where it fell (the territory there, else the nearer end of the road) if the
+  war lets that clan push there, and then renown `raidRenown` (10) for the killer and his sworn clan-mates within
+  `helperPx`; a Herald line to the room and `sfx` `caravan_raided` `{id, x, y, by, from}`. Felled by anything else: lost.
+  The escorts fight on `scatterMs` round the wreck, then go.
+- Delivered: a sworn hero of the cart's clan within `escortPx` (6 tiles) for at least `escortShare` (50%) of the trip,
+  and the destination still the clan's: valor `deliverValor` (8) there, renown `escortRenown` (10) for each such hero, a
+  Herald line to them and `sfx` `caravan_delivered` `{x, y, clan, t}`. With no hero escort nothing happens.
+- Outcomes live in memory for the process (shared by its rooms), so a raided cart never respawns on wake nor rolls on
+  in another room; nothing is saved (the war save and `fits()` are untouched).
+- Balance (`npx tsx tools/balance/pve.ts 40 --caravan`, the hero alone vs cart + 3 escorts of its level, win = cart
+  felled within 120 s): Lv15 wizard 95% / vampire 90% / summoner 73% (slow) / songweaver 80%; Lv30 100/80/100/78%;
+  Lv45 73/83/93/28% (the Songweaver's known trouble with three soldiers at Lv 45).
+- Client: real carts use their own sheets (`war_cart_<clan>`, `trooperArt` in `textures.ts`; walk, idle, frame 12 hurt, 13 wreck in `TownScene.trooperFrame`), name "<Clan> supply cart"; sounds `caravan_raided`, `caravan_delivered`.
+- Several rooms: only "raided" / "delivered" settle a trip for every room (a cart felled after another room settled it pays nothing); an unescorted arrival in one room does not block a delivery in another.
+- Not done: `escort` / `raid` writ kinds (the writ board), virtual carts on the war table, building all roads at boot (first use costs 10-75 ms per road).
+- Next: escort and raid writs; caravans feeding the war's supply.

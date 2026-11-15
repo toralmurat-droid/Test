@@ -106,6 +106,7 @@ import { byPart, hitBy } from "./hitBy";
 import { addValor, attachWar, onWar, warNow, warState } from "./war";
 import { clanView, cleanOath, Presence, swear } from "./warHeroes";
 import { WarTroops } from "./warTroops";
+import { WarCaravans } from "./warCaravans";
 import { WarWrits } from "./warWrits";
 import { cleanWrit } from "../shared/war/writs";
 import { WAR_TROOPS } from "../shared/war/troops";
@@ -616,7 +617,7 @@ export class TownRoom extends Room<TownState> {
   private offWar?: () => void;
   private warPresence = new Presence();
   /** Clan troops that fight (server/warTroops.ts): the holders' soldiers on the lands near heroes, as real monsters. */
-  private warTroops = new WarTroops({
+  private warTroops: WarTroops = new WarTroops({
     spawn: (id, level, x, y, weapon) => { this.spawnMob("trooper", -1, id, { x, y, level }); const m = this.state.mobs.get(id); if (m) m.weapon = weapon; return m; },
     remove: (id) => { this.state.mobs.delete(id); },
     mob: (id) => this.state.mobs.get(id), mobsInBox: (x, y, r) => this.state.mobs.inBox(x, y, r),
@@ -632,7 +633,17 @@ export class TownRoom extends Room<TownState> {
     },
     strikeMob: (mid, tid, dmg) => { const m = this.state.mobs.get(mid), o = this.state.mobs.get(tid); if (m && o && !o.dead) { this.broadcast("swing", { id: mid }); this.mobHitsMob(m, mid, o, tid, dmg); } },
     ranked: (pid, rank) => { const c = this.clients.getById(pid), p = this.state.players.get(pid); if (c && p) { c.send("clan", clanView(p)); c.send("chat", { id: "", name: "Herald", text: `Your renown grows: you are now ${rank}.` }); } },
+    reserved: (): number => this.caravans.count,
   });
+  /** Caravans (server/warCaravans.ts): supply carts on the clans' roads, spawned with their escorts near heroes. */
+  private caravans: WarCaravans = new WarCaravans({
+    spawn: (id, level, x, y, weapon) => { this.spawnMob("trooper", -1, id, { x, y, level }); const m = this.state.mobs.get(id); if (m) m.weapon = weapon; return m; },
+    remove: (id) => { this.state.mobs.delete(id); }, mob: (id) => this.state.mobs.get(id),
+    heroes: () => this.state.players.entries(), hero: (id) => this.state.players.get(id),
+    dropGold: (x, y, n) => this.dropItem("gold", x, y, n), broadcast: (type, msg) => this.broadcast(type, msg),
+    tell: (pid, text) => this.clients.getById(pid)?.send("chat", { id: "", name: "Herald", text }),
+    ranked: (pid, rank) => { const c = this.clients.getById(pid), p = this.state.players.get(pid); if (c && p) { c.send("clan", clanView(p)); c.send("chat", { id: "", name: "Herald", text: `Your renown grows: you are now ${rank}.` }); } },
+  }, this.warTroops);
 
   /** War writs (server/warWrits.ts): clan work from the bounty boards, apart from the hunts. */
   private writs = new WarWrits({
@@ -711,6 +722,7 @@ export class TownRoom extends Room<TownState> {
         const c = this.clients.getById(id), p = this.state.players.get(id);
         if (c && p) { c.send("clan", clanView(p)); c.send("chat", { id: "", name: "Herald", text: `Your renown grows: you are now ${rank}.` }); }
       }
+      this.caravans.tick(Date.now()); // (caravans claim their share of WAR_TROOPS.maxTroops first)
       this.warTroops.tick(Date.now());
     }, 1000);
     this.onMessage("clan", (client, msg: { swear?: unknown }) => {
@@ -1077,7 +1089,7 @@ export class TownRoom extends Room<TownState> {
     this.tradeStop(client.sessionId, "The other hero left: trade cancelled.");
     this.tradeAsks.delete(client.sessionId);
     this.state.players.delete(client.sessionId);
-    this.warTroops.forget(client.sessionId);
+    this.warTroops.forget(client.sessionId); this.caravans.forget(client.sessionId);
     this.unsummon(client.sessionId);
     this.dismissAll(client.sessionId);
     this.addrs.delete(client.sessionId);
@@ -3261,7 +3273,7 @@ export class TownRoom extends Room<TownState> {
     if (m.dead) { m.moving = false; m.winding = false; m.windUntil = 0; return; }
     if (m.owner) return this.updateSummon(m, id, dt, now);
     if (this.dummies.has(id)) { m.moving = false; m.winding = false; return; } // skill clip targets stand still
-    if (m.kind === "trooper") return this.warTroops.step(m, id, dt, now); // clan troops (server/warTroops.ts)
+    if (m.kind === "trooper") return this.caravans.owns(id) ? this.caravans.step(m, id, dt, now) : this.warTroops.step(m, id, dt, now); // clan troops and caravans (server/warTroops.ts, server/warCaravans.ts)
     if (m.banishAt && now >= m.banishAt && !m.specialAt) {
       // the summoned demon's time is up: it sinks back into the ground
       this.broadcast("banish", { id, x: Math.round(m.x), y: Math.round(m.y) });
@@ -5310,7 +5322,7 @@ export class TownRoom extends Room<TownState> {
     const m = this.state.mobs.get(targetId);
     if (!m || m.dead) return;
     if (a && !this.canHurtMob(attackerId, m)) return;
-    if (a && m.kind === "trooper") this.warTroops.hit(attackerId, m); // an enemy hero's blow: the trooper turns on them
+    if (a && m.kind === "trooper") { this.warTroops.hit(attackerId, m); this.caravans.hit(attackerId, targetId); } // an enemy hero's blow: the trooper (and a caravan's escort) turns on them
     if (m.owner && a) dmg = Math.max(1, Math.round(dmg / SUMMON.pvp.hp)); // a hero's blow on someone's creature (SUMMON.pvp)
     const def = mobDef(m);
     if (a && (m.camp || m.kind === "banditchief")) this.banditShout(m, targetId, attackerId, Date.now());
@@ -5467,6 +5479,7 @@ export class TownRoom extends Room<TownState> {
     if (m.voice) this.bossSay(targetId, m.voice.death);
     if (m.kind === "nightraider") this.raiderGone(m, targetId, true, killerName);
     if (m.kind === "trooper") { // its slot refills at the Hold; valor for a sworn killer, and a rout writ counts it
+      this.caravans.killed(m, targetId, attackerId); // a caravan's cart or escort (server/warCaravans.ts)
       const k = this.warTroops.killed(m, targetId, attackerId);
       if (k) this.writs.trooperKilled(attackerId, k.t, k.clan);
     }
@@ -6372,7 +6385,7 @@ export class TownRoom extends Room<TownState> {
     }
     if (riseAgain(this.host, tid)) return false; // Blood Pact: a killing blow leaves the vampire standing
     t.dead = true;
-    this.warTroops.forget(tid); // the troops are done with a fallen hero
+    this.warTroops.forget(tid); this.caravans.forget(tid); // the troops are done with a fallen hero
     this.qsteps.died(tid); // a carried lantern falls here, a hold run may fail (server/questSteps.ts)
     if (opts.from && this.state.players.has(opts.from)) onKill(this.host, opts.from); // Bloodlust
     const killer = opts.from ? this.state.mobs.get(opts.from) : undefined;
