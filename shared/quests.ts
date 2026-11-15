@@ -3076,7 +3076,7 @@ const IDLE: Record<string, string> = {
   cairncaptain: "Keep to the corpse roads, and if a barrow calls your name, don't answer. Four hundred years the Wardens have held these cairns shut. I mean to be the captain who doesn't lose them.",
   smoker: "Cod on the left, herring on the right, and don't lean on the racks. Alder smoke gets into everything, your coat included. You'll smell like Saltmere for a week. Folk say it suits you.",
   agna: "Mind the nets. I mend them, but I can't mend the sea. My Ilka used to hold the other end for me.",
-  pell: "She's taken on more water than a gull's belly, but she'll float. Once she's mended I might carry folk along the coast. Don't ask me when. The planks have their own mind.",
+  pell: "She's taken on more water than a gull's belly, but she'll float. Gullrock or the Heronwreck, twelve gold a leg, and I row the whole way. Mind your feet getting in. The planks have their own mind.",
   marta: "The stores are near empty. I water the broth and tell the boys it's the cold. Garrick says there is hope. I hope he's right.",
   alewife: "Ale's cold, the gossip's warm. Pull up a barrel, love. Whatever happens in this valley, it comes past my cart sooner or later.",
 };

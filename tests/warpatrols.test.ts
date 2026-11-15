@@ -5,7 +5,8 @@ import { TILE } from "../shared/constants";
 import { isSolidAt } from "../shared/map";
 import { CLAN_KEYS } from "../shared/war/clans";
 import { garrisonCount, garrisonSpots, patrolCount, patrolOf, patrolPos, patrols, SIEGE_FIGHT, siegeCounts, siegeLife, TROOP, TROOP_LOOK, type Patrol } from "../shared/war/patrols";
-import { HOLD_FORT_PX, HOLDS, STANDARD, STANDARDS } from "../shared/war/standards";
+import { holdReachPx } from "../shared/war/holdWalls";
+import { HOLDS, STANDARD, STANDARDS } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
 
 const seg = (p: Patrol, i: number) => [p.pts[i], p.pts[(i + 1) % p.pts.length]] as const;
@@ -25,7 +26,7 @@ test("patrols: every territory with a Hold and a standard has one; gate first (j
     assert.equal(patrolOf(t.id), p);
     const hold = HOLDS.find((h) => h.t === t.id)!;
     const g = p.pts[0], gd = Math.max(Math.abs(g.x - hold.x), Math.abs(g.y - hold.y));
-    assert.ok(gd >= HOLD_FORT_PX && gd <= HOLD_FORT_PX + 5 * TILE, `${t.name} starts just outside its fort (${gd.toFixed(0)} px)`);
+    assert.ok(gd >= holdReachPx(t.id) && gd <= holdReachPx(t.id) + 5 * TILE, `${t.name} starts just outside its fort, any clan's (${gd.toFixed(0)} px)`);
     assert.ok(!isSolidAt(g.x, g.y), `${t.name} gate spot walkable`);
     assert.equal(p.stops[0], 0);
     assert.ok(p.pts.length >= 2 && p.len > 0);
@@ -122,7 +123,7 @@ test("garrisonSpots: outside the fort, walkable, distinct, deterministic", () =>
     const g = garrisonSpots(t.id, TROOP.garrisonMax);
     assert.ok(g.length >= TROOP.garrisonMin, `${t.name} has room for ${g.length} guards`);
     const h = HOLDS.find((x) => x.t === t.id)!;
-    for (const p of g) { assert.ok(!isSolidAt(p.x, p.y)); assert.ok(Math.max(Math.abs(p.x - h.x), Math.abs(p.y - h.y)) >= HOLD_FORT_PX, `${t.name} guard outside the fort`); assert.ok(Math.abs(Math.hypot(p.fx, p.fy) - 1) < 1e-9); }
+    for (const p of g) { assert.ok(!isSolidAt(p.x, p.y)); assert.ok(Math.max(Math.abs(p.x - h.x), Math.abs(p.y - h.y)) >= holdReachPx(t.id), `${t.name} guard outside the fort`); assert.ok(Math.abs(Math.hypot(p.fx, p.fy) - 1) < 1e-9); }
     assert.deepEqual(garrisonSpots(t.id, 3), g.slice(0, 3));
   }
 });

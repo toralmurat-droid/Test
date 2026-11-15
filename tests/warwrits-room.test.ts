@@ -47,7 +47,7 @@ test("war writs (room): taken only at a board and sworn; bad payloads ignored; t
   freshWar();
   try {
     const { c, room, id, p, got } = await setup(srv);
-    assert.ok(got.some((m) => m.active === null && m.left === WRIT.perDay), "join: no writ, the day's count");
+    assert.ok(await until(() => got.some((m) => m.active === null && m.left === WRIT.perDay)), "join: no writ, the day's count"); // the join message, however busy the suite
     const { clan, level } = swornWithOffers();
     p.level = level;
     // away from any board: no offers, take refused

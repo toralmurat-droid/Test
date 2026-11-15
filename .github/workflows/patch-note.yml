@@ -12,6 +12,10 @@ permissions:
   contents: read
   pull-requests: read
 
+concurrency:
+  group: patch-note-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   patch-note:
     runs-on: ubuntu-latest

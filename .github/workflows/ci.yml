@@ -1,5 +1,6 @@
 # Every PR into the default branch must typecheck, pass the tests, build, and boot.
-# auto-merge.yml waits for this check: a PR that fails it is never merged (nothing reaches the live game).
+# auto-merge.yml starts when this check finishes: a PR that fails it is never merged (nothing reaches the live game).
+# Draft PRs are skipped (saves paid minutes on work in progress); marking the PR ready runs the full check.
 name: CI
 
 on:
@@ -16,6 +17,7 @@ concurrency:
 
 jobs:
   check:
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 25 # the suite takes 12-14 min on the runner since the moors and badlands; 15 cut it off mid-build
     # A throwaway Postgres for the account-store tests and the smoke test on Postgres

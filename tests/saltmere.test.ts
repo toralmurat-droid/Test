@@ -31,7 +31,7 @@ const area = (name: string) => AREAS.find((a) => a.name === name)!;
 const overlaps = (a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }) =>
   a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
-test("saltmere: the harbour square is a safe zone inside the village, flagstones underfoot", () => {
+test("saltmere: the harbour square is a safe zone inside the village, cobbles underfoot", () => {
   assert.deepEqual(SALT_SAFE, SALT_SQUARE);
   const town = area("Saltmere");
   assert.deepEqual({ x: town.x, y: town.y, w: town.w, h: town.h }, SALT_TOWN, "the area entry is SALT_TOWN");

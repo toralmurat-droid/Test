@@ -11,6 +11,7 @@ import { DOORS, GROUND, isSafeZone, isSolidAt, isSolidTile, T } from "../map";
 import { noMobsAt } from "../spawns";
 import { inVillage } from "../wrath";
 import type { ClanKey } from "./clans";
+import { anyHoldWall } from "./holdWalls";
 import { mix, patrolOf } from "./patrols";
 import { TERRITORIES, type Territory } from "./territories";
 import { troopLevel, troopStats } from "./troops";
@@ -109,7 +110,7 @@ function box(x0: number, y0: number, x1: number, y1: number): Box {
   const w = x1 - x0 + 1, h = y1 - y0 + 1, walk = new Uint8Array(w * h), open = new Uint8Array(w * h), cost = new Uint8Array(w * h);
   for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) {
     const i = (ty - y0) * w + tx - x0, cx = (tx + 0.5) * TILE, cy = (ty + 0.5) * TILE;
-    const banned = isDoor(tx, ty) || caravanOffLimits(cx, cy) || caravanOffLimits(tx * TILE, ty * TILE) || caravanOffLimits((tx + 1) * TILE - 0.01, (ty + 1) * TILE - 0.01)
+    const banned = isDoor(tx, ty) || anyHoldWall(tx, ty) || caravanOffLimits(cx, cy) || caravanOffLimits(tx * TILE, ty * TILE) || caravanOffLimits((tx + 1) * TILE - 0.01, (ty + 1) * TILE - 0.01)
       || caravanOffLimits((tx + 1) * TILE - 0.01, ty * TILE) || caravanOffLimits(tx * TILE, (ty + 1) * TILE - 0.01);
     walk[i] = !banned && !isSolidAt(cx, cy) ? 1 : 0;
     open[i] = !banned && !isSolidTile(tx, ty) ? 1 : 0;

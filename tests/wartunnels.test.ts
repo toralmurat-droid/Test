@@ -6,7 +6,8 @@ import { WAYGATE_DESERT, WAYGATE_OAKVALE } from "../shared/desert";
 import { CRYPT_DOOR, LINKS, SINKHOLE, UNDER_SHAFT, underground } from "../shared/dungeon";
 import { NPC_DECOR, NPCS } from "../shared/npcs";
 import { BOARDS } from "../shared/bounty";
-import { HOLD_FORT_PX, HOLDS, STANDARD, STANDARDS } from "../shared/war/standards";
+import { anyHoldWall, holdReachPx } from "../shared/war/holdWalls";
+import { HOLDS, STANDARD, STANDARDS } from "../shared/war/standards";
 import { caravanOffLimits } from "../shared/war/caravans";
 import { CLAN_KEYS, CLANS, type ClanKey } from "../shared/war/clans";
 import { newMinds, scriptedOrders } from "../shared/war/doctrine";
@@ -113,7 +114,8 @@ test("tunnels: every possible mouth is deterministic, walkable, reachable and in
     assert.ok(reachOf(t).has(ty * MAP_W + tx), `${name}: reachable from the Hold gate`);
     assert.ok((m.x / TILE - T.cx) * (F.cx - T.cx) + (m.y / TILE - T.cy) * (F.cy - T.cy) > 0, `${name}: on the side facing the start`);
     // territory rects overlap (Saltwind Coast holds Gullrock Cove): no Hold's fort and no standard's ring of any land
-    for (const h of HOLDS) assert.ok(Math.max(Math.abs(h.x - m.x), Math.abs(h.y - m.y)) >= HOLD_FORT_PX + TILE, `${name}: clear of ${TERRITORIES[h.t].name}'s fort`);
+    for (const h of HOLDS) assert.ok(Math.max(Math.abs(h.x - m.x), Math.abs(h.y - m.y)) >= holdReachPx(h.t), `${name}: clear of ${TERRITORIES[h.t].name}'s fort`);
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) assert.ok(!anyHoldWall(tx + dx, ty + dy), `${name}: no Hold wall by the mouth`);
     for (const st of STANDARDS) assert.ok(Math.hypot(st.x - m.x, st.y - m.y) >= STANDARD.range + TILE, `${name}: clear of ${TERRITORIES[st.t].name}'s standard`);
   }
   // every strike the war can order has its pair

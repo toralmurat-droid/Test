@@ -7,7 +7,9 @@ import Phaser from "phaser";
 import { CLANS, CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
 import { RENOWN_RANKS, rankOf } from "../../shared/war/renown";
 import { HOLDS, STANDARD, STANDARDS, type Standard } from "../../shared/war/standards";
-import { ensureHold, HOLD_ORIGIN, holdKeys, HOLD_RANGE, HOLD_SCALE } from "./holdAssets";
+import { ensureHold, HoldDraw, HOLD_KEEP, HOLD_RANGE } from "./holdAssets";
+import { fortOf } from "../../shared/war/holdWalls";
+import { TILE } from "../../shared/constants";
 import { targetsOf, type WarState } from "../../shared/war/rules";
 import { TERRITORIES } from "../../shared/war/territories";
 import type { WarView } from "../../shared/war/view";
@@ -47,7 +49,10 @@ function standardTexture(scene: Phaser.Scene, k: ClanKey): string {
 
 export class WarStandards {
   private poles = new Map<number, Phaser.GameObjects.Image>();
-  private holds = new Map<number, { ground: Phaser.GameObjects.Image; stand: Phaser.GameObjects.Image }>();
+  private holds = new Map<number, HoldDraw | Phaser.GameObjects.Graphics>();
+  private holdClan = new Map<number, ClanKey>();
+  /** Holds shown as flat blocks for now (the atlas is loading, or the top-down view): solid cells are never left bare. */
+  private holdFlat = new Set<number>();
   private rings = new Map<number, Phaser.GameObjects.Ellipse>();
   private prompt = document.createElement("div");
   private el = document.createElement("div");
@@ -123,25 +128,38 @@ export class WarStandards {
   }
 
   /**
-   * Each land's Hold, in its holder's style (baked PNGs, holdAssets.ts): the layers of a Hold near the hero load in the
-   * background (one clan at a time) and the Hold appears when they are in; it changes with the land. Cheap when nothing is new.
+   * Each land's Hold, drawn from the cells of its holder's fort (holdAssets.ts, shared/war/holdWalls.ts): the same cells
+   * the server makes solid. A Hold near the hero is built when seen, rebuilt when the land changes hands, dropped when far.
+   * While the clan's baked atlas loads (or in the top-down view) the cells show as flat blocks, so a solid cell is never bare.
+   * Cheap when nothing is new.
    */
   private syncHolds(me: { x: number; y: number } | undefined) {
     const v = this.view;
     if (!v || !me) return;
     for (const h of HOLDS) {
-      const k = CLAN_KEYS[v.owner[h.t]];
-      if (!k || Math.hypot(h.x - me.x, h.y - me.y) > HOLD_RANGE) continue;
-      if (!ensureHold(this.scene, k, () => this.syncHolds(this.hero))) continue;
-      const keys = holdKeys(k);
-      let img = this.holds.get(h.t);
-      if (!img) {
-        // the trampled ground lies under everything (heroes walk the compound); the standing parts sort by the foot
-        const mk = (key: string, depth: number) => isoAnchor(this.scene.add.image(h.x, h.y, key).setOrigin(HOLD_ORIGIN.x, HOLD_ORIGIN.y).setScale(HOLD_SCALE).setDepth(depth), { x: h.x, y: h.y }) as Phaser.GameObjects.Image;
-        img = { ground: mk(keys.ground, -0.5), stand: mk(keys.stand, h.y) };
-        this.holds.set(h.t, img);
-      } else if (img.stand.texture.key !== keys.stand) { img.ground.setTexture(keys.ground); img.stand.setTexture(keys.stand); }
+      const k = CLAN_KEYS[v.owner[h.t]], have = this.holds.get(h.t), d = Math.hypot(h.x - me.x, h.y - me.y);
+      if (have && (!k || d > HOLD_KEEP)) { have.destroy(); this.holds.delete(h.t); this.holdClan.delete(h.t); this.holdFlat.delete(h.t); continue; }
+      if (!k || d > HOLD_RANGE) continue;
+      // the baked art of this clan is there: build the Hold in one go (the old one goes the same frame, so a wall is never bare)
+      const ready = ISO && ensureHold(this.scene, k, () => this.syncHolds(this.hero));
+      if (have && this.holdClan.get(h.t) === k && !(ready && this.holdFlat.has(h.t))) continue;
+      const draw: HoldDraw | Phaser.GameObjects.Graphics = ready ? new HoldDraw(this.scene, h.t, k) : this.flatHold(h.t, k);
+      have?.destroy();
+      this.holds.set(h.t, draw); this.holdClan.set(h.t, k);
+      if (ready) this.holdFlat.delete(h.t); else this.holdFlat.add(h.t);
     }
+  }
+
+  /** The fort's cells as flat blocks (walls solid, gates and gaps open): the top-down view, and the stand-in while the art loads. */
+  private flatHold(t: number, k: ClanKey) {
+    const g = this.scene.add.graphics().setDepth(-0.4), f = fortOf(t, k);
+    if (f) for (const c of f.cells) {
+      const x = (f.cx + c.dx) * TILE, y = (f.cy + c.dy) * TILE;
+      if (c.kind === "court") g.fillStyle(CLANS[k].cloth, 0.25).fillRect(x, y, TILE, TILE);
+      else if (c.kind === "gate") g.fillStyle(CLANS[k].trim, 0.35).fillRect(x, y, TILE, TILE);
+      else if (c.kind !== "gap") g.fillStyle(CLANS[k].trim, 0.9).fillRect(x + 1, y + 1, TILE - 2, TILE - 2);
+    }
+    return g;
   }
 
   /** The server's oath state. */

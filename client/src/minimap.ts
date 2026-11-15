@@ -7,8 +7,14 @@ import { createTilesetCanvas, tileColors } from "./tileset";
 import { ISO } from "./isoflag";
 import { pixelText } from "./pixeltext";
 import { clasp, frameBorderImage, plaque, FRAME } from "./mapframe";
-import { drawWarLegend, drawWarTable, warLandLabels, warLinkLabels, warTableOn, setWarTableOn } from "./warTable";
+import { drawWarTable, warTableOn, setWarTableOn } from "./warTable";
 import type { WarView } from "../../shared/war/view";
+import { CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
+const CLAN_KEYS_OF = (i: number): ClanKey | undefined => CLAN_KEYS[i];
+import type { WarPlan, CallToArms } from "../../shared/war/intel";
+import type { MouthView } from "../../shared/war/tunnels";
+import type { WritState } from "../../shared/war/writs";
+import { currentCalls, drawCalls, drawRimArrows, drawTip, drawWarWorld, holdTip, panelLayout, panelRowAt, rimTargets, tipTarget, CLAN_COL, type PanelLayout, type WarMapData } from "./warMap";
 
 /** Moors colours (cool greys and heather) for the minimap and world map; the rest falls back to the tileset. */
 function moorsColor(o: number, g: number, colors: string[]): string {
@@ -109,6 +115,9 @@ export class Minimap {
   markers: MapMarker[] = [];
   /** The clan war snapshot, for the war table layer (warTable.ts). */
   war?: WarView;
+  /** The hero's clan, its plan of attacks ("warplan"), the active writ and the tunnel mouths: the war overlays (warMap.ts). */
+  clan?: ClanKey; plan?: WarPlan; writ?: WritState | null; tunnels?: MouthView[];
+  private calls: CallToArms[] = []; private callBox?: PanelLayout;
   /** Last positions given to draw(): the world map redraws every frame while open. */
   private me?: P;
   private others: OtherHero[] = [];
@@ -122,6 +131,9 @@ export class Minimap {
   private focus?: { x: number; y: number };
   private held = new Set<string>(); // map keys held down
   private lastBig = 0;
+  private hover?: { x: number; y: number }; // pointer on the war table (canvas px)
+  private warCursor = false;
+  private get tableUp() { return !!this.war && warTableOn(); }
   private ptrs = new Map<number, { x: number; y: number }>(); // pointers down on the world map (canvas px)
   private dragged = false; // the current press moved the map (not a tap)
   private downAt?: { x: number; y: number };
@@ -158,7 +170,7 @@ export class Minimap {
     // Big world map overlay
     this.overlay = document.createElement("div");
     this.overlay.id = "worldmap";
-    this.overlay.innerHTML = `<div class="wm-box"><div class="wm-title"></div><canvas class="wm-map"></canvas><div class="wm-hint"><button type="button" class="wm-center" tabindex="-1" title="Centre on your hero (C)">◎ Centre</button><button type="button" class="wm-war" tabindex="-1" title="Show who holds each land in the clan war">War table</button><span class="wm-keys">Drag or I J K L to move · Wheel or + / − to zoom · C or double-click to centre · M / Esc to close</span><span class="wm-touch">Drag · Pinch to zoom · Double-tap to centre</span></div></div>`;
+    this.overlay.innerHTML = `<div class="wm-box"><div class="wm-title"></div><canvas class="wm-map"></canvas><div class="wm-hint"><button type="button" class="wm-center" tabindex="-1" title="Centre on your hero (C)">◎ Centre</button><button type="button" class="wm-war" tabindex="-1" title="Show who holds each land in the clan war">War table</button><span class="wm-keys-war">M / Esc to close · War table to return to the map</span><span class="wm-keys">Drag or I J K L to move · Wheel or + / − to zoom · C or double-click to centre · M / Esc to close</span><span class="wm-touch">Drag · Pinch to zoom · Double-tap to centre</span></div></div>`;
     this.big = this.overlay.querySelector("canvas")!;
     // Ornate frame: iron-bound oak with gem corners, a title plaque on top and clasps on the sides
     const box = this.overlay.querySelector<HTMLDivElement>(".wm-box")!;
@@ -167,7 +179,19 @@ export class Minimap {
     const title = pixelText("Map of Oakvale", "#e8c27a", 11, 2);
     const plate = plaque(title.width * 2, title.height * 2);
     const tbox = this.overlay.querySelector<HTMLDivElement>(".wm-title")!;
+    tbox.classList.add("wm-title-map");
     tbox.append(plate, title);
+    // the war table's own title: "The Riven Marches" with a smaller "war table" under it
+    const t1 = pixelText("The Riven Marches", "#e8c27a", 11, 2), t2 = pixelText("war table", "#b8a27a", 8, 2);
+    const both = document.createElement("canvas");
+    both.width = Math.max(t1.width, t2.width); both.height = t1.height + t2.height - 6;
+    both.style.width = `${both.width * 2}px`; both.style.height = `${both.height * 2}px`; both.style.imageRendering = "pixelated";
+    const bg = both.getContext("2d")!; bg.imageSmoothingEnabled = false;
+    bg.drawImage(t1, Math.round((both.width - t1.width) / 2), 0); bg.drawImage(t2, Math.round((both.width - t2.width) / 2), t1.height - 6);
+    const wbox = document.createElement("div");
+    wbox.className = "wm-title wm-title-war";
+    wbox.append(plaque(both.width * 2, both.height * 2), both);
+    tbox.after(wbox);
     const l = clasp(true), r = clasp(true), bt = clasp(false);
     l.classList.add("wm-l"); r.classList.add("wm-r"); bt.classList.add("wm-b");
     box.append(l, r, bt);
@@ -246,6 +270,8 @@ export class Minimap {
       else this.dragged = true; // a second finger: pinch, never a tap
       c.style.cursor = "grabbing";
     });
+    c.addEventListener("pointermove", (ev) => { this.hover = at(ev); });
+    c.addEventListener("pointerleave", () => { this.hover = undefined; });
     c.addEventListener("pointermove", (ev) => {
       const prev = this.ptrs.get(ev.pointerId);
       if (!prev) return;
@@ -270,6 +296,8 @@ export class Minimap {
       if (this.ptrs.size) { const [q] = this.ptrs.values(); this.downAt = q; return; } // pinch to one finger: keep dragging
       c.style.cursor = "grab";
       if (this.dragged || ev.type === "pointercancel") return;
+      const row = panelRowAt(this.callBox, at(ev).x, at(ev).y);
+      if (row >= 0 && this.calls[row]) { this.showAt(this.calls[row].x, this.calls[row].y); return; } // a call to arms: centre there
       // A tap: two in a row (300 ms, close together) centre on the hero
       const p = at(ev), t = performance.now(), l = this.lastTap;
       if (l && t - l.t < 300 && Math.hypot(p.x - l.x, p.y - l.y) < 30) { this.lastTap = undefined; this.recentre(); }
@@ -326,6 +354,7 @@ export class Minimap {
 
   /** Moves the world map by a canvas-pixel offset (screen directions, even on the turned iso map). */
   private pan(dx: number, dy: number) {
+    if (this.tableUp) return; // the war table is fixed
     const c = this.camera(), [mx, my] = this.unturn(dx, dy);
     c.cx += mx / c.s; c.cy += my / c.s;
     this.follow = false;
@@ -334,6 +363,7 @@ export class Minimap {
 
   /** Zooms the world map by `f`, keeping the spot under canvas point (px, py) in place. */
   private zoomAt(f: number, px: number, py: number) {
+    if (this.tableUp) return;
     const c = this.camera(), [ox, oy] = this.unturn(px - this.big.width / 2, py - this.big.height / 2);
     const tx = c.cx + ox / c.s, ty = c.cy + oy / c.s; // tile under the point
     c.s *= f;
@@ -343,7 +373,7 @@ export class Minimap {
 
   /** Centres the world map on the hero and keeps following them. */
   private recentre() {
-    if (!this.me) return;
+    if (!this.me || this.tableUp) return;
     const c = this.camera();
     c.cx = this.me.x / TILE; c.cy = this.me.y / TILE;
     this.follow = true;
@@ -360,6 +390,13 @@ export class Minimap {
   showAt(px: number, py: number) {
     this.toggle(true);
     this.focus = { x: px / TILE, y: py / TILE };
+  }
+
+  /** Is this tile uncovered in the hero's fog (a Hold there counts as found)? */
+  isSeen(tx: number, ty: number) { return tx >= 0 && ty >= 0 && tx < MAP_W && ty < MAP_H && this.seen[ty * MAP_W + tx] >= 100; }
+
+  private warData(): WarMapData | undefined {
+    return this.war ? { war: this.war, clan: this.clan, plan: this.plan, writ: this.writ, tunnels: this.tunnels, seen: (x, y) => this.isSeen(x, y) } : undefined;
   }
 
   get isOpen() { return this.overlay.classList.contains("open"); }
@@ -520,9 +557,12 @@ export class Minimap {
     c.drawImage(this.colors, -sx * mpx, -sy * mpx, MAP_W * mpx, MAP_H * mpx);
     c.drawImage(this.fog, -sx * mpx, -sy * mpx, MAP_W * mpx, MAP_H * mpx);
     const dot = this.dot.bind(this);
+    const wd = this.warData();
+    if (wd) drawWarWorld(c, wd, { mini: true, s: mpx, ox: sx, oy: sy, now, wall: Date.now(), upright: (g) => { if (ISO) g.rotate(-Math.PI / 4); } });
     // Other online heroes: blue dots with a dark outline, shown even in unexplored parts
     for (const o of others) { dot(c, o, mpx, sx, sy, "#000", 3); dot(c, o, mpx, sx, sy, ALLY, 2); }
     this.drawMarkers(c, mpx, sx, sy, true);
+    if (wd) drawRimArrows(c, rimTargets(wd.war, this.clan, this.writ, me), mpx, sx, sy);
     if (me) { dot(c, me, mpx, sx, sy, "#000", 3); dot(c, me, mpx, sx, sy, "#ffd166", 2); }
     if (ISO) {
       const o = this.ctx, w = this.el.width, h = this.el.height;
@@ -568,6 +608,13 @@ export class Minimap {
     const R = this.cam ? { x: this.cam.cx - cw / this.cam.s / 2, y: this.cam.cy - ch / this.cam.s / 2, s: this.cam.s } : this.region(cw, ch, me), BIG = R.s;
     const g = this.big.getContext("2d")!;
     g.imageSmoothingEnabled = false;
+    this.overlay.classList.toggle("war", this.tableUp);
+    if (this.war && warTableOn()) { // the war table is its own schematic continent, not the world bands (warTable.ts)
+      this.big.style.cursor = "default"; this.warCursor = true;
+      drawWarTable(g, this.war, PF, now, this.hover, me ? { tx: Math.floor(me.x / TILE), ty: Math.floor(me.y / TILE) } : undefined);
+      return;
+    }
+    if (this.warCursor) { this.warCursor = false; this.big.style.cursor = "grab"; }
     g.fillStyle = FOG;
     g.fillRect(0, 0, this.big.width, this.big.height);
     // Iso view (Murat 2026-11-07): the world map turns 45 degrees like the minimap, so up on the map is up on the
@@ -581,10 +628,11 @@ export class Minimap {
     g.save();
     if (ISO) { g.translate(cw / 2, ch / 2); g.rotate(Math.PI / 4); g.scale(K, K); g.translate(-cw / 2, -ch / 2); }
     g.drawImage(this.colors, -R.x * BIG, -R.y * BIG, MAP_W * BIG, MAP_H * BIG);
-    if (this.war && warTableOn()) drawWarTable(g, this.war, BIG, R.x, R.y, now); // under the fog: unexplored land stays hidden
     g.drawImage(this.fog, -R.x * BIG, -R.y * BIG, MAP_W * BIG, MAP_H * BIG);
     this.turned = ISO;
     this.drawMarkers(g, BIG, R.x, R.y, false);
+    const wd = this.warData();
+    if (wd) drawWarWorld(g, wd, { mini: false, s: BIG, ox: R.x, oy: R.y, now, wall: Date.now(), upright: (u) => { if (ISO) { u.rotate(-Math.PI / 4); u.scale(1 / K, 1 / K); } } });
     this.turned = false;
     for (const o of others) { dot(g, o, BIG, R.x, R.y, "#000", 5); dot(g, o, BIG, R.x, R.y, ALLY, 3); }
     if (me) { dot(g, me, BIG, R.x, R.y, "#000", 6); dot(g, me, BIG, R.x, R.y, "#ffd166", 4); }
@@ -604,24 +652,6 @@ export class Minimap {
       g.fillStyle = "#000"; g.fillText(a.name, lx + 1, ly + 1);
       g.fillStyle = "#ffe8a3"; g.fillText(a.name, lx, ly);
     }
-    if (this.war && warTableOn()) {
-      // the lands' names, upright at the top corner of each land's dashed box (warTable.ts)
-      g.font = `15px ${PF}`; g.textAlign = "left"; g.textBaseline = "alphabetic";
-      for (const l of warLandLabels()) {
-        const [lx, ly] = T((l.x - R.x) * BIG, (l.y - R.y) * BIG), x = Math.round(lx - g.measureText(l.name).width / 2), y0 = Math.round(ly) - 6;
-        if (y0 < -40) continue; // another band's land, far off the top
-        const y = Math.max(16, y0); // a label just above the canvas comes down into it
-        g.fillStyle = "#000"; g.fillText(l.name, x + 1, y + 1);
-        g.fillStyle = "#ffe8a3"; g.fillText(l.name, x, y);
-      }
-      g.font = `12px ${PF}`; g.textAlign = "center";
-      for (const l of warLinkLabels()) { // the ways between lands, named at their gates
-        const [lx, ly] = T((l.x - R.x) * BIG, (l.y - R.y) * BIG), x = Math.round(lx), y = Math.round(ly) - 22; // above the gate's own map label
-        g.fillStyle = "#000"; g.fillText(l.name, x + 1, y + 1);
-        g.fillStyle = "#96d7ff"; g.fillText(l.name, x, y);
-      }
-      drawWarLegend(g, this.war, PF);
-    }
     // Other online heroes: name above their dot (the dots are drawn with the map, above)
     g.font = `11px ${PF}`; g.textAlign = "center"; g.textBaseline = "alphabetic";
     for (const o of others) {
@@ -630,6 +660,18 @@ export class Minimap {
       g.fillStyle = "#000"; g.fillText(o.name, lx + 1, ly + 1);
       g.fillStyle = ALLY; g.fillText(o.name, lx, ly);
     }
+    // War overlay UI in canvas px: the calls-to-arms list and the hold / siege tooltip
+    if (wd) {
+      this.calls = currentCalls(wd, me, now);
+      this.callBox = panelLayout(this.calls.length, cw);
+      const hot = this.hover && !this.ptrs.size ? panelRowAt(this.callBox, this.hover.x, this.hover.y) : -1;
+      if (this.callBox) drawCalls(g, this.calls, this.callBox, Date.now(), hot);
+      if (!this.ptrs.size) this.big.style.cursor = hot >= 0 ? "pointer" : "grab";
+      if (this.hover && hot < 0 && !this.ptrs.size) {
+        const hit = tipTarget(wd, (wx, wy) => T((wx / TILE - R.x) * BIG, (wy / TILE - R.y) * BIG), this.hover.x, this.hover.y);
+        if (hit) { const own = CLAN_KEYS_OF(wd.war.owner[hit[0]]); drawTip(g, holdTip(wd.war, hit[0], Date.now(), hit[1]), this.hover.x, this.hover.y, own ? CLAN_COL[own] : "#e8c27a"); }
+      }
+    } else { this.calls = []; this.callBox = undefined; }
   }
 
   /**

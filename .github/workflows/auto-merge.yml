@@ -1,7 +1,9 @@
 # Automatically merges pull requests opened by Claude threads.
 # Only open, non-draft PRs from claude/* branches in THIS repo (never forks) into the default branch.
 #
-#   am-gate    read-only: checks the PR qualifies and waits for its other checks to pass.
+# Starts when the CI check of a PR finishes (workflow_run), so no paid runner sits idle waiting for CI.
+#
+#   am-gate    read-only: checks the PR qualifies and that its other checks passed.
 #   am-test    read-only token, runs the PR's code: if the default branch moved since CI ran, tests the PR again on a
 #           temporary merge with it (tests incl. Postgres, build, smoke). Never pushes anything.
 #   am-merge   write token, runs no PR code: rebuilds that merge commit and pushes it without force, so the push is
@@ -13,9 +15,9 @@
 name: Auto-merge Claude PRs
 
 on:
-  pull_request:
-    types: [opened, reopened, synchronize, ready_for_review]
-    branches: [claude/relaxed-wozniak-cjs85z]
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
   workflow_dispatch:
     inputs:
       pr: { description: "PR number", required: true, type: number }
@@ -26,7 +28,7 @@ on:
 permissions: {}
 
 concurrency:
-  group: auto-merge-${{ github.event.pull_request.number || inputs.pr || 'sweep' }}
+  group: auto-merge-${{ inputs.pr || github.event.workflow_run.pull_requests[0].number || github.event.workflow_run.head_branch || 'sweep' }}
   cancel-in-progress: true
 
 env:
@@ -36,12 +38,14 @@ env:
 
 jobs:
   am-gate:
-    if: github.event_name != 'schedule'
+    # From CI: only a CI run that passed (a failed one blocks the merge, a cancelled one was replaced by a newer run)
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions: { contents: read, pull-requests: read, checks: read, issues: write }
     outputs:
       go: ${{ steps.g.outputs.go }}
+      pr: ${{ steps.g.outputs.pr }}
       sha: ${{ steps.g.outputs.sha }}
       ref: ${{ steps.g.outputs.ref }}
       title: ${{ steps.g.outputs.title }}
@@ -50,8 +54,15 @@ jobs:
         id: g
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR: ${{ github.event.pull_request.number || inputs.pr }}
+          PR: ${{ inputs.pr || github.event.workflow_run.pull_requests[0].number }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
+          if [ -z "$PR" ] && [ -n "$HEAD_BRANCH" ]; then
+            PR=$(gh api "repos/$GITHUB_REPOSITORY/pulls?state=open&head=$GITHUB_REPOSITORY_OWNER:$HEAD_BRANCH" --jq '.[0].number // empty')
+          fi
+          if [ -z "$PR" ]; then echo "No open PR for this run; nothing to do."; echo "go=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          echo "pr=$PR" >> "$GITHUB_OUTPUT"
           unwait() { gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/$PR/labels/$(jq -rn --arg l "$WAITING" '$l|@uri')" >/dev/null 2>&1 || true; }
           # Read live, not from the event: draft state and head can change after the event fired.
           pr=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR")
@@ -59,6 +70,8 @@ jobs:
             '.state == "open" and (.draft | not) and .head.repo.full_name == $repo and (.head.ref | startswith("claude/")) and .base.ref == $base')
           if [ "$ok" != "true" ]; then echo "Not an open, ready claude/* PR into $BASE; nothing to do."; echo "go=false" >> "$GITHUB_OUTPUT"; unwait; exit 0; fi
           sha=$(echo "$pr" | jq -r .head.sha)
+          # A CI run for an older commit of the PR: the CI run of the newest commit starts this again when it ends.
+          if [ -n "$RUN_SHA" ] && [ "$RUN_SHA" != "$sha" ]; then echo "CI ran on an older commit; waiting for the newest."; echo "go=false" >> "$GITHUB_OUTPUT"; exit 0; fi
           { echo "sha=$sha"; echo "ref=$(echo "$pr" | jq -r .head.ref)"; echo "title=$(echo "$pr" | jq -r .title | tr -d '\n')"; } >> "$GITHUB_OUTPUT"
           # Only the latest run of each check counts (highest id per name): a run that a newer run of the same check
           # replaced (cancel-in-progress) must not block. This workflow's own jobs and the warning-only
@@ -104,7 +117,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: ${{ github.event_name == 'pull_request' && 'npm' || '' }}
+          cache: "" # no shared npm cache here: this job runs PR code in the default branch's context
       - name: Test on top of the latest default branch (if it moved)
         id: t
         env:
@@ -151,7 +164,7 @@ jobs:
       - name: Push the tested merge, or queue a retry
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR: ${{ github.event.pull_request.number || inputs.pr }}
+          PR: ${{ needs.am-gate.outputs.pr }}
           ATTEMPT: ${{ inputs.attempt || 1 }}
           SHA: ${{ needs.am-gate.outputs.sha }}
           REF: ${{ needs.am-gate.outputs.ref }}
@@ -201,7 +214,6 @@ jobs:
           gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/$PR/labels/$label_uri" >/dev/null 2>&1 || true
           # Pushes made with GITHUB_TOKEN start no push workflows, so start them here.
           gh workflow run patch-numbers.yml --repo "$GITHUB_REPOSITORY" --ref "$BASE" || true
-          gh workflow run skill-clips.yml --repo "$GITHUB_REPOSITORY" --ref "$BASE" || true
           # Wake PRs that were waiting on this merge
           for n in $(gh api "repos/$GITHUB_REPOSITORY/issues?state=open&labels=$label_uri&per_page=100" --jq '.[] | select(.pull_request) | .number' || true); do
             [ "$n" = "$PR" ] || gh workflow run auto-merge.yml --repo "$GITHUB_REPOSITORY" --ref "$BASE" -f pr="$n" || true
@@ -217,7 +229,7 @@ jobs:
       - name: Tell the PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR: ${{ github.event.pull_request.number || inputs.pr }}
+          PR: ${{ needs.am-gate.outputs.pr }}
           RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/$PR/labels/$(jq -rn --arg l "$WAITING" '$l|@uri')" >/dev/null 2>&1 || true
