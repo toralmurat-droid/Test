@@ -1583,6 +1583,7 @@ export class TownScene extends Phaser.Scene {
       this.warTroops?.setSiege(m.fronts.length ? m.t : -1); this.warStd?.setSiege(m); (this.warPlaque ??= new WarPlaque(document.getElementById("hud")!)).setSiege(m);
     });
     this.room.onMessage("rituals", (m) => { (this.warRituals ??= new WarRituals(this)).set(m); (this.warPlaque ??= new WarPlaque(document.getElementById("hud")!)).setRitual(this.warRituals); });
+    this.room.onMessage("tunnels", (m) => { if (m && Array.isArray(m.mouths)) this.tunnelMouths = m.mouths; }); // Hide-Kin tunnel mouths (server/warTunnels.ts), kept for a war-table marker later
     const warNotice = new WarNotice(document.getElementById("hud")!);
     this.room.onMessage("warev", (e) => warNotice.show(e, this.entities.get(this.me)?.sprite));
     this.room.onMessage("mv", alive);
@@ -2066,6 +2067,9 @@ export class TownScene extends Phaser.Scene {
     e.sprite.destroy(); e.label?.destroy(); e.titleLabel?.destroy(); e.pennant?.destroy(); e.stripe?.destroy(); e.bar.destroy(); e.parts?.destroy(); e.bubble?.destroy(); e.shield?.destroy(); e.gear?.destroy();
     this.entities.delete(id);
   }
+
+  /** The Hide-Kin tunnel mouths the server last listed ("tunnels" message): look only, nothing drawn from it yet. */
+  private tunnelMouths: { t: number; x: number; y: number; state: string }[] = [];
 
   /** A clan trooper's sheet: the painted one replaces the stand-in once loaded; fallen, it staggers (frame 12) and lies (13). */
   private trooperFrame(e: Entity, p: any, now: number) {

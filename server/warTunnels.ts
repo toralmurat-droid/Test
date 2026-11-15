@@ -16,12 +16,12 @@ import { noMobsAt } from "../shared/spawns";
 import { inVillage } from "../shared/wrath";
 import { CLANS, type ClanKey } from "../shared/war/clans";
 import { RENOWN_RANKS, rankOf } from "../shared/war/renown";
-import { targetsOf, type Orders } from "../shared/war/rules";
+import { targetsOf } from "../shared/war/rules";
 import { STANDARD } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
 import { troopLevel, troopStance, troopStats, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
-import { mouthHp, TUNNEL, tunnelMouth, tunnelStrikes, type TunnelStrike, type TunnelsView } from "../shared/war/tunnels";
-import { addValor, warNow, warOrders, warState } from "./war";
+import { mouthHp, TUNNEL, tunnelMouth, type TunnelsView } from "../shared/war/tunnels";
+import { addValor, warNow, warState, warStrikes } from "./war";
 import type { SiegeHero } from "./warSieges";
 import { newFighter, type FightGround, type Fighter, type TroopHero, type TroopMob, type WarTroops } from "./warTroops";
 
@@ -58,6 +58,8 @@ interface Tunnel {
   /** The war tick it was collapsed in (-1 open), and when its soldiers go back down. */
   shutTick: number; scatterUntil: number;
   nextWave: number; nextPay: number; held: boolean; g: FightGround;
+  /** Opened in this wake (tunnel_open heard, first wave out): a mouth back after a budget drop keeps the wave clock and makes no sound. */
+  opened: boolean;
 }
 interface Soldier { tn: Tunnel; f?: Fighter; i: number }
 
@@ -70,8 +72,6 @@ export class WarTunnels {
   private mobs = new Map<string, Soldier>();
   /** Tunnel valor paid per land and clan in the current war tick (TUNNEL.maxValorPerTick). */
   private paid = new Map<string, { tick: number; n: number }>();
-  private strikesKey: { tick: number; orders?: Partial<Record<ClanKey, Orders>> } = { tick: NaN };
-  private strikes: TunnelStrike[] = [];
   private sent = "";
   private seq = 0;
 
@@ -96,9 +96,8 @@ export class WarTunnels {
     }
     const v = TUNNEL.live && WAR_TROOPS.live ? warNow() : undefined, st = v ? warState() : undefined, tick = v?.tick ?? -1;
     for (const [k, at] of collapsed) if (at !== tick && v) collapsed.delete(k);
-    const orders = warOrders();
-    if (st && (this.strikesKey.tick !== tick || this.strikesKey.orders !== orders)) { this.strikesKey = { tick, orders }; this.strikes = tunnelStrikes(st, orders); }
-    const strikes = st ? this.strikes : [];
+    // the strikes the rules fed last tick (read before it moved the owners); a land the tunnel already won has no mouth
+    const strikes = st ? warStrikes().filter((x) => st.owner[x.t] !== x.clan) : [];
     for (const tn of [...this.tunnels.values()]) {
       const s = strikes.find((x) => x.t === tn.t);
       if (!s || s.from !== tn.from || s.clan !== tn.clan) this.end(tn);
@@ -108,7 +107,7 @@ export class WarTunnels {
       if (!at) continue;
       const level = troopLevel(s.t), maxHp = mouthHp(s.clan, level);
       const tn: Tunnel = { t: s.t, from: s.from, clan: s.clan, x: at.x, y: at.y, level, maxHp, hp: maxHp, live: false, lastHero: 0, mouth: "", soldiers: new Set(),
-        shutTick: -1, scatterUntil: 0, nextWave: 0, nextPay: 0, held: false, g: { leash: () => false, hunt: () => false } };
+        shutTick: -1, scatterUntil: 0, nextWave: 0, nextPay: 0, held: false, g: { leash: () => false, hunt: () => false }, opened: false };
       tn.g = { leash: (x, y) => Math.hypot(x - tn.x, y - tn.y) <= TUNNEL.leashPx, hunt: () => false }; // wild monsters only when one strikes first
       this.tunnels.set(s.t, tn);
     }
@@ -153,8 +152,10 @@ export class WarTunnels {
       m.maxHp = tn.maxHp; m.hp = Math.max(1, Math.min(tn.maxHp, tn.hp)); m.dir = "down";
       tn.mouth = id;
       this.mobs.set(id, { tn, i: -1 });
-      tn.nextWave = now;
-      this.h.broadcast("sfx", { ev: "tunnel_open", x: Math.round(tn.x), y: Math.round(tn.y) });
+      if (!tn.opened) { // a fresh opening (not the mouth coming back after the room's budget squeezed it out)
+        tn.opened = true; tn.nextWave = now;
+        this.h.broadcast("sfx", { ev: "tunnel_open", x: Math.round(tn.x), y: Math.round(tn.y) });
+      }
     }
     if (now >= tn.nextWave) {
       tn.nextWave = now + TUNNEL.waveMs;
@@ -206,7 +207,7 @@ export class WarTunnels {
   private sleep(tn: Tunnel) {
     this.dropMouth(tn);
     for (const id of [...tn.soldiers]) this.dropOne(id);
-    tn.live = false;
+    tn.live = false; tn.opened = false;
   }
   /** The tunnel is no longer ordered (or starts elsewhere now): it is forgotten. */
   private end(tn: Tunnel) { this.sleep(tn); this.tunnels.delete(tn.t); }
@@ -218,7 +219,7 @@ export class WarTunnels {
       if (m && !m.dead) this.h.broadcast("sfx", { ev: "tunnel_collapse", x: Math.round(tn.x), y: Math.round(tn.y) });
       this.mobs.delete(tn.mouth); this.h.remove(tn.mouth);
     }
-    tn.mouth = ""; tn.shutTick = tick; tn.scatterUntil = now + TUNNEL.scatterMs; tn.hp = tn.maxHp;
+    tn.mouth = ""; tn.shutTick = tick; tn.scatterUntil = now + TUNNEL.scatterMs; tn.hp = tn.maxHp; tn.opened = false;
   }
 
   /** A soldier's place by the mouth: a ring round it (the mouth itself if that spot is a wall). */

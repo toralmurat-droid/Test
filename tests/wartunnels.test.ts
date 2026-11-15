@@ -1,7 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { MAP_W, TILE } from "../shared/constants";
-import { isSolidAt } from "../shared/map";
+import { isSolidAt, PORTAL_SPOTS, SHRINE_SPOT } from "../shared/map";
+import { WAYGATE_DESERT, WAYGATE_OAKVALE } from "../shared/desert";
+import { CRYPT_DOOR, LINKS, SINKHOLE, UNDER_SHAFT, underground } from "../shared/dungeon";
+import { NPC_DECOR, NPCS } from "../shared/npcs";
+import { BOARDS } from "../shared/bounty";
+import { HOLD_FORT_PX, HOLDS, STANDARD, STANDARDS } from "../shared/war/standards";
 import { caravanOffLimits } from "../shared/war/caravans";
 import { CLAN_KEYS, CLANS, type ClanKey } from "../shared/war/clans";
 import { newMinds, scriptedOrders } from "../shared/war/doctrine";
@@ -9,7 +14,7 @@ import { patrolOf } from "../shared/war/patrols";
 import { newWar, supplyMap, targetsOf, WAR, warTick, type Orders, type WarState } from "../shared/war/rules";
 import { TERRITORIES } from "../shared/war/territories";
 import { parseTroop, troopName, troopStats, troopWeapon } from "../shared/war/troops";
-import { mouthHp, TUNNEL, tunnelMouth, tunnelPairs, tunnelStrikes } from "../shared/war/tunnels";
+import { mouthHp, TUNNEL, tunnelLandmarks, tunnelMouth, tunnelPairs, tunnelStrikes } from "../shared/war/tunnels";
 
 const HK: ClanKey = "hidekin";
 const clone = (s: WarState): WarState => JSON.parse(JSON.stringify(s));
@@ -107,6 +112,9 @@ test("tunnels: every possible mouth is deterministic, walkable, reachable and in
     assert.ok(!isSolidAt(m.x, m.y) && !caravanOffLimits(m.x, m.y), `${name}: walkable, not off limits`);
     assert.ok(reachOf(t).has(ty * MAP_W + tx), `${name}: reachable from the Hold gate`);
     assert.ok((m.x / TILE - T.cx) * (F.cx - T.cx) + (m.y / TILE - T.cy) * (F.cy - T.cy) > 0, `${name}: on the side facing the start`);
+    // territory rects overlap (Saltwind Coast holds Gullrock Cove): no Hold's fort and no standard's ring of any land
+    for (const h of HOLDS) assert.ok(Math.max(Math.abs(h.x - m.x), Math.abs(h.y - m.y)) >= HOLD_FORT_PX + TILE, `${name}: clear of ${TERRITORIES[h.t].name}'s fort`);
+    for (const st of STANDARDS) assert.ok(Math.hypot(st.x - m.x, st.y - m.y) >= STANDARD.range + TILE, `${name}: clear of ${TERRITORIES[st.t].name}'s standard`);
   }
   // every strike the war can order has its pair
   for (const s of STATES) for (const t of targetsOf(s, HK)) for (const g of tunnelStrikes(s, only({ defend: 0.5, attack: [{ t, share: 1 }] }))) {
@@ -126,4 +134,21 @@ test("tunnels: the mouth is a trooper object (weapon 'hidekin~'), named, with so
   assert.equal(parseTroop("nobody~"), undefined);
   assert.equal(troopName(HK, false, false, false, true), "Hide-Kin tunnel");
   assert.equal(mouthHp(HK, 20), Math.round(troopStats(HK, 20).hp * TUNNEL.mouthHp));
+});
+
+test("tunnels: every mouth keeps clear of people, props, entrances, waygates, the shrine, boards and portal stones", () => {
+  const tile = (p: { x: number; y: number }) => ({ x: p.x + 0.5, y: p.y + 0.5 }), px = (p: { x: number; y: number }) => ({ x: p.x / TILE, y: p.y / TILE });
+  const named: [string, { x: number; y: number }][] = [
+    ...NPCS.map((n) => [n.name, px(n)] as [string, { x: number; y: number }]), ...NPC_DECOR.map((d) => [d.prop, d] as [string, { x: number; y: number }]),
+    ...LINKS.filter((l) => !underground(l.y)).map((l) => [l.label, px(l)] as [string, { x: number; y: number }]), ...BOARDS.map((b) => [b.name, px(b)] as [string, { x: number; y: number }]),
+    ["sinkhole", tile(SINKHOLE)], ["crypt door", tile(CRYPT_DOOR)], ["well-shaft", tile(UNDER_SHAFT)], ["Oakvale waygate", tile(WAYGATE_OAKVALE)], ["desert waygate", tile(WAYGATE_DESERT)], ["shrine", tile(SHRINE_SPOT)],
+  ];
+  assert.ok(named.some(([n]) => n === "Hamid") && named.some(([n]) => n === "Amos"), "the wild quest givers are listed");
+  assert.equal(tunnelLandmarks().length, named.length, "the module keeps the same landmarks");
+  assert.ok(LINKS.filter((l) => !underground(l.y)).length >= 3, "the overworld entrances are found");
+  for (const { t, from } of tunnelPairs()) {
+    const m = tunnelMouth(t, from)!, mx = m.x / TILE, my = m.y / TILE, name = `${TERRITORIES[t].name} <- ${TERRITORIES[from].name}`;
+    for (const [n, p] of named) assert.ok(Math.hypot(p.x - mx, p.y - my) >= TUNNEL.keepTiles, `${name}: ${Math.hypot(p.x - mx, p.y - my).toFixed(1)} tiles from ${n}`);
+    for (const p of PORTAL_SPOTS) assert.ok(Math.hypot(p.x - (mx - 0.5), p.y - (my - 0.5)) >= 6, `${name}: clear of the ${p.name} stone`);
+  }
 });
