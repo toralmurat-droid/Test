@@ -77,7 +77,7 @@ export const MILESTONES: Milestone[] = [
     items: [
       { name: "Continent design: regions, borders between regions, level bands, design page v0.3", owner: "Lead Designer", status: "done" },
       { name: "Regions in the war map: territories grouped by land, links between lands, capitals move home", owner: "Gameplay Engineers", status: "done", note: "Oakvale Lands 21, Sunscar 10; forward capitals step down when a homeland is built" },
-      { name: "The Red Badlands (Redfang homeland, west)", owner: "World + Art + Narrative", status: "doing", note: "The land and the Red Pass are open; outpost, monsters, quests and the war come next", pr: 444 },
+      { name: "The Red Badlands (Redfang homeland, west)", owner: "World + Art + Narrative", status: "doing", note: "Open: the land, the Red Pass, Rustwater Post (shops, portal), eight Redfang-country monsters and a quest chain to Old Rourke. The war and its art come next", pr: 445 },
       { name: "The Grey Barrow Moors (Ossuary Host homeland, north-east)", owner: "World + Art + Narrative", status: "done", note: "Open: the Moorgate, Cairnwatch (outpost, portal stone, bounty board), seven new monsters, the Barrow-King and a quest chain. At war: 11 territories, the Host's seat at the Muster, the Wardens' Grey Ring, the Barrowgate to Oakvale", pr: 442 },
       { name: "The Mawdeep Sinkholes (Hide-Kin homeland, south)", owner: "World + Art + Narrative", status: "later" },
       { name: "The Crown of the Marches (neutral prize in the middle)", owner: "World + Gameplay", status: "later" },

@@ -68,9 +68,9 @@ export const NPCS: Npc[] = [
   // ---- The Rustwater Post, the drovers' and salt-miners' waystation in the Red Badlands (Act 4, shared/badlands.ts): round its
   // square (placeholder names; sprites: existing sheets until tools/art paints rustmarshal / rustarmourer / rusthealer).
   // The Post's marshal stands before his hall: the badlands' quest chain starts with him
-  { id: "rustmarshal", name: "Marshal Hesk Varro", title: "Marshal of the Rustwater Post", sprite: "guard", x: 226.5 * TILE, y: BR(87.75) * TILE, dir: "down", where: "the Rustwater Post (Act 4 badlands), before the marshal's hall" },
-  { id: "rustarmourer", name: "Corra Flint", title: "Armour merchant", sprite: "sandarmourer", x: 232.5 * TILE, y: BR(87.75) * TILE, dir: "down", shop: "rustarmourer", where: "the Rustwater Post (Act 4 badlands), before the armoury" },
-  { id: "rusthealer", name: "Old Sal", title: "Healer", sprite: "spicetrader", x: 236.5 * TILE, y: BR(87.75) * TILE, dir: "down", shop: "rusthealer", where: "the Rustwater Post (Act 4 badlands), at her stall on the square" },
+  { id: "rustmarshal", name: "Marshal Hesk Varro", title: "Marshal of the Rustwater Post", sprite: "rustmarshal", x: 226.5 * TILE, y: BR(87.75) * TILE, dir: "down", where: "the Rustwater Post (Act 4 badlands), before the marshal's hall" },
+  { id: "rustarmourer", name: "Corra Flint", title: "Armour merchant", sprite: "rustarmourer", x: 232.5 * TILE, y: BR(87.75) * TILE, dir: "down", shop: "rustarmourer", where: "the Rustwater Post (Act 4 badlands), before the armoury" },
+  { id: "rusthealer", name: "Old Sal", title: "Healer", sprite: "rusthealer", x: 236.5 * TILE, y: BR(87.75) * TILE, dir: "down", shop: "rusthealer", where: "the Rustwater Post (Act 4 badlands), at her stall on the square" },
   // ---- Zone quest givers (Murat 2026-11-10: "more zone quests, real exploration arcs"): each lives out in their zone and
   // starts a short arc there that moves on through it and ends out in the field (shared/quests.ts ZONE_ARCS)
   { id: "huntsman", name: "Huntmaster Bryn", title: "Hunter", sprite: "huntsman", ...standNear(28, 18), dir: "left", where: "the Hunter's Camp, north-west of Oakvale" },

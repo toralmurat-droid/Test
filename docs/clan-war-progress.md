@@ -627,3 +627,18 @@ Sims (`npx tsx tools/balance/war.ts 200 30 [--clever=host]`):
   under zeal (5.8 -> 7.7): the struck borders change hands more. Domination 0.0% in every run.
 - Open: the exit criterion "live" needs days of live play to check (the live war runs the same rules). The brakes rarely
   bite without players (no clan gets far ahead); they matter once players carry a clan.
+
+## NL-4: the Red Badlands, Rustwater Post quests and words (2026-11-15, badlands PR2, PR #445)
+- Quest chain `badlands` ("The Redfang Road", `BAD_QUESTS` in `shared/quests.ts`) is a side arc, the last entry of
+  `SIDE_ARCS`, not a zone arc: the client sends chain indices, so nothing before it moves. Local giver (Marshal Hesk
+  Varro, `rustmarshal`), later quests `auto`, each ends in the field with an `outro`. No Player field: it lives in the
+  shared `quests` map under `badlands`. Rewards from `arcReward` like the moors chain.
+- Eight quests: Salt on the Wind (Saltlick Flats, Lv 25), The Drovers' Draw (26), Tally-Stones (Hanging Arches, 27), Fire
+  in the Pits (Cinnabar Pits, 28), The Hawk of Bloodstone Mesa (30; Dask Morrow, redcaptain summon Lv 32), Talon Fort (32),
+  Gallows Canyon (35), Old Rourke (37; `rourke` summon Lv 40 in Fangrock Keep, hpMult 2, no night). Both summoned bosses
+  talk (`BossVoice`). Only existing object kinds (`clue`, `cairn`, `nest`) and no new quest items, so no new art.
+- Loot: Old Rourke's gold, potions and gear already come from `LOOT` / `GEAR_DROP`; the summoned one drops them like the
+  Barrow-King. No chest logic added.
+- Marshal Varro's idle line reworded. The armourer's and healer's shop greetings (`shared/shops.ts`) were already written.
+- Tests: `tests/badlands-quests.test.ts` (shape, and the whole chain start to finish).
+- Not done: Vulture's Roost and Rattlesnake Gulch have no quest; the war land (Redfang territories in Act 4) is still to come.

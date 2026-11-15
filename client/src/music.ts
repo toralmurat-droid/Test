@@ -62,11 +62,13 @@ const firstOf = (...ids: (string | null)[]) => ids.find((id): id is string => !!
 const DESERT_TOWNS = ["Kel Ashar", "Kel Ashar Market"];
 /** Act 3 calm areas that play the village tune (Cairnwatch, the moors' outpost). */
 const MOORS_TOWNS = ["Cairnwatch"];
+/** Act 4 calm area that plays the village tune (the Rustwater Post) until the badlands have their own music. */
+const BADLANDS_TOWNS = ["The Rustwater Post", "Rustwater Post"];
 const OASES = ["Palmshade Oasis", "Mirage Wells", "Jackal Springs"];
 const BURIED = ["Kharsun, the Buried City", "The Veiled Sanctum"];
 const FURNACE = "The Sun Furnace";
 const UNDEAD = ["skeleton", "skeletonmage", "necromancer", "sanddead", "wight", "bonehound", "mistwraith", "legionary", "cairnlord", "barrowking"];
-const FIGHT = ["slime", "shooterblob", "warriorblob", "healerblob", "motherblob", "bandit", "venomblob", "frostblob", "fireblob", "stormblob", "nomad", "scorpion", "veiled", "camelfolk", "sphinx", "sunwright", "nightraider", "boghag"];
+const FIGHT = ["slime", "shooterblob", "warriorblob", "healerblob", "motherblob", "bandit", "venomblob", "frostblob", "fireblob", "stormblob", "nomad", "scorpion", "veiled", "camelfolk", "sphinx", "sunwright", "nightraider", "boghag", "outrider", "crossbowman", "firebrand", "warhound", "vulture", "rattler", "redcaptain", "rourke"];
 const TOWNS = ["Oakvale", "Market Square", "Chapel of the Dawn", "The Rusty Tankard", "The Smithy", "Saltmere", "Hunter's Camp"];
 
 const FADE_IN = 2.5;
@@ -326,7 +328,7 @@ export function setMusicZone(zone: string | undefined, mobs: Partial<Record<stri
   } else {
     zoneName = zone;
     zoneBattle = actOneBattle;
-    calm = !zone && (TOWNS.includes(area) || (actNowRaw === 3 && MOORS_TOWNS.includes(area))) ? "village" : "country";
+    calm = !zone && (TOWNS.includes(area) || (actNowRaw === 3 && MOORS_TOWNS.includes(area)) || (actNowRaw === 4 && BADLANDS_TOWNS.includes(area))) ? "village" : "country";
   }
   // Back to the valley while the theme plays: it fades with the calm change below
   if (actNow !== act) { act = actNow; if (arrival === "playing") arrival = "done"; }

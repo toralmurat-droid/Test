@@ -5,6 +5,7 @@ import { npcById } from "./npcs";
 import { chamberAt, COCOONS, CRYPT_FLOORS, DEN, FLOORS, HIGH_CHOIR, SINKHOLE, TOTEMS, UNDER_FLOORS, WATER_THRONE } from "./dungeon";
 import { D, FURNACE, KEL_ASHAR } from "./desert";
 import { BARROW_FIELDS, CAIRN_SQUARE, KINGS_MOUND, MR } from "./moors";
+import { BR, FANGROCK_KEEP, RUSTWATER_SQUARE } from "./badlands";
 import { xpStep } from "./classes";
 import { type BargainSpec, type CarrySpec, type ChoiceId, type ChoiceSpec, choiceOf, type HoldSpec, nextStage, type PickSpec, sayFor, stepObjects, type SyncSpec, type UnseenSpec } from "./questSteps";
 
@@ -2410,10 +2411,170 @@ const PENANCE_QUESTS: QuestDef[] = [
     sets: { flag: "bargain", v: 3 }, // penance done: the cold lines end (the trait stays)
   },
 ];
+// ---- Act 4: the Red Badlands, from the Rustwater Post (Lv 25-40; shared/badlands.ts, docs/badlands-progress.md) ----
+/** Where things are, said from the Post's square (the badlands' own compass). */
+function dirFromPost(tx: number, ty: number): string {
+  const q = RUSTWATER_SQUARE, cx = q.x + q.w / 2, cy = BR(q.y + q.h / 2);
+  const k = (Math.round(Math.atan2(ty - cy, tx - cx) / (Math.PI / 4)) + 8) % 8;
+  return ["east", "south-east", "south", "south-west", "west", "north-west", "north", "north-east"][k];
+}
+const pdir = (name: string) => { const z = zoneByName(name); return dirFromPost(z.x + z.w / 2, z.y + z.h / 2); };
+const BAD_CARTS = [obj("bad_cart1", "clue", "Wrecked salt-cart", "Search", "The Saltlick Flats", 0.22, 0.4), obj("bad_cart2", "clue", "Wrecked salt-cart", "Search", "The Saltlick Flats", 0.55, 0.72), obj("bad_cart3", "clue", "Wrecked salt-cart", "Search", "The Saltlick Flats", 0.8, 0.35)];
+const BAD_TALLIES = [obj("bad_tally1", "cairn", "Tally-stone", "Read", "The Hanging Arches", 0.25, 0.45), obj("bad_tally2", "cairn", "Tally-stone", "Read", "The Hanging Arches", 0.5, 0.7), obj("bad_tally3", "cairn", "Tally-stone", "Read", "The Hanging Arches", 0.78, 0.4)];
+const BAD_FIREPOTS = [obj("bad_pots1", "nest", "Fire-pot cache", "Smash", "The Cinnabar Pits", 0.25, 0.4), obj("bad_pots2", "nest", "Fire-pot cache", "Smash", "The Cinnabar Pits", 0.55, 0.72), obj("bad_pots3", "nest", "Fire-pot cache", "Smash", "The Cinnabar Pits", 0.8, 0.45)];
+const BAD_BANNERS = [obj("bad_banner1", "nest", "Redfang war-banner", "Burn", "Talon Fort", 0.25, 0.5), obj("bad_banner2", "nest", "Redfang war-banner", "Burn", "Talon Fort", 0.55, 0.3), obj("bad_banner3", "nest", "Redfang war-banner", "Burn", "Talon Fort", 0.75, 0.6)];
+const BAD_LEDGERS = [obj("bad_ledger1", "clue", "Hangman's ledger", "Read", "Gallows Canyon", 0.2, 0.5), obj("bad_ledger2", "clue", "Hangman's ledger", "Read", "Gallows Canyon", 0.5, 0.3), obj("bad_ledger3", "clue", "Hangman's ledger", "Read", "Gallows Canyon", 0.8, 0.6)];
+const BAD_QUESTS: QuestDef[] = [
+  {
+    id: "saltcarts", title: "Salt on the Wind", giver: "rustmarshal", zone: "The Saltlick Flats", minLevel: 25,
+    description: `Marshal Hesk Varro says the salt-carts have stopped coming in from the Saltlick Flats, ${pdir("The Saltlick Flats")} of the Post. Clear the rattlers off the diggings and search the wrecked carts.`,
+    offer: [
+      "You came through the Red Pass on your own legs. Good. Most who come this way are carried.",
+      "I am Hesk Varro, Marshal of the Rustwater Post. The Post is a spring, a wall and forty people who will not pay the Redfang for water. That is the whole of our law.",
+      `The salt-carts have stopped coming in from the Saltlick Flats, ${pdir("The Saltlick Flats")} of here. Rattlers have the diggings, and somebody has been through the carts. Clear the one, search the other.`,
+    ],
+    acceptText: "I'll go to the Flats",
+    steps: [
+      { type: "kill", zone: "The Saltlick Flats", kinds: ["rattler"], goal: 6, text: "Kill 6 Rattlers on the Saltlick Flats", banner: ["New quest", "Salt on the Wind"], obj: "Rattlers slain: {n} / {goal}", nag: "{n} of {goal}. They lie in the white crust where the heat shimmers." },
+      { type: "use", zone: "The Saltlick Flats", objects: BAD_CARTS, chest: false, text: "Search the 3 wrecked salt-carts", banner: ["Wrecked carts", "Search the salt-carts"], obj: "Carts searched: {n} / {goal}", nag: "{n} of {goal}. They lie on their sides along the old miners' track." },
+    ],
+    outro: ["Every cart was cut open with a bolt-axe and the salt left in the dust. They did not want the salt. They wanted the drivers.", "A red fang is burnt into each tailboard, still warm."],
+    reward: arcReward(26),
+    after: "Cut open and left. They did not want salt. I have a bad feeling about what they did want.",
+  },
+  {
+    id: "droversdraw", title: "The Drovers' Draw", giver: "rustmarshal", zone: "Drovers' Draw", minLevel: 26, auto: true,
+    description: `The Redfang outriders hunt the drovers' herds in Drovers' Draw, ${pdir("Drovers' Draw")} of the Post, with their hounds. Break the riders and thin the pack.`,
+    offer: [
+      "The drovers water their herds in the Draw after rain. This year the Redfang outriders got there first, with their hounds.",
+      "A drover who loses a herd cannot pay his debts, and a Redfang tax-man is always waiting with an offer. That is how they take a country without a battle.",
+      "Ride them down. Outriders and hounds both.",
+    ],
+    acceptText: "I'll ride them down",
+    steps: [
+      { type: "kill", zone: "Drovers' Draw", kinds: ["outrider"], goal: 6, text: "Kill 6 Redfang Outriders in Drovers' Draw", banner: ["New quest", "The Drovers' Draw"], obj: "Outriders slain: {n} / {goal}", nag: "{n} of {goal}. They circle on the dry wash and strike from the flank." },
+      { type: "kill", zone: "Drovers' Draw", kinds: ["warhound"], goal: 4, text: "Kill 4 Redfang Warhounds", banner: ["The pack", "Kill 4 Warhounds"], obj: "Warhounds slain: {n} / {goal}", nag: "{n} of {goal}. Hold a wall at your back and let them come." },
+    ],
+    outro: ["The last hound drops, and the drovers' herd lifts its heads out of the thorn. They stand and watch you, and then they go back to drinking.", "On a dead outrider's belt, a rolled strip of hide with a ledger of debts. Half the Post's drovers are in it."],
+    reward: arcReward(27),
+    after: "A ledger of debts. Then it is true: they do not raid, they lend. I'll burn this.",
+  },
+  {
+    id: "talliestones", title: "Tally-Stones", giver: "rustmarshal", zone: "The Hanging Arches", minLevel: 27, auto: true,
+    description: `The Redfang scratch tally-marks under the wind-cut arches of the Hanging Arches, ${pdir("The Hanging Arches")} of the Post. Read their stones and cut down the outriders who keep them.`,
+    offer: [
+      "South, in the Hanging Arches, the Redfang keep tally-stones. A scratch for every wagon, every well, every family that passes under the stone.",
+      "I want to know what they count, and how close it is to the Post. Read three of them.",
+      "Outriders camp under the arches. They will not take kindly to a reader.",
+    ],
+    acceptText: "I'll read the stones",
+    steps: [
+      { type: "use", zone: "The Hanging Arches", objects: BAD_TALLIES, chest: false, text: "Read the 3 Redfang tally-stones", banner: ["New quest", "Tally-Stones"], obj: "Tally-stones read: {n} / {goal}", nag: "{n} of {goal}. They stand at the foot of the tallest arches." },
+      { type: "kill", zone: "The Hanging Arches", kinds: ["outrider"], goal: 6, text: "Cut down 6 Redfang Outriders", banner: ["The counters", "Cut down 6 Outriders"], obj: "Outriders slain: {n} / {goal}", nag: "{n} of {goal}. Watch the arches above you for the bolt." },
+    ],
+    outro: ["Scratches in rows of five, and at the end of each row a little picture of a spring with a line through it.", "The Rustwater Post. They have been counting us for a year."],
+    reward: arcReward(28),
+    after: "A spring with a line through it. Well. At least I know what I am worth to them.",
+  },
+  {
+    id: "firepots", title: "Fire in the Pits", giver: "rustmarshal", zone: "The Cinnabar Pits", minLevel: 28, auto: true,
+    description: `The Redfang Firebrands keep their fire-pots in the old diggings at the Cinnabar Pits, ${pdir("The Cinnabar Pits")} of the Post. Smash the caches and put the Firebrands down.`,
+    offer: [
+      "When the Redfang burn a wagon, they burn it with fire-pots: clay jars of cinnabar, pitch and quicksilver. They keep them in the old pits, south-west of here.",
+      "A Firebrand throws one the way you or I would throw a stone. They have a lot of stones.",
+      "Smash the caches. Do it before they find a use for them on my wall.",
+    ],
+    acceptText: "I'll break the caches",
+    steps: [
+      { type: "kill", zone: "The Cinnabar Pits", kinds: ["firebrand"], goal: 5, text: "Kill 5 Redfang Firebrands at the Cinnabar Pits", banner: ["New quest", "Fire in the Pits"], obj: "Firebrands slain: {n} / {goal}", nag: "{n} of {goal}. Keep moving. Their pots land where you stood." },
+      { type: "use", zone: "The Cinnabar Pits", objects: BAD_FIREPOTS, chest: false, text: "Smash the 3 fire-pot caches", banner: ["The stores", "Smash the fire-pot caches"], obj: "Caches smashed: {n} / {goal}", nag: "{n} of {goal}. They are stacked in the spoil heaps, under hide." },
+    ],
+    outro: ["The last cache goes up in a red sheet, and the pits glow like a forge for a quarter hour.", "Whoever stacked those pots was planning something bigger than a wagon."],
+    reward: arcReward(29),
+    after: "I saw the glow from the wall. Good. Let them wonder what happened to their stores.",
+  },
+  {
+    id: "mesahawk", title: "The Hawk of Bloodstone Mesa", giver: "rustmarshal", zone: "Bloodstone Mesa", minLevel: 30, auto: true,
+    description: `A Redfang captain holds Bloodstone Mesa, ${pdir("Bloodstone Mesa")} of the Post, and calls the signals for every raid on the Fang Road. Take down her crossbowmen, then her.`,
+    offer: [
+      "Bloodstone Mesa is the highest rock in the badlands. From its top you can see every road, which is why a Redfang captain sits on it with a mirror.",
+      "Dask Morrow, they call her the Mesa Hawk. Every raid on the Fang Road starts with her flash.",
+      "Her crossbowmen first, or they will have you on the climb. Then her.",
+    ],
+    acceptText: "I'll take the Hawk",
+    steps: [
+      { type: "kill", zone: "Bloodstone Mesa", kinds: ["crossbowman"], goal: 5, text: "Kill 5 Redfang Crossbowmen on Bloodstone Mesa", banner: ["New quest", "The Hawk of Bloodstone Mesa"], obj: "Crossbowmen slain: {n} / {goal}", nag: "{n} of {goal}. Close the distance fast. Cover is thin on the mesa." },
+      { type: "kill", zone: "Bloodstone Mesa", kinds: ["redcaptain"], goal: 1, own: true,
+        summon: { parts: ["redcaptain"], level: 32, title: "Dask Morrow, the Mesa Hawk", hpMult: 1.5, ...spotIn("Bloodstone Mesa", 0.5, 0.5),
+          voice: { wake: ["Look at that. A little glint down in the dust. Somebody sent you.", "Varro's dog, is it? Come up, then. The view is wonderful."], taunt: ["Every road in this country is mine to see.", "Fang, to me! There is a hero on the rock!"], half: ["I flashed the mirror for twelve years. Not once did anybody climb up. You are brave, or a fool."], death: ["The Fang... will see you... from Fangrock..."] } },
+        text: "Bring down Dask Morrow, the Mesa Hawk", banner: ["THE MESA HAWK", "Bring down Dask Morrow"], obj: "The Mesa Hawk brought down: {n} / {goal}", nag: "She holds the top of the mesa with her guard. Cut it down, then break her." },
+    ],
+    outro: ["Her signal mirror lies cracked on the rock, and from the top of the mesa the whole country spreads out in red and gold.", "West along the Dry Ashwell, a fort of grey logs: Talon Fort. Smoke from every tower."],
+    reward: arcReward(32, true),
+    after: "The Hawk is down. Then the Fang Road has lost her eyes. Not for long, mind. They'll find another.",
+  },
+  {
+    id: "talonfort", title: "Talon Fort", giver: "rustmarshal", zone: "Talon Fort", minLevel: 32, auto: true,
+    description: `Talon Fort, ${pdir("Talon Fort")} of the Post, watches the north road and the Dry Ashwell. Burn its war-banners and cut down its garrison.`,
+    offer: [
+      "Talon Fort is a little Fangrock: logs, towers, a horn, and forty men who have never had to ask permission for anything.",
+      "Three war-banners hang inside. The Redfang think a banner makes a man brave. Let us find out whether it works the other way.",
+      "Cut through the garrison, burn the banners, and be gone before the horn brings the rest.",
+    ],
+    acceptText: "I'll burn the banners",
+    steps: [
+      { type: "kill", zone: "Talon Fort", kinds: ["outrider", "crossbowman"], goal: 8, text: "Cut down 8 of Talon Fort's garrison", banner: ["New quest", "Talon Fort"], obj: "Garrison slain: {n} / {goal}", nag: "{n} of {goal}. Their lookouts are on the towers. Keep to cover." },
+      { type: "use", zone: "Talon Fort", objects: BAD_BANNERS, chest: false, text: "Burn the 3 Redfang war-banners", banner: ["The banners", "Burn the war-banners"], obj: "Banners burned: {n} / {goal}", nag: "{n} of {goal}. They hang on the inner posts, over the fire-pits." },
+    ],
+    outro: ["Three red banners go up and the fort's horn answers, but it is a ragged note. Nobody is left to blow it well.", "Among the ashes, a message in Rourke's own hand: \"Hold Talon. Hold it or hang.\" Every road in this country leads to Fangrock, and to him."],
+    reward: arcReward(34),
+    after: "Hold it or hang. Then he is frightened. Good. Come and drink to that.",
+  },
+  {
+    id: "gallowscanyon", title: "Gallows Canyon", giver: "rustmarshal", zone: "Gallows Canyon", minLevel: 35, auto: true,
+    description: `The road to Fangrock runs through Gallows Canyon, ${pdir("Gallows Canyon")} of the Post, where the Redfang hang the drovers who would not pay. Clear the crossbows from the cliffs and read the hangman's ledgers.`,
+    offer: [
+      "The Fang Road ends at Fangrock, and the last stretch is Gallows Canyon. They hang the ones who will not pay, and leave them there for whoever comes next.",
+      "Every one is in a ledger, with a name and what they owed. Three ledgers hang on the canyon posts. I want to know whose names are in them.",
+      "Crossbows on every ledge. Move quickly.",
+    ],
+    acceptText: "I'll go through",
+    steps: [
+      { type: "kill", zone: "Gallows Canyon", kinds: ["crossbowman"], goal: 6, text: "Kill 6 Redfang Crossbowmen in Gallows Canyon", banner: ["New quest", "Gallows Canyon"], obj: "Crossbowmen slain: {n} / {goal}", nag: "{n} of {goal}. They shoot from the ledges. Go up the scree and take them." },
+      { type: "use", zone: "Gallows Canyon", objects: BAD_LEDGERS, chest: false, text: "Read the 3 hangman's ledgers", banner: ["The ledgers", "Read the hangman's ledgers"], obj: "Ledgers read: {n} / {goal}", nag: "{n} of {goal}. They hang from the gibbet posts." },
+    ],
+    outro: ["Four hundred names. Most of them drovers, most of them owing less than a day's wage. At the foot of each page, in the same square hand: \"Rourke.\"", "The canyon opens on Fangrock's east gate, and above it a banner of a red fang on black."],
+    reward: arcReward(37),
+    after: "Four hundred names. I'll not forget one. Go on to Fangrock, and bring him down.",
+  },
+  {
+    id: "oldrourke", title: "Old Rourke", giver: "rustmarshal", zone: "Fangrock Keep", minLevel: 37, auto: true,
+    description: `Old Rourke, warlord of the Redfang, holds his keep inside Fangrock, ${pdir("Fangrock Keep")} of the Post. Go through the stockade and end him.`,
+    offer: [
+      "Old Rourke. Forty years a bandit and thirty a warlord. He took the Redfang when it was twelve men and a stolen well, and now it is a country.",
+      "He keeps a keep inside Fangrock, behind its own wall. I cannot take you there, and nobody else will. So go, and put him down.",
+      "If he offers you a deal, remember the ledgers.",
+    ],
+    acceptText: "I'll end it",
+    steps: [
+      { type: "reach", at: { ...at(FANGROCK_KEEP.x + FANGROCK_KEEP.w / 2, BR(FANGROCK_KEEP.y + FANGROCK_KEEP.h / 2), 9, "Old Rourke's keep") }, zone: "Fangrock Keep", text: "Go to Old Rourke's keep in Fangrock", banner: ["New quest", "Old Rourke"], obj: `Go to Old Rourke's keep in Fangrock (${pdir("Fangrock Keep")} of the Post)`, nag: "Take the Fang Road to Fangrock's east gate, and keep to the middle of the road." },
+      { type: "kill", zone: "Fangrock Keep", kinds: ["rourke"], goal: 1, own: true,
+        summon: { parts: ["rourke"], level: 40, title: "Old Rourke, Warlord of the Redfang", hpMult: 2, ...spotIn("Fangrock Keep", 0.5, 0.5),
+          voice: { wake: ["So. Varro's hound. You came a long way to bleed in my hall.", "Thirty years I've watched that little spring. Thirty years I let it live."], taunt: ["Every well in this country is mine. Every road. Every grave.", "Come, then. I cut down better than you at Gallows Canyon.", "Fang, to me! Come and see how a warlord dies!"], half: ["Hah! You can fight. I'll give you that. Walk out, and I will tell Varro you are dead, and you will never pay another copper. Well?"], death: ["Water's... free... then... for... a while..."] } },
+        text: "Defeat Old Rourke", banner: ["OLD ROURKE", "Defeat Old Rourke"], obj: "Old Rourke defeated: {n} / {goal}", nag: "He leaps, cleaves and roars, and calls his riders at half health. Keep moving and break his riders first." },
+    ],
+    outro: ["The warlord goes down on one knee, then on both. His war-axe rings once on the stone and lies still.", "A horn sounds on Fangrock's wall, long and low. Then another, and another. Nobody answers it. The Redfang's red fang banner comes down by itself."],
+    reward: arcReward(40, true),
+    after: "Rourke dead. I'll believe it when I see an empty Fangrock. Still: the water is free, and you may drink it any time. Stay a while, friend.",
+  },
+];
+
 /** Side arcs (QuestChain.local, after ZONE_ARCS in CHAINS): `needs` gates the first offer. */
 export const SIDE_ARCS: { id: string; name: string; quests: QuestDef[]; needs?: (p: Quester | undefined) => boolean }[] = [
   { id: "letters", name: "Two Letters", quests: LETTER_QUESTS, needs: (p) => chainDone(p, RED_CHAIN) },
   { id: "penance", name: "Penance", quests: PENANCE_QUESTS, needs: (p) => choiceOf(p, "bargain") === 1 && chainDone(p, BEAST_CHAIN) },
+  // Act 4: the Red Badlands, from the Rustwater Post (a side arc so no chain index moves; local giver, later quests `auto`)
+  { id: "badlands", name: "The Redfang Road", quests: BAD_QUESTS },
 ];
 const ARC_OBJECTS: QuestObject[] = [...ZONE_ARCS, ...SIDE_ARCS].flatMap((a) => a.quests.flatMap((d) => d.steps.flatMap(stepObjects)));
 
@@ -2682,7 +2843,7 @@ const IDLE: Record<string, string> = {
   mourner2: "Gran would've hated all this fuss. She'd have wanted the kettle on.",
   mourner3: "I build boats. Corin built better ones. I keep thinking he'll walk up the lane and say so.",
   ilka: "Don't look at me like that. Keep walking.",
-  rustmarshal: "Water's free, the roof's free, and nobody here pays the Redfang a copper. That's the Post's whole law. Fangrock doesn't like it.", // placeholder until the badlands chain is written
+  rustmarshal: "Water's free, the roof's free, and nobody here pays the Redfang a copper. That's the Post's whole law. Fangrock doesn't like it, and now that you've been out there, neither do you.",
   cairncaptain: "Keep to the corpse roads, and if a barrow calls your name, don't answer. Four hundred years the Wardens have held these cairns shut. I mean to be the captain who doesn't lose them.",
   alewife: "Ale's cold, the gossip's warm. Pull up a barrel, love. Whatever happens in this valley, it comes past my cart sooner or later.",
 };
