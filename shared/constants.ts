@@ -19,17 +19,28 @@ export const DEEP_SPLIT = 144;
 /** Act 3, the Grey Barrow Moors (shared/moors.ts): the Ossuary Host's homeland, its own band under the deep band's rock. */
 export const MOORS_Y0 = DEEP_END + 8;
 export const MOORS_H = 176;
-export const MAP_H = MOORS_Y0 + MOORS_H + 4; // tiles: overworld, underground band, rock, desert, rock, deep band, rock, moors
+/** Act 4, the Red Badlands (shared/badlands.ts): the Redfang clan's homeland, its own band under the moors' rock. */
+export const BADLANDS_Y0 = MOORS_Y0 + MOORS_H + 8;
+export const BADLANDS_H = 176;
+export const MAP_H = BADLANDS_Y0 + BADLANDS_H + 4; // tiles: overworld, underground band, rock, desert, rock, deep band, rock, moors, rock, badlands
+/** The acts (one per land): 1 Oakvale (and the Mawdeep, the Lantern Crypt), 2 the Sunscar, 3 the moors, 4 the badlands. */
+export type Act = 1 | 2 | 3 | 4;
 /** True in the deep band (tiles). */
 export const inDeepRow = (ty: number) => ty >= DEEP_Y0 && ty < DEEP_END;
-/** True for a map row in the moors band, with the rock strip round it (so a tile there is never mistaken for the desert's). */
-export const inMoorsBand = (ty: number) => ty >= MOORS_Y0 - 4;
 /**
- * Which act a tile belongs to: the moors band is Act 3; the desert and the Undercity Act 2; the rest (the Lantern
- * Crypt too) Act 1. The moors test comes first: every row from the desert down used to count as Act 2.
+ * True for a map row in the badlands band, with the rock strip round it: the 8 rows of rock between two bands split
+ * evenly, 4 to each, so a tile there is never mistaken for the band above.
  */
-export const actOfTile = (tx: number, ty: number): 1 | 2 | 3 =>
-  inMoorsBand(ty) ? 3 : ty >= DESERT_Y0 && !(ty >= DEEP_Y0 - 4 && tx < DEEP_SPLIT) ? 2 : 1;
+export const inBadlandsBand = (ty: number) => ty >= BADLANDS_Y0 - 4;
+/** True for a map row in the moors band, with its share of the rock strips above and below. */
+export const inMoorsBand = (ty: number) => ty >= MOORS_Y0 - 4 && ty < BADLANDS_Y0 - 4;
+/**
+ * Which act a tile belongs to: the badlands band is Act 4, the moors band Act 3; the desert and the Undercity Act 2;
+ * the rest (the Lantern Crypt too) Act 1. The homeland bands are tested first: every row from the desert down would
+ * otherwise count as Act 2.
+ */
+export const actOfTile = (tx: number, ty: number): Act =>
+  inBadlandsBand(ty) ? 4 : inMoorsBand(ty) ? 3 : ty >= DESERT_Y0 && !(ty >= DEEP_Y0 - 4 && tx < DEEP_SPLIT) ? 2 : 1;
 export const TICK_RATE = 20; // server updates per second
 export const PLAYER_SPEED = 90; // px per second (default; classes override, see classes.ts)
 export const PLAYER_RADIUS = 5; // collision half-size in px
@@ -379,10 +390,24 @@ export const act2SpecialLevel = (l: number) => Math.min(ACT2_LEVEL.special, Math
 export const MOORS_LEVEL = { min: 20, mob: 33, special: 35, tilesPerLevel: 10 };
 export const moorsMobLevel = (l: number) => Math.min(MOORS_LEVEL.mob, Math.max(MOORS_LEVEL.min, Math.round(l)));
 export const moorsSpecialLevel = (l: number) => Math.min(MOORS_LEVEL.special, Math.max(MOORS_LEVEL.min, Math.round(l)));
+/**
+ * Act 4, the Red Badlands: Lv 25-40, open from hero Lv 25 (shared/act2.ts badlandsOpen). Regular monsters Lv 25-38, a
+ * level every `tilesPerLevel` tiles west of the Red Pass's badlands side (the band's east edge) toward Fangrock, the
+ * Redfang stronghold in the far west (shared/spawns.ts baseLevelAt).
+ */
+export const BADLANDS_LEVEL = { min: 25, mob: 38, special: 40, tilesPerLevel: 16 };
+/**
+ * Every act's level band in one table (min, regular ceiling, special ceiling), so a new homeland is one row here. Act 1
+ * starts at Lv 1 (regionMobLevel); the others hold their monsters inside their own band.
+ */
+export const ACT_LEVEL: Record<Act, { min: number; mob: number; special: number }> = {
+  1: { min: 1, ...REGION_LEVEL }, 2: ACT2_LEVEL, 3: MOORS_LEVEL, 4: BADLANDS_LEVEL,
+};
+const actLevels = (act: number) => ACT_LEVEL[act as Act] ?? ACT_LEVEL[1];
 /** A regular monster's level held to its act's band (act from actOfTile). */
-export const actMobLevel = (act: number, l: number) => (act === 3 ? moorsMobLevel(l) : act === 2 ? act2MobLevel(l) : regionMobLevel(l));
+export const actMobLevel = (act: number, l: number) => { const L = actLevels(act); return Math.min(L.mob, Math.max(L.min, Math.round(l))); };
 /** A merged blob, demon, elite or boss: its act's special ceiling. */
-export const actSpecialLevel = (act: number, l: number) => (act === 3 ? moorsSpecialLevel(l) : act === 2 ? act2SpecialLevel(l) : regionSpecialLevel(l));
+export const actSpecialLevel = (act: number, l: number) => { const L = actLevels(act); return Math.min(L.special, Math.max(L.min, Math.round(l))); };
 
 export const MOB_ATTACK_RANGE = 14; // px
 
