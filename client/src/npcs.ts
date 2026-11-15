@@ -46,6 +46,8 @@ import { matCanvas } from "./matArt";
 import { TEXT_FONT, TITLE_FONT, TEXT_PX, TITLE_PX, WT } from "./pixelfont";
 import { hudOccludes, hudSlot } from "./hudSlots";
 import { own } from "./own";
+/** Escapes text for HTML text and attributes (the shop's wear reason goes into both). */
+const escAttr = (t: string) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
 type Me = { x: number; y: number } | undefined;
 /** The local player's synced state (only the fields NPCs care about). */
@@ -550,7 +552,7 @@ export class NpcLayer {
       const cant = q ? wearProblem(cls ?? "", e.item) : ""; // a class that can never wear it (buying stays allowed: it can be sold on)
       const why = q && !cant ? reqProblem(e.item, reqInfoOf(q)) : "";
       const html = row(e.item, gearName(e.item, cls), itemColor(e.item), `${rarityLabel(e.item)}${TIER_NAMES[d.tier]} · Lv ${itemLevel(e.item)} · ${itemText(e.item)}${why ? ` · <span class="sh-need">${why}</span>` : ""}` +
-        (cant ? `<span class="sh-cant" title="${cant}">${cant.split(". ")[0].replace(/\.$/, "")}</span>` : ""), `${e.price.toLocaleString("en-US")}${pxIcon("coin")}`, "sh-buy", i, gold < e.price);
+        (cant ? `<span class="sh-cant" title="${escAttr(cant)}">${escAttr(cant.split(". ")[0].replace(/\.$/, ""))}</span>` : ""), `${e.price.toLocaleString("en-US")}${pxIcon("coin")}`, "sh-buy", i, gold < e.price);
       return head + (cant ? html.replace('class="sh-row"', 'class="sh-row cant"') : html);
     }).join("");
     const sellable = shop.buys ? bag.map((id, i) => [id, i] as const).filter(([id]) => shopBuys(shop, id, true) && !keepsBoundOf(q?.cls ?? "", [q?.weapon, q?.shield], bag)(id)) : [];
