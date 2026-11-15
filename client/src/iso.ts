@@ -119,6 +119,8 @@ const BAKE_FROM: Partial<Record<number, number>> = { [T.FLOWERS]: T.GRASS, [T.FI
  * The tilemap uses them as separate tilesets (the second starts at gid ISO_PER * TILE_COUNT), so tile indices are
  * unchanged. Only the rows the two layers really use are baked (`isoRows`): the high rows are palisade and signpost
  * variants, which the iso view draws as sprites, so the ground and object layers never show them.
+ * Width is TILE_COUNT * 66 px (4224 at 64 tiles): over 4096 but well under the 8192+ every desktop WebGL GPU offers;
+ * the game is desktop only. Split the columns too if TILE_COUNT ever passes ~124.
  */
 const ISO_PER = 64;
 const ISO_KEYS = ["tiles_iso", "tiles_iso_b"];
