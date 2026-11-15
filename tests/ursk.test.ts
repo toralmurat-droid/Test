@@ -27,8 +27,12 @@ test("Grandam Ursk: speaks on waking, enters the Rite and the Bear, hooks a far 
     // the Rite: below 70% she calls her brood and starts hooking heroes in
     m.hp = Math.round(m.maxHp * 0.6); m.target = pid;
     // a ranged hero keeping well away from her (a step back every moment) until the hook comes
+    // once her hook winds up the hero stands still: the hit (and its synchronous pull) can land between two checks here,
+    // and stepping back after it would undo the pull before the "bhit" message arrives
+    let aimed = false;
     for (let i = 0; i < 200 && !hits.includes("hook"); i++) {
-      if (!m.specialKind) { p.x = m.x + 170; p.y = m.y; }
+      aimed ||= m.specialKind === "hook";
+      if (!aimed && !m.specialKind) { p.x = m.x + 170; p.y = m.y; }
       await wait(150);
       m.target = pid;
     }
