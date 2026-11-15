@@ -1,0 +1,11 @@
+{
+  "date": "2026-11-15",
+  "patch": 265,
+  "title": "Clearer Songweaver effects and a tidier HUD",
+  "changes": [
+    "Shields no longer draw a bubble around heroes: your own shield shows on your health orb, and other heroes' shields show as a rim on their health bar.",
+    "Songweaver chord rings now lie flat, pulse outward with each note and fold in slowly when they fade. Her sound waves fly as small notes in the colour of the note just played.",
+    "The song gauge drains visibly when it empties. A chip shows her current mode (hover for details), and a small clock shows how long chords stay locked.",
+    "All buff icons, for every class, now sit in one row of larger icons above the experience bar."
+  ]
+}

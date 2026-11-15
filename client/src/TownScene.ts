@@ -30,7 +30,7 @@ import { SoundCues } from "./soundCues";
 import { MonsterBar } from "./monsterBar";
 import { isMineOrGroup, monsterInfo, showWorldBar } from "./monsterInfo";
 import { placeFloat, type FloatBox } from "./floatLanes";
-import { CHORD_NAMES, MODE_COLOR } from "./songTables";
+import { CHORD_NAMES, MODE_COLOR, hasSongShield } from "./songTables";
 
 const SONG_SFX = new Set(["note", "chord", "swell", "newsong", "matpick", "lutefit", "break", "resonate", "bounce", "soundhit", "shieldbreak"]);
 import { attackMult, cooldownMult, critChance, heroSpeed, STATS, magicMult, STAT_KINDS, STAT_NAMES, StatKind, statPoints, HP_PER_STR } from "../../shared/powers";
@@ -195,7 +195,6 @@ interface Entity {
   top: number; // px from the feet to the top of the head, for the name label and chat bubble
   bar: Phaser.GameObjects.Graphics;
   bubble?: Phaser.GameObjects.Image;
-  shield?: Phaser.GameObjects.Graphics;
   tx: number; ty: number; // server target position
   snaps?: Snap[]; // recent server positions with local arrival time, played back a little late (see interpolate)
   chaseUntil?: number; // a dash/blink/knockback event: ease to tx/ty instead of playing back the snapshots
@@ -2074,7 +2073,7 @@ export class TownScene extends Phaser.Scene {
     this.forms?.drop(id);
     this.lastMineHit.delete(id);
     if (e.mob && e.state.kind === "trooper" && e.state.dead && e.artOn && !e.culled) this.trooperCorpse(e);
-    e.sprite.destroy(); e.label?.destroy(); e.titleLabel?.destroy(); e.pennant?.destroy(); e.stripe?.destroy(); e.bar.destroy(); e.parts?.destroy(); e.bubble?.destroy(); e.shield?.destroy(); e.gear?.destroy();
+    e.sprite.destroy(); e.label?.destroy(); e.titleLabel?.destroy(); e.pennant?.destroy(); e.stripe?.destroy(); e.bar.destroy(); e.parts?.destroy(); e.bubble?.destroy(); e.gear?.destroy();
     this.entities.delete(id);
   }
 
@@ -3437,12 +3436,7 @@ export class TownScene extends Phaser.Scene {
       this.fx.status(e, e.bar, dtMs / 1000);
       // (Stacks built by basic hits are shown by the skill keys, see chargeCell: no pips under the hero, Murat 2026-11-04)
       const maxHp = p.maxHp;
-      if (!e.mob) {
-        if (p.guarding && !p.dead) {
-          e.shield ??= isoAnchor(this.add.graphics(), e.sprite) as Phaser.GameObjects.Graphics;
-          setBaseDepth(e.shield.clear().lineStyle(1, 0x9ad1ff, 0.9).strokeCircle(x, y - e.top / 2, e.top / 2 + 3), e.sprite.y + 2);
-        } else if (e.shield) { e.shield.destroy(); e.shield = undefined; }
-      }
+      if (!e.mob && p.guarding && !p.dead) this.fx.shieldMark(e, e.bar); // a raised guard: a mark on the bar, no bubble (own: health orb)
       if (p.broken && !p.dead) {
         // Dizzy: three little stars circling over the head
         const sy = y - e.top - (e.mob ? 8 : 4);
@@ -3582,7 +3576,7 @@ export class TownScene extends Phaser.Scene {
       // Top-left bars (resourceBars.ts): red HP, blue Mana (spells, shared/mana.ts), green XP
       const ow = own(mine), mn = unpackMana(ow.mp); // owner-only numbers, in `me` (server/player.ts)
       (this.resBars ??= new ResourceBars(document.getElementById("hud")!)).update({
-        song: cls === "songweaver", level: mine.level, hp: mine.hp, maxHp: mine.maxHp, mp: mn.mana, maxMp: mn.maxMana, // the gauge lives in mana / maxMana (shared/mana.ts usesGauge)
+        song: cls === "songweaver", chordLock: !mine.dead && String(mine.fx ?? "").split(",").includes("chlock"), mode: /(?:^|,)mode:(\w+)/.exec(mine.fx ?? "")?.[1], rank: (id: string) => ow.talents.get(id) ?? 0, shield: !mine.dead && (!!mine.guarding || hasSongShield(mine.fx)), level: mine.level, hp: mine.hp, maxHp: mine.maxHp, mp: mn.mana, maxMp: mn.maxMana, // the gauge lives in mana / maxMana (shared/mana.ts usesGauge)
         xpFrac: mine.level >= MAX_LEVEL ? 1 : Math.max(0, Math.min(1, (ow.xp - cur) / Math.max(1, next - cur))),
         xp: Math.max(0, ow.xp - cur), xpNeed: mine.level >= MAX_LEVEL ? undefined : next - cur,
       });
