@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-15",
+  "title": "Siege battles",
+  "changes": [
+    "When a land is under siege and you come near, both clans now send real soldiers to fight at its standards and at the Hold gate.",
+    "A front changes hands when one side has more fighters there for a while; the rings show who holds each one and the plaque counts the fronts.",
+    "Sworn heroes who stand at a front their clan holds earn it valor every minute, the gate twice as much. Soldiers alone earn nothing."
+  ]
+}

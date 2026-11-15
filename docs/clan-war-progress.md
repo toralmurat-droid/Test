@@ -255,3 +255,55 @@ Open points for M1:
 - Text: three leader lines per clan per kind (`{from}`, `{to}`); the board and tracker show the road "A to B"
   (`writWhere`).
 
+
+## M2: Siege battles (2026-11-15)
+
+- Rules and numbers: `shared/war/siege.ts` (`SIEGE_BATTLE`, pure `siegeFronts`, `attackAxis` (moved from the client's
+  painted battles), `siegeApproach`, `siegeForce`, `frontStep`, `frontPay`); server: `server/warSieges.ts` (`WarSieges`
+  behind a narrow `SiegeHost`, the soldiers borrow `WarTroops.think / fight / walk / speedOf / seen` like the caravan
+  escorts); room wiring in `TownRoom.ts` (field, 1 s tick between the caravans and the patrols, trooper branch of
+  `updateMob`, `hit`, `mobDied`, `forget`, the join message). No schema change, no save change.
+- Fronts: each standard on the besieged land's patrol loop, then the Hold gate (`patrolOf(t).pts[0]`). No order between
+  them. Attackers come in at the approach: the loop point inside the land farthest toward the attacker's nearest land
+  (`attackAxis`), at least `gateKeepTiles` (8) from the gate when the land allows; they march along the loop to their
+  front, so no one gets stuck behind a wall. Defenders stand at their fronts when the siege wakes, reinforcements walk
+  out of the Hold gate.
+- Forces: attackers `perFront` (4) per front, defenders `perFront x troopShare(control)`, at least `defMin` (2); empty
+  places fill in a wave every `reinforceMs` (30 s). One live siege per room (the nearest a living hero above ground,
+  within `wakeTiles` 24 of the land's rect), at most `maxSiegeTroops` (28). Budget order: caravans, then sieges
+  (`WAR_TROOPS.maxTroops - caravans`), then patrols (`WarTroops` `reserved()` = caravans + sieges), so the total never
+  passes `maxTroops` (80). With no hero near nothing spawns and nothing changes; a live siege sleeps `sleepMs` (30 s)
+  after the last hero left (troopers gone, front holders kept). The siege's end or a flip clears its troopers.
+- Combat: plain trooper monsters (weapon `troopWeapon(clan, officer)`, the gate's first man on each side is an officer):
+  every trooper gate holds (no XP / loot / quest credit, unsworn heroes neither hurt them nor get attacked, enemy-sworn
+  heroes are attacked). The two sides fight each other through `pick`; wild monsters only when one strikes first
+  (`hunt` is off); leash `leashPx` (6 tiles) round the trooper's place. A hit turns the idle mates of that front on the
+  hero. Siege kills give no kill valor and do not count for rout writs (open).
+- Front control: every `scoreMs` (2 s) per front, living non-cart troopers of either side + `heroWeight` (2) x active
+  sworn heroes (level 5+, `STANDARD.idleMs`) within `frontRadiusPx` (96). A front changes holder only after one side led
+  by `holdMargin` (2) or more for `captureMs` (20 s) straight (`frontStep`). Hold guards near the gate count for the
+  defender. A change sends `sfx` `siege_front {x, y, clan}` and the new `"siege"` view; the gate also gets a Herald line
+  and the winning leader's line (`GATE_LINES` / `gateLine` in `shared/war/heralds.ts`, took and took back).
+- War effect: every `valorEveryMs` (60 s) each front's holder gets `frontValor` (2; the gate x `gateMult` 2) through
+  `addValor`, only if one of its sworn heroes was active in that ring during the minute (troops alone earn nothing), at
+  most `battleValorPerTick` (20) per clan per land per room per war tick, and only where the war lets that clan fight
+  (owner, or `targetsOf`). The war rules then decide what it is worth.
+- Message: server -> client `"siege"` `{t, fronts: {x, y, gate, holder}[]}` on wake, sleep, end, each front change and
+  on join (`t: -1`, no fronts, when none). Nothing comes back from the client.
+- Client: `warTroops.ts` draws no painted battle on the land with a live server siege; `warStandards.ts` tints the
+  front rings by holder; `warPlaque.ts` adds "Fronts n/m <clan>"; `sfx.ts` `siege_front` (a war-horn blast with drums).
+- Balance (`npx tsx tools/balance/pve.ts 40 --siege`, the hero + 4 allied soldiers vs 4 attackers of its level at one
+  front; cell = win% / hero HP lost / s / allies lost):
+
+| Lv | soldiers alone | wizard | vampire | summoner | songweaver |
+|---|---|---|---|---|---|
+| 15 | 50%/-/23.6s/2.5 | 100%/0%/11.3s/0.0 | 100%/27%/6.6s/0.0 | 100%/12%/11.5s/0.0 | 100%/0%/12.8s/0.0 |
+| 30 | 73%/-/20.2s/1.9 | 100%/0%/8.0s/0.0 | 98%/23%/4.7s/0.0 | 100%/6%/5.8s/0.0 | 100%/0%/11.2s/0.0 |
+| 45 | 48%/-/17.3s/2.5 | 100%/0%/8.5s/0.0 | 95%/24%/5.1s/0.0 | 100%/7%/5.1s/0.0 | 100%/0%/10.7s/0.0 |
+
+- Bench (`WAR=1 SPREAD=1 npm run bench`, 5 bots, a shared machine at load 5-6, so noisy): before 9.6 / 9.9 ms tick avg
+  (p95 21.9 / 20.5), after 10.0 / 6.6 (p95 22.2 / 13.3); with `SIEGE=1` (a siege at an Act 1 land, a bot at its gate)
+  7.9 / 13.6 (p95 16.6 / 30.0), 20-21 siege troopers inside the 80-trooper cap (patrols yield). No dropped bots.
+- `npx tsx tools/balance/war.ts 200 30`: unchanged (no player valor in the sim).
+- Not done: kill valor and rout-writ credit for siege kills; virtual sieges in other rooms do not share front holders
+  (each room keeps its own, in memory); siege works for the Host (roadmap "later").

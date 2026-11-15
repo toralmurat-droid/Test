@@ -66,3 +66,24 @@ export function leaderLine(k: ClanKey, moment: WarMoment, land: string, foe: Cla
 export function eventVoice(kind: "siege" | "flip" | "held", by: ClanKey, from: ClanKey): { k: ClanKey; foe: ClanKey; moment: WarMoment } {
   return kind === "siege" ? { k: from, foe: by, moment: "besieged" } : kind === "flip" ? { k: by, foe: from, moment: "took" } : { k: from, foe: by, moment: "held" };
 }
+
+/** Siege battles (shared/war/siege.ts): what a leader says when their side takes a besieged land's gate ({land}, {foe}). */
+export const GATE_LINES: Record<ClanKey, { took: string[]; retook: string[] }> = {
+  wardens: { took: ["The gate of {land} is ours. Push on, Wardens!", "{foe} lost the gate of {land}. Hold it fast."],
+    retook: ["The gate of {land} is ours again. Bar it!", "{foe} are thrown back from the gate of {land}."] },
+  redfang: { took: ["We're through the gate of {land}. Grab everything.", "The gate of {land} is open. {foe} can't stop us now."],
+    retook: ["Shut the gate of {land} on {foe}'s fingers.", "Gate of {land} back in Redfang hands. Nobody robs a robber."] },
+  host: { took: ["The gate of {land} gives way. The dead walk in.", "{foe} could not hold the gate of {land}."],
+    retook: ["The gate of {land} is sealed again. The fallen keep watch.", "{foe} broke on the gate of {land}."] },
+  hidekin: { took: ["We came up under the gate of {land}. Bite!", "The gate of {land} is ours, my children."],
+    retook: ["Back to the gate of {land}. {foe} out of our burrow!", "The gate of {land} holds again."] },
+  veiled: { took: ["The gate of {land} opens, as foretold.", "{foe} abandon the gate of {land}. The rite goes on."],
+    retook: ["The circle closes round the gate of {land} again.", "{foe} could not keep the gate of {land}."] },
+};
+
+/** The leader line of `k` on taking (or taking back) a siege's gate from `foe`, picked by `seed`. */
+export function gateLine(k: ClanKey, retook: boolean, land: string, foe: ClanKey, seed: number): { name: string; text: string } {
+  const opts = GATE_LINES[k][retook ? "retook" : "took"];
+  const t = opts[Math.abs(Math.floor(seed)) % opts.length].replace(/\{land\}/g, land).replace(/\{foe\}/g, FOE_NAME[foe]);
+  return { name: LEADERS[k].name, text: t.charAt(0).toUpperCase() + t.slice(1) };
+}

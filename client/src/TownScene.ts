@@ -1572,6 +1572,10 @@ export class TownScene extends Phaser.Scene {
     this.warTroops = new WarTroops(this); // cosmetic clan patrols, derived from the war snapshot
     this.room.onMessage("war", (v) => { this.warTroops?.setWar(v); (this.warPlaque ??= new WarPlaque(document.getElementById("hud")!)).set(v); this.warStd?.setWar(v); this.warLast = v; });
     this.room.onMessage("clan", (m) => this.warStd?.setClan(m));
+    this.room.onMessage("siege", (m) => { // the server's live siege battle (server/warSieges.ts): front holders on the rings and the plaque
+      if (!m || typeof m.t !== "number" || !Array.isArray(m.fronts)) return;
+      this.warTroops?.setSiege(m.fronts.length ? m.t : -1); this.warStd?.setSiege(m); (this.warPlaque ??= new WarPlaque(document.getElementById("hud")!)).setSiege(m);
+    });
     const warNotice = new WarNotice(document.getElementById("hud")!);
     this.room.onMessage("warev", (e) => warNotice.show(e, this.entities.get(this.me)?.sprite));
     this.room.onMessage("mv", alive);

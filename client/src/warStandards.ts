@@ -11,6 +11,7 @@ import { ensureHold, HOLD_ORIGIN, holdKeys, HOLD_RANGE, HOLD_SCALE } from "./hol
 import { targetsOf, type WarState } from "../../shared/war/rules";
 import { TERRITORIES } from "../../shared/war/territories";
 import type { WarView } from "../../shared/war/view";
+import type { SiegeView } from "../../shared/war/siege";
 import { hudSlot } from "./hudSlots";
 import { isoAnchor } from "./iso";
 import { ISO } from "./isoflag";
@@ -53,6 +54,8 @@ export class WarStandards {
   private view?: WarView;
   private hero?: { x: number; y: number };
   private holdAt = 0;
+  /** Standards that are fronts of the server's live siege battle, and who holds each ("siege" message). */
+  private fronts = new Map<number, ClanKey>();
   clan: ClanKey | "" = "";
   private next = 0;
   private minLevel = 5;
@@ -90,11 +93,33 @@ export class WarStandards {
         isoAnchor(img, { x: s.x, y: s.y });
         this.poles.set(s.id, img);
       } else if (img.texture.key !== key) img.setTexture(key);
-      const cl = CLANS[k], col = k === "redfang" ? cl.sigil : cl.trim;
-      this.rings.get(s.id)!.setVisible(true).setFillStyle(col, 0.07).setStrokeStyle(2, col, 0.45);
+      this.tint(s.id, this.fronts.get(s.id) ?? k);
     }
     this.syncHolds(this.hero);
     if (this.open) this.render();
+  }
+
+  /** A ring in a clan's colour: the land's holder, or whoever holds that front in a live siege battle. */
+  private tint(id: number, k: ClanKey) {
+    const cl = CLANS[k], col = k === "redfang" ? cl.sigil : cl.trim, front = this.fronts.has(id);
+    this.rings.get(id)?.setVisible(true).setFillStyle(col, front ? 0.14 : 0.07).setStrokeStyle(front ? 3 : 2, col, front ? 0.8 : 0.45);
+  }
+
+  /** The server's live siege battle: each front's ring takes its holder's colour (the gate front has no ring). */
+  setSiege(m: SiegeView) {
+    const old = [...this.fronts.keys()];
+    this.fronts.clear();
+    for (const f of m.fronts ?? []) {
+      if (f.gate || !CLAN_KEYS.includes(f.holder as ClanKey)) continue;
+      const s = STANDARDS.find((x) => x.t === m.t && Math.hypot(x.x - f.x, x.y - f.y) < STANDARD.range);
+      if (s) this.fronts.set(s.id, f.holder as ClanKey);
+    }
+    const v = this.view;
+    if (!v) return;
+    for (const id of new Set([...old, ...this.fronts.keys()])) {
+      const k = this.fronts.get(id) ?? CLAN_KEYS[v.owner[STANDARDS[id].t]];
+      if (k) this.tint(id, k);
+    }
   }
 
   /**
