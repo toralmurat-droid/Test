@@ -75,15 +75,18 @@ function pageFor(id: string, q: QuestState): DialogPage | undefined {
  * a dialog panel and the quest tracker. The server checks distance and owns quest progress.
  */
 /** Where the way to the other act starts, for the tracker (shared/desert.ts WAYGATE_OAKVALE / WAYGATE_DESERT). */
-const GATE_HINT: Record<1 | 2 | 3, string> = {
+const GATE_HINT: Record<1 | 2 | 3 | 4, string> = {
   1: "Step through the waygate, just outside Oakvale's south gate",
   2: "Step through the waygate in the Sunstone Circle, south-west of Kel Ashar",
   3: "Touch the Cairnwatch portal stone, or step back through the Moorgate by the stone ring",
+  4: "Touch the portal stone at Rustwater Post, or walk back through the Red Pass at the badlands' east edge",
 };
 /** Act 1's way to the moors: the Moorgate is not Oakvale's south waygate. */
 const MOORGATE_HINT = "Step through the Moorgate in the forest north of the Hollow Throne";
+/** Act 1's way to the badlands: the Red Pass on the west edge. */
+const REDPASS_HINT = "Take the Red Pass on Oakvale's west edge, between Mirror Pond and the Barrow Downs";
 const gateHint = (me: { x: number; y: number }, gateId?: string) =>
-  gateId === "moorsgate" ? MOORGATE_HINT : GATE_HINT[actAt(me.y, me.x)];
+  gateId === "moorsgate" ? MOORGATE_HINT : gateId === "redpass" ? REDPASS_HINT : GATE_HINT[actAt(me.y, me.x)];
 
 /** This act's gate whose twin lies in the target's act (else any gate of this act): where to head for another act's target. */
 function gateToward(me: { x: number; y: number }, target: { x: number; y: number }) {

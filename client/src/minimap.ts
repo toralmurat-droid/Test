@@ -1,6 +1,6 @@
 import { uiScale } from "./worldscale";
-import { loadFog } from "./fogmigrate";
-import { DESERT_H, DESERT_Y0, inDeepRow, inMoorsBand, MOORS_Y0, MOORS_H, MAP_H, MAP_W, TILE, UNDER_END, WORLD_H } from "../../shared/constants";
+import { decodeFog, encodeFog, loadFog } from "./fogmigrate";
+import { BADLANDS_H, BADLANDS_Y0, DESERT_H, DESERT_Y0, inBadlandsBand, inDeepRow, inMoorsBand, MOORS_Y0, MOORS_H, MAP_H, MAP_W, TILE, UNDER_END, WORLD_H } from "../../shared/constants";
 import { floorAt, SEA_END } from "../../shared/dungeon";
 import { AREAS, EMPTY, GROUND, OBJECTS, T } from "../../shared/map";
 import { createTilesetCanvas, tileColors } from "./tileset";
@@ -18,6 +18,15 @@ function moorsColor(o: number, g: number, colors: string[]): string {
   if (o === T.BONE_PILE) return "#c9c4b0";
   if (o !== EMPTY && o !== T.BUSH) return colors[o];
   return g === T.HEATHER ? "#6b5a78" : g === T.BOG ? "#2f3d3a" : g === T.GRASS ? "#4f6048" : g === T.DIRT ? "#5f5850" : g === T.SAND ? "#8a8a82" : colors[g];
+}
+
+/** Badlands colours (red sand, red mesas, grey-brown riverbeds) for the minimap and world map; the rest falls back to the tileset. */
+function badlandsColor(o: number, g: number, colors: string[]): string {
+  if (o === T.CLIFF) return "#7a3a26";
+  if (o === T.ARCH) return "#9a4a30";
+  if (o === T.CACTUS) return "#5f7a3a";
+  if (o !== EMPTY && o !== T.BUSH) return colors[o];
+  return g === T.SAND ? "#b8603a" : g === T.CLAY ? "#8a4a32" : g === T.GRAVEL ? "#7a6a5c" : g === T.DIRT ? "#9a6444" : g === T.GRASS ? "#8a7f4a" : colors[g];
 }
 
 const VIEW_W = 56, VIEW_H = 56; // tiles shown around the player on the (round) minimap
@@ -68,6 +77,8 @@ export class Minimap {
   private mx0 = MAP_W; private my0 = MAP_H; private mx1 = -1; private my1 = -1; // explored box of the moors
   private inDesert = false;
   private inMoors = false;
+  private inBadlands = false;
+  private ax0 = MAP_W; private ay0 = MAP_H; private ax1 = -1; private ay1 = -1; // explored box of the badlands
   private view = MIN_VIEW; // tiles currently shown across the minimap (eases towards the explored size)
   /** Quest and NPC markers, set by the NPC layer every frame. */
   markers: MapMarker[] = [];
@@ -103,7 +114,8 @@ export class Minimap {
       const o = OBJECTS[y][x];
       // the Mawdeep: black rock, dim cave floors
       const g = GROUND[y][x];
-      b.fillStyle = inMoorsBand(y) ? moorsColor(o, g, colors) // the Grey Barrow Moors
+      b.fillStyle = inBadlandsBand(y) ? badlandsColor(o, g, colors) // the Red Badlands
+        : inMoorsBand(y) ? moorsColor(o, g, colors) // the Grey Barrow Moors
         : y >= DESERT_Y0 && y < DESERT_Y0 + DESERT_H ? (o === T.CLIFF ? "#7a4a2c" : o !== EMPTY && o !== T.BUSH ? colors[o] : g === T.SAND ? "#c99c60" : g === T.DIRT ? "#a8744a" : g === T.GRASS ? "#5e6e30" : colors[g]) // the desert
         : y >= SEA_END ? (o !== EMPTY ? "#0d0b0c" : "#4a3d33") : colors[o !== EMPTY ? o : g];
       b.fillRect(x, y, 1, 1);
@@ -256,6 +268,7 @@ export class Minimap {
     const f = me && floorAt(Math.floor(me.x / TILE), Math.floor(me.y / TILE));
     if (f) return { x0: f.x, y0: f.y, x1: f.x + f.w, y1: f.y + f.h };
     if (me && me.y >= WORLD_H * TILE && me.y < UNDER_END * TILE) return { x0: 0, y0: WORLD_H, x1: MAP_W, y1: UNDER_END };
+    if (this.inBadlands) return { x0: 0, y0: BADLANDS_Y0, x1: MAP_W, y1: BADLANDS_Y0 + BADLANDS_H };
     if (this.inMoors) return { x0: 0, y0: MOORS_Y0, x1: MAP_W, y1: MOORS_Y0 + MOORS_H };
     return this.inDesert ? { x0: 0, y0: DESERT_Y0, x1: MAP_W, y1: DESERT_Y0 + DESERT_H } : { x0: 0, y0: 0, x1: MAP_W, y1: WORLD_H };
   }
@@ -322,17 +335,15 @@ export class Minimap {
     try {
       const s = localStorage.getItem(this.key);
       if (!s) return;
-      const bin = atob(s);
+      const bin = decodeFog(s); // compressed "z1:" or the older raw form
       loadFog(bin, this.seen, MAP_W, MAP_H); // (saved before the map grew: same coordinates, copied row by row)
     } catch { /* storage unavailable: start with nothing discovered */ }
   }
 
   private save() {
-    try {
-      let bin = "";
-      for (let i = 0; i < this.seen.length; i += 4096) bin += String.fromCharCode(...this.seen.subarray(i, i + 4096));
-      localStorage.setItem(this.key, btoa(bin));
-    } catch { /* ignore */ }
+    const z = encodeFog(this.seen); // always the compressed form (a few KB): the raw one could hit the storage quota
+    try { localStorage.setItem(this.key, z); }
+    catch { try { localStorage.removeItem(this.key); localStorage.setItem(this.key, z); } catch (e) { console.warn("minimap: fog not saved", e); } }
   }
 
   private paintFog(x0: number, y0: number, w: number, h: number) {
@@ -347,6 +358,11 @@ export class Minimap {
 
   private grow(x: number, y: number) {
     if (inDeepRow(y)) return; // the deep dungeons frame their floor
+    if (y >= BADLANDS_Y0 - 4) {
+      if (x < this.ax0) this.ax0 = x; if (x > this.ax1) this.ax1 = x;
+      if (y < this.ay0) this.ay0 = y; if (y > this.ay1) this.ay1 = y;
+      return;
+    }
     if (y >= MOORS_Y0) {
       if (x < this.mx0) this.mx0 = x; if (x > this.mx1) this.mx1 = x;
       if (y < this.my0) this.my0 = y; if (y > this.my1) this.my1 = y;
@@ -363,6 +379,7 @@ export class Minimap {
   }
   /** The explored box of the act the hero is in. */
   private box() {
+    if (this.inBadlands) return { x0: this.ax0, y0: this.ay0, x1: this.ax1, y1: this.ay1 };
     if (this.inMoors) return { x0: this.mx0, y0: this.my0, x1: this.mx1, y1: this.my1 };
     return this.inDesert ? { x0: this.dx0, y0: this.dy0, x1: this.dx1, y1: this.dy1 } : { x0: this.bx0, y0: this.by0, x1: this.bx1, y1: this.by1 };
   }
@@ -385,7 +402,7 @@ export class Minimap {
       return { x: f.x + f.w / 2 - cw / s / 2, y: f.y + f.h / 2 - ch / s / 2, s };
     }
     const B = this.box();
-    if (B.x1 < 0) return { x: 0, y: this.inMoors ? MOORS_Y0 : this.inDesert ? DESERT_Y0 : 0, s: Math.max(1, Math.floor(Math.min(cw / MAP_W, ch / WORLD_H))) };
+    if (B.x1 < 0) return { x: 0, y: this.inBadlands ? BADLANDS_Y0 : this.inMoors ? MOORS_Y0 : this.inDesert ? DESERT_Y0 : 0, s: Math.max(1, Math.floor(Math.min(cw / MAP_W, ch / WORLD_H))) };
     const w = Math.max(24, B.x1 - B.x0 + 1 + MAP_PAD * 2), hh = Math.max(18, B.y1 - B.y0 + 1 + MAP_PAD * 2);
     const s = Math.max(1, Math.floor(Math.min(cw / w, ch / hh)));
     const cx = (B.x0 + B.x1 + 1) / 2, cy = (B.y0 + B.y1 + 1) / 2;
@@ -421,8 +438,9 @@ export class Minimap {
   private drawMini(now: number, me: P | undefined, others: OtherHero[]) {
     if (me) {
       const ty = Math.floor(me.y / TILE);
+      this.inBadlands = inBadlandsBand(ty);
       this.inMoors = inMoorsBand(ty);
-      this.inDesert = !this.inMoors && me.y >= DESERT_Y0 * TILE && !inDeepRow(ty);
+      this.inDesert = !this.inMoors && !this.inBadlands && me.y >= DESERT_Y0 * TILE && !inDeepRow(ty);
     }
     if (me) this.reveal(Math.floor(me.x / TILE), Math.floor(me.y / TILE));
     if (this.dirty && now - this.lastSave > 3000) { this.save(); this.dirty = false; this.lastSave = now; }

@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { DEEP_END, DEEP_Y0, DESERT_H, DESERT_Y0, MAP_H, MAP_W, MOORS_H, MOORS_Y0, TILE, UNDER_END, WORLD_H } from "../../shared/constants";
+import { BADLANDS_H, BADLANDS_Y0, DEEP_END, DEEP_Y0, DESERT_H, DESERT_Y0, MAP_H, MAP_W, MOORS_H, MOORS_Y0, TILE, UNDER_END, WORLD_H } from "../../shared/constants";
 import { SEA_END } from "../../shared/dungeon";
 import { ELEMENT_LANDS, EMPTY, OBJECTS, T, TILE_COUNT } from "../../shared/map";
 import type { GroundData } from "./groundPaint";
@@ -18,7 +18,7 @@ const FADE_MS = 220; // a chunk that still lands on screen blends in instead of 
 const SOLID = new Set<number>([
   T.TREE, T.PINE, T.BUSH, T.ROCK, T.PALISADE, T.ROOF_THATCH, T.ROOF_RED, T.ROOF_SLATE, T.WALL_TIMBER, T.WALL_STONE,
   T.WINDOW_TIMBER, T.WINDOW_STONE, T.DOOR, T.WELL, T.RUIN, T.BEAM, T.STUMP, T.BARREL, T.CRATE, T.HAY,
-  T.ADOBE, T.ADOBE_WALL, T.TENT, T.PALM,
+  T.ADOBE, T.ADOBE_WALL, T.TENT, T.PALM, T.ARCH, T.CACTUS,
 ]);
 
 export class SmoothGround {
@@ -37,7 +37,7 @@ export class SmoothGround {
       if (o === T.CLIFF) cliff[y * MAP_W + x] = 1;
       else if (o !== EMPTY && SOLID.has(o)) solid[y * MAP_W + x] = 1;
     }
-    const data: GroundData = { w: MAP_W, h: MAP_H, tile: TILE, tileCount: TILE_COUNT, ground: g, solid, lands: ELEMENT_LANDS.map((l) => ({ x: l.x, y: l.y, w: l.w, h: l.h, el: l.el })), cave: { y0: WORLD_H, rock: SEA_END, end: UNDER_END, deep: [DEEP_Y0, DEEP_END] }, desert: { y0: DESERT_Y0, y1: DESERT_Y0 + DESERT_H }, moors: { y0: MOORS_Y0, y1: MOORS_Y0 + MOORS_H }, cliff };
+    const data: GroundData = { w: MAP_W, h: MAP_H, tile: TILE, tileCount: TILE_COUNT, ground: g, solid, lands: ELEMENT_LANDS.map((l) => ({ x: l.x, y: l.y, w: l.w, h: l.h, el: l.el })), cave: { y0: WORLD_H, rock: SEA_END, end: UNDER_END, deep: [DEEP_Y0, DEEP_END] }, desert: { y0: DESERT_Y0, y1: DESERT_Y0 + DESERT_H }, moors: { y0: MOORS_Y0, y1: MOORS_Y0 + MOORS_H }, badlands: { y0: BADLANDS_Y0, y1: BADLANDS_Y0 + BADLANDS_H }, cliff };
     const n = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 2) - 1));
     for (let i = 0; i < n; i++) {
       const w = new Worker(new URL("./groundWorker.ts", import.meta.url), { type: "module" });
