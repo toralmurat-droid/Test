@@ -40,7 +40,8 @@ function drawOrb(ctx: CanvasRenderingContext2D, frac: number, pal: Pal, t: numbe
   const d = img.data;
   const level = C + R_IN - 2 * R_IN * Math.max(0, Math.min(1, frac)); // y of the liquid surface
   const top = Math.max(0, Math.min(1, frac)) + amt, overflow = amt > 0 && top > 1; // the band's top, in orb heights
-  const bandTop = C + R_IN - 2 * R_IN * Math.min(1, top); // y of the band's top edge
+  // Without overflow the band stacks on the liquid (level up to its top); with overflow it is the top `amt` of the orb, over the red.
+  const bandTop = overflow ? C - R_IN : C + R_IN - 2 * R_IN * top, bandBot = overflow ? C - R_IN + 2 * R_IN * Math.min(1, amt) : level + 1.2;
   for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) {
     const dx = x + 0.5 - C, dy = y + 0.5 - C, r = Math.hypot(dx, dy);
     if (r > R_OUT) continue;
@@ -67,11 +68,13 @@ function drawOrb(ctx: CanvasRenderingContext2D, frac: number, pal: Pal, t: numbe
         // An absorb shield: pale glass stacked on the liquid (amt known), or just a glinting rim when only its presence is known.
         // Chunky 2 px steps keep it pixel art.
         const a = Math.atan2(dy, dx), sweep = Math.cos(a - t * 1.6), rim = r > R_IN - 4;
-        const yy = y + 0.5, inBand = amt > 0 && yy >= bandTop && yy < level + 1.2;
+        const yy = y + 0.5, inBand = amt > 0 && yy >= bandTop && yy < bandBot;
+        const onRed = inBand && overflow && yy >= level;
         if (inBand) {
-          c = mix(c, [196, 228, 255], 0.34 + 0.2 * lit + 0.03 * Math.sin(t * 2)); // glass lit like the sphere, no stripes
+          c = mix(c, [200, 236, 255], (onRed ? 0.3 : 0.55) + 0.2 * lit + 0.03 * Math.sin(t * 2)); // pale blue glass lit like the sphere, no stripes; translucent over the red
           if (!rim && ((x >> 2) * 7 + (y >> 2) * 13) % 17 === 0) c = mix(c, [236, 246, 255], 0.16); // a few sparse facets
-          if (yy - bandTop < 1.8 && !overflow) c = mix(c, [240, 250, 255], 0.75); // the band's top edge
+          if (!overflow && yy - bandTop < 1.8) c = mix(c, [240, 250, 255], 0.8); // the band's top edge
+          if (overflow && bandBot - yy < 1.8) c = mix(c, [240, 250, 255], 0.7); // its lower edge, over the red
         }
         if (amt <= 0 || inBand) {
           if (rim) c = mix(c, [190, 226, 255], 0.55 + 0.3 * Math.max(0, sweep));
