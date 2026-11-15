@@ -76,12 +76,21 @@ function pageFor(id: string, q: QuestState): DialogPage | undefined {
  * a dialog panel and the quest tracker. The server checks distance and owns quest progress.
  */
 /** Where the way to the other act starts, for the tracker (shared/desert.ts WAYGATE_OAKVALE / WAYGATE_DESERT). */
-const GATE_HINT: Record<1 | 2 | 3 | 4 | 5, string> = {
+const GATE_HINT: Record<1 | 2 | 3 | 4 | 5 | 6, string> = {
   1: "Step through the waygate, just outside Oakvale's south gate",
   2: "Step through the waygate in the Sunstone Circle, south-west of Kel Ashar",
   3: "Touch the Cairnwatch portal stone, or step back through the Moorgate by the stone ring",
   4: "Walk back through the Red Pass at the badlands' east edge",
   5: "Climb back up the Sinkway by the cave mouth at the sinkholes' north-west edge",
+  6: "Take any of the five Crownways back from the Crown's rim, the gate on your homeland's side",
+};
+/** Where each homeland's Crownway dais stands (shared/crown.ts CROWNWAYS), for the tracker. */
+const CROWNWAY_HINT: Record<string, string> = {
+  oakvale: "Take the Greenward Gate on Oakvale's south-east coast, east of Gullrock Cove",
+  moors: "Take the Mourning Gate in the heather south of the Host's Muster",
+  badlands: "Take the Red Gate on the flats south of Fangrock's stockade",
+  sinkholes: "Take the Deep Gate in the dells west of Hidehall's palisade",
+  sunscar: "Take the Sun Gate in the sand east of the Veiled Sanctum",
 };
 /** Act 1's way to the moors: the Moorgate is not Oakvale's south waygate. */
 const MOORGATE_HINT = "Step through the Moorgate in the forest north of the Hollow Throne";
@@ -90,7 +99,7 @@ const REDPASS_HINT = "Take the Red Pass on Oakvale's west edge, between Mirror P
 /** Act 1's way to the sinkholes: the Sinkway, a cave on the beach. */
 const SINKWAY_HINT = "Take the Sinkway on the beach south of Sunken Lake, west of the river mouth";
 const gateHint = (me: { x: number; y: number }, gateId?: string) =>
-  gateId === "moorsgate" ? MOORGATE_HINT : gateId === "redpass" ? REDPASS_HINT : gateId === "sinkway" ? SINKWAY_HINT : GATE_HINT[actAt(me.y, me.x)];
+  gateId === "moorsgate" ? MOORGATE_HINT : gateId === "redpass" ? REDPASS_HINT : gateId === "sinkway" ? SINKWAY_HINT : gateId?.startsWith("crownway_") ? CROWNWAY_HINT[gateId.slice(9)] ?? GATE_HINT[6] : GATE_HINT[actAt(me.y, me.x)];
 
 /** This act's gate whose twin lies in the target's act (else any gate of this act): where to head for another act's target. */
 function gateToward(me: { x: number; y: number }, target: { x: number; y: number }) {

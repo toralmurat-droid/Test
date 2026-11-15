@@ -16,3 +16,12 @@ nothing errors.
   under the surf and gull sounds the game already plays on the beach.
 - Length: 2 to 4 minutes, seamless loop (the end flows into the start; no fade-out baked in).
 - Format: mp3, about 128 to 192 kbps, cover art stripped (`ffmpeg -i in.mp3 -map 0:a -c copy out.mp3`).
+
+## The Crown of the Marches (Act 6, optional)
+
+`tollcross-tune.mp3` (slot `tollcross`) plays in Tollcross, the Truce Market; `crown-of-the-marches.mp3` (slot `crown`)
+plays everywhere else in the Crown outside monster zones. Both are `optional` in `TRACKS` (`client/src/music.ts`): without
+the files Tollcross keeps the village tune and the rest of the Crown the country tune, and nothing errors.
+- Mood: regal and ruined; slow horns and strings over a faded fanfare, dusk-gold warmth with a hollow, wind-swept
+  edge. Tollcross is livelier (a fair under old banners); the open Marches are sparse and wide.
+- Length: 2 to 4 minutes, seamless loop. Format: mp3, 128 to 192 kbps, cover art stripped.

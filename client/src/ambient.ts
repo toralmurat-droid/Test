@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { ART_K as K, BADLANDS_Y0, DESERT_Y0, MAP_H, MAP_W, MOORS_Y0, SINKHOLES_H, SINKHOLES_Y0, TILE } from "../../shared/constants";
+import { ART_K as K, BADLANDS_Y0, DESERT_Y0, MAP_H, CROWN_Y0, MAP_W, MOORS_Y0, SINKHOLES_H, SINKHOLES_Y0, TILE } from "../../shared/constants";
 import { gorseTexture, origin } from "./moorsArt";
 import { origin as blOrigin, scrubTexture } from "./badlandsArt";
 import { fernTexture, origin as skOrigin, willowTexture } from "./sinkholesArt";
@@ -227,6 +227,7 @@ export class Ambient {
   /** The hero's tile: sets how thick the moors mist lies (none outside Act 3, thick in the MIST_HOLLOWS). */
   setHero(tx: number, ty: number) {
     this.dust = ty >= BADLANDS_Y0 - 4 && ty < SINKHOLES_Y0 - 4;
+    if (ty >= CROWN_Y0 - 4) { this.mistWant = 0.12; return; } // the Crown: only a faint pale haze (the embers and ash are drawn by the Crown pass)
     if (ty >= SINKHOLES_Y0 - 4) { this.mistWant = 0.3; return; } // the sinkholes: a thin damp haze (cool tint, no dust)
     if (this.dust) { this.mistWant = 0.55; return; } // the badlands: dust in the heat, no hollows
     if (ty < MOORS_Y0 - 4) { this.mistWant = 0; return; }
@@ -391,6 +392,7 @@ export class Ambient {
     this.buildChimneys();
     this.buildSpores();
     this.buildCampfires();
+    this.buildBraziers();
     this.buildBonfires();
     this.buildButterflies();
     this.buildFireflies();
@@ -430,7 +432,7 @@ export class Ambient {
       if (!TREES.has(t)) continue;
       const oaks = SMOOTH ? ["oak_a", "oak_b", "oak_c", "oak_d", "oak_e", "oak_a", "oak_b", "oak_f"] : ["oak_a", "oak_b"];
       const pines = SMOOTH ? ["pine", "pine", "pine_b"] : ["pine"];
-      const sink = y >= SINKHOLES_Y0 - 4, badl = y >= BADLANDS_Y0 - 4 && !sink, desert = y >= DESERT_Y0 && y < MOORS_Y0 - 4, moors = y >= MOORS_Y0 - 4 && y < BADLANDS_Y0 - 4;
+      const crown = y >= CROWN_Y0 - 4, sink = y >= SINKHOLES_Y0 - 4 && !crown, badl = y >= BADLANDS_Y0 - 4 && !sink && !crown, desert = y >= DESERT_Y0 && y < MOORS_Y0 - 4, moors = y >= MOORS_Y0 - 4 && y < BADLANDS_Y0 - 4;
       const lush = sink && (t === T.BUSH || t === T.TREE) ? (t === T.TREE ? willowTexture(this.scene, Math.floor(r() * 4)) : fernTexture(this.scene, Math.floor(r() * 3), Math.floor(r() * 4))) : undefined; // the sinkholes' willows and ferns (sinkholesArt.ts)
       const scrub = badl && t === T.BUSH ? scrubTexture(this.scene, Math.floor(r() * 2), Math.floor(r() * 4)) : undefined; // the badlands' thorn scrub and tumbleweed (badlandsArt.ts)
       const gorse = lush ?? scrub ?? (moors && t === T.BUSH ? gorseTexture(this.scene, Math.floor(r() * 4)) : undefined); // the moors' gorse (moorsArt.ts) instead of the plain bush
@@ -527,6 +529,28 @@ export class Ambient {
         scale: { start: 1.5, end: 0.4 }, alpha: { start: 1, end: 0 }, frequency: 140, blendMode: "ADD",
       }).setDepth(25000);
       this.smoke(cx, cy - 6 * K, 0.7);
+    }
+  }
+
+  /** The Crown's braziers (T.BRAZIER, Act 6): a warm flickering glow with embers rising, and a few ash flakes drifting off in the wind. Cosmetic only. */
+  private buildBraziers() {
+    for (let y = CROWN_Y0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
+      if (OBJECTS[y][x] !== T.BRAZIER) continue;
+      const cx = (x + 0.5) * TILE, fy = (y + 0.5) * TILE;
+      const glow = staticObj(this.scene, this.scene.add.image(cx, fy - 10 * K, "glow").setTint(0xffb040).setScale(4.2 * K).setAlpha(0.22).setBlendMode(Phaser.BlendModes.ADD).setDepth(-0.8));
+      this.scene.tweens.add({ targets: glow, alpha: 0.38, scale: 4.8 * K, duration: 220 + ((x * 7 + y * 3) % 5) * 40, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+      const embers = this.scene.add.particles(cx, fy - 16 * K, "spark", {
+        lifespan: { min: 1400, max: 2600 }, speedY: { min: -14 * K, max: -6 * K }, speedX: { min: -3 * K, max: 3 * K }, accelerationX: WIND_X * 0.5 * K,
+        scale: { start: 0.7, end: 0.15 }, alpha: { start: 1, end: 0 }, frequency: 300, blendMode: "ADD",
+      }).setDepth(25000);
+      isoAnchor(embers, { x: cx, y: fy });
+      staticObj(this.scene, embers, { box: plumeBox(cx, fy - 16 * K, cx, fy), warm: 2800 });
+      const ash = this.scene.add.particles(cx, fy - 12 * K, "spark", {
+        lifespan: { min: 3500, max: 5500 }, speedY: { min: -4 * K, max: 3 * K }, speedX: { min: 2 * K, max: 8 * K }, accelerationX: WIND_X * 0.3 * K,
+        scale: { start: 0.45, end: 0.2 }, alpha: { start: 0.5, end: 0 }, tint: 0xb8b4aa, frequency: 900,
+      }).setDepth(25000);
+      isoAnchor(ash, { x: cx, y: fy });
+      staticObj(this.scene, ash, { box: plumeBox(cx, fy - 12 * K, cx + 40 * K, fy), warm: 4000 });
     }
   }
 
