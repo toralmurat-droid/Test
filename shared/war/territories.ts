@@ -38,11 +38,12 @@ export function isSanctuary(z: SpawnZone): boolean {
 const gap = (a: SpawnZone, b: SpawnZone) => Math.hypot(Math.max(0, a.x - (b.x + b.w), b.x - (a.x + a.w)), Math.max(0, a.y - (b.y + b.h), b.y - (a.y + a.h)));
 
 function build(): Territory[] {
-  const zones = SPAWN_ZONES.filter((z) => !isSanctuary(z));
+  // the war is fought in Acts 1 and 2: the moors (Act 3) have no capitals or link yet (see the module comment)
+  const zones = SPAWN_ZONES.filter((z) => !isSanctuary(z) && actOfTile(z.x + (z.w >> 1), z.y + (z.h >> 1)) !== 3);
   const capital = new Map<string, ClanKey>();
   for (const k of CLAN_KEYS) for (const n of Object.values(CLANS[k].capitals)) capital.set(n, k);
   const out: Territory[] = zones.map((z, id) => ({
-    id, name: z.name, act: actOfTile(z.x + (z.w >> 1), z.y + (z.h >> 1)), x: z.x, y: z.y, w: z.w, h: z.h,
+    id, name: z.name, act: actOfTile(z.x + (z.w >> 1), z.y + (z.h >> 1)) as 1 | 2, x: z.x, y: z.y, w: z.w, h: z.h,
     cx: z.x + z.w / 2, cy: z.y + z.h / 2, levels: z.levels, capitalOf: capital.get(z.name), near: [],
   }));
   const link = (a: number, b: number) => { if (a !== b && !out[a].near.includes(b)) { out[a].near.push(b); out[b].near.push(a); } };

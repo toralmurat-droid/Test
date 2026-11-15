@@ -1,5 +1,6 @@
-import { actOfTile, inDeepRow, act2MobLevel, act2SpecialLevel, DESERT_Y0, ELITE, MobKind, regionMobLevel, regionSpecialLevel, TILE } from "./constants";
+import { actOfTile, inDeepRow, act2MobLevel, act2SpecialLevel, DESERT_Y0, ELITE, MobKind, MOORS_LEVEL, moorsMobLevel, moorsSpecialLevel, regionMobLevel, regionSpecialLevel, TILE } from "./constants";
 import { D, SUNSTONE } from "./desert";
+import { MOORSGATE_MOORS } from "./moors";
 import { AREAS, isSafeZone, isSolidAt, OBJECTS, T, VILLAGE } from "./map";
 import { CAMP_POSTS } from "./bandits";
 import { AMBUSH_ROOMS, chamberAtPx, FLOORS, LAIRS, LANDING, pointInChamber } from "./dungeon";
@@ -150,18 +151,24 @@ export function zoneLevels(a: { x: number; y: number; w: number; h: number }): [
 }
 /** Lowest monster level at a tile, from its distance to the village centre (a spot spans this level to +2). */
 export function baseLevelAt(tx: number, ty: number): number {
+  const act = actOfTile(tx, ty);
+  // Act 3: from Lv 20 at the moorgate, a level every 10 tiles further out (held under MOORS_LEVEL by levelFns)
+  if (act === 3) return MOORS_LEVEL.min + Math.floor(Math.max(0, Math.hypot(tx - MOORSGATE_MOORS.x, ty - MOORSGATE_MOORS.y) - 12) / MOORS_LEVEL.tilesPerLevel);
   // Act 2: from Lv 30 at the Sunstone Circle, a level every 12 tiles further out
-  if (actOfTile(tx, ty) === 2) return 30 + Math.floor(Math.max(0, Math.hypot(tx - SUNSTONE.x, ty - D(SUNSTONE.y)) - 12) / 12);
+  if (act === 2) return 30 + Math.floor(Math.max(0, Math.hypot(tx - SUNSTONE.x, ty - D(SUNSTONE.y)) - 12) / 12);
   const cx = (VILLAGE.x0 + VILLAGE.x1) / 2, cy = (VILLAGE.y0 + VILLAGE.y1) / 2;
   return 1 + Math.floor(Math.max(0, Math.hypot(tx - cx, ty - cy) - 40) / 8);
 }
 
-/** The level ceilings for a zone or a tile: Oakvale's (regionMobLevel, Lv 25/30) or the desert's (ACT2_LEVEL, Lv 30-47/50). */
-const levelFns = (tx: number, ty: number) => actOfTile(tx, ty) === 2 ? { mob: act2MobLevel, special: act2SpecialLevel } : { mob: regionMobLevel, special: regionSpecialLevel };
+/** The level ceilings for a zone or a tile: Oakvale's (regionMobLevel, Lv 25/30), the desert's (ACT2_LEVEL, Lv 30-47/50) or the moors' (MOORS_LEVEL, Lv 20-33/35). */
+const levelFns = (tx: number, ty: number) => {
+  const act = actOfTile(tx, ty);
+  return act === 3 ? { mob: moorsMobLevel, special: moorsSpecialLevel } : act === 2 ? { mob: act2MobLevel, special: act2SpecialLevel } : { mob: regionMobLevel, special: regionSpecialLevel };
+};
 
 const inRect = (r: { x: number; y: number; w: number; h: number }, tx: number, ty: number) => tx >= r.x && tx < r.x + r.w && ty >= r.y && ty < r.y + r.h;
 /** Areas so broad they never keep a wild zone's monsters out (they hold other zones). */
-const BROAD_AREAS = ["Whispering Woods", "River Ashwell", "The Sunscar"];
+const BROAD_AREAS = ["Whispering Woods", "River Ashwell", "The Sunscar", "The Grey Barrow Moors"];
 /** Named areas (and Oakvale's surroundings) a wild zone leaves alone: its monsters stay in their own biome. */
 function claimedByArea(name: string, tx: number, ty: number): boolean {
   return AREAS.some((a) => a.name !== name && !BROAD_AREAS.includes(a.name) && inRect(a, tx, ty));
