@@ -113,6 +113,9 @@ export type MobKind = "slime" | "skeleton" | "motherblob" | "blobling" | "shoote
   // Act 4, the Red Badlands (shared/badlands.ts): the Redfang clan's riders, bowmen, fire-throwers, dogs and captains, the
   // badlands' vultures and rattlesnakes, and Old Rourke, the Fang-Father, in his keep at Fangrock
   | "outrider" | "crossbowman" | "firebrand" | "warhound" | "vulture" | "rattler" | "redcaptain" | "rourke"
+  // Act 5, the Mawdeep Sinkholes (shared/sinkholes.ts): the Hide-Kin's diggers, hyena packs, stag-chargers, quill-throwers
+  // and hide-stitching shamans, the Gullet Worms in the pit floors, the Hide-Chieftains, and the Maw-Father in the Great Maw
+  | "delver" | "cackler" | "stagkin" | "quillback" | "stitcher" | "sinkworm" | "hidechief" | "mawfather"
   // clan troops of the war (shared/war/troops.ts): the clan rides in Mob.weapon; art comes per clan (shared/war/patrols.ts TROOP_LOOK)
   | "trooper"
   // summoned by heroes (shared/summons.ts): they fight for their owner
@@ -218,13 +221,24 @@ export const MOBS: Record<MobKind, MobDef> = {
   // the clan's captains (elite) and its lord, Old Rourke, the Fang-Father, in Fangrock's keep (a living boss: about by day and night)
   redcaptain: { name: "Redfang Captain", maxHp: 760, speed: 56, damage: 27, attackCooldownMs: 1250, aggroRange: 180, leash: 320, xp: 350 },
   rourke: { name: "Old Rourke", maxHp: 1900, speed: 56, damage: 26, attackCooldownMs: 1200, aggroRange: 240, leash: 460, xp: 1200 },
+  // Act 5, the Mawdeep Sinkholes (Lv 30-45): base numbers set with tools/balance/pve.ts --sinkholes so the sinkholes play
+  // like the badlands for a hero of their level (SINKHOLES_KINDS below; moves in BEAST_MOVES, SINKHOLES_AI, server/hidekin.ts)
+  delver: { name: "Hide-Kin Delver", maxHp: 175, speed: 58, damage: 20, attackCooldownMs: 1000, aggroRange: 140, leash: 240, xp: 38 },
+  cackler: { name: "Cackler", maxHp: 120, speed: 84, damage: 10, attackCooldownMs: 800, aggroRange: 150, leash: 260, xp: 30 },
+  stagkin: { name: "Stagkin", maxHp: 205, speed: 62, damage: 22, attackCooldownMs: 1150, aggroRange: 150, leash: 260, xp: 42 },
+  quillback: { name: "Quillback", maxHp: 145, speed: 52, damage: 20, attackCooldownMs: 1700, aggroRange: 170, leash: 240, xp: 38 },
+  stitcher: { name: "Hide-Stitcher", maxHp: 130, speed: 52, damage: 18, attackCooldownMs: 1600, aggroRange: 160, leash: 240, xp: 42 },
+  sinkworm: { name: "Gullet Worm", maxHp: 150, speed: 50, damage: 18, attackCooldownMs: 1100, aggroRange: 110, leash: 200, xp: 36 },
+  // the Hide-Chieftains (elite) and the Maw-Father, the Hide-Kin's first father, in the Great Maw (a living boss: about by day and night)
+  hidechief: { name: "Hide-Chieftain", maxHp: 780, speed: 58, damage: 27, attackCooldownMs: 1250, aggroRange: 180, leash: 320, xp: 380 },
+  mawfather: { name: "The Maw-Father", maxHp: 2000, speed: 54, damage: 32, attackCooldownMs: 1250, aggroRange: 240, leash: 460, xp: 1400 },
 };
 
 /** Elite monsters: much tougher than the rest of their zone, with a bigger look and an "Elite" tag. */
 export const ELITE: Partial<Record<MobKind, true>> = { necromancer: true, demon: true, banditchief: true, hollowking: true, packlord: true, hornbrute: true, hidemother: true, gnasher: true, weaver: true, sunwright: true, cairnlord: true, barrowking: true,
-  redcaptain: true, rourke: true };
+  redcaptain: true, rourke: true, hidechief: true, mawfather: true };
 /** Bosses: elites that lead a whole camp (tagged "Boss" instead of "Elite"). */
-export const BOSS: Partial<Record<MobKind, true>> = { banditchief: true, hollowking: true, hidemother: true, sunwright: true, barrowking: true, rourke: true };
+export const BOSS: Partial<Record<MobKind, true>> = { banditchief: true, hollowking: true, hidemother: true, sunwright: true, barrowking: true, rourke: true, mawfather: true };
 
 /**
  * Skeleton casters. Distances in px.
@@ -532,6 +546,12 @@ export const BEAST_MOVES: Partial<Record<MobKind, BeastMove[]>> = {
   warhound: ["pounce"],
   redcaptain: ["stomp", "maul"],
   rourke: ["pounce", "roar", "maul"],
+  // Act 5: the Stagkin lower their antlers and charge (a long stampede, a short gore); a Hide-Chieftain howls up his
+  // cacklers (and cries war, SINKHOLES_AI.warlords) and cleaves; the Maw-Father brings the pit's walls down when badly
+  // hurt, calls his brood, roars and cleaves (and burrows, server/hidekin.ts)
+  stagkin: ["stampede", "gore"],
+  hidechief: ["howl", "maul"],
+  mawfather: ["rockfall", "brood", "roar", "maul"],
 };
 /** Damage over time after a plain blow (BEAST.plague / bleed / venom). */
 /**
@@ -584,10 +604,12 @@ export const SUNWRIGHT = {
   },
 };
 export const BEAST_RIDER: Partial<Record<MobKind, "plague" | "bleed" | "venom">> = { gnawkin: "plague", packlord: "bleed", silkwretch: "venom", hidemother: "bleed", gnasher: "plague", weaver: "venom", scorpion: "venom", bonehound: "bleed", boghag: "venom",
-  warhound: "bleed", rattler: "venom" };
+  warhound: "bleed", rattler: "venom",
+  cackler: "bleed" };
 /** Who answers a beast's Brood or Howl (default BEAST.brood.kinds / BEAST.howl.summon). */
 export const BEAST_BROOD: Partial<Record<MobKind, MobKind[]>> = { gnasher: ["gnawkin", "gnawkin", "gnawkin"], weaver: ["silkwretch", "silkwretch"], sunwright: ["veiled", "veiled", "veiled"],
-  cairnlord: ["wight", "wight"], barrowking: ["wight", "legionary", "bonehound", "bonehound"] };
+  cairnlord: ["wight", "wight"], barrowking: ["wight", "legionary", "bonehound", "bonehound"],
+  hidechief: ["cackler", "cackler"], mawfather: ["delver", "cackler", "cackler", "stagkin"] };
 /**
  * Half-folk variants (Mob.weapon "folk", Murat 2026-11-05): a man's face under the flayed animal head, the body gone
  * over to the beast. Gnawkin bone-slingers throw stones from range; the rest fight like their kind.
@@ -628,6 +650,38 @@ export const BADLANDS_AI = {
 export const BADLANDS_KINDS: MobKind[] = ["outrider", "crossbowman", "firebrand", "warhound", "vulture", "rattler", "redcaptain", "rourke"];
 /** The Redfang clan's own (the badlands' men and dogs): they answer the horn and their captains' war cries. */
 export const REDFANG_KINDS: MobKind[] = ["outrider", "crossbowman", "firebrand", "warhound", "redcaptain", "rourke"];
+/**
+ * The sinkholes' moves (server/hidekin.ts, TownRoom, pve.ts). Distances in px, times in ms, damage as a multiple of the
+ * monster's own.
+ * - quills: the Quillback shakes quills off its back at range like a crossbowman's bolt, and every so often a fan of
+ *   them (`volley`, like a Redfang archer's); up on a Hidehall lookout it sees and throws as far as a camp lookout.
+ * - hex: the Hide-Stitcher's bone-needle hex, thrown from range (poison, MOB_SHOT_ELEMENT).
+ * - stitch: a Hide-Stitcher sews a hurt kinsman back up (the most hurt Hide-Kin in `range` under `hpFrac`): a cast,
+ *   then `heal` of its max HP. Kill the stitcher first.
+ * - burrow: a Delver (and the Maw-Father) digs in, tunnels under its hero, marks the ground where it will come up
+ *   (`markMs` to step off) and bursts out there: damage and a short stun in `radius`.
+ * - burst: a Gullet Worm lies buried in a pit floor (shared/spawns.ts HIDE) and bursts out at a hero who walks by.
+ * - warlords: a Hide-Chieftain's war cry rallies the Hide-Kin round him like a Redfang Captain's (BADLANDS_AI.warlords).
+ */
+export const SINKHOLES_AI = {
+  quills: { range: 140, keepAway: 60, shotSpeed: 210, shotRadius: 3, mult: 0.95, volley: { everyMs: 5500, arrows: 3, spread: 0.2 } },
+  hex: { range: 135, keepAway: 70, shotSpeed: 160, shotRadius: 3, mult: 1 },
+  stitch: { everyMs: 8000, castMs: 900, range: 6 * 32, hpFrac: 0.6, heal: 0.25 },
+  burrow: {
+    delver: { minDist: 60, maxDist: 220, firstMs: 2500, everyMs: 8000, underMs: 1100, markMs: 650, radius: 30, dmgMult: 1.5, stunMs: 400 },
+    mawfather: { minDist: 90, maxDist: 320, firstMs: 6000, everyMs: 14000, underMs: 1400, markMs: 900, radius: 52, dmgMult: 1.9, stunMs: 600 },
+  } as Partial<Record<MobKind, { minDist: number; maxDist: number; firstMs: number; everyMs: number; underMs: number; markMs: number; radius: number; dmgMult: number; stunMs: number }>>,
+  burst: { radius: 36, dmgMult: 1.4, stunMs: 450, knockback: 1.5, seekRadius: 10 },
+  warlords: {
+    hidechief: { cooldownMs: 20000, range: 10 * 32, buffMs: 9000 },
+  } as Partial<Record<MobKind, { cooldownMs: number; range: number; buffMs: number; reinforce?: { hpFrac: number; count: number; kind: MobKind } }>>,
+};
+/** Act 5's monsters (the Mawdeep Sinkholes): levels from SINKHOLES_LEVEL. */
+export const SINKHOLES_KINDS: MobKind[] = ["delver", "cackler", "stagkin", "quillback", "stitcher", "sinkworm", "hidechief", "mawfather"];
+/** The Hide-Kin themselves (the Gullet Worms are only beasts of their pits): they answer the horn, the war cries and the stitch. */
+export const HIDEKIN_KINDS: MobKind[] = ["delver", "cackler", "stagkin", "quillback", "stitcher", "hidechief", "mawfather"];
+/** Pack hunters: one that has prey bays, and every one of its own kind near with nobody to chase runs in (BADLANDS_AI.pack). */
+export const PACK_KINDS: MobKind[] = ["warhound", "cackler"];
 /** Beast-folk that fly (drawn hovering, client textures.ts). */
 export const BEAST_FLYERS: MobKind[] = ["duskwing", "crowseer", "vulture"];
 export const BEAST_KINDS: MobKind[] = ["gnawkin", "tuskborn", "silkwretch", "duskwing", "packlord", "hornbrute", "hidemother", "crowseer", "gnasher", "weaver"];

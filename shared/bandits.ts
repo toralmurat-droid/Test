@@ -1,6 +1,7 @@
 import { TILE, type MobKind } from "./constants";
 import { isSolidAt, isSolidTile, REDFANG, REDFANG_TOWERS, T } from "./map";
 import { BR, FANGROCK, FANGROCK_KEEP, FANGROCK_TOWERS, LEDGES, TALON_FORT, TALON_TOWERS } from "./badlands";
+import { HIDEHALL, HIDEHALL_BURROWS, HIDEHALL_TOWERS, SR } from "./sinkholes";
 
 /**
  * Redfang Hollow (Murat 2026-11-03): a small, organised outlaw camp instead of a crowd of bandits.
@@ -24,6 +25,10 @@ import { BR, FANGROCK, FANGROCK_KEEP, FANGROCK_TOWERS, LEDGES, TALON_FORT, TALON
  * warhounds patrol the roads, outriders crouch on rock ledges by the roads (ambushers), captains, firebrands and the rest
  * hold posts inside. A post of another kind than "bandit" keeps its role in the Mob's flags (perch, ambusher), not in
  * Mob.weapon, which stays "" for them (a lookout's is "lookout" too: the client draws every lookout up on its tower).
+ *
+ * Act 5 (the Mawdeep Sinkholes): Hidehall, the Hide-Kin's seat, is a camp the same way: Quillbacks on its lookout towers
+ * (their bone horn alerts the warren), Hide-Chieftains, stitchers and the rest at posts, cackler and stagkin patrols on
+ * the roads, Delvers lying in burrow mounds by the roads (ambushers: they burst out instead of dropping from a tree).
  */
 export type BanditRole = "cutthroat" | "brute" | "archer" | "lookout" | "ambusher";
 
@@ -133,9 +138,32 @@ export const TALON_POSTS: BanditPost[] = [
   ...LEDGES.filter(([x]) => x > 100).map(([x, y]) => bp("outrider", "ambusher", x, y + 1)),
 ];
 
+/** A Hidehall post (local sinkholes tiles) held by one of the Hide-Kin. */
+const hp = (kind: MobKind, role: BanditRole, x: number, y: number, route?: [number, number][]): BanditPost =>
+  ({ kind, role, at: [x, SR(y)], ...(route ? { route: route.map(([rx, ry]): [number, number] => [rx, SR(ry)]) } : {}) });
+const HH = HIDEHALL;
+/** Hidehall's garrison (the Hide-Kin's seat, Lv 40-43): quillbacks on the towers, two Hide-Chieftains, stitchers, packs and chargers. */
+export const HIDEHALL_POSTS: BanditPost[] = [
+  ...HIDEHALL_TOWERS.map(([x, y]) => hp("quillback", "lookout", x, y)),
+  hp("hidechief", "brute", 248, 135),   // on the main lane inside the north gate
+  hp("hidechief", "brute", 256, 151),   // before the great hall's door
+  hp("stitcher", "archer", 244, 140), hp("stitcher", "archer", 252, 141), hp("stitcher", "archer", 242, 151),
+  hp("quillback", "archer", 237, 144), hp("quillback", "archer", 259, 143),
+  hp("cackler", "cutthroat", 246, 133), hp("cackler", "cutthroat", 250, 138), hp("cackler", "cutthroat", 240, 141), hp("cackler", "cutthroat", 253, 154),
+  hp("stagkin", "cutthroat", 243, 132), hp("stagkin", "cutthroat", 262, 150), hp("stagkin", "cutthroat", 236, 141),
+  // patrols: out of the north gate up the road toward the Maw, out of the west gate along the back way
+  hp("cackler", "cutthroat", 248, HH.y - 1, [[248, HH.y - 1], [244, 118], [236, 104]]),
+  hp("stagkin", "cutthroat", 249, HH.y - 1, [[249, HH.y - 1], [245, 118], [237, 104]]),
+  hp("cackler", "cutthroat", HH.x - 1, 142, [[HH.x - 1, 142], [218, 146], [190, 150]]),
+  hp("stagkin", "cutthroat", HH.x - 1, 143, [[HH.x - 1, 143], [218, 147], [190, 151]]),
+  // ambushers: a Delver under each burrow mound by the roads (shared/sinkholes.ts HIDEHALL_BURROWS)
+  ...HIDEHALL_BURROWS.map(([x, y]) => hp("delver", "ambusher", x, y + 1)),
+];
+
 /**
  * The organised camps (Murat 2026-11-03's Redfang Hollow and the badlands' forts): the spawn zone they belong to, their
- * posts, and where their ambushers hide (`hide`: tile ids, trees in the Hollow's woods, rocks and crags in the badlands).
+ * posts, and where their ambushers hide (`hide`: tile ids, trees in the Hollow's woods, rocks and crags in the badlands,
+ * burrow mounds round Hidehall).
  */
 export interface BanditCamp { zone: string; posts: BanditPost[]; towers: [number, number][]; hide: number[] }
 /** Where the Hollow's ambushers hide: up in the woods' trees (the same trees as the slimes', shared/spawns.ts HIDE). */
@@ -144,6 +172,7 @@ export const CAMPS: BanditCamp[] = [
   { zone: "Redfang Hollow", posts: CAMP_POSTS, towers: REDFANG_TOWERS, hide: REDFANG_HOLLOW_HIDE }, // first: its post indices stay what they were
   { zone: "Fangrock", posts: FANGROCK_POSTS, towers: FANGROCK_TOWERS.map(([x, y]): [number, number] => [x, BR(y)]), hide: [T.ROCK, T.CLIFF] },
   { zone: "Talon Fort", posts: TALON_POSTS, towers: TALON_TOWERS.map(([x, y]): [number, number] => [x, BR(y)]), hide: [T.ROCK, T.CLIFF] },
+  { zone: "Hidehall", posts: HIDEHALL_POSTS, towers: HIDEHALL_TOWERS.map(([x, y]): [number, number] => [x, SR(y)]), hide: [T.BURROW] }, // the Delvers lie in burrow mounds
 ];
 /** Every post of every camp, one index space (Mob.post): Redfang Hollow's come first, as before. `camp` = its CAMPS index. */
 export const POSTS: (BanditPost & { camp: number })[] = CAMPS.flatMap((c, ci) => c.posts.map((p) => ({ ...p, camp: ci })));

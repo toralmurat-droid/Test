@@ -57,8 +57,9 @@ test("sinkholes: a band of its own under the badlands, built the same every time
     [OBJECTS, T.PIT, "sinkhole pits", 300], [OBJECTS, T.BURROW, "burrow mounds", 40], [OBJECTS, T.CAVE, "cave mouths", CAVE_MOUTHS.length * 3],
     [OBJECTS, T.TREE, "willows and alders", 100], [OBJECTS, T.BUSH, "brush", 200], [OBJECTS, T.ROCK, "boulders", 100]] as const)
     assert.ok(count(layer as number[][], id) >= min, `${name} in the sinkholes`);
-  // the Great Maw is a pit, every sink a pit or black water
-  assert.equal(OBJECTS[SR(GREAT_MAW.y)][GREAT_MAW.x], T.PIT);
+  // the Great Maw is a pit (the Maw-Father's ledge down in its middle, tests/sinkholes-zones.test.ts), every sink a pit or black water
+  assert.equal(OBJECTS[SR(GREAT_MAW.y)][GREAT_MAW.x - GREAT_MAW.rx + 3], T.PIT);
+  assert.equal(OBJECTS[SR(GREAT_MAW.y)][GREAT_MAW.x + GREAT_MAW.rx - 3], T.PIT);
   for (const s of SINKS) assert.ok(s.flooded ? GROUND[SR(s.y)][s.x] === T.WATER : OBJECTS[SR(s.y)][s.x] === T.PIT, `sink at ${s.x},${s.y}`);
   for (const c of CAVE_MOUTHS) for (let i = -1; i <= 1; i++) assert.equal(OBJECTS[SR(c.y)][c.x + i], T.CAVE, `cave mouth at ${c.x},${c.y}`);
   // the new tiles stay in the sinkholes band
@@ -86,7 +87,7 @@ test("sinkholes: actOfTile knows all five acts, the rock strip under the badland
   assert.ok(inSinkholesRow(SR(0)) && inSinkholesRow(SR(SINKHOLES_H - 1)) && !inSinkholesRow(SR(-1)) && !inSinkholesRow(SR(SINKHOLES_H)));
 });
 
-test("sinkholes: sealed in rock, every walkable tile reachable from the Sinkway, room for Ropewell, Hidehall and the war", () => {
+test("sinkholes: sealed in rock, every walkable tile reachable from the Sinkway, Ropewell and Hidehall open to walk in, room for the war", () => {
   const gate = waygateById("sinkholes")!, home = waygateById("sinkway")!;
   const [ax, ay] = tileOf(waygateArrival(gate));
   assert.ok(!isSolidTile(ax, ay), "the sinkholes arrival spot is free");
@@ -102,9 +103,16 @@ test("sinkholes: sealed in rock, every walkable tile reachable from the Sinkway,
   assert.ok(walk > MAP_W * SINKHOLES_H * 0.5, "mostly open land");
   for (let y = BADLANDS_Y0 + BADLANDS_H; y < S0; y++) for (let x = 0; x < MAP_W; x++) assert.ok(isSolidTile(x, y), `rock at ${x},${y}`);
   for (let y = S1; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) assert.ok(isSolidTile(x, y), `rock at ${x},${y}`);
-  // Ropewell (just south-east of the gate) and Hidehall (far south-east): bare open ground, all reachable
-  for (const r of [ROPEWELL, HIDEHALL]) for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) {
-    assert.ok(!isSolidTile(x, SR(y)) && seen[SR(y) * MAP_W + x], `tile ${x},${SR(y)} open and reachable`);
+  // Ropewell (just south-east of the gate) and Hidehall (far south-east), raised in tests/sinkholes-zones.test.ts: mostly
+  // open ground inside their walls, every bit of it reachable through the gates
+  for (const r of [ROPEWELL, HIDEHALL]) {
+    let open = 0;
+    for (let y = r.y + 1; y < r.y + r.h - 1; y++) for (let x = r.x + 1; x < r.x + r.w - 1; x++) {
+      if (isSolidTile(x, SR(y))) continue;
+      open++;
+      assert.ok(seen[SR(y) * MAP_W + x], `tile ${x},${SR(y)} inside the walls reachable`);
+    }
+    assert.ok(open > (r.w - 2) * (r.h - 2) * 0.6, `${open} open tiles inside`);
   }
   assert.ok(ROPEWELL.x > SINKGATE.x && ROPEWELL.y > SINKGATE.y && ROPEWELL.x - SINKGATE.x < 20, "Ropewell just south-east of the gate");
   assert.ok(HIDEHALL.x > MAP_W * 0.7 && HIDEHALL.y > SINKHOLES_H * 0.6, "Hidehall in the far south-east");
@@ -147,8 +155,8 @@ test("sinkholes: Lv 30-45 climbing south-east, the Sinkway opens at Lv 30", () =
   assert.deepEqual(HOMELAND_GATES.map((h) => [h.act, h.level]), [[3, 20], [4, 25], [5, 30]]);
   assert.ok(actOpen(5, { level: 30 } as never) && !actOpen(5, { level: 29 } as never));
   for (const act of [1, 2, 3, 4, 5]) { const q = actSpawn(act, randomSpawn); assert.equal(actAt(q.y, q.x), act, `act ${act} spawn`); }
-  // no monsters and no war down there yet
-  assert.ok(!SPAWN_ZONES.some((z) => actOfTile(z.x, z.y) === 5), "no zones yet");
+  // its own monsters (tests/sinkholes-zones.test.ts), no war down there yet
+  assert.ok(SPAWN_ZONES.some((z) => actOfTile(z.x, z.y) === 5), "its own monster zones");
   assert.ok(!TERRITORIES.some((t) => t.act === 5), "no territories yet");
 });
 

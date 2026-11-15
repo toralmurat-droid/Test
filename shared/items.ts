@@ -79,4 +79,13 @@ export const LOOT: Record<MobKind, LootDef> = {
   rattler: { gold: [4, 10], potionChance: 0.25 },
   redcaptain: { gold: [90, 160], potionChance: 1 },
   rourke: { gold: [380, 600], potionChance: 1 },
+  // Act 5, the sinkholes (Lv 30-45): the Hide-Kin carry little coin but bone and hide; the Chieftains and the Maw-Father a hoard
+  delver: { gold: [12, 26], potionChance: 0.32, mats: mat("bone", 0.06) },
+  cackler: { gold: [5, 11], potionChance: 0.22, mats: mat("bone", 0.06) },
+  stagkin: { gold: [12, 28], potionChance: 0.34, mats: mat("bone", 0.1) },
+  quillback: { gold: [12, 26], potionChance: 0.32 },
+  stitcher: { gold: [13, 28], potionChance: 0.36 },
+  sinkworm: { gold: [5, 11], potionChance: 0.25 },
+  hidechief: { gold: [95, 170], potionChance: 1, mats: mat("bone", 1, 2, 4) },
+  mawfather: { gold: [400, 640], potionChance: 1, mats: mat("bone", 1, 4, 6) },
 };

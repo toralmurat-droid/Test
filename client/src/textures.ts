@@ -401,6 +401,9 @@ export const mobLook = (kind: string, weapon = "") => MOB_LOOK[kind === "trooper
  * monster's look ([kind, weapon]). Once tools/art paints mob_<kind>, add it to PAINTED_MOBS / PAINTED_LOOK and drop it here.
  */
 const MOORS_STANDIN: Record<string, [string, string]> = {
+  // Act 5, the Mawdeep Sinkholes (shared/constants.ts SINKHOLES_KINDS), until tools/art paints them
+  delver: ["gnawkin", ""], cackler: ["warhound", ""], stagkin: ["tuskborn", ""], quillback: ["silkwretch", ""],
+  stitcher: ["crowseer", ""], sinkworm: ["rattler", ""], hidechief: ["packlord", ""], mawfather: ["hidemother", ""],
 };
 /** The old pixel look (?pixel=1) of the moors monsters: no pixel sheets, so each wears an older monster's. */
 const MOORS_PIXEL: Record<string, string> = { wight: "skeleton", boghag: "nomad", bonehound: "gnawkin", mistwraith: "skeletonmage", legionary: "skeleton", cairnlord: "necromancer", barrowking: "necromancer",

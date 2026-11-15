@@ -9,9 +9,10 @@ import { MAP_W, SINKHOLES_H, SINKHOLES_Y0 } from "./constants";
  * Hide-Kin's seat in the far south-east. Not to be confused with the Mawdeep Sinkhole, Act 1's way down into the
  * Mawdeep Warrens (shared/dungeon.ts SINKHOLE): the Hide-Kin who dug the Warrens came from here.
  *
- * This file is the land and its places. Ropewell (the outpost) and Hidehall are still bare ground: their buildings,
- * the monster zones and the war come later. Tile ids are passed in (shared/map.ts T) so this file does not import
- * map.ts. Layout constants are in local sinkholes coordinates (0..MAP_W, 0..SINKHOLES_H); `SR(y)` turns a local row
+ * This file is the land and its places: Ropewell (the outpost), Hidehall (the Hide-Kin's seat, a camp like the
+ * badlands' forts) and the Maw-Father's ledge down in the Great Maw. Monster zones are in shared/spawns.ts, the monsters
+ * in shared/constants.ts (SINKHOLES_KINDS) and server/hidekin.ts, Hidehall's garrison in shared/bandits.ts (CAMPS); the
+ * war comes later. Tile ids are passed in (shared/map.ts T) so this file does not import map.ts. Layout constants are in local sinkholes coordinates (0..MAP_W, 0..SINKHOLES_H); `SR(y)` turns a local row
  * into a map row.
  */
 export const SR = (y: number) => y + SINKHOLES_Y0;
@@ -31,16 +32,48 @@ export const SINKWAY_BOX = { x0: 94, x1: 112, y0: 177, y1: 196 };
 /** The arrival clearing below the Sinkway's cave mouth (local tiles, ellipse): always open ground, nothing stands in it. */
 export const SINKGATE_CLEARING = { x: 96.5, y: 14, rx: 8, ry: 5 };
 /**
- * Ropewell, the sinkholes' outpost (local tiles): a camp of Hide-Kin who keep the old truce, round a well-shaft with
- * rope lifts, just south-east of the Sinkway. Bare ground for now; its buildings come with the zones.
+ * Ropewell, the sinkholes' outpost (local tiles): a trappers' and rope-makers' lodge just south-east of the Sinkway,
+ * its halls on timber scaffolds round the rim of a tame sinkhole (the well its ropes go down) in the middle of the
+ * square, inside a timber palisade. Gates west (the Sinkway road and the Dells), east (Rootfall) and south (the Maw).
  */
 export const ROPEWELL = { x: 104, y: 18, w: 24, h: 18 };
 /** Ropewell's square (local tiles): the sinkholes' safe zone (shared/map.ts isSafeZone), where heroes come back after dying. */
 export const ROPEWELL_SQUARE = { x: 111, y: 23, w: 10, h: 7 };
-/** Hidehall, the Hide-Kin's seat in the far south-east (local tiles): bare ground reserved for the great hall and its stockade. */
+/** Gate gaps in Ropewell's palisade (local tiles): y range on the west / east walls, x range on the south wall. */
+export const ROPEWELL_GATES = { west: [26, 30], east: [26, 28], south: [115, 117] } as const;
+/** The tame sinkhole the lodge is named for (local tiles: a pit in the middle of the square, flagstones round it). */
+export const ROPEWELL_WELL = { x: 115, y: 25, w: 2, h: 2 };
+/** Ropewell's portal stone (local tile), in the yard south-west of the square (shared/map.ts PORTAL_SPOTS). */
+export const ROPEWELL_PORTAL = { x: 108, y: 32 };
+/**
+ * Hidehall, the Hide-Kin's seat in the far south-east (local tiles): an above-ground warren town inside a palisade of
+ * bone and stretched hide, burrow mounds and hide huts round the Chieftains' great hall, lookout towers along the
+ * wall. Gates north (the road from the Maw) and west (the back way from the Pitfields).
+ */
 export const HIDEHALL = { x: 230, y: 126, w: 36, h: 32 };
+/** Gate gaps in Hidehall's palisade (local tiles): x range on the north wall, y range on the west wall. */
+export const HIDEHALL_GATES = { north: [247, 249], west: [141, 143] } as const;
+/** The great hall inside Hidehall (local tiles; its door faces south, on the lane from the north gate). */
+export const HIDEHALL_HALL = { x: 251, y: 145, w: 10, h: 5 };
+/** Hidehall's lookout towers (local tiles, a stack of crates the client draws a tower on): Quillbacks keep watch up there. */
+export const HIDEHALL_TOWERS: [number, number][] = [[246, 128], [250, 128], [231, 138], [231, 146], [264, 135], [264, 152], [242, 156]];
+/**
+ * Burrow mounds by the roads to Hidehall (local tiles): Delvers lie in them and burst out on whoever walks by
+ * (shared/bandits.ts CAMPS, the sinkholes' answer to the badlands' ledges).
+ */
+export const HIDEHALL_BURROWS: [number, number][] = [[245, 116], [251, 112], [240, 106], [228, 104], [214, 144], [207, 146]];
 /** The Great Maw: the biggest sinkhole of all, in the middle of the band (local tiles, ellipse of the pit). */
 export const GREAT_MAW = { x: 150, y: 92, rx: 13, ry: 9 };
+/**
+ * The Maw-Father's ledge (local tiles, ellipse): a shelf of rubble and bones down in the Great Maw, his lair, reached by
+ * a ramp down from the south rim (`ramp`: the x of its two columns). Far enough below the rim path that he lets
+ * passers-by be.
+ */
+export const MAW_LEDGE = { x: 150.5, y: 92.5, rx: 5, ry: 3.5, ramp: [150, 151] as const };
+/** The ledge as a rect (local tiles): the Maw-Father's spawn zone (shared/spawns.ts). */
+export const MAW_LEDGE_RECT = { x: 145, y: 89, w: 12, h: 8 };
+/** Pit holes in the Pitfields (local tiles, each a 2x2 hole): the Gullet Worms lie buried in their floors. */
+export const PIT_HOLES: [number, number][] = [[104, 124], [112, 137], [122, 152], [128, 124], [141, 128], [156, 132], [160, 154], [110, 156], [146, 157], [164, 139], [100, 140], [121, 143]];
 /** The lesser sinks (local tiles: centre, radii, `flooded`: a drowned pit of black water, else overgrown and sheer). */
 export const SINKS: readonly { x: number; y: number; rx: number; ry: number; flooded: boolean }[] = (
   [[60, 40, 4, 3, 0], [178, 30, 5, 3, 1], [218, 52, 4, 3, 0], [40, 96, 5, 4, 1], [90, 70, 3, 2, 0], [120, 130, 5, 3, 1], [196, 110, 4, 3, 0],
@@ -97,6 +130,10 @@ export interface SinkholesTiles {
   GRASS_DARK: number; TALL_GRASS: number; DIRT: number; RUBBLE: number; FLAGS: number; WATER: number;
   TREE: number; BUSH: number; ROCK: number; STUMP: number; CLIFF: number; SIGNPOST: number;
   MOSS: number; PIT: number; BURROW: number; CAVE: number;
+  // Ropewell and Hidehall: timber and thatch, palisades, the yards' props, Hidehall's bones
+  COBBLE: number; PALISADE: number; FENCE: number; ROOF_THATCH: number; ROOF_RED: number; WALL_TIMBER: number; WINDOW_TIMBER: number;
+  DOOR: number; BARREL: number; CRATE: number; HAY: number; STALL_BLUE: number; BONFIRE: number; CAMPFIRE: number; TENT: number;
+  ANVIL: number; BONES: number; BONE_PILE: number;
 }
 export interface SinkholesArea { name: string; x: number; y: number; w: number; h: number; mobs?: never[] }
 
@@ -198,12 +235,19 @@ export function buildSinkholes(T: SinkholesTiles, ground: number[][], objects: n
   // ---------- 7. The Great Maw: a sheer pit, a rim of slumped moss and rubble round it ----------
   disk(M.x, M.y, M.rx + 4, M.ry + 4, (x, y) => { setO(x, y, EMPTY); open(x, y); setG(x, y, hash(x, y, 1161) < 0.55 ? T.MOSS : T.RUBBLE); });
   disk(M.x, M.y, M.rx, M.ry, (x, y, d) => { if (d < 1 - 0.12 * noise(x, y, 3, 1162)) { setO(x, y, T.PIT); keep[y * W + x] = 0; } });
+  // the Maw-Father's ledge down in it, and the ramp of rubble from the south rim
+  const L = MAW_LEDGE;
+  disk(L.x, L.y, L.rx, L.ry, (x, y, d) => { setO(x, y, EMPTY); open(x, y); setG(x, y, d < 0.45 ? T.FLAGS : hash(x, y, 1163) < 0.6 ? T.RUBBLE : T.DIRT); });
+  for (let y = Math.floor(L.y); y <= M.y + M.ry + 2; y++) for (const x of L.ramp) { setO(x, y, EMPTY); open(x, y); if (y > L.y + L.ry - 1) setG(x, y, T.RUBBLE); }
 
   // ---------- 8. The lesser sinks: drowned pits of black water, or sheer holes choked with brush ----------
   for (const s of SINKS) {
     disk(s.x, s.y, s.rx + 2, s.ry + 2, (x, y) => { if (getO(x, y) === T.CLIFF) setO(x, y, EMPTY); setG(x, y, hash(x, y, 1171) < 0.7 ? T.MOSS : T.TALL_GRASS); });
     disk(s.x, s.y, s.rx, s.ry, (x, y) => { if (s.flooded) { setO(x, y, EMPTY); setG(x, y, T.WATER); } else setO(x, y, T.PIT); });
   }
+
+  // the Pitfields' holes, where the Gullet Worms lie (2x2, never on a trail's verge)
+  for (const [hx, hy] of PIT_HOLES) each(hx, hy, 2, 2, (x, y) => { if (!keep[y * W + x]) { setO(x, y, T.PIT); setG(x, y, T.DIRT); } });
 
   // ---------- 9. Collapsed slopes: rubble fans and tumbled boulders ----------
   SLIDES.forEach(([cx, cy, r], i) => disk(cx, cy, r, r * 0.8, (x, y) => {
@@ -260,6 +304,68 @@ export function buildSinkholes(T: SinkholesTiles, ground: number[][], objects: n
   // Ropewell and Hidehall stand on bare ground; every future zone keeps a 7x7 of clear ground for a war Hold
   for (const r of [O, HIDEHALL]) each(r.x, r.y, r.w, r.h, (x, y) => setO(x, y, EMPTY));
   for (const l of SINK_LANDS) each(l.hold[0] - 3, l.hold[1] - 3, 7, 7, (x, y) => { setO(x, y, EMPTY); open(x, y); if (getG(x, y) === T.WATER) setG(x, y, T.MOSS); });
+
+  // ---------- 12b. Ropewell, Hidehall and the Maw-Father's ledge ----------
+  /** A building: `roof` rows over two rows of timber wall, a door in the front wall (like the badlands' Post). */
+  const house = (x: number, y: number, w: number, h: number, roof: number) => {
+    each(x, y, w, h - 2, (i, j) => setO(i, j, roof));
+    each(x, y + h - 2, w, 2, (i, j) => setO(i, j, T.WALL_TIMBER));
+    const door = x + Math.floor(w / 2);
+    setO(door, y + h - 1, T.DOOR);
+    for (const wx of [x + 1, x + w - 2]) if (wx !== door) setO(wx, y + h - 1, T.WINDOW_TIMBER);
+  };
+  /** A palisade round a rect, with gaps: `gap(x, y)` true for a gate tile. */
+  const stockade = (r: { x: number; y: number; w: number; h: number }, gap: (x: number, y: number) => boolean) => {
+    const x1 = r.x + r.w - 1, y1 = r.y + r.h - 1;
+    each(r.x, r.y, r.w, r.h, (x, y) => { if ((x === r.x || x === x1 || y === r.y || y === y1) && !gap(x, y)) setO(x, y, T.PALISADE); });
+  };
+  const props = (list: readonly (readonly [number, number, number])[]) => { for (const [x, y, t] of list) setO(x, y, t); };
+  {
+    // Ropewell: a timber palisade round a yard of trodden mud, the cobbled square with the tame sinkhole in its middle
+    const Q = ROPEWELL_SQUARE, Gt = ROPEWELL_GATES, Wl = ROPEWELL_WELL, P = ROPEWELL_PORTAL, x1 = O.x + O.w - 1, y1 = O.y + O.h - 1;
+    each(O.x, O.y, O.w, O.h, (x, y) => setG(x, y, hash(x, y, 1251) < 0.7 ? T.DIRT : T.MOSS));
+    each(Q.x, Q.y, Q.w, Q.h, (x, y) => road(x, y, T.COBBLE));
+    for (let x = O.x; x < Q.x; x++) road(x, 27);                    // the west gate (the Sinkway road)
+    for (let y = 27; y <= Gt.west[1]; y++) road(O.x, y);             // (the Dells road comes in at its south end)
+    for (let x = Q.x + Q.w; x <= x1; x++) road(x, Gt.east[0] + 1);   // the east gate (Rootfall)
+    for (let y = Q.y + Q.h; y <= y1; y++) road(Gt.south[0] + 1, y);  // the south gate (the Maw road)
+    house(105, 19, 6, 4, T.ROOF_RED);     // the Lodge-Warden's hall
+    house(112, 19, 4, 4, T.ROOF_THATCH);  // the armoury
+    house(117, 19, 4, 4, T.ROOF_THATCH);  // the herb-wife's house
+    house(122, 19, 5, 4, T.ROOF_THATCH);  // the rope-makers' loft
+    stockade(O, (x, y) => (x === O.x && y >= Gt.west[0] && y <= Gt.west[1]) || (x === x1 && y >= Gt.east[0] && y <= Gt.east[1]) || (y === y1 && x >= Gt.south[0] && x <= Gt.south[1]));
+    // the well: the tame sinkhole the ropes go down, flagstones round its lip
+    each(Wl.x - 1, Wl.y - 1, Wl.w + 2, Wl.h + 2, (x, y) => setG(x, y, T.FLAGS));
+    each(Wl.x, Wl.y, Wl.w, Wl.h, (x, y) => { setO(x, y, T.PIT); roads.delete((y + Y0) * W + x); });
+    // the portal stone's yard, the herb-wife's stall, the armourer's anvil, trappers' tents and drying racks, rope stores
+    each(P.x - 2, P.y - 1, 5, 3, (x, y) => setG(x, y, T.FLAGS));
+    setO(Q.x + Q.w - 1, Q.y, T.STALL_BLUE);
+    setO(Q.x, Q.y + 1, T.ANVIL);
+    props([[120, 31, T.FENCE], [121, 31, T.FENCE], [122, 31, T.FENCE], [121, 33, T.TENT], [124, 33, T.TENT], [122, 34, T.CAMPFIRE],
+      [125, 30, T.HAY], [126, 30, T.HAY], [105, 24, T.BARREL], [105, 25, T.BARREL], [126, 24, T.CRATE], [126, 25, T.CRATE], [124, 25, T.BARREL]]);
+  }
+  {
+    // Hidehall: a palisade of bone and hide, burrow mounds and hide huts round the great hall, lookouts on the wall
+    const F = HIDEHALL, Gt = HIDEHALL_GATES, Hl = HIDEHALL_HALL, x1 = F.x + F.w - 1, y1 = F.y + F.h - 1;
+    each(F.x, F.y, F.w, F.h, (x, y) => setG(x, y, noise(x, y, 4, 1261) > 0.45 ? T.DIRT : hash(x, y, 1262) < 0.5 ? T.MOSS : T.RUBBLE));
+    for (let y = F.y; y <= Hl.y + Hl.h + 1; y++) road(Gt.north[0] + 1, y);               // the main lane: the north gate down past the hall
+    for (let x = F.x; x <= Gt.north[0] + 1; x++) road(x, Gt.west[0] + 1);                // the west gate in to the lane
+    for (let x = Gt.north[0] + 1; x <= Hl.x + Hl.w - 2; x++) road(x, Hl.y + Hl.h + 1);   // round to the hall's door
+    stockade(F, (x, y) => (y === F.y && x >= Gt.north[0] && x <= Gt.north[1]) || (x === F.x && y >= Gt.west[0] && y <= Gt.west[1]));
+    house(Hl.x, Hl.y, Hl.w, Hl.h, T.ROOF_RED);
+    house(233, 128, 5, 3, T.ROOF_THATCH); house(239, 128, 5, 3, T.ROOF_THATCH); house(253, 128, 5, 3, T.ROOF_THATCH); house(258, 128, 5, 3, T.ROOF_THATCH);
+    // the warren yards: burrow mounds east of the lane and in the south-west corner, runs left between them
+    const mounds = (x: number, y: number, w: number, h: number, seed: number) => each(x, y, w, h, (i, j) => { if ((i + j) % 2 === 0 && hash(i, j, seed) < 0.55 && !roads.has((j + Y0) * W + i)) setO(i, j, T.BURROW); });
+    mounds(255, 134, 8, 7, 1263); mounds(233, 147, 8, 8, 1264);
+    props([[236, 135, T.TENT], [241, 137, T.TENT], [259, 154, T.TENT], [244, 147, T.BONFIRE], [238, 139, T.CAMPFIRE], [256, 142, T.CAMPFIRE],
+      [262, 146, T.BONE_PILE], [263, 146, T.BONE_PILE], [251, 152, T.BONE_PILE], [234, 132, T.FENCE], [235, 132, T.FENCE], [236, 132, T.FENCE],
+      [262, 131, T.BONES], [233, 156, T.BONES], [254, 156, T.BARREL], [255, 156, T.CRATE]]);
+    for (const [tx, ty] of HIDEHALL_TOWERS) setO(tx, ty, T.CRATE); // the lookout towers stand on a stack of crates (client draws the tower)
+  }
+  // the ambushers' burrow mounds by the roads, off the road
+  for (const [bx, by] of HIDEHALL_BURROWS) if (!roads.has((by + Y0) * W + bx)) setO(bx, by, T.BURROW);
+  // the Maw-Father's ledge: the bones of what he ate, heaped at its edge
+  props([[146, 92, T.BONE_PILE], [155, 91, T.BONE_PILE], [147, 94, T.BONES], [154, 94, T.BONES]]);
 
   // ---------- 13. Reachability: every open tile joins the Sinkway (pockets cut off by rock or water are filled in) ----------
   const solid = (x: number, y: number) => {
