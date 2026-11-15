@@ -559,7 +559,7 @@ function buildWorld() {
 
   // Saltmere (shared/saltmere.ts): Act 1's second town, a fishing village on the beach east of the river mouth. The four
   // old fishers' houses and the beach lane with its two piers; above them Upper Lane with the tavern, the chandlery and
-  // the smokehouse, Harbour Street from the waystone down to the east pier, and the flagstone harbour square (a safe
+  // the smokehouse, Harbour Street from the waystone down to the east pier, and the cobbled harbour square (a safe
   // zone) on the sand between the piers. Hedges and a few fences on the land edges, no stockade.
   const ST = SALT_TOWN, lane = SALT_LANE; // lane: the lane along the beach
   const laneW = ST.x, laneE = ST.x + ST.w - 1; // the lane's ends, where the Coast Road and the Smugglers' Path come in

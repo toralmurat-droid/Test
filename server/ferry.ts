@@ -26,6 +26,7 @@ const TOLD: ReadonlySet<FerryResult> = new Set(["closed", "far", "fight", "gold"
 /** Server lag slack on the range, as for portal stones (PORTAL_RANGE * 1.5). */
 const RANGE = FERRY_RANGE * 1.5;
 
+/** One ride request from the room's "ferry" handler: kept out of TownRoom so the room only gains a call. */
 export function rideFerry(h: FerryHost, pid: string, p: FerryHero | undefined, msg: unknown, now = Date.now()): FerryResult {
   const r = ride(h, pid, p, msg, now);
   if (TOLD.has(r)) h.send("ferryno", { why: r });

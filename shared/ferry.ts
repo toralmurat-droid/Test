@@ -32,6 +32,7 @@ export const FERRY_STOPS: readonly FerryStop[] = [
   stop("gullrock", "Gullrock Cove"),
   stop("heronwreck", "Heronwreck Strand"),
 ];
+/** A stop by id, for the server's payload check and the client's list (unknown input gives undefined). */
 export const ferryStopById = (id: unknown): FerryStop | undefined => FERRY_STOPS.find((s) => s.id === id);
 
 /** Gold per leg, any two stops: a small fee (owner: 10-20 gold), so a ride is a convenience, not a gold sink. */

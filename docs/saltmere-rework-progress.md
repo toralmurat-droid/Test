@@ -2,9 +2,7 @@
 
 Goal (owner, 2026-11-15): turn Saltmere into "a proper little fishing village, with its own life and variety":
 a real town layout, Act 1's second safe town, services, people and side quests, its own look and sound.
-Work branch: `claude/wizardly-franklin-nedywr`. Shipped in two PRs:
-- **PR A (town and look):** phases 1, 2, 3, 3b.
-- **PR B (systems):** phases 4, 5, 6, 7.
+Work branch: `claude/wizardly-franklin-nedywr`. All phases shipped in one PR, #450 (planned as two; done in one session).
 
 ## Decisions (owner 2026-11-15: "go with the recommendations")
 1. **Respawn:** in Act 1, a hero who has woken the `saltmere` waystone wakes at the nearer of Oakvale and Saltmere
@@ -21,11 +19,11 @@ Work branch: `claude/wizardly-franklin-nedywr`. Shipped in two PRs:
 | 1 | Coastal sound bed (surf, gulls by day, rigging, bell buoy), optional `saltmere-tune.mp3` slot | done |
 | 2 | Harbour props: moored boats, rowboats, bell buoy, lobster pots, mooring posts, breakwater; gulls | done |
 | 3 | Layout (`shared/saltmere.ts`, `shared/map.ts`): tavern, chandlery, smokehouse, 3 cottages, Upper Lane, Harbour Street, cobbled harbour square = safe zone, jetties at Gullrock and Heronwreck | done |
-| 3b | Building art: tavern and smokehouse styles, signs, smoke, quay edge | done |
+| 3b | Building art: tavern and smokehouse styles, signs, smoke (the quay edge became shore boulders) | done |
 | 4 | Respawn at the nearer town; second stash chest on the square (same account stash) | done |
 | 5 | People: Bess Tanner (smokehouse), Hob Wick (chandler shop), Marta (tavern), Agna (net-mender), Pell (after the Redfang chain); fisherfolk routines; town reacts to the Redfang chain | done (racks/lanterns reacting per hero: not done) |
 | 6 | Side arc "Saltmere Ways" (Lv 16-17): Smoke and Salt, The Watch-Fire | done |
-| 7 | The ferry (`shared/ferry.ts`, `server/ferry.ts`, validated and rate-limited message) | server done, client todo |
+| 7 | The ferry (`shared/ferry.ts`, `server/ferry.ts`, validated and rate-limited message) | done |
 
 ## Log
 - 2026-11-15: plan written (planner agent), owner accepted all recommendations. #448 (Ropewell) merged, so
@@ -34,7 +32,7 @@ Work branch: `claude/wizardly-franklin-nedywr`. Shipped in two PRs:
   lane-end signposts at x 123 and 161 and the Coast Road's last bend at x 124 must stay outside the area, or the posts
   stop naming Saltmere); the clearing is one tile wider each side. Upper Lane y 176, Harbour Street x 148 (cobble),
   Net Alley x 133; tavern, chandlery, smokehouse and cottage E on Upper Lane, cottage G behind them (path down x 129),
-  cottage F east of the old fishers' houses. Square `SALT_SAFE` (135,188, 12x7, flagstones) is in `isSafeZone`.
+  cottage F east of the old fishers' houses. Square `SALT_SAFE` (135,188, 12x7; flagstones at first, now cobbles, see below) is in `isSafeZone`.
   Reserved: `SALT_STASH` (137,189), `SALT_JETTIES` (147,204 / 189,194 / 37,201), `WATCH_FIRE` (160,195). Outside
   `SALT_BOXES` the overworld is unchanged (hash in `tests/badlands.test.ts`; 9 tiles in rows 166-167 come from the
   reachability pass, which no longer cuts the old way out of the woods).
@@ -102,3 +100,13 @@ Work branch: `claude/wizardly-franklin-nedywr`. Shipped in two PRs:
   fade in `client/src/TownScene.ts`).
 - 2026-11-15: the harbour square is COBBLE, not FLAGS: Act 1's iso ground painter draws FLAGS as dark grass (on purpose,
   for the war camps), so the square was invisible in game. Oakvale's square is COBBLE too.
+- 2026-11-15: closing entry, #450 ready. Phase 7 client (`client/src/ferry.ts`): E prompt at a jetty head when
+  `ferryOpen`, "Take Pell's boat" in Pell's dialog, the fare list of the other two stops, `ferryno` float texts, a
+  sea-blue arrival fade, `ferryOff` / `ferryOn` sounds for `ev: "ferry"`. Phase 6 client follow-ups done: `q_driftwood`
+  icon, `client/src/carryHide.ts` hides any carry step's take object (Garrick's lantern stays lit after the quest), a
+  burning watch-fire and a smoking smoke-pit per hero. The quay edge along the square was dropped (it stood on the
+  beach, five tiles from the water): boulders follow the shore between the piers instead. `shared/saltmere.ts` is
+  `area:map` (`tools/ci/critical-areas.mjs`, CLAUDE.md). Review: OK TO MERGE.
+- Open for later: the per-hero town reactions to the Redfang chain (cod on the racks, lanterns lit; Marta's and
+  Agna's lines already follow it); new character art for the five NPCs (placeholder sheets now); a real
+  `saltmere-tune.mp3`; tuning the coast sound volumes by ear; a real fishing mechanic (decision 3).
