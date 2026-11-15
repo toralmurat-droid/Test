@@ -62,4 +62,12 @@ export const LOOT: Record<MobKind, LootDef> = {
   sunwright: { gold: [600, 900], potionChance: 1, mats: mat("sunglass", 1, 3, 5) },
   nightraider: { gold: [180, 320], potionChance: 1 },
   trooper: { gold: [0, 0], potionChance: 0 }, // clan troops drop nothing (shared/war/troops.ts)
+  // Act 3, the moors: bone from the Host's dead (the hags carry only coin)
+  wight: { gold: [10, 22], potionChance: 0.3, mats: mat("bone", 0.12) },
+  boghag: { gold: [10, 24], potionChance: 0.35 },
+  bonehound: { gold: [5, 12], potionChance: 0.25, mats: mat("bone", 0.1) },
+  mistwraith: { gold: [10, 22], potionChance: 0.3 },
+  legionary: { gold: [12, 26], potionChance: 0.35, mats: mat("bone", 0.12) },
+  cairnlord: { gold: [80, 150], potionChance: 1, mats: mat("bone", 1, 3, 5) },
+  barrowking: { gold: [350, 550], potionChance: 1, mats: mat("bone", 1, 4, 6) },
 };

@@ -86,6 +86,14 @@ export const MOB_COMBAT: Record<MobKind, { poise: number; windupMs: number; soun
   sunwright: { poise: 460, windupMs: 480, sound: { tier: "dull", pitch: "L", mode: "major" } },
   trooper: { poise: 200, windupMs: 300, sound: { tier: "normal", pitch: "M" } },
   nightraider: { poise: 3000, windupMs: 460, sound: { tier: "deaf" } }, // barely flinches: a hero alone can hardly break it
+  // Act 3, the moors: the Host's dead hear in the major key like the valley's; the hags and the wraiths' hollow cold ring easily
+  wight: { poise: 80, windupMs: 360, sound: { tier: "normal", pitch: "L", mode: "major" } },
+  boghag: { poise: 40, windupMs: 440, sound: { tier: "keen", pitch: "M", mode: "minor" } },
+  bonehound: { poise: 35, windupMs: 240, sound: { tier: "fragile", pitch: "H", mode: "major" } },
+  mistwraith: { poise: 30, windupMs: 420, sound: { tier: "keen", pitch: "H", mode: "major" } },
+  legionary: { poise: 150, windupMs: 380, sound: { tier: "dull", pitch: "L", mode: "major" } }, // behind a tower shield: hard to break
+  cairnlord: { poise: 300, windupMs: 460, sound: { tier: "dull", pitch: "L", mode: "major" } },
+  barrowking: { poise: 440, windupMs: 480, sound: { tier: "dull", pitch: "L", mode: "major" } },
 };
 
 /**

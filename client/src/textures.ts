@@ -358,6 +358,7 @@ const PAINTED_LOOK: Record<string, { top: number; bar: number; oy: number; scale
 export function preloadPaintedMobs(scene: Phaser.Scene) {
   if (!SMOOTH) return;
   Object.assign(MOB_LOOK, PAINTED_LOOK);
+  lookStandins();
   scene.load.json("hd_mobs", "assets/hd/mobs/mobs.json");
   for (const k of [...PAINTED_MOBS.filter((m) => m !== "golem_colossus" && m !== "nightraider").map((m) => `mob_${m}`), "mob_motherblob2", "mob_motherblob3", "mob_skeleton_axe", "mob_skeleton_spear", "mob_skeleton_bow", "mob_bandit_brute", "mob_bandit_archer", "mob_demon1", "mob_demon2", "mob_demon3", "mob_demon4", ...FOLK_MOBS.map((m) => `mob_${m}_folk`), ...COLOSSUS_ELEMENTS.map((e) => `mob_golem_colossus_${e}`), ...WISP_ELEMENTS.map((e) => `mob_wisp_${e}`), ...RAIDERS.map((r) => `mob_nightraider_${r.key}`), ...AFFIX_KEYS.filter((k) => AFFIXES[k].overlay).map((k) => `mob_champ_${k}`), ...CHAMP_SHEETS.map((k) => `mob_${k}_champ`)]) scene.load.image(`hd_${k}`, `assets/hd/mobs/${k}.webp`);
 }
@@ -379,7 +380,21 @@ export function trooperArt(weapon: string): string {
 /** A monster's look entry (size, label height): a trooper's comes from its clan's soldier sheet. */
 export const mobLook = (kind: string, weapon = "") => MOB_LOOK[kind === "trooper" ? trooperArt(weapon) : kind];
 
+/**
+ * Act 3's monsters (shared/constants.ts MOORS_KINDS) until their own sheets are painted: each wears an existing
+ * monster's look ([kind, weapon]). Once tools/art paints mob_<kind>, add it to PAINTED_MOBS / PAINTED_LOOK and drop it here.
+ */
+const MOORS_STANDIN: Record<string, [string, string]> = {
+  wight: ["sanddead", ""], boghag: ["veiled", ""], bonehound: ["gnawkin", ""], mistwraith: ["skeletonmage", ""],
+  legionary: ["skeleton", "spear"], cairnlord: ["necromancer", ""], barrowking: ["hollowking", ""],
+};
+/** The stand-in's size entry for a moors monster (MOB_LOOK, filled at load and again once the painted looks are in). */
+function lookStandins() { for (const [k, [st]] of Object.entries(MOORS_STANDIN)) if (MOB_LOOK[st] && !PAINTED_MOBS.includes(k)) MOB_LOOK[k] = MOB_LOOK[st]; }
+lookStandins();
+
 export function mobTexture(scene: Phaser.Scene, kind: string, level = 1, weapon = "", bones = 0, champion = false): string {
+  const standin = MOORS_STANDIN[kind];
+  if (standin && !PAINTED_MOBS.includes(kind)) return mobTexture(scene, standin[0], level, standin[1], bones, champion);
   if (kind === "trooper") { // a clan soldier: its painted sheet once loaded, an old monster look meanwhile (the watchman is a hero sheet: a bandit stands in)
     const art = trooperArt(weapon), painted = warSoldierTexture(scene, art);
     if (painted) return painted;

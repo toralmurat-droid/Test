@@ -27,8 +27,11 @@ export const UNDEAD_NIGHT = {
   sinkClear: 14 * 32,
 };
 
-/** Bosses of the dead: only about at night (zone elites, ritual and quest demons, the Pale Marshal, the Hollow King). */
-export const NIGHT_BOSSES: MobKind[] = ["necromancer", "demon", "hollowking"];
+/**
+ * Bosses of the dead: only about at night (zone elites, ritual and quest demons, the Pale Marshal, the Hollow King; in the
+ * moors the Cairn-Lords and the Barrow-King).
+ */
+export const NIGHT_BOSSES: MobKind[] = ["necromancer", "demon", "hollowking", "cairnlord", "barrowking"];
 
 export function isUndeadNight(t: number): boolean {
   return t >= UNDEAD_NIGHT.from && t < UNDEAD_NIGHT.to;

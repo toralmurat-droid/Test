@@ -86,9 +86,11 @@ test("moors: every walkable tile is reachable from the moorgate; the Act 1 gate 
   // the band is sealed: nothing walkable in the rock round it
   for (let y = DEEP_END; y < MOORS_Y0; y++) for (let x = 0; x < MAP_W; x++) assert.ok(isSolidTile(x, y), `rock at ${x},${y}`);
   for (let y = MOORS_Y0 + MOORS_H; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) assert.ok(isSolidTile(x, y), `rock at ${x},${y}`);
-  // the outpost's ground is reserved: flat and empty, reachable
-  for (let y = MOORS_OUTPOST.y; y < MOORS_OUTPOST.y + MOORS_OUTPOST.h; y++) for (let x = MOORS_OUTPOST.x; x < MOORS_OUTPOST.x + MOORS_OUTPOST.w; x++)
-    assert.ok(OBJECTS[MR(y)][x] === EMPTY && GROUND[MR(y)][x] !== T.WATER && seen[MR(y) * MAP_W + x], `outpost tile ${x},${MR(y)}`);
+  // Cairnwatch stands on the outpost's ground: every open tile inside its palisade (the square too) is reachable, no water
+  for (let y = MOORS_OUTPOST.y; y < MOORS_OUTPOST.y + MOORS_OUTPOST.h; y++) for (let x = MOORS_OUTPOST.x; x < MOORS_OUTPOST.x + MOORS_OUTPOST.w; x++) {
+    assert.ok(GROUND[MR(y)][x] !== T.WATER, `no water in Cairnwatch at ${x},${MR(y)}`);
+    if (!isSolidTile(x, MR(y))) assert.ok(seen[MR(y) * MAP_W + x], `Cairnwatch tile ${x},${MR(y)} reachable`);
+  }
   // Act 1's side: reachable on foot from Oakvale's square
   const s = randomSpawn(), home = flood(...tileOf(s));
   const [ox, oy] = tileOf(waygateArrival(oakGate));
@@ -112,9 +114,10 @@ test("moors: levels 20-35 from the moorgate; gates; Acts 1 and 2 keep their own 
   assert.equal(gateOpen(g, { level: 20 } as never), true);
   assert.equal(gateOpen(waygateById("oakvale")!, { level: 50 } as never), false, "the Sunscar's gate still wants its bosses");
   assert.equal(WAYGATES.length, 4);
-  // respawns and logins land in the act's own place (death in the moors: the moorgate's clearing)
+  // respawns and logins land in the act's own place (death in the moors: Cairnwatch's square)
   for (const act of [1, 2, 3]) { const q = actSpawn(act, randomSpawn); assert.equal(actAt(q.y, q.x), act, `act ${act} spawn`); }
-  for (const z of SPAWN_ZONES) if (actOfTile(z.x, z.y) === 3) { assert.ok(!huntable(z, false) && !huntable(z, true)); }
+  // the moors' hunts are only on the moors' board (its act), never on Act 1's or Act 2's
+  for (const z of SPAWN_ZONES) if (actOfTile(z.x, z.y) === 3) { assert.ok(!huntable(z, 1) && !huntable(z, 2)); }
   assert.ok(TERRITORIES.every((t) => t.act === 1 || t.act === 2), "the war stays in Acts 1 and 2");
 });
 

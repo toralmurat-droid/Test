@@ -92,6 +92,8 @@ export type MobKind = "slime" | "skeleton" | "motherblob" | "blobling" | "shoote
   | "sunwright"
   // the Night Raiders (shared/raiders.ts): seven named riders who roam both acts by night
   | "nightraider"
+  // Act 3, the Grey Barrow Moors (shared/moors.ts): the Ossuary Host's dead, the fen-hags who serve them, and the Barrow-King
+  | "wight" | "boghag" | "bonehound" | "mistwraith" | "legionary" | "cairnlord" | "barrowking"
   // clan troops of the war (shared/war/troops.ts): the clan rides in Mob.weapon; art comes per clan (shared/war/patrols.ts TROOP_LOOK)
   | "trooper"
   // summoned by heroes (shared/summons.ts): they fight for their owner
@@ -176,12 +178,22 @@ export const MOBS: Record<MobKind, MobDef> = {
   // hero of their level (pve.ts --troops); no XP, no loot. troopStats adds the clan, officer and veteran multipliers
   trooper: { name: "Soldier", maxHp: 230, speed: 64, damage: 21, attackCooldownMs: 950, aggroRange: 160, leash: 192, xp: 0 },
   hidemother: { name: "The Hide-Mother", maxHp: 950, speed: 50, damage: 28, attackCooldownMs: 1300, aggroRange: 240, leash: 480, xp: 1000 },
+  // Act 3, the Grey Barrow Moors (Lv 20-35): base numbers set with tools/balance/pve.ts --moors so the moors play like
+  // Act 1's Lv 20-25 zones for a hero of their level (MOORS_KINDS below; moves in BEAST_MOVES, shots in server RANGED)
+  wight: { name: "Barrow-Wight", maxHp: 170, speed: 56, damage: 23, attackCooldownMs: 1000, aggroRange: 120, leash: 220, xp: 34 },
+  boghag: { name: "Bog Hag", maxHp: 125, speed: 50, damage: 22, attackCooldownMs: 1800, aggroRange: 150, leash: 230, xp: 36 },
+  bonehound: { name: "Bone Hound", maxHp: 105, speed: 84, damage: 10, attackCooldownMs: 800, aggroRange: 150, leash: 260, xp: 28 },
+  mistwraith: { name: "Mist Wraith", maxHp: 110, speed: 62, damage: 20, attackCooldownMs: 1700, aggroRange: 160, leash: 240, xp: 36 },
+  legionary: { name: "Host Legionary", maxHp: 220, speed: 54, damage: 24, attackCooldownMs: 1150, aggroRange: 130, leash: 230, xp: 42 },
+  // the elite of the barrow fields, and the Host's old king under Kingsbarrow (a boss of the dead: only about at night)
+  cairnlord: { name: "Cairn-Lord", maxHp: 750, speed: 50, damage: 27, attackCooldownMs: 1300, aggroRange: 170, leash: 320, xp: 340 },
+  barrowking: { name: "The Barrow-King", maxHp: 1900, speed: 52, damage: 32, attackCooldownMs: 1250, aggroRange: 240, leash: 460, xp: 1100 },
 };
 
 /** Elite monsters: much tougher than the rest of their zone, with a bigger look and an "Elite" tag. */
-export const ELITE: Partial<Record<MobKind, true>> = { necromancer: true, demon: true, banditchief: true, hollowking: true, packlord: true, hornbrute: true, hidemother: true, gnasher: true, weaver: true, sunwright: true };
+export const ELITE: Partial<Record<MobKind, true>> = { necromancer: true, demon: true, banditchief: true, hollowking: true, packlord: true, hornbrute: true, hidemother: true, gnasher: true, weaver: true, sunwright: true, cairnlord: true, barrowking: true };
 /** Bosses: elites that lead a whole camp (tagged "Boss" instead of "Elite"). */
-export const BOSS: Partial<Record<MobKind, true>> = { banditchief: true, hollowking: true, hidemother: true, sunwright: true };
+export const BOSS: Partial<Record<MobKind, true>> = { banditchief: true, hollowking: true, hidemother: true, sunwright: true, barrowking: true };
 
 /**
  * Skeleton casters. Distances in px.
@@ -287,6 +299,8 @@ export const FACTION: Partial<Record<MobKind, "blob" | "undead" | "outlaw">> = {
   skeleton: "undead", skeletonmage: "undead", necromancer: "undead", crawler: "undead", demon: "undead",
   bandit: "outlaw", banditchief: "outlaw",
   sanddead: "undead",
+  // Act 3: the Ossuary Host (the bog hags are living witches in its pay: no side)
+  wight: "undead", bonehound: "undead", mistwraith: "undead", legionary: "undead", cairnlord: "undead", barrowking: "undead",
 };
 
 /**
@@ -453,6 +467,11 @@ export const BEAST_MOVES: Partial<Record<MobKind, BeastMove[]>> = {
   sphinx: ["pounce"], // spreads its wings and drops onto you
   // the Sunwright: Zenith (when ready) before everything, then her choir, falling sun, the flare when crowded, the lance
   sunwright: ["zenith", "brood", "sunfall", "flare", "beam"],
+  // Act 3: the legionary rushes behind its tower shield; the Cairn-Lord calls wights out of the mounds, stamps and cleaves;
+  // the Barrow-King brings his barrow's roof down when badly hurt, calls his host, roars (slows) and cleaves
+  legionary: ["gore"],
+  cairnlord: ["brood", "stomp", "maul"],
+  barrowking: ["rockfall", "brood", "roar", "maul"],
 };
 /** Damage over time after a plain blow (BEAST.plague / bleed / venom). */
 /**
@@ -504,9 +523,10 @@ export const SUNWRIGHT = {
     death: ["The night... it is so cold... I only wanted..."],
   },
 };
-export const BEAST_RIDER: Partial<Record<MobKind, "plague" | "bleed" | "venom">> = { gnawkin: "plague", packlord: "bleed", silkwretch: "venom", hidemother: "bleed", gnasher: "plague", weaver: "venom", scorpion: "venom" };
+export const BEAST_RIDER: Partial<Record<MobKind, "plague" | "bleed" | "venom">> = { gnawkin: "plague", packlord: "bleed", silkwretch: "venom", hidemother: "bleed", gnasher: "plague", weaver: "venom", scorpion: "venom", bonehound: "bleed", boghag: "venom" };
 /** Who answers a beast's Brood or Howl (default BEAST.brood.kinds / BEAST.howl.summon). */
-export const BEAST_BROOD: Partial<Record<MobKind, MobKind[]>> = { gnasher: ["gnawkin", "gnawkin", "gnawkin"], weaver: ["silkwretch", "silkwretch"], sunwright: ["veiled", "veiled", "veiled"] };
+export const BEAST_BROOD: Partial<Record<MobKind, MobKind[]>> = { gnasher: ["gnawkin", "gnawkin", "gnawkin"], weaver: ["silkwretch", "silkwretch"], sunwright: ["veiled", "veiled", "veiled"],
+  cairnlord: ["wight", "wight"], barrowking: ["wight", "legionary", "bonehound", "bonehound"] };
 /**
  * Half-folk variants (Mob.weapon "folk", Murat 2026-11-05): a man's face under the flayed animal head, the body gone
  * over to the beast. Gnawkin bone-slingers throw stones from range; the rest fight like their kind.
@@ -514,6 +534,16 @@ export const BEAST_BROOD: Partial<Record<MobKind, MobKind[]>> = { gnasher: ["gna
 export const BEAST_FOLK: Partial<Record<MobKind, number>> = { gnawkin: 0.4, tuskborn: 0.35, silkwretch: 0.4, duskwing: 0.4, nomad: 0.35 }; // nomad "folk": a Dustrider archer
 /** Act 2's monsters (the Sunscar): levels from ACT2_LEVEL. */
 export const DESERT_KINDS: MobKind[] = ["nomad", "scorpion", "sanddead", "veiled", "camelfolk", "sphinx", "sunwright"];
+/**
+ * The moors' casters (server RANGED, pve.ts): the Bog Hag hangs back and spits green rot (poison, MOB_SHOT_ELEMENT), the
+ * Mist Wraith drifts at the edge of sight and throws shards of grave-cold (cold). Distances in px.
+ */
+export const MOORS_AI = {
+  hag: { range: 130, keepAway: 65, shotSpeed: 150, shotRadius: 3, mult: 1 },
+  wraith: { range: 140, keepAway: 75, shotSpeed: 165, shotRadius: 3, mult: 1 },
+};
+/** Act 3's monsters (the Grey Barrow Moors): levels from MOORS_LEVEL. */
+export const MOORS_KINDS: MobKind[] = ["wight", "boghag", "bonehound", "mistwraith", "legionary", "cairnlord", "barrowking"];
 /** Beast-folk that fly (drawn hovering, client textures.ts). */
 export const BEAST_FLYERS: MobKind[] = ["duskwing", "crowseer"];
 export const BEAST_KINDS: MobKind[] = ["gnawkin", "tuskborn", "silkwretch", "duskwing", "packlord", "hornbrute", "hidemother", "crowseer", "gnasher", "weaver"];

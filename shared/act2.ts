@@ -1,7 +1,7 @@
 import { actOfTile, MOORS_LEVEL, PLAYER_RADIUS, TILE } from "./constants";
 import { CHAINS, chainDone, type Quester } from "./quests";
 import { KEL_MARKET, D, WAYGATE_DESERT, WAYGATE_OAKVALE } from "./desert";
-import { MOORGATE, MOORGATE_CLEARING, MOORSGATE_MOORS, MOORSGATE_OAKVALE, MR } from "./moors";
+import { CAIRN_SQUARE, MOORSGATE_MOORS, MOORSGATE_OAKVALE, MR } from "./moors";
 import { isSolidAt } from "./map";
 
 /**
@@ -53,15 +53,14 @@ export function desertSpawn(): { x: number; y: number } {
   return { x: (M.x + 2 + Math.random() * (M.w - 4)) * TILE, y: (D(M.y + M.h - 2) + Math.random()) * TILE };
 }
 /**
- * The moorgate's clearing: where heroes in the moors come back after dying, and where they log in if they left from
- * Act 3 (until the outpost stands). Free ground only; the gate's arrival spot if none is found.
+ * Cairnwatch's square (shared/moors.ts): where heroes in the moors come back after dying, and where they log in if
+ * they left from Act 3. Free ground only; the moorgate's arrival spot if none is found.
  */
 export function moorsSpawn(): { x: number; y: number } {
-  const C = MOORGATE_CLEARING, r = PLAYER_RADIUS;
+  const Q = CAIRN_SQUARE, r = PLAYER_RADIUS;
   for (let i = 0; i < 60; i++) {
-    const a = Math.random() * Math.PI * 2, d = 2 + Math.random() * 3; // round the arrival spot, off the stone ring
-    const x = (MOORGATE.x + 0.5 + Math.cos(a) * d) * TILE, y = (MR(MOORGATE.y) + 3 + Math.sin(a) * d * 0.6) * TILE;
-    if (Math.hypot(x / TILE - C.x, y / TILE - MR(C.y)) < C.rx && ![[-r, -r], [r, -r], [-r, r], [r, r]].some(([dx, dy]) => isSolidAt(x + dx, y + dy))) return { x, y };
+    const x = (Q.x + 1 + Math.random() * (Q.w - 2)) * TILE, y = (MR(Q.y) + 1 + Math.random() * (Q.h - 2)) * TILE;
+    if (![[-r, -r], [r, -r], [-r, r], [r, r]].some(([dx, dy]) => isSolidAt(x + dx, y + dy))) return { x, y };
   }
   return waygateArrival(waygateById("moors")!);
 }

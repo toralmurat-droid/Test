@@ -216,7 +216,7 @@ export function rumourGround(z: { x: number; y: number; w: number; h: number }, 
 
 /** Zones that can have a rumour (SPAWN_ZONES indices): a monster to hunt, in this act, above ground (no crypts or warrens: no night down there). */
 export function rumourZones(act = 1): number[] {
-  return SPAWN_ZONES.flatMap((z, zi) => (huntable(z, act === 2) && !underground((z.y + z.h / 2) * TILE) ? [zi] : []));
+  return SPAWN_ZONES.flatMap((z, zi) => (huntable(z, act) && !underground((z.y + z.h / 2) * TILE) ? [zi] : []));
 }
 
 /** A spot (feet px) of open ground in z, from the seeded rng: spread from `taken`, or `around` a point (ring of tiles). */

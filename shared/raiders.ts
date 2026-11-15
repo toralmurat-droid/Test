@@ -78,7 +78,8 @@ export const RAIDERS: Raider[] = [
 export const raiderByKey = (k: string) => RAIDERS.find((r) => r.key === k);
 
 /** Never touched by the riders, and they never fight back against them: the dead. */
-export const RAIDER_SPARES: MobKind[] = ["skeleton", "skeletonmage", "necromancer", "crawler", "demon", "hollowking", "sanddead"];
+export const RAIDER_SPARES: MobKind[] = ["skeleton", "skeletonmage", "necromancer", "crawler", "demon", "hollowking", "sanddead",
+  "wight", "bonehound", "mistwraith", "legionary", "cairnlord", "barrowking"];
 /** Not living things (the Summoner's golems): the riders pass them by. */
 export const raiderIgnores = (kind: MobKind) => RAIDER_SPARES.includes(kind) || kind.startsWith("golem") || kind === "nightraider";
 

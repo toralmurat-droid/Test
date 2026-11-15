@@ -5,7 +5,7 @@
  * and not counted for the day, when its land changes hands, its caravan line stops running or the hero swears another clan. State is the hero's plain
  * Player.writ / writDay / writN, saved; TownRoom calls in through the small WritHost below.
  */
-import { DESERT_Y0, TILE } from "../shared/constants";
+import { actOfTile, TILE } from "../shared/constants";
 import { caravanLines, type CaravanLine } from "../shared/war/caravans";
 import { nearestBoard } from "../shared/bounty";
 import { CLAN_KEYS, type ClanKey } from "../shared/war/clans";
@@ -64,7 +64,7 @@ export class WarWrits {
     const out: WritMsg = { board: board?.id ?? "", offers: [], active: p.writ ?? null, left };
     if (!sworn) out.note = SWEAR_FIRST;
     else if (!left) out.note = `You have finished ${WRIT.perDay} war writs today. New ones at dawn (UTC).`;
-    else if (board && war) out.offers = writOffers(war, p.clan!, p.level, board.y >= DESERT_Y0 * TILE ? 2 : 1, war.tick + this.doneToday(p, now));
+    else if (board && war) out.offers = writOffers(war, p.clan!, p.level, actOfTile(Math.floor(board.x / TILE), Math.floor(board.y / TILE)), war.tick + this.doneToday(p, now));
     return out;
   }
 

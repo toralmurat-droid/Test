@@ -49,13 +49,18 @@ export const MOB_AFFINITY: Partial<Record<MobKind, Partial<Record<Element, numbe
   // Act 2: the Sand-Dead are the Kharsun dead (undead); scorpions shrug off venom; the Veiled Circle burns with the sun
   sanddead: UNDEAD, scorpion: { poison: 0.4, cold: 1.25 }, veiled: { fire: 0.5, cold: 1.25 }, sunwright: { fire: 0.4, cold: 1.3 }, nomad: { fire: 0.85 },
   sphinx: { fire: 0.6, faith: 0.8, poison: 1.2 }, // sun-blessed guardians
+  // Act 3: the Host's dead are undead like the valley's; the wraiths are made of grave-cold mist; the hags live in the bog's rot
+  wight: UNDEAD, bonehound: UNDEAD, legionary: UNDEAD, cairnlord: UNDEAD, barrowking: UNDEAD,
+  mistwraith: { cold: 0.3, poison: 0.3, faith: 1.6, fire: 1.3 },
+  boghag: { poison: 0.4, fire: 1.3 },
 };
 export const mobAffinity = (kind: string, el: Element) => MOB_AFFINITY[kind as MobKind]?.[el] ?? 1;
 
 /** The element of a monster's magic shot (hero resistances apply to it). Unset = Physical. */
-export const MOB_SHOT_ELEMENT: Partial<Record<MobKind, Element>> = { shooterblob: "poison", skeletonmage: "cold", necromancer: "poison", hollowking: "cold", crowseer: "poison", veiled: "fire" };
+export const MOB_SHOT_ELEMENT: Partial<Record<MobKind, Element>> = { shooterblob: "poison", skeletonmage: "cold", necromancer: "poison", hollowking: "cold", crowseer: "poison", veiled: "fire", boghag: "poison", mistwraith: "cold" };
 /** The element of a monster's melee blows and special moves (unset = Physical). */
-export const MOB_MELEE_ELEMENT: Partial<Record<MobKind, Element>> = { venomblob: "poison", frostblob: "cold", fireblob: "fire", stormblob: "shock" };
+export const MOB_MELEE_ELEMENT: Partial<Record<MobKind, Element>> = { venomblob: "poison", frostblob: "cold", fireblob: "fire", stormblob: "shock",
+  wight: "cold", mistwraith: "cold", barrowking: "cold" }; // Act 3: the barrow-cold in a wight's grip
 
 /** One elemental part of a hit, already in damage points. */
 export interface ElemPart { el: Element; amt: number }

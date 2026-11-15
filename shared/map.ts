@@ -1,7 +1,7 @@
 import { MAP_H as FULL_H, MAP_W, PLAYER_RADIUS, TILE, UNDER_END, WORLD_H, type MobKind } from "./constants";
 import { CRYPT_DOOR, FLOORS, LAIRS, SEA_END, SHORTCUTS, SINKHOLE, UNDER_SHAFT, type Floor } from "./dungeon";
 import { buildDesert, D, inDesertRow, KEL_MARKET, WAYGATE_OAKVALE } from "./desert";
-import { buildMoors, MOORSGATE_OAKVALE } from "./moors";
+import { buildMoors, CAIRN_PORTAL, CAIRN_SQUARE, MOORSGATE_OAKVALE, MR } from "./moors";
 
 /** Mirror Pond, in tiles (centre and radii of its water): the Songweaver's Mirror Pond Air is played on its shore (shared/songbook.ts). */
 export const MIRROR_POND = { x: 24, y: 94, rx: 9, ry: 6 };
@@ -85,6 +85,8 @@ export const PORTAL_SPOTS = [
   { id: "ruins", name: "Old Ruins", x: 150, y: 59 },
   { id: "keep", name: "Greywatch Keep", x: 196, y: 69 },
   { id: "gravemoor", name: "Gravemoor Cemetery", x: 210, y: 120 },
+  // Act 3: in the cairn-yard of Cairnwatch, the moors' outpost (shared/moors.ts)
+  { id: "cairnwatch", name: "Cairnwatch", x: CAIRN_PORTAL.x, y: MR(CAIRN_PORTAL.y) },
 ] as const;
 export const REDFANG = { x: 240, y: 102, w: 24, h: 18 };
 export const REDFANG_TOWERS: [number, number][] = [[254, 103], [249, 118], [241, 108]];
@@ -99,6 +101,8 @@ export const WRECK = { x: 27, y: 195, solid: [25, 194.3, 5.2, 1.1] as [number, n
 export const SAFE_ZONE = { x: 74, y: 55, w: 13, h: 11 };
 /** Act 2's safe zone: Kel Ashar's market (shared/desert.ts), in map tiles. */
 export const DESERT_SAFE = { x: KEL_MARKET.x, y: D(KEL_MARKET.y), w: KEL_MARKET.w, h: KEL_MARKET.h };
+/** Act 3's safe zone: Cairnwatch's square (shared/moors.ts), in map tiles. */
+export const MOORS_SAFE = { x: CAIRN_SQUARE.x, y: MR(CAIRN_SQUARE.y), w: CAIRN_SQUARE.w, h: CAIRN_SQUARE.h };
 
 /** Column of the river's center for a given row (River Ashwell, east of the village). */
 /** Gullrock Cove: a fishers' smokehouse on a little bay east of Saltmere, burned and pillaged by Redfang raiders (Redfang quest chain). */
@@ -1256,13 +1260,15 @@ export function randomSpawn(): { x: number; y: number } {
   return { x: (ROADS.RX + 1.5) * TILE, y: (ROADS.RY + 1.5) * TILE };
 }
 
-/** The market square is a safe zone: no damage there, and monsters will not enter. */
+/** The market squares (Oakvale's, Kel Ashar's, Cairnwatch's) are safe zones: no damage there, and monsters will not enter. */
 export function isSafeZone(px: number, py: number): boolean {
   const tx = Math.floor(px / TILE), ty = Math.floor(py / TILE);
   const z = SAFE_ZONE;
   if (tx >= z.x && ty >= z.y && tx < z.x + z.w && ty < z.y + z.h) return true;
   const k = DESERT_SAFE; // Act 2: Kel Ashar's market
-  return tx >= k.x && ty >= k.y && tx < k.x + k.w && ty < k.y + k.h;
+  if (tx >= k.x && ty >= k.y && tx < k.x + k.w && ty < k.y + k.h) return true;
+  const m = MOORS_SAFE; // Act 3: Cairnwatch's square
+  return tx >= m.x && ty >= m.y && tx < m.x + m.w && ty < m.y + m.h;
 }
 
 /** Random walkable point outside the village palisade, where monsters live. */

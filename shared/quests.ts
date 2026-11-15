@@ -2518,6 +2518,7 @@ const IDLE: Record<string, string> = {
   mourner2: "Gran would've hated all this fuss. She'd have wanted the kettle on.",
   mourner3: "I build boats. Corin built better ones. I keep thinking he'll walk up the lane and say so.",
   ilka: "Don't look at me like that. Keep walking.",
+  cairncaptain: "Keep to the corpse roads, and if a barrow calls your name, don't answer. The Host has been counting its dead again.", // placeholder until the moors chain is written
   alewife: "Ale's cold, the gossip's warm. Pull up a barrel, love. Whatever happens in this valley, it comes past my cart sooner or later.",
 };
 /**

@@ -100,7 +100,7 @@ const desertStock = (ids: string[]): ShopEntry[] => ids.map((base) => {
  * Armourers (Murat 2026-11-08: "a merchant selling armor in the villages"): shields, body armour, helms and boots only,
  * in steps across the levels of their part of the world. Each step is [tier, item level]; every step sells the four
  * armour slots of that tier. Oakvale covers the first half of Act 1, Saltmere (reached at Lv 16) the second half,
- * Kel Ashar Act 2 (Lv 30-50).
+ * Kel Ashar Act 2 (Lv 30-50), Cairnwatch the moors (Act 3, Lv 20-35).
  */
 export const ARMOUR_BASES: Record<number, string[]> = {
   1: ["sh_wood", "a_leather", "h_cap", "s_leather"],
@@ -111,6 +111,7 @@ export const ARMOUR_STEPS: Record<string, [number, number][]> = {
   armourer: [[1, 3], [1, 6], [2, 9], [2, 12], [3, 15]],
   saltarmourer: [[2, 17], [2, 20], [3, 23], [3, 26], [3, 29]],
   sandarmourer: [[2, 32], [3, 36], [3, 40], [3, 44], [3, 48]],
+  moorarmourer: [[2, 21], [3, 24], [3, 27], [3, 30], [3, 33]], // Cairnwatch (Act 3, Lv 20-35)
 };
 const armourStock = (shop: string): ShopEntry[] => ARMOUR_STEPS[shop].flatMap(([tier, level]) => ARMOUR_BASES[tier].map((base) => {
   const item = withLevel(base, level);
@@ -163,6 +164,18 @@ export const SHOPS: Record<string, Shop> = {
     stock: armourStock("sandarmourer"),
     buys: ARMOUR_SLOTS,
     levelHeads: true,
+  },
+  moorarmourer: {
+    greeting: "Iron rings over boiled leather, and a hood against the mist. The dead out there bite cold. Wear something thick.",
+    stock: armourStock("moorarmourer"),
+    buys: ARMOUR_SLOTS,
+    levelHeads: true,
+  },
+  // Cairnwatch's herbwife (Act 3): Medium and Greater flasks; she buys and fuses loose runes like Morwen and Zahra
+  moorherbalist: {
+    greeting: "Bog-myrtle, sundew, a drop of something stronger. Red keeps you breathing, blue keeps you thinking. Carved stones? I'll take them, or fuse four.",
+    stock: [...potionStock("potion", [1, 2]), ...potionStock("mpotion", [1, 2])],
+    buys: ["rune"],
   },
   spicetrader: {
     greeting: "Cardamom, saffron, and flasks to keep you breathing in the sun. Water is extra. Joking. Mostly. Carved stones? I buy those too, or fuse four into one.",
