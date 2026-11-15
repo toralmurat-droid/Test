@@ -12,32 +12,32 @@ export const WAR_CARTS = ["war_cart_wardens", "war_cart_redfang", "war_cart_host
 export type WarCart = (typeof WAR_CARTS)[number];
 type Clan = "wardens" | "redfang" | "host" | "hidekin" | "veiled";
 type Dir = "down" | "up" | "right";
-const G = 40; // the ground line in the frame
+export const G = 40; // the ground line in the frame
 
-const SKIN = { wood: 0x6b4a2a, woodD: 0x3e2a18, iron: 0x6a6a68, rope: 0xb49a6a, bone: 0xd8cfb2, gold: 0xe9b84a };
+export const SKIN = { wood: 0x6b4a2a, woodD: 0x3e2a18, iron: 0x6a6a68, rope: 0xb49a6a, bone: 0xd8cfb2, gold: 0xe9b84a };
 
-const rect = (c: C2, x: number, y: number, w: number, h: number, col: number, o: { ao?: number; spec?: number; n?: number } = {}) => {
+export const rect = (c: C2, x: number, y: number, w: number, h: number, col: number, o: { ao?: number; spec?: number; n?: number } = {}) => {
   const s = poly([[x, y], [x + w, y], [x + w, y + h], [x, y + h]]);
   vol(c, s, col, [x, y, w, h], { ao: o.ao ?? 0.35, spec: o.spec });
   grain(c, s, [x, y, w, h], col, ((x * 31 + y * 17) | 0) + 7, o.n ?? Math.min(60, (w * h) | 0), 0.2, 0.9, 0);
 };
-const planks = (c: C2, x: number, y: number, w: number, h: number, n: number, col: number) => {
+export const planks = (c: C2, x: number, y: number, w: number, h: number, n: number, col: number) => {
   for (let i = 1; i < n; i++) line(c, [[x, y + (h * i) / n], [x + w, y + (h * i) / n]], sh(col, 0.42), 0.35, 0.8);
 };
-const disc = (c: C2, x: number, y: number, r: number, col: number, spec = 0.3) => vol(c, ellipseP(x, y, r, r), col, [x - r, y - r, r * 2, r * 2], { ao: 0.3, spec });
-const skull = (c: C2, x: number, y: number, r: number, eye = 0x1a1410) => {
+export const disc = (c: C2, x: number, y: number, r: number, col: number, spec = 0.3) => vol(c, ellipseP(x, y, r, r), col, [x - r, y - r, r * 2, r * 2], { ao: 0.3, spec });
+export const skull = (c: C2, x: number, y: number, r: number, eye = 0x1a1410) => {
   disc(c, x, y, r, SKIN.bone, 0.4);
   fillShape(c, ellipseP(x, y + r * 0.9, r * 0.6, r * 0.45), css(sh(SKIN.bone, 0.9)));
   fillShape(c, ellipseP(x - r * 0.35, y - r * 0.05, r * 0.28, r * 0.3), css(eye)); fillShape(c, ellipseP(x + r * 0.35, y - r * 0.05, r * 0.28, r * 0.3), css(eye));
 };
 /** A soft ground shadow (own layer so the pixel pass keeps it). */
-const shadow = (s: C2 | null, x: number, y: number, rx: number, ry: number) => {
+export const shadow = (s: C2 | null, x: number, y: number, rx: number, ry: number) => {
   if (!s) return;
   s.save(); s.translate(x, y); s.scale(1, ry / rx); s.fillStyle = "rgba(0,0,0,0.42)"; s.beginPath(); s.arc(0, 0, rx, 0, Math.PI * 2); s.fill(); s.restore();
 };
 
 /** A spoked wheel seen from the side; `ang` turns it between frames. */
-function wheel(c: C2, x: number, y: number, r: number, ang: number, rim: number, hub: number, spokes = 8, far = false) {
+export function wheel(c: C2, x: number, y: number, r: number, ang: number, rim: number, hub: number, spokes = 8, far = false) {
   const k = far ? 0.62 : 1;
   fillShape(c, ellipseP(x, y, r + 0.5, r + 0.5), css(sh(rim, 0.3 * k + 0.1)));
   c.save(); c.beginPath(); ellipseP(x, y, r - 1, r - 1)(c); c.fillStyle = css(sh(rim, 0.28), 0.9); c.fill(); c.restore();

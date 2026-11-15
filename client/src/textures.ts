@@ -441,6 +441,11 @@ export function warCartTexture(scene: Phaser.Scene, clan: string): string | null
   return warSoldierTexture(scene, clan.startsWith("war_cart_") ? clan : `war_cart_${clan}`);
 }
 
+/** The Ossuary Host's bone siege ram sheet (art key "war_ram_host"; same 72x44 / 14-frame layout as the carts). Null until loaded. Art only. */
+export function warRamTexture(scene: Phaser.Scene): string | null {
+  return warSoldierTexture(scene, "war_ram_host");
+}
+
 /** A champion affix's painted detail (tools/art/paint/mobs.ts champOverlay, 2 frames), or null (pixel look, not loaded). */
 export function champOverlayTexture(scene: Phaser.Scene, k: string): string | null {
   return SMOOTH ? paintedSheet(scene, `mob_champ_${k}`) : null;
