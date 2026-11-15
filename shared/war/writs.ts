@@ -180,9 +180,9 @@ export function cleanWrit(v: unknown, clan?: ClanKey): WritState | undefined {
   const goal = int(w.goal);
   if (goal < 1 || goal > 100) return undefined;
   let road: WritRoad | undefined;
-  if (isRoadKind(w.kind as WritKind)) { // the line must still read the same: both ends' ids and names, t one of them, one act
+  if (isRoadKind(w.kind as WritKind)) { // the line must still read the same: both ends' ids and names, t one of them, one land
     const r = (w.road ?? {}) as Partial<WritRoad>, a = int(r.a), b = int(r.b), A = TERRITORIES[a], B = TERRITORIES[b];
-    if (!A || !B || a === b || A.name !== r.from || B.name !== r.to || (t !== a && t !== b) || A.act !== B.act) return undefined;
+    if (!A || !B || a === b || A.name !== r.from || B.name !== r.to || (t !== a && t !== b) || A.region !== B.region) return undefined;
     road = { a, b, from: A.name, to: B.name };
   }
   const out: WritState = { kind: w.kind as WritKind, t, land: T.name, goal, clan: w.clan, holder: w.holder, minLevel: Math.max(0, int(w.minLevel)),

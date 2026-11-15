@@ -498,3 +498,39 @@ Open points for M1:
   noon, a bot at the circle) 8.93 (p95 17.8), 3 acolytes channelling. No dropped bots.
 - `npx tsx tools/balance/war.ts 200 30`: unchanged (only the run time line differs).
 - Not done: a war-table marker; rituals for other clans; a completed ritual changing the war rules beyond valor.
+
+## NL-1: Lands in the war map (2026-11-15)
+Territories are grouped into the lands of the continent (design page v0.3), so a homeland can plug in later. Play is
+exactly the same today: the golden fingerprint of the map (ids, names, borders, capitals, starting owners) and both war
+sims are unchanged.
+- `shared/war/regions.ts`: `REGIONS` (key, name, compass, `home`, `contains(tx, ty)`, `capitals`). Built: The Oakvale
+  Lands (Act 1 via `actOfTile`, Wardens' home), The Sunscar (Act 2, Veiled home). Planned, no `contains` yet: The Grey
+  Barrow Moors (Host, NE), The Red Badlands (Redfang, W), The Mawdeep Sinkholes (Hide-Kin, S), The Crown of the Marches
+  (centre). A land is built when at least one territory lies in it. `contains` is checked in `REGIONS` order (first
+  match wins): a new land's test must come before the acts' catch-all, or the acts' test must exclude it.
+- Capitals moved from `CLANS.capitals` into the lands. Forward capitals (design page: "Clans whose homeland is not built
+  yet hold a forward capital there"): Redfang Hollow, Greywatch Keep, Thornwood (Oakvale), Dustrider Camp, Kharsun and
+  the Humpback Mesas (Sunscar). `capitalsOf(built)` drops a forward capital once its clan's homeland is built; Palmshade
+  Oasis and Cinder Scar stay (the Wardens' and Veiled's capital in the other act is not forward on the design page).
+  `Territory.forward` marks them for the plaque.
+- `REGION_LINKS`: the Waygate (WAYGATE_OAKVALE <-> WAYGATE_DESERT) first; a link is live only when both lands are built.
+  `linkPairs` / `LAND_LINKS` give the territory pair (the one nearest each end): Stonecrag Quarry <-> The Glasswind Flats.
+- `territories.ts`: `buildTerritories(zones, regions, links)`; each territory has `region` (and keeps `act`). Borders,
+  `minNeighbours` and the "same land" check of `initialOwners(ts)` work per land. Caravan lines and routes, and caravan
+  writ roads (`writs.ts`, a deviation from the plan: same rule, same result today), stay inside one land. The writ board's
+  `act` filter (where the hero stands) is unchanged.
+- Saved war (`server/war.ts`): still `v: 1`, now with `names` (territory names in id order). `migrateWar(saved,
+  oldNames, names)` remaps owner, Control, forts, sieges, pressure, the leaders' targets / feints (also ids, not in the
+  plan) and the log by name. A new territory starts with its capital's clan, else its land's home clan, else the clan
+  holding most of its neighbours, at Control 100; a removed one is dropped with its log lines; a capital always starts
+  with its clan. A save without `names` of today's size loads unchanged (the live save on deploy); one of another size
+  cannot be mapped and restarts like a malformed one (old save kept aside as `war-old-<ms>`). When the names changed, the
+  old save is kept aside too and the remapped war goes on.
+- Client: the war table draws a dashed box around each land with its name upright at the top corner (Pixelify Sans),
+  a dashed blue line for the Waygate, and a legend row per land with each clan's count there. The plaque's title adds
+  " · <land>" and says "(forward capital)" where it applies. Cosmetic only.
+- Tests: `tests/warregions.test.ts` (golden fingerprint, 21 / 10 per land, one cross-land border = the Waygate, a fake
+  Grey Barrow Moors plugged in through `buildTerritories`, `migrateWar` cases, load paths); `tests/warlive.test.ts` save /
+  load round trip with names.
+- Sims (`npx tsx tools/balance/war.ts 200 30`, and `--clever=host`): identical before and after but for the run time.
+- Not done: a land's own map, zones and capitals (the homelands themselves); the Crown.

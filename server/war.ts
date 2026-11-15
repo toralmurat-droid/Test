@@ -2,19 +2,22 @@
  * The live clan war (roadmap M1): one war for the whole server, independent of the room (a room closes when its last
  * player leaves; the war goes on). Every WAR.tickMs the scripted leaders (shared/war/doctrine.ts) give orders, the
  * players' valor of the last ten minutes is added, and shared/war/rules.ts moves the fronts. The state is saved after
- * every tick (Postgres table kv, or data/war.json) so a deploy never resets the war.
+ * every tick (Postgres table kv, or data/war.json) so a deploy never resets the war. The save names its territories, so
+ * a new land or zone remaps the war by name (migrateWar) instead of restarting it.
  */
 import { CLANS, CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import { newMinds, scriptedOrders, type Mind } from "../shared/war/doctrine";
 import { newWar, WAR, warTick, type Orders, type WarState } from "../shared/war/rules";
-import { TERRITORIES } from "../shared/war/territories";
+import { TERRITORIES, type Territory } from "../shared/war/territories";
+import { regionByKey } from "../shared/war/regions";
 import { tunnelStrikes, type TunnelStrike } from "../shared/war/tunnels";
 import { warPhase, warView, type WarView } from "../shared/war/view";
 import { eventVoice, leaderLine } from "../shared/war/heralds";
 import { openKv, type Kv } from "./store";
 
 export interface WarEvent { at: number; tick: number; kind: "siege" | "flip" | "held"; t: number; by: ClanKey; from: ClanKey; text: string }
-interface Saved { v: 1; state: WarState; minds: Record<ClanKey, Mind>; next: number; log: WarEvent[] }
+/** `names`: the territory names in id order (optional: saves before 2026-11-15 have none, and their ids are today's). */
+interface Saved { v: 1; state: WarState; minds: Record<ClanKey, Mind>; next: number; log: WarEvent[]; names?: string[] }
 
 const KEY = "war";
 const LOG_MAX = 200;
@@ -37,16 +40,67 @@ function rng(seed: number) {
   return () => { a = (a + 0x6d2b79f5) >>> 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t ^= t + Math.imul(t ^ (t >>> 7), 61 | t); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
 
+const namesNow = () => TERRITORIES.map((t) => t.name);
+
 function fresh(now: number): Saved {
-  return { v: 1, state: newWar(), minds: newMinds(), next: now + WAR.tickMs, log: [] };
+  return { v: 1, state: newWar(), minds: newMinds(), next: now + WAR.tickMs, log: [], names: namesNow() };
 }
 
-/** A saved war that still fits today's map (a new zone or act changes the territory count: then the war restarts). */
-function fits(s: Saved | undefined): s is Saved {
-  const n = TERRITORIES.length, st = s?.state;
-  return !!s && s.v === 1 && !!st && Number.isFinite(s.next) && Array.isArray(s.log)
-    && [st.owner, st.control, st.fort, st.siege, st.pressure].every((a) => Array.isArray(a) && a.length === n)
+/** A saved war that is whole: every per-territory list the same length (any length: the map may have changed since). */
+function wellFormed(s: Saved | undefined): s is Saved {
+  const st = s?.state, n = st?.owner?.length;
+  return !!s && s.v === 1 && !!st && Number.isFinite(s.next) && Array.isArray(s.log) && Array.isArray(st.owner) && n! > 0
+    && [st.control, st.fort, st.siege, st.pressure].every((a) => Array.isArray(a) && a.length === n)
+    && (s.names === undefined || (Array.isArray(s.names) && s.names.length === n && s.names.every((x) => typeof x === "string") && new Set(s.names).size === n))
     && st.owner.every((k) => !!CLANS[k]) && CLAN_KEYS.every((k) => Number.isFinite(st.army?.[k]) && !!s.minds?.[k]);
+}
+
+/**
+ * The saved war on today's map: owner, Control, forts, sieges, pressure, the leaders' targets and the log follow their
+ * territory by name. A territory new to the map starts with its capital's clan, else its land's home clan, else the
+ * clan holding most of its neighbours, at full Control; one gone from the map is dropped (with its log lines). A capital
+ * always starts with its clan. Pure: same names in the same order give the same war back. `oldNames` / `names` must not
+ * repeat a name (wellFormed checks the save's).
+ */
+export function migrateWar(saved: Saved, oldNames: readonly string[], names: readonly string[], ts: readonly Territory[] = TERRITORIES): Saved {
+  const was = new Map(oldNames.map((n, i) => [n, i])), from = names.map((n) => was.get(n)), st = saved.state;
+  const pick = <T>(a: T[], seed: (i: number) => T) => from.map((o, i) => (o === undefined ? seed(i) : a[o]));
+  const owner = pick<ClanKey | undefined>(st.owner, () => undefined);
+  for (let i = 0; i < names.length; i++) {
+    if (owner[i]) continue;
+    const t = ts.find((x) => x.name === names[i]), home = t && regionByKey(t.region)?.home;
+    const votes = new Map<ClanKey, number>();
+    for (const m of t?.near ?? []) { const k = from[m] !== undefined ? owner[m] : undefined; if (k) votes.set(k, (votes.get(k) ?? 0) + 1); }
+    const most = [...votes].sort((a, b) => b[1] - a[1])[0]?.[0];
+    owner[i] = t?.capitalOf ?? home ?? most ?? CLAN_KEYS[i % CLAN_KEYS.length];
+  }
+  const state: WarState = {
+    ...st, owner: owner as ClanKey[],
+    control: pick(st.control, () => 100), fort: pick(st.fort, () => 0),
+    siege: pick(st.siege, () => null).map((x) => x && { ...x }), pressure: pick(st.pressure, () => 0), army: { ...st.army },
+  };
+  for (let i = 0; i < names.length; i++) {
+    const cap = ts.find((x) => x.name === names[i])?.capitalOf;
+    if (cap && state.owner[i] !== cap) { state.owner[i] = cap; state.control[i] = 100; state.siege[i] = null; }
+  }
+  const to = new Map<number, number>();
+  from.forEach((o, i) => { if (o !== undefined) to.set(o, i); });
+  const re = (t: number | undefined) => (t === undefined ? undefined : to.get(t));
+  const minds = Object.fromEntries(CLAN_KEYS.map((k) => {
+    const m = { ...saved.minds[k] }, target = re(m.target), feint = re(m.feint);
+    if (target === undefined) delete m.target; else m.target = target;
+    if (feint === undefined) delete m.feint; else m.feint = feint;
+    return [k, m];
+  })) as Record<ClanKey, Mind>;
+  const log = saved.log.flatMap((e) => { const t = re(e.t); return t === undefined ? [] : [{ ...e, t }]; });
+  return { ...saved, state, minds, log, names: [...names] };
+}
+
+/** The saved war read for today's map, or undefined when it cannot be (malformed, or an unnamed save of another size). */
+function load(got: Saved | undefined): Saved | undefined {
+  if (!wellFormed(got)) return undefined;
+  const names = namesNow(), old = got.names ?? (got.state.owner.length === names.length ? names : undefined);
+  return old && migrateWar(got, old, names);
 }
 
 /** Loads the war (or starts it) and starts the clock. Safe to call more than once. */
@@ -54,12 +108,20 @@ export async function startWar(store?: Kv) {
   if (timer) return;
   kv = store ?? (await openKv());
   // A load error stops the start (like the accounts): never let a fresh war overwrite a saved one we failed to read
-  const got = await kv.get<Saved>(KEY);
-  saved = fits(got) ? got : fresh(Date.now());
-  if (!fits(got)) {
-    if (got) await kv.set(`${KEY}-old-${Date.now()}`, got); // a war that no longer fits the code: kept aside, not lost
-    console.log(got ? "War: the saved war no longer fits the map, a new war begins (old one kept)" : "War: a new war begins");
-  } else console.log(`War: tick ${saved.state.tick}, next in ${Math.max(0, Math.round((saved.next - Date.now()) / 1000))} s`);
+  const got = await kv.get<Saved>(KEY), war = load(got);
+  saved = war ?? fresh(Date.now());
+  if (!war) {
+    if (got) await kv.set(`${KEY}-old-${Date.now()}`, got); // a war that cannot be read: kept aside, not lost
+    console.log(got ? "War: the saved war cannot be read or mapped to this map, a new war begins (old one kept)" : "War: a new war begins");
+  } else {
+    const old = got!.names;
+    if (old && (old.length !== war.names!.length || old.some((n, i) => n !== war.names![i]))) {
+      await kv.set(`${KEY}-old-${Date.now()}`, got); // the map changed: the remapped war goes on, the old save is kept aside
+      const kept = war.names!.filter((n) => old.includes(n)).length;
+      console.log(`War: the map changed (${kept} territories kept, ${war.names!.length - kept} new, ${old.length - kept} gone)`);
+    }
+    console.log(`War: tick ${saved.state.tick}, next in ${Math.max(0, Math.round((saved.next - Date.now()) / 1000))} s`);
+  }
   timer = setInterval(() => { step(Date.now()).catch((e) => console.error("War: tick failed:", e)); }, 15_000);
   timer.unref?.();
 }
@@ -124,7 +186,7 @@ export function onWar(f: (v: WarView, events: WarEvent[]) => void) { listeners.a
 export function flushWar() { if (saved && kv?.setSync) try { kv.setSync(KEY, saved); } catch (e) { console.error("War: could not save:", e); } }
 
 /** Tests: start from a given state without a store or a clock. */
-export function _resetWar(s?: Saved, store?: Kv) { stopWar(); saved = s ?? fresh(Date.now()); kv = store; valor = TERRITORIES.map(() => ({})); lastOrders = undefined; lastStrikes = []; }
+export function _resetWar(s?: Saved, store?: Kv) { stopWar(); saved = s ?? fresh(Date.now()); saved.names ??= namesNow(); kv = store; valor = TERRITORIES.map(() => ({})); lastOrders = undefined; lastStrikes = []; }
 /** Tests: set the last tick's orders. */
 export function _setWarOrders(o: Partial<Record<ClanKey, Orders>> | undefined) { lastOrders = o; lastStrikes = saved ? tunnelStrikes(saved.state, o) : []; }
 /** Tests: valor clan `k` has gathered in territory `t` so far this war tick. */

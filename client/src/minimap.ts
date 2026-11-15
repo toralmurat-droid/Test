@@ -7,7 +7,7 @@ import { createTilesetCanvas, tileColors } from "./tileset";
 import { ISO } from "./isoflag";
 import { pixelText } from "./pixeltext";
 import { clasp, frameBorderImage, plaque, FRAME } from "./mapframe";
-import { drawWarLegend, drawWarTable, warTableOn, setWarTableOn } from "./warTable";
+import { drawWarLegend, drawWarTable, warLandLabels, warTableOn, setWarTableOn } from "./warTable";
 import type { WarView } from "../../shared/war/view";
 
 /** Moors colours (cool greys and heather) for the minimap and world map; the rest falls back to the tileset. */
@@ -524,7 +524,16 @@ export class Minimap {
       g.fillStyle = "#000"; g.fillText(a.name, lx + 1, ly + 1);
       g.fillStyle = "#ffe8a3"; g.fillText(a.name, lx, ly);
     }
-    if (this.war && warTableOn()) drawWarLegend(g, this.war, PF);
+    if (this.war && warTableOn()) {
+      // the lands' names, upright at the top corner of each land's dashed box (warTable.ts)
+      g.font = `15px ${PF}`; g.textAlign = "left"; g.textBaseline = "alphabetic";
+      for (const l of warLandLabels()) {
+        const [lx, ly] = T((l.x - R.x) * BIG, (l.y - R.y) * BIG), x = Math.round(lx - g.measureText(l.name).width / 2), y = Math.round(ly) - 6;
+        g.fillStyle = "#000"; g.fillText(l.name, x + 1, y + 1);
+        g.fillStyle = "#ffe8a3"; g.fillText(l.name, x, y);
+      }
+      drawWarLegend(g, this.war, PF);
+    }
     // Other online heroes: name above their dot (the dots are drawn with the map, above)
     g.font = `11px ${PF}`; g.textAlign = "center"; g.textBaseline = "alphabetic";
     for (const o of others) {

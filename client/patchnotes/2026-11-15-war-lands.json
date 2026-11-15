@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-15",
+  "patch": 253,
+  "title": "Lands of the Marches",
+  "changes": [
+    "The war table now groups the territories into their lands, The Oakvale Lands and The Sunscar, with a dashed border, the land's name and the Waygate drawn between them.",
+    "The war table legend shows how much of each land every clan holds.",
+    "The front plaque names the land you are in and marks forward capitals: the clans whose homeland is not built yet hold them until it is."
+  ]
+}

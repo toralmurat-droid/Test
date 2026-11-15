@@ -87,6 +87,22 @@ test("live war: a saved war that no longer fits is kept aside, and a broken tick
   assert.ok(warNow()!.next > t0, "the broken tick was skipped, the clock moved on");
 });
 
+test("live war: the save names its territories and loads back the same war", async () => {
+  const { kv, m } = memKv(), t0 = 6_000_000_000_000;
+  const { startWar, stopWar, warState } = await import("../server/war");
+  _resetWar(saved(t0), kv);
+  await step(t0); await step(t0 + WAR.tickMs);
+  const disk = JSON.parse(m.get("war")!) as SavedWar;
+  assert.deepEqual(disk.names, TERRITORIES.map((t) => t.name), "names written with the save (still v: 1)");
+  assert.equal(disk.v, 1);
+  const before = JSON.parse(JSON.stringify(warState()));
+  _resetWar(undefined); stopWar();
+  await startWar(kv); stopWar();
+  assert.deepEqual(warState(), before, "loaded back unchanged");
+  assert.deepEqual(warLog(), disk.log);
+  assert.ok(![...m.keys()].some((k) => k.startsWith("war-old-")), "same map: nothing kept aside");
+});
+
 test("heralds: every leader has a line for every moment, filled in and capitalised", async () => {
   const { LEADERS, leaderLine, eventVoice } = await import("../shared/war/heralds");
   for (const k of CLAN_KEYS) for (const m of Object.keys(LEADERS[k].lines) as any[]) {

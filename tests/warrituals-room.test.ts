@@ -23,7 +23,8 @@ const PICK = (() => {
 })();
 const LAND = TERRITORIES[PICK.t], FOE = PICK.foe, OUT = PICK.out, SPOT = ritualSpot(LAND.id)!;
 /** A moment at noon (the Veiled's doctrine phase), and one at night. */
-const NOON = (() => { let t = Date.now(); while (!ritualTime(t)) t += 10_000; return t; })();
+/** The start of a ritual phase (not the current one, which may be about to end, so "a minute later" stays in phase). */
+const NOON = (() => { let t = Date.now(); while (ritualTime(t)) t += 10_000; while (!ritualTime(t)) t += 10_000; return t; })();
 const NIGHT = (() => { let t = NOON; while (ritualTime(t)) t += 10_000; return t + 5 * 60_000; })();
 
 const saved = { ...RITUAL }, savedTroops = { ...WAR_TROOPS };
