@@ -2411,7 +2411,7 @@ const PENANCE_QUESTS: QuestDef[] = [
     sets: { flag: "bargain", v: 3 }, // penance done: the cold lines end (the trait stays)
   },
 ];
-// ---- Act 4: the Red Badlands, from the Rustwater Post (Lv 25-40; shared/badlands.ts, docs/badlands-progress.md) ----
+// ---- Act 4: the Red Badlands, from the Rustwater Post (Lv 25-40; shared/badlands.ts, docs/clan-war-progress.md) ----
 /** Where things are, said from the Post's square (the badlands' own compass). */
 function dirFromPost(tx: number, ty: number): string {
   const q = RUSTWATER_SQUARE, cx = q.x + q.w / 2, cy = BR(q.y + q.h / 2);

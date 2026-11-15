@@ -3972,7 +3972,7 @@ export class TownRoom extends Room<TownState> {
       this.addHate(o, heroId, 0);
       ids.push(oid);
     }
-    this.broadcast("bay", { id, ids });
+    if (ids.length) this.broadcast("bay", { id, ids }); // a lone hound keeps quiet: no howl spam every cooldown
   }
 
   /** One extra cutthroat (or a lord's `kind`) runs out next to the chief (his own man: no post, never respawns). */
