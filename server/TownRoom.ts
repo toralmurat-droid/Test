@@ -666,7 +666,7 @@ export class TownRoom extends Room<TownState> {
 
   onCreate() {
     liveRooms.add(this);
-    const offNews = attachWar(this), offTroops = onWar((v) => { this.warTroops.onWar(v); this.writs.onWar(v); }); // the clan war (server/war.ts) runs on its own; the room passes on the news
+    const offNews = attachWar(this), offTroops = onWar((v) => { this.sieges.tick(Date.now()); this.warTroops.onWar(v); this.writs.onWar(v); }); // the clan war (server/war.ts) runs on its own; the room passes on the news
     this.offWar = () => { offNews(); offTroops(); };
     this.limitMessages();
     this.qsteps = new QuestSteps({
