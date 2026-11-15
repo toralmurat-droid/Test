@@ -109,7 +109,7 @@ export function callLabel(c: CallToArms): string {
   switch (c.kind) {
     case "siege": return `${c.defend ? "Defend" : "Siege"} ${c.name}`;
     case "writ": return `Writ: ${c.name}`;
-    case "march": return `${c.tunnel ? "Tunnel strike" : "March"}: ${c.name}`;
+    case "march": return `${c.tunnel ? "Tunnel strike" : "Attacked"}: ${c.name}`;
     default: return `Front: ${c.name}`;
   }
 }
@@ -281,7 +281,8 @@ export function drawWarWorld(g: CanvasRenderingContext2D, d: WarMapData, v: WarM
     const clan = CLAN_KEYS[war.owner[h.t]];
     if (!clan || !d.seen(Math.floor(h.x / TILE), Math.floor(h.y / TILE))) continue;
     const [x, y] = pxs(v, h.x, h.y), k = mini ? 1 : 2, ic = holdIcon(clan);
-    if (x < -20 || y < -20 || x > g.canvas.width + 20 || y > g.canvas.height + 20) continue;
+    // cull only on the flat minimap: the world map draws inside the iso transform, where map space is not screen space
+    if (mini && (x < -20 || y < -20 || x > g.canvas.width + 20 || y > g.canvas.height + 20)) continue;
     g.save(); g.translate(Math.round(x), Math.round(y)); v.upright(g);
     g.imageSmoothingEnabled = false;
     g.drawImage(ic, -Math.floor((11 * k) / 2), -Math.floor((9 * k) / 2), 11 * k, 9 * k);

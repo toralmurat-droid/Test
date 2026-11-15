@@ -1600,7 +1600,7 @@ export class TownScene extends Phaser.Scene {
     });
     this.room.onMessage("rituals", (m) => { (this.warRituals ??= new WarRituals(this)).set(m); (this.warPlaque ??= new WarPlaque(document.getElementById("hud")!)).setRitual(this.warRituals); });
     this.room.onMessage("tunnels", (m) => { if (m && Array.isArray(m.mouths)) { this.tunnelMouths = m.mouths; if (this.minimap) this.minimap.tunnels = m.mouths; } });
-    this.room.onMessage("warplan", (m) => { if (this.minimap && m && Array.isArray(m.march)) this.minimap.plan = m; }); // the own clan's marches (server/warIntel.ts) // Hide-Kin tunnel mouths (server/warTunnels.ts), kept for a war-table marker later
+    this.room.onMessage("warplan", (m) => { if (this.minimap && m && Array.isArray(m.march)) this.minimap.plan = m; }); // the own clan's attacks of the last war tick (server/warIntel.ts)
     const warNotice = new WarNotice(document.getElementById("hud")!);
     this.room.onMessage("warev", (e) => warNotice.show(e, this.entities.get(this.me)?.sprite));
     this.room.onMessage("warraid", (r) => warNotice.raid(r, this.entities.get(this.me)?.sprite)); // the Night Raiders strike the leading clan's lands

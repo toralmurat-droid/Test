@@ -4,7 +4,7 @@
   "changes": [
     "The world map and the minimap show the war camps you have found, with Control, guards and patrols when you point at one.",
     "Announced sieges ring the land in the attacker's colour with a countdown, and fronts show as ember borders and hatching where the fighting is.",
-    "Sworn heroes also see their clan's marches, tunnel strikes and supply caravans, and the land of the active writ outlined in gold.",
+    "Sworn heroes also see where their clan struck in the last war tick (arrows, tunnel strikes) and supply caravans, and the land of the active writ outlined in gold.",
     "A new Calls to arms list on the map points to the sieges, writs and fronts where your clan needs you: click a row to go there."
   ]
 }
