@@ -108,6 +108,7 @@ import { clanView, cleanOath, Presence, swear } from "./warHeroes";
 import { WarTroops } from "./warTroops";
 import { WarCaravans } from "./warCaravans";
 import { WarSieges } from "./warSieges";
+import { WarOaths } from "./warOaths";
 import { WarWrits } from "./warWrits";
 import { cleanWrit } from "../shared/war/writs";
 import { WAR_TROOPS } from "../shared/war/troops";
@@ -664,6 +665,9 @@ export class TownRoom extends Room<TownState> {
     save: (id) => { const p = this.state.players.get(id); if (p) saveHero(p.name, p.cls, this.snapshot(p)); },
   });
 
+  /** Tabards (server/warOaths.ts): every hero's clan and Renown rank, by message (the Player schema is full). */
+  private oaths = new WarOaths({ heroes: () => this.state.players.entries(), broadcast: (msg) => this.broadcast("oaths", msg) });
+
   onCreate() {
     liveRooms.add(this);
     const offNews = attachWar(this), offTroops = onWar((v) => { this.sieges.tick(Date.now()); this.warTroops.onWar(v); this.writs.onWar(v); }); // the clan war (server/war.ts) runs on its own; the room passes on the news
@@ -734,13 +738,14 @@ export class TownRoom extends Room<TownState> {
       this.caravans.tick(Date.now()); // (caravans claim their share of WAR_TROOPS.maxTroops first, then the sieges)
       this.sieges.tick(Date.now());
       this.warTroops.tick(Date.now());
+      this.oaths.sync(); // a rank up from any source (standards, kills, writs, caravans) reaches the tabards
     }, 1000);
     this.onMessage("clan", (client, msg: { swear?: unknown }) => {
       const p = this.state.players.get(client.sessionId);
       if (!p || !this.allow("ask", client)) return;
       const err = msg && msg.swear !== undefined ? swear(p, msg.swear) : "";
       client.send("clan", { ...clanView(p), err });
-      if (!err) this.writs.oathChanged(client.sessionId); // a writ for the old clan is withdrawn
+      if (!err) { this.writs.oathChanged(client.sessionId); this.oaths.sync(); } // a writ for the old clan is withdrawn; tabards update
     });
     this.setState(new TownState());
     copyPatches(this); // each socket gets its own copy of a patch (deflate compresses later; server/patchCopy.ts)
@@ -1077,6 +1082,7 @@ export class TownRoom extends Room<TownState> {
     const war = warNow(); if (war) client.send("war", war); // the clan war front plaque (client/src/warPlaque.ts)
     client.send("siege", this.sieges.view()); // the live siege battle's fronts (server/warSieges.ts)
     client.send("clan", clanView(p));
+    this.oaths.sync(); client.send("oaths", this.oaths.full()); // tabards: others learn this hero's oath, this client gets everyone's
     this.writs.join(client.sessionId); // a war writ in progress (or withdrawn while away)
     console.log(`${p.name} the ${CLASSES[p.cls].name} joined (${this.clients.length} online)`);
   }
@@ -1101,6 +1107,7 @@ export class TownRoom extends Room<TownState> {
     this.tradeAsks.delete(client.sessionId);
     this.state.players.delete(client.sessionId);
     this.warTroops.forget(client.sessionId); this.caravans.forget(client.sessionId); this.sieges.forget(client.sessionId);
+    this.oaths.leave(client.sessionId); // (after players.delete) the tabard goes for everyone
     this.unsummon(client.sessionId);
     this.dismissAll(client.sessionId);
     this.addrs.delete(client.sessionId);

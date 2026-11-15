@@ -314,3 +314,24 @@ Open points for M1:
 - `npx tsx tools/balance/war.ts 200 30`: unchanged (no player valor in the sim).
 - Not done: kill valor and rout-writ credit for siege kills; virtual sieges in other rooms do not share front holders
   (each room keeps its own, in memory); siege works for the Host (roadmap "later").
+
+## M2: Tabards (2026-11-15)
+
+- Other players see a hero's oath and Renown rank. The Player schema is full (64 fields), so it goes by message, no
+  schema change, no save change: server -> client `"oaths"` `{full?: true, o: {sessionId: [clanKey, rankIndex]}, gone?:
+  sessionId[]}` (`Oath` / `OathsMsg` in `shared/war/renown.ts`). Unsworn heroes are never listed. Nothing comes back.
+- Server: `server/warOaths.ts` (`WarOaths` behind `OathsHost`) keeps what every client was last told and diffs: the room
+  calls `sync()` in the 1 s war interval (so renown from standards, troop kills, writs and caravans all reach it without
+  hooks), right after a `"clan"` oath, and on join before sending the joiner `full()`; `leave(id)` after the player is
+  removed sends `gone`. Room wiring: one field and four calls in `TownRoom.ts`.
+- Client: `client/src/warTabards.ts` (look only): an 8x11 px flag on a staff in the clan's cloth / trim / sigil left of
+  the name tag (gilt finial from Banneret, rank 3), a clan stripe under the name, and the rank title (`rankTitle`: "Banneret of the
+  Redfang", "Hero of the Marches, Hide-Kin"; none for Sworn) in the hero's title line, after a cosmetic title when both.
+  Shown on the own hero too. Dead or hidden heroes show none. The banner cloths are dark, so the tag lightens them
+  (`lift`) and outlines the flag; both images are drawn by the world-text camera (`__worldText`, `pixelgrid.ts`), crisp
+  and unlit at night like the name.
+- Why not a cloth on the body: hero bodies are painted HD sheets (96 px frames, per class, per facing, plus skill-move
+  sheets) with no per-frame body anchors, so a code-drawn tabard would drift off the chest. A baked overlay per class
+  and frame (like the gear overlays, `tools/art/gear.ts`) is the way if a body tabard is wanted later.
+- Tests: `tests/waroaths-room.test.ts` (full map on join, delta on oath and rank up, nothing on an unchanged rank,
+  `gone` on leave, unsworn not listed).
