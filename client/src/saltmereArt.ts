@@ -13,7 +13,7 @@ import { sheet } from "./worldProps";
 /**
  * Saltmere's harbour (docs/saltmere-rework-progress.md, phase 2): moored fishing smacks at the pier heads, rowboats
  * drawn up on the sand, a bell buoy offshore, mooring posts and lobster pots on the piers, breakwater boulders along the
- * shore east and west of the harbour square, a stone quay edge along the square's south side and fish drying on the
+ * shore east and west of the harbour square, boulders along the harbour-mouth shore between the piers and fish drying on the
  * racks. Cosmetic only: sprites, nothing here touches collisions.
  *
  * Where things stand is read from the map once (piers are BRIDGE tiles over water, the breakwater sits on water tiles
@@ -290,37 +290,6 @@ function boulder(variant: number) {
   };
 }
 
-// ---- quay edge ---------------------------------------------------------------------------------------------------
-export const QUAY = { W: 168, H: 96, OY: 52, LEN: 144 };
-/** One 3-tile stretch of the harbour square's stone edge: coursed ashlar, a coping stone, bollards and iron rings. */
-function quaySegment(bollards: number[]) {
-  const { W, H, OY, LEN } = QUAY;
-  return (p: import("./worldProps").Pen) => {
-    const g = new IsoPaint(p, W, H, W / 2 + 4, OY);
-    const half = LEN / 2;
-    const ashlar = (len: number, seed: number): Mat => (l, s, t, x, y) => {
-      const course = Math.floor(t * 3), off = course % 2 ? 6 : 0, bx = Math.floor((s * len + off) / 13), fx = (s * len + off) % 13, fy = (t * 3) % 1;
-      const mortar = fx < 0.9 || fy < 0.12;
-      const tone = (hsh(bx, course, seed) - 0.5) * 0.22;
-      const foot = t < 0.28 ? -0.1 - (hsh(Math.floor(s * len / 3), 2, seed) < 0.4 ? 0.1 : 0) : 0;
-      if (mortar) return ramp(STONER, l * 0.7 - 0.12, x, y);
-      if (foot < -0.15 && hsh(bx, 7, seed) < 0.5) return ramp(MOSS, 0.25 + l * 0.3, x, y);
-      return ramp(STONER, l * 1.2 + tone + foot + 0.06, x, y);
-    };
-    g.shadow(0, 5, 40, 0.18);
-    g.box(-half, half, 0, 8, 0, 6.2, ashlar(LEN, 3), 2 | 4); // front face (v) and the end
-    g.box(-half - 0.6, half + 0.6, -1.2, 9, 6.2, 7.8, (l, s, t, x, y) => {
-      const j = Math.floor(s * (LEN + 1.2) / 17);
-      return (s * (LEN + 1.2)) % 17 < 0.8 ? ramp(STONER, l * 0.8, x, y) : ramp(STONER, l * 1.3 + 0.08 + (hsh(j, 5, 4) - 0.5) * 0.2, x, y);
-    }); // the coping, a little proud
-    for (const bu of bollards) {
-      g.rod([bu, 4.4, 7.8], [bu, 4.4, 11.5], 2.6, (l, s, t, x, y) => ramp(IRONR, l * 0.7 - 0.1, x, y));
-      g.blob([bu, 4.4, 11.9], 3.3, 3.3, 1.3, (l, s, t, x, y) => ramp(IRONR, l * 0.75 - 0.05, x, y), 0.5, 1);
-    }
-    for (const ru of [-half * 0.55, half * 0.5]) g.blob([ru, 9.2, 3.6], 1.6, 0.5, 1.7, (l, s, t, x, y) => ramp(IRONR, l * 0.7 - 0.05, x, y)); // mooring rings
-  };
-}
-
 // ---- fish racks --------------------------------------------------------------------------------------------------
 export const FISHRACK = { W: 124, H: 56, OY: 14 };
 /** Split fish hung in rows on a drying line along u, swaying (6 frames). The posts are the map's fence. */
@@ -421,10 +390,17 @@ function buildLayout(): Spot[] {
       nb++;
     }
   }
-  // the quay edge along the square's south side, in 3-tile stretches
-  const qy = (SQ.y + SQ.h) * TILE;
-  for (let i = 0; i * 3 < SQ.w; i++) {
-    out.push({ key: `salt_quay${i % 2}`, x: (SQ.x + i * 3 + 1.5) * TILE, y: qy, ox: (QUAY.W / 2 + 4) / QUAY.W, oy: QUAY.OY / QUAY.H, depth: qy - 7 });
+  // The harbour-mouth shore between the two piers is a staircase of sand (1-2 tiles a step), too ragged for a straight stone
+  // kerb (which read as a stray wall on the beach when it stood on the square's edge): boulders on the water tiles that
+  // touch it instead, never on the piers' own water or the bell buoy's.
+  const pw = Math.min(...SALT_PIERS), pe = Math.max(...SALT_PIERS);
+  for (let y = SQ.y + SQ.h + 1; y < SQ.y + SQ.h + 12; y++) for (let x = pw + 2; x <= pe - 2; x++) {
+    if (!isWater(x, y) || Math.hypot(x + 0.5 - bx, y + 0.5 - by) < 1.6) continue;
+    const shore = [[0, -1], [-1, 0], [1, 0]].some(([dx, dy]) => { const g = gAt(x + dx, y + dy); return g !== undefined && g !== T.WATER && g !== T.BRIDGE; });
+    if (!shore || hash(x, y, 177) > 0.8) continue;
+    for (let k = 0; k < (hash(x, y, 178) < 0.4 ? 2 : 1); k++) {
+      out.push({ key: `salt_boulder${Math.floor(hash(x, y, 179 + k) * 4)}`, x: (x + 0.2 + hash(x, y, 180 + k) * 0.6) * TILE, y: (y + 0.45 + hash(x, y, 182 + k) * 0.4) * TILE, ox: 0.5, oy: BOULDER.OY / BOULDER.H, flip: hash(x, y, 184) < 0.5 });
+    }
   }
   // fish drying on the racks beside the smokehouse: one line per run of rack tiles
   const racks = new Map<number, number[]>();
@@ -447,7 +423,6 @@ export function addSaltmereProps(scene: Phaser.Scene, light?: (x: number, y: num
   mk("salt_post", POST.W, POST.H, 1, mooringPost);
   for (let v = 0; v < 2; v++) mk(`salt_pots${v}`, POTS.W, POTS.H, 1, lobsterPots(v));
   for (let v = 0; v < 4; v++) mk(`salt_boulder${v}`, BOULDER.W, BOULDER.H, 1, boulder(v));
-  mk("salt_quay0", QUAY.W, QUAY.H, 1, quaySegment([-52])); mk("salt_quay1", QUAY.W, QUAY.H, 1, quaySegment([46]));
   mk("salt_fishline", FISHRACK.W, FISHRACK.H, N, fishLine);
   for (const k of ["salt_buoy", "salt_fishline"]) if (!scene.anims.exists(`${k}_idle`)) scene.anims.create({ key: `${k}_idle`, frames: scene.anims.generateFrameNumbers(k, { start: 0, end: N - 1 }), frameRate: k === "salt_buoy" ? 5 : 3, repeat: -1 });
   const perches = SALT_PERCHES.length;
