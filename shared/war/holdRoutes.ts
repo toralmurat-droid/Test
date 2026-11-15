@@ -2,7 +2,7 @@
  * Walking round the Hold walls (shared/war/holdWalls.ts) for monsters that steer by themselves (server/warTroops.ts
  * walk: a guard going to its post on the far side of the fort, a man coming out of the courtyard). Away from a fort,
  * or when the straight way is clear, the goal itself; else the farthest tile in sight along the shortest tile path to
- * the goal (a small BFS field round the Hold, cached per goal and holder).
+ * the goal (a small BFS field round the Hold, cached per goal tile and holder).
  */
 import { MAP_H, MAP_W, TILE } from "../constants";
 import { blocked } from "../movement";
@@ -13,11 +13,18 @@ import { HOLDS } from "./standards";
 const FIELD_R = 18;
 /** Tiles of the path looked along for the farthest one in sight (long enough that a hook round stumps reads the same from each tile on it). */
 const CHAIN = 20;
-/** Fields kept (goal x holder); all are dropped when there are more. */
+/** Fields kept (goal tile x holder); all are dropped when there are more. */
 const FIELD_MAX = 1500;
 
 interface Field { x0: number; y0: number; w: number; h: number; dist: Int16Array }
 const fields = new Map<string, Field>();
+/** At most this many new fields per server tick (routeFrame): a crowd chasing heroes spreads the work over ticks. */
+const BUILDS_PER_TICK = 8;
+let builds = 0, capped = false, built = 0;
+/** The server starts a tick: the field budget refills. (Never called, as in tests and tools: no cap.) */
+export function routeFrame() { capped = true; builds = 0; }
+/** Tests: fields built so far. */
+export const _fieldBuilds = () => built;
 
 const STEPS: [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
@@ -42,14 +49,16 @@ function clearLine(ax: number, ay: number, bx: number, by: number): boolean {
 }
 
 /**
- * Steps (8-way, never cutting a corner) from every tile round the Hold at tile (hx, hy) to the goal (px), with the walls
- * as they stand: 0 on the goal's tile (if open) and on each open tile next to it with the goal in a straight line (a goal by a stump).
+ * Steps (8-way, never cutting a corner) from every tile round the Hold at tile (hx, hy) to goal tile (gx, gy), with the
+ * walls as they stand: 0 on the goal tile (if open) and on the open tiles next to it that lead to it. Keyed by tile, so a monster chasing a hero rebuilds it only when the hero changes tile.
  */
-function field(hx: number, hy: number, px: number, py: number, k: string): Field {
+function field(hx: number, hy: number, gx: number, gy: number, k: string): Field | undefined {
   const got = fields.get(k);
   if (got) return got;
+  if (capped && builds >= BUILDS_PER_TICK) return undefined; // enough built this tick: straight on until the next
+  builds++; built++;
   if (fields.size >= FIELD_MAX) fields.clear();
-  const gx = Math.floor(px / TILE), gy = Math.floor(py / TILE);
+  const px = (gx + 0.5) * TILE, py = (gy + 0.5) * TILE;
   const x0 = Math.max(0, Math.min(hx - FIELD_R, gx - 2)), y0 = Math.max(0, Math.min(hy - FIELD_R, gy - 2));
   const x1 = Math.min(MAP_W - 1, Math.max(hx + FIELD_R, gx + 2)), y1 = Math.min(MAP_H - 1, Math.max(hy + FIELD_R, gy + 2));
   const w = x1 - x0 + 1, h = y1 - y0 + 1, dist = new Int16Array(w * h).fill(-1), walk = new Uint8Array(w * h);
@@ -57,10 +66,12 @@ function field(hx: number, hy: number, px: number, py: number, k: string): Field
   const free = (x: number, y: number) => x >= x0 && y >= y0 && x <= x1 && y <= y1 && walk[(y - y0) * w + x - x0] === 1;
   const q = new Int32Array(w * h);
   let head = 0, tail = 0;
-  if (free(gx, gy)) { dist[(gy - y0) * w + gx - x0] = 0; q[tail++] = (gy - y0) * w + gx - x0; }
+  const open = free(gx, gy);
+  if (open) { dist[(gy - y0) * w + gx - x0] = 0; q[tail++] = (gy - y0) * w + gx - x0; }
   for (const [dx, dy] of STEPS) {
     const nx = gx + dx, ny = gy + dy, n = (ny - y0) * w + nx - x0;
-    if (free(nx, ny) && clearLine((nx + 0.5) * TILE, (ny + 0.5) * TILE, px, py)) { dist[n] = 0; q[tail++] = n; }
+    // an open goal tile: its neighbours with its middle in sight; a stump's tile (the goal stands at its edge): the four beside it
+    if (free(nx, ny) && (open ? clearLine((nx + 0.5) * TILE, (ny + 0.5) * TILE, px, py) : !dx || !dy)) { dist[n] = 0; q[tail++] = n; }
   }
   while (head < tail) {
     const c = q[head++], cx = (c % w) + x0, cy = Math.floor(c / w) + y0;
@@ -87,7 +98,8 @@ export function fortDetour(x: number, y: number, gx: number, gy: number): { x: n
     const r = liveReachPx(hd.t);
     if (!r || !crossesSquare(x, y, gx, gy, hd.x, hd.y, r + 3 * TILE) || clearLine(x, y, gx, gy)) continue; // (rocks by the walls count: they make the corners)
     const htx = Math.floor(hd.x / TILE), hty = Math.floor(hd.y / TILE);
-    const f = field(htx, hty, gx, gy, `${hd.t}:${liveHolder(hd.t)}:${Math.round(gx)},${Math.round(gy)}`);
+    const gtx = Math.floor(gx / TILE), gty = Math.floor(gy / TILE), f = field(htx, hty, gtx, gty, `${hd.t}:${liveHolder(hd.t)}:${gtx},${gty}`);
+    if (!f) return { x: gx, y: gy };
     const at = (tx: number, ty: number) => (tx >= f.x0 && ty >= f.y0 && tx < f.x0 + f.w && ty < f.y0 + f.h ? f.dist[(ty - f.y0) * f.w + tx - f.x0] : -1);
     let tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
     if (tx < f.x0 || ty < f.y0 || tx >= f.x0 + f.w || ty >= f.y0 + f.h) return { x: gx, y: gy };

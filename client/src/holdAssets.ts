@@ -2,79 +2,79 @@ import type Phaser from "phaser";
 import type { ClanKey } from "../../shared/war/clans";
 import { fortOf } from "../../shared/war/holdWalls";
 import { TILE } from "../../shared/constants";
-import { composeGround, fortLayout, paintPiece, type Painted } from "./holdArt";
+import { atlasFile, type AtlasMeta, fortLayout, groundPlan } from "./holdArt";
 import { isoAnchor } from "./iso";
 
 /**
- * Clan Holds at run time, built from the fort cells (shared/war/holdWalls.ts fortOf): the pieces of holdArt.ts are
- * painted once per look, turned into textures and shared by every Hold; each cell gets one image, sorted by the depth of
- * its foot with heroes, and the compound's ground is one image per Hold under everything. Painting is cut into slices
- * (a few ms per frame) so walking up to a Hold never stalls. Texels are 1.5 per world px, as all world art.
+ * Clan Holds at run time. The pieces and ground tiles are baked at art time (tools/art/holds.ts, `npm run art`) into one
+ * atlas per clan (PNG + JSON), loaded lazily when a Hold of that clan is near. Nothing is painted in the browser: a Hold
+ * is built from the fort's cells (shared/war/holdWalls.ts fortOf) in one go, one image per cell sorted by the depth of its
+ * foot with heroes, and the ground tiles blitted into one canvas under them. Texels are 1.5 per world px, as all world art.
  */
 export const HOLD_SCALE = 1 / 1.5;
 /** How near (px) the hero must be before a Hold is drawn; one farther than HOLD_KEEP is dropped again. */
 export const HOLD_RANGE = 1100, HOLD_KEEP = 1500;
+export const atlasKey = (k: ClanKey) => `holdatlas_${k}`;
 
-const toTexture = (scene: Phaser.Scene, key: string, p: Painted) => {
-  if (scene.textures.exists(key)) return;
-  const c = document.createElement("canvas");
-  c.width = p.w; c.height = p.h;
-  const g = c.getContext("2d")!;
-  g.putImageData(new ImageData(p.data, p.w, p.h), 0, 0);
-  scene.textures.addCanvas(key, c)?.setFilter(1); // NEAREST: hard pixels like other painted props
-};
-
-const queue: (() => void)[] = [];
-let pumping = false;
-/** Runs queued paint jobs for about 8 ms per slice. */
-function pump() {
-  const t0 = performance.now();
-  while (queue.length && performance.now() - t0 < 8) queue.shift()!();
-  if (queue.length) window.setTimeout(pump, 0); else pumping = false;
+const meta = new Map<ClanKey, AtlasMeta>(), asked = new Set<ClanKey>();
+/** True when the clan's atlas is loaded; otherwise starts loading it (once; retried after a failure) and returns false. `done` runs when it arrives. */
+export function ensureHold(scene: Phaser.Scene, k: ClanKey, done?: () => void): boolean {
+  if (meta.has(k) && scene.textures.exists(atlasKey(k))) return true;
+  if (asked.has(k)) return false;
+  asked.add(k);
+  const key = atlasKey(k), jkey = `${key}_json`;
+  let left = 2, bad = false;
+  const fin = () => {
+    if (--left) return;
+    if (bad) { window.setTimeout(() => asked.delete(k), 15000); return; } // try again later, never throw
+    const m = scene.cache.json.get(jkey) as AtlasMeta, tex = scene.textures.get(key);
+    for (const [name, f] of Object.entries(m.frames)) tex.add(name, 0, f.x, f.y, f.w, f.h);
+    tex.setFilter(1); // NEAREST: hard pixels like other painted props
+    meta.set(k, m);
+    done?.();
+  };
+  for (const kk of [key, jkey]) {
+    const err = (f: { key?: string }) => { if (f?.key === kk) { scene.load.off("loaderror", err); bad = true; fin(); } };
+    scene.load.on("loaderror", err);
+    scene.load.once(`filecomplete-${kk === key ? "image" : "json"}-${kk}`, () => { scene.load.off("loaderror", err); fin(); });
+  }
+  scene.load.image(key, `assets/holds/${atlasFile(k, "png")}`);
+  scene.load.json(jkey, `assets/holds/${atlasFile(k, "json")}`);
+  if (!scene.load.isLoading()) scene.load.start();
+  return false;
 }
-const later = (job: () => void) => { queue.push(job); if (!pumping) { pumping = true; window.setTimeout(pump, 0); } };
 
-/** Origin of each piece texture, as a fraction: x is always the middle, y the ground line (the cell's middle). */
-const originY = new Map<string, number>();
-const pieceTex = (scene: Phaser.Scene, key: string, spec: Parameters<typeof paintPiece>[0]) => {
-  if (scene.textures.exists(key)) return;
-  const p = paintPiece(spec);
-  originY.set(key, p.oy / p.h);
-  toTexture(scene, key, p);
-};
-
-/** One Hold on screen: ground and standing pieces of the clan's fort at that land. */
+/** One Hold on screen: ground and standing pieces of the clan's fort at that land. Needs ensureHold(clan) to be true. */
 export class HoldDraw {
   private objs: Phaser.GameObjects.GameObject[] = [];
   private gkey = "";
-  private dead = false;
-  constructor(private scene: Phaser.Scene, readonly t: number, readonly clan: ClanKey, onReady?: () => void) {
-    const f = fortOf(t, clan);
-    if (!f) return;
-    const insts = fortLayout(f), specs = new Map(insts.map((i) => [i.key, i.spec]));
-    const need = [...specs].filter(([k]) => !scene.textures.exists(k));
-    for (const [k, spec] of need) later(() => { if (!this.dead) pieceTex(scene, k, spec); });
-    later(() => {
-      if (this.dead) return;
-      const ground = composeGround(f);
-      this.gkey = `holdg_${t}_${clan}`;
-      toTexture(scene, this.gkey, ground);
-      const cx = (f.cx + 0.5) * TILE, cy = (f.cy + 0.5) * TILE;
-      const place = (img: Phaser.GameObjects.Image, x: number, y: number, depth: number) => {
-        img.setScale(HOLD_SCALE).setDepth(depth);
-        this.objs.push(isoAnchor(img, { x, y }));
-      };
-      // the trampled ground lies under everything (heroes walk the compound); the pieces sort by their feet
-      place(scene.add.image(cx, cy, this.gkey).setOrigin(ground.ox / ground.w, ground.oy / ground.h), cx, cy, -0.5);
-      for (const i of insts) {
-        const x = cx + i.dx * TILE, y = cy + i.dy * TILE;
-        place(scene.add.image(x, y, i.key).setOrigin(0.5, originY.get(i.key) ?? 0.5), x, y, y + i.foot);
-      }
-      onReady?.();
-    });
+  constructor(private scene: Phaser.Scene, readonly t: number, readonly clan: ClanKey) {
+    const f = fortOf(t, clan), m = meta.get(clan);
+    if (!f || !m) return;
+    const akey = atlasKey(clan), src = scene.textures.get(akey).getSourceImage() as CanvasImageSource;
+    const plan = groundPlan(f), cv = document.createElement("canvas");
+    cv.width = plan.w; cv.height = plan.h;
+    const g = cv.getContext("2d")!;
+    g.imageSmoothingEnabled = false;
+    for (const tl of plan.tiles) { const fr = m.frames[tl.key]; if (fr) g.drawImage(src, fr.x, fr.y, fr.w, fr.h, tl.x, tl.y, fr.w, fr.h); }
+    this.gkey = `holdg_${t}_${clan}`;
+    if (scene.textures.exists(this.gkey)) scene.textures.remove(this.gkey);
+    scene.textures.addCanvas(this.gkey, cv)?.setFilter(1);
+    const cx = (f.cx + 0.5) * TILE, cy = (f.cy + 0.5) * TILE;
+    const place = (img: Phaser.GameObjects.Image, x: number, y: number, depth: number) => {
+      img.setScale(HOLD_SCALE).setDepth(depth);
+      this.objs.push(isoAnchor(img, { x, y }));
+    };
+    // the trampled ground lies under everything (heroes walk the compound); the pieces sort by their feet
+    place(scene.add.image(cx, cy, this.gkey).setOrigin(plan.ox / plan.w, plan.oy / plan.h), cx, cy, -0.5);
+    for (const i of fortLayout(f)) {
+      const fr = m.frames[i.key];
+      if (!fr) continue; // not in the atlas (art out of date): that cell stays bare
+      const x = cx + i.dx * TILE, y = cy + i.dy * TILE;
+      place(scene.add.image(x, y, akey, i.key).setOrigin(fr.ox / fr.w, fr.oy / fr.h), x, y, y + i.foot);
+    }
   }
   destroy() {
-    this.dead = true;
     for (const o of this.objs) o.destroy();
     this.objs = [];
     if (this.gkey && this.scene.textures.exists(this.gkey)) this.scene.textures.remove(this.gkey);

@@ -11,6 +11,9 @@
  */
 import { MAP_H, MAP_W, TILE } from "../constants";
 import { DOORS, isSolidTile, PORTAL_SPOTS, WORLD } from "../map";
+import { BOARDS } from "../bounty";
+import { CHESTS } from "../chests";
+import { LINKS } from "../dungeon";
 import { NPCS } from "../npcs";
 import { CLAN_KEYS, type ClanKey } from "./clans";
 import { HOLD_FORT_PX, HOLDS, STANDARDS, type Hold } from "./standards";
@@ -107,8 +110,8 @@ function parsePlan(clan: ClanKey): FortPlan {
 /** Each clan's fort plan (before fitting to a Hold). */
 export const FORT_PLANS: Record<ClanKey, FortPlan> = Object.fromEntries(CLAN_KEYS.map((k) => [k, parsePlan(k)])) as Record<ClanKey, FortPlan>;
 
-/** Tiles a fort wall keeps from a portal stone, an NPC, and a standard (its spot and some of its ring stay open ground). */
-export const HOLD_WALL_KEEP = { portal: 3, npc: 1.5, standard: 2 };
+/** Tiles a fort wall keeps from a portal stone, an NPC, a standard (its spot and some of its ring stay open ground), and a chest, bounty board or stair. */
+export const HOLD_WALL_KEEP = { portal: 3, npc: 1.5, standard: 2, prop: 1.5 };
 
 /** One clan's fort as built at one Hold. Offsets in `cells`; absolute tiles in `walls` (blocking) and `gates` (gates and gaps). */
 export interface HoldFort {
@@ -131,7 +134,7 @@ const key = (x: number, y: number) => y * MAP_W + x;
 const N4: [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 
 let doorTiles: Set<number> | undefined;
-/** Must tile (x, y) stay open ground (a road, a dungeon gate, by a portal stone, an NPC or a standard)? */
+/** Must tile (x, y) stay open ground (a road, a dungeon gate, by a portal stone, an NPC, a chest, a board, a stair or a standard)? */
 function keepOpen(x: number, y: number): boolean {
   if (WORLD.roads.has(key(x, y))) return true;
   if (!doorTiles) { doorTiles = new Set(); for (const d of DOORS) for (const k of d.tiles) doorTiles.add(k); }
@@ -139,6 +142,8 @@ function keepOpen(x: number, y: number): boolean {
   const K = HOLD_WALL_KEEP, mx = x + 0.5, my = y + 0.5;
   if (PORTAL_SPOTS.some((p) => Math.hypot(p.x + 0.5 - mx, p.y + 0.5 - my) < K.portal)) return true;
   if (NPCS.some((n) => Math.hypot(n.x / TILE - mx, n.y / TILE - my) < K.npc)) return true;
+  // things a hero walks up to and uses: chests, bounty boards, stairs and ropes
+  if ([...CHESTS, ...BOARDS, ...LINKS].some((o) => Math.hypot(o.x / TILE - mx, o.y / TILE - my) < K.prop)) return true;
   return STANDARDS.some((s) => Math.hypot(s.x / TILE - mx, s.y / TILE - my) < K.standard);
 }
 

@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { ANIMS, COLS, DIRS, FH, FW, HEROES, K, LH, NPCS, PAINT_COLS, PAINT_DIRS, animsOf, buildSheet } from "./characters";
 import { buildObjects } from "./objects";
+import { buildHolds } from "./holds";
 import { buildGear } from "./gear";
 import { buildPainted, PAINT_K } from "./paint/sheets";
 import { buildPoseVariants } from "./paint/pose-variants";
@@ -40,6 +41,7 @@ writeFileSync(`${OUT}/characters/characters.json`, JSON.stringify({
 
 // ---- objects ----
 buildObjects(OUT + "/objects");
+buildHolds(OUT + "/holds"); // clan Hold atlases, loaded lazily by the client (holdAssets.ts)
 // ---- gear overlays (must run after the plain sheets; see gear.ts) ----
 buildGear(OUT + "/gear");
 // ---- painted (smooth) characters + gear: assets/hd, used unless ?pixel=1 (`npm run art -- --hd-only knight` = just those) ----

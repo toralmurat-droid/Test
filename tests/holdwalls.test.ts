@@ -4,6 +4,9 @@ import { dirInput, MAP_H, MAP_W, PLAYER_RADIUS, TILE } from "../shared/constants
 import { DOORS, isSolidTile, PORTAL_SPOTS, WORLD } from "../shared/map";
 import { blocked, moveStep, nearestFree } from "../shared/movement";
 import { NPCS } from "../shared/npcs";
+import { BOARDS } from "../shared/bounty";
+import { CHESTS } from "../shared/chests";
+import { LINKS } from "../shared/dungeon";
 import { CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import {
   anyHoldWall, BLOCKING, FORT_PLANS, fortOf, HOLD_WALL_KEEP, holdReachPx, holdTiles, holdWallAt, liveHoldWall, REACH_BOX, setHoldOwners, touchesHoldWall, type FortCell,
@@ -69,7 +72,7 @@ test("hold walls: each clan builds a clearly different fort (size, shape, gates)
   assert.ok(has("wardens", "tower") >= 1 && has("redfang", "tent") >= 4 && has("host", "tower") >= 4 && has("hidekin", "mound") >= 1 && has("veiled", "tower") >= 1);
 });
 
-test("hold walls: every Hold under every clan keeps its gates and courtyard reachable, covers no standard, portal stone, road, NPC or dungeon gate", () => {
+test("hold walls: every Hold under every clan keeps its gates and courtyard reachable, covers no standard, portal stone, road, NPC, chest, board, stair or dungeon gate", () => {
   assert.ok(HOLDS.length >= 50);
   const doors = new Set(DOORS.flatMap((d) => d.tiles)), K = HOLD_WALL_KEEP;
   for (const h of HOLDS) {
@@ -85,6 +88,8 @@ test("hold walls: every Hold under every clan keeps its gates and courtyard reac
         assert.ok(!PORTAL_SPOTS.some((p) => Math.hypot(p.x - x, p.y - y) < K.portal), `${name}: clear of portal stones`);
         assert.ok(!NPCS.some((n) => Math.hypot(n.x / TILE - x - 0.5, n.y / TILE - y - 0.5) < K.npc), `${name}: clear of NPCs`);
         assert.ok(!STANDARDS.some((s) => Math.hypot(s.x / TILE - x - 0.5, s.y / TILE - y - 0.5) < K.standard), `${name}: clear of standards`);
+        const prop = [...CHESTS, ...BOARDS, ...LINKS].find((o) => Math.hypot(o.x / TILE - x - 0.5, o.y / TILE - y - 0.5) < K.prop);
+        assert.ok(!prop, `${name}: clear of chests, boards and stairs (${prop?.id})`);
       }
       for (const [x, y] of f.gates) assert.ok(!walls.has(y * MAP_W + x), `${name}: no wall on a gate`);
       // no wall of another Hold overlaps this one
@@ -230,4 +235,27 @@ test("hold walls: patrol routes, gate spots and guard posts lie outside every cl
     }
   } finally { setHoldOwners([]); }
   assert.ok(lands >= 50 && posts >= lands * 4 * CLAN_KEYS.length * 0.9, `${lands} lands, ${posts} posts reached`);
+});
+
+test("hold walls: troopers chasing a hero round a fort build a route field only when the hero changes tile", async () => {
+  const { _fieldBuilds } = await import("../shared/war/holdRoutes");
+  const h = wholeHold("host"), f = fortOf(h.t, "host")!;
+  try {
+    setHoldOwners(allOwned("host"));
+    // the hero walks about the keep's courtyard; twenty troopers outside the walls chase him every tick for 4 s
+    const men = Array.from({ length: 20 }, (_, i) => { const a = (i / 20) * 2 * Math.PI; return { x: h.x + Math.cos(a) * 6 * TILE, y: h.y + Math.sin(a) * 6 * TILE }; });
+    const before = _fieldBuilds(), path = [[0, 0], [-1, -1], [-1, 1], [1, 1], [1, -1]];
+    let ticks = 0;
+    for (let i = 0; i < 80; i++) {
+      const [px, py] = path[Math.floor(i / 16)], gx = (f.cx + px + 0.5) * TILE + (i % 16) * 0.5, gy = (f.cy + py + 0.5) * TILE; // drifts inside one tile, then moves on
+      for (const m of men) {
+        const to = fortDetour(m.x, m.y, gx, gy), dx = to.x - m.x, dy = to.y - m.y, d = Math.hypot(dx, dy);
+        ({ x: m.x, y: m.y } = moveStep(m.x, m.y, dirInput(dx, dy), 0.05, Math.min(TROOP.speed * 3, d / 0.05)));
+      }
+      ticks++;
+    }
+    const built = _fieldBuilds() - before;
+    assert.ok(built <= path.length, `${built} fields for ${ticks} ticks of 20 chasers (one per tile the hero stood on)`);
+    assert.ok(men.filter((m) => Math.hypot(m.x - h.x, m.y - h.y) < 3 * TILE).length >= 10, "most chasers came in through the gate");
+  } finally { setHoldOwners([]); }
 });

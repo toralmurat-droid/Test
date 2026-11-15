@@ -9,6 +9,7 @@ import { BLOCKING, FORT_PLANS, fortOf, setHoldOwners, touchesHoldWall } from "..
 import { newWar } from "../shared/war/rules";
 import { HOLDS } from "../shared/war/standards";
 import { _resetWar, warState } from "../server/war";
+import { rememberLive } from "../server/handoff";
 
 /** A Hold whose `clan` fort stands whole (no wall left out), away from any other Hold. */
 const HOLD = HOLDS.find((h) => {
@@ -67,5 +68,22 @@ test("hold walls (room): when the land changes hands, heroes and monsters standi
     assert.ok(!blocked(p.x, p.y) && Math.hypot(p.x - sx, p.y - sy) <= 1.5 * TILE, `the hero stands on free ground next to it (${((p.x - sx) / TILE).toFixed(1)}, ${((p.y - sy) / TILE).toFixed(1)} tiles)`);
     assert.ok(!blocked(mob.x, mob.y) && Math.hypot(mob.x - sx, mob.y - sy) <= 2 * TILE, "the monster too");
     assert.ok(!touchesHoldWall(mob.homeX, mob.homeY, PLAYER_RADIUS), "and its home is out of the wall");
+  } finally { setHoldOwners([]); await srv.stop(); }
+});
+
+test("hold walls (room): a hero coming back (resume after an update) where a wall now stands is out of it at once, not at the next sweep", async () => {
+  const srv = await startRoom();
+  try {
+    await setup(srv, "wardens"); // the room is up, the Wardens' palisade stands
+    const room = srv.room, f = fortOf(HOLD.t, "wardens")!, [wx, wy] = f.walls.find(([x, y]) => y === f.cy - 4 && Math.abs(x - f.cx) <= 1)!;
+    const sx = (wx + 0.5) * TILE, sy = (wy + 0.5) * TILE, name = `Wallback${process.pid % 1000}`;
+    room.holdWalls.sync = () => 0; // no sweep: only the join itself may move the hero
+    rememberLive(name, "wizard", { x: sx, y: sy, dir: "down", hp: 50, mana: 0, energy: 0, group: [] });
+    const sid = "wallback";
+    room.onJoin({ sessionId: sid, send: () => {} }, { cls: "wizard" }, { name }); // a returning hero (not New game)
+    const p = room.state.players.get(sid);
+    assert.ok(Math.hypot(p.x - sx, p.y - sy) <= 1.5 * TILE, `back where they stood, or a tile off it (${((p.x - sx) / TILE).toFixed(1)}, ${((p.y - sy) / TILE).toFixed(1)})`);
+    assert.ok(!touchesHoldWall(p.x, p.y, PLAYER_RADIUS) && !blocked(p.x, p.y), "not inside the palisade");
+    room.state.players.delete(sid);
   } finally { setHoldOwners([]); await srv.stop(); }
 });

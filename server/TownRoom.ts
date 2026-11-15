@@ -107,6 +107,7 @@ import { Player } from "./player";
 import { byPart, hitBy } from "./hitBy";
 import { addValor, attachWar, onWar, rallyTell, warNow, warState } from "./war";
 import { HoldWalls } from "./holdWalls";
+import { routeFrame } from "../shared/war/holdRoutes";
 import { clanView, cleanOath, Presence, swear } from "./warHeroes";
 import { WarTroops } from "./warTroops";
 import { WarCaravans } from "./warCaravans";
@@ -1140,6 +1141,7 @@ export class TownRoom extends Room<TownState> {
     if (options?.newGame) dropLive(p.name, p.cls);
     const back = options?.newGame ? undefined : takeLive(p.name, p.cls);
     if (back) this.resume(p, back);
+    this.holdWalls.admit(p, warState()?.owner); // a Hold wall rose where they stood: step out of it now
     if (options?.newGame) saveHero(p.name, p.cls, this.snapshot(p));
     else if (loaded) this.writeLoaded(p, loaded);
     // A quest that carries on by itself (QuestDef.auto) but did not start (they left right after the last one, or its
@@ -2992,6 +2994,7 @@ export class TownRoom extends Room<TownState> {
   private update(dtMs: number) {
     let dt = dtMs / 1000;
     const now = Date.now();
+    routeFrame(); // a fresh budget of route fields round the Hold walls (shared/war/holdRoutes.ts)
     this.tradeTick();
     if (now >= this.autoAt) { this.autoAt = now + 500; this.autoGolems(now); this.golemNews(now); }
     this.state.players.forEach((p, pid) => {

@@ -29,6 +29,12 @@ export class HoldWalls {
     return moved;
   }
 
+  /** A hero coming in (a login, a resume after an update) at a spot a fort has walled since: out at once, not at the next sweep. */
+  admit(b: WallBody, owner: readonly ClanKey[] | undefined): boolean {
+    setHoldOwners(owner ?? []);
+    return this.free(b);
+  }
+
   /** Moves a body out of a wall (true if it was in one and moved). */
   private free(b: WallBody): boolean {
     if (!touchesHoldWall(b.x, b.y, PLAYER_RADIUS)) return false;

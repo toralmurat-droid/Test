@@ -7,7 +7,7 @@ import Phaser from "phaser";
 import { CLANS, CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
 import { RENOWN_RANKS, rankOf } from "../../shared/war/renown";
 import { HOLDS, STANDARD, STANDARDS, type Standard } from "../../shared/war/standards";
-import { HoldDraw, HOLD_KEEP, HOLD_RANGE } from "./holdAssets";
+import { ensureHold, HoldDraw, HOLD_KEEP, HOLD_RANGE } from "./holdAssets";
 import { fortOf } from "../../shared/war/holdWalls";
 import { TILE } from "../../shared/constants";
 import { targetsOf, type WarState } from "../../shared/war/rules";
@@ -51,6 +51,8 @@ export class WarStandards {
   private poles = new Map<number, Phaser.GameObjects.Image>();
   private holds = new Map<number, HoldDraw | Phaser.GameObjects.Graphics>();
   private holdClan = new Map<number, ClanKey>();
+  /** Holds shown as flat blocks for now (the atlas is loading, or the top-down view): solid cells are never left bare. */
+  private holdFlat = new Set<number>();
   private rings = new Map<number, Phaser.GameObjects.Ellipse>();
   private prompt = document.createElement("div");
   private el = document.createElement("div");
@@ -128,6 +130,7 @@ export class WarStandards {
   /**
    * Each land's Hold, drawn from the cells of its holder's fort (holdAssets.ts, shared/war/holdWalls.ts): the same cells
    * the server makes solid. A Hold near the hero is built when seen, rebuilt when the land changes hands, dropped when far.
+   * While the clan's baked atlas loads (or in the top-down view) the cells show as flat blocks, so a solid cell is never bare.
    * Cheap when nothing is new.
    */
   private syncHolds(me: { x: number; y: number } | undefined) {
@@ -135,14 +138,19 @@ export class WarStandards {
     if (!v || !me) return;
     for (const h of HOLDS) {
       const k = CLAN_KEYS[v.owner[h.t]], have = this.holds.get(h.t), d = Math.hypot(h.x - me.x, h.y - me.y);
-      if (have && (!k || this.holdClan.get(h.t) !== k || d > HOLD_KEEP)) { have.destroy(); this.holds.delete(h.t); this.holdClan.delete(h.t); }
-      if (!k || d > HOLD_RANGE || this.holds.has(h.t)) continue;
-      this.holdClan.set(h.t, k);
-      this.holds.set(h.t, ISO ? new HoldDraw(this.scene, h.t, k) : this.flatHold(h.t, k));
+      if (have && (!k || d > HOLD_KEEP)) { have.destroy(); this.holds.delete(h.t); this.holdClan.delete(h.t); this.holdFlat.delete(h.t); continue; }
+      if (!k || d > HOLD_RANGE) continue;
+      // the baked art of this clan is there: build the Hold in one go (the old one goes the same frame, so a wall is never bare)
+      const ready = ISO && ensureHold(this.scene, k, () => this.syncHolds(this.hero));
+      if (have && this.holdClan.get(h.t) === k && !(ready && this.holdFlat.has(h.t))) continue;
+      const draw: HoldDraw | Phaser.GameObjects.Graphics = ready ? new HoldDraw(this.scene, h.t, k) : this.flatHold(h.t, k);
+      have?.destroy();
+      this.holds.set(h.t, draw); this.holdClan.set(h.t, k);
+      if (ready) this.holdFlat.delete(h.t); else this.holdFlat.add(h.t);
     }
   }
 
-  /** The top-down view has no iso art: the fort's cells as flat blocks (walls solid, gates and gaps open). */
+  /** The fort's cells as flat blocks (walls solid, gates and gaps open): the top-down view, and the stand-in while the art loads. */
   private flatHold(t: number, k: ClanKey) {
     const g = this.scene.add.graphics().setDepth(-0.4), f = fortOf(t, k);
     if (f) for (const c of f.cells) {

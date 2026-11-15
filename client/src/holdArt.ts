@@ -13,9 +13,9 @@ import type { Pen } from "./worldProps";
  * cells: `fortLayout(fort)` turns them into pieces, one per cell (a tower or mound that spans several cells is one
  * piece), and `paintPiece` draws each piece once per look with the depth-buffered iso painter (isoPaint.ts: lit and
  * shaded faces, like the bonfire). Walls pick their shape from which neighbours they join (a 4-bit mask, plus diagonals
- * for stair-stepped walls), so a wall is straight, a corner, a T or an end. The client turns the pieces into textures
- * once (holdAssets.ts), puts one image on every cell, sorted by depth with heroes, and lays the trampled ground of the
- * whole compound under them as one image (`paintGround` tiles, `composeGround`).
+ * for stair-stepped walls), so a wall is straight, a corner, a T or an end. The pieces are baked at art time into one atlas per clan
+ * (tools/art/holds.ts, `npm run art`) and the client only loads it (holdAssets.ts), puts one image on every cell, sorted by depth with heroes, and lays the trampled ground of the
+ * whole compound under them as one image (`paintGround` tiles, `groundPlan`).
  *
  * Every piece is painted a little past its cell and then clipped to the cell by the model point each pixel shows, so
  * neighbours meet without a seam and the outline only rings the real silhouette. Units are texels, 1.5 per world px
@@ -632,30 +632,52 @@ export function paintGround(clan: ClanKey, mask: number, v: number, road: boolea
   return { w: W, h: H, ox: GROUND_OX, oy: GROUND_OY, data };
 }
 
-const groundCache = new Map<string, Painted>();
-/** The whole compound's ground as one image, origin on the middle cell's centre (tile offsets (dx, dy) sit at ((dx - dy) * 48, (dx + dy) * 24)). */
-export function composeGround(f: HoldFort): Painted {
+/** Key of one ground tile look (atlas frame name). */
+export const groundKey = (clan: ClanKey, mask: number, v: number, road: boolean) => `hg_${clan}_${mask}_${v}_${road ? 1 : 0}`;
+export interface GroundPlan {
+  /** Size and origin (the middle cell's centre) of the compound's ground image, in texels. */
+  w: number; h: number; ox: number; oy: number;
+  /** The tiles to lay, back to front, at pixel (x, y) of that image. */
+  tiles: { key: string; clan: ClanKey; mask: number; v: number; road: boolean; x: number; y: number }[];
+}
+/** Which ground tiles, where, make up a fort's compound (tile offsets (dx, dy) sit at ((dx - dy) * 48, (dx + dy) * 24)). */
+export function groundPlan(f: HoldFort): GroundPlan {
   const cell = new Set(f.cells.map((c) => `${c.dx},${c.dy}`)), at = (dx: number, dy: number) => cell.has(`${dx},${dy}`);
   let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
   for (const c of f.cells) {
     const px = (c.dx - c.dy) * T, py = (c.dx + c.dy) * T / 2;
     x0 = Math.min(x0, px - GROUND_OX); x1 = Math.max(x1, px - GROUND_OX + GROUND_W); y0 = Math.min(y0, py - GROUND_OY); y1 = Math.max(y1, py - GROUND_OY + GROUND_H);
   }
-  const w = x1 - x0, h = y1 - y0, data = new Uint8ClampedArray(w * h * 4);
+  const tiles: GroundPlan["tiles"] = [];
   for (const c of [...f.cells].sort((a, b) => a.dy + a.dx - b.dy - b.dx)) {
     const mask = (at(c.dx + 1, c.dy) ? J.E : 0) | (at(c.dx - 1, c.dy) ? J.W : 0) | (at(c.dx, c.dy + 1) ? J.S : 0) | (at(c.dx, c.dy - 1) ? J.N : 0);
-    const v = Math.floor(hsh(f.cx + c.dx, f.cy + c.dy, 19) * 3), road = c.kind === "gate", key = `${f.clan}_${mask}_${v}_${road ? 1 : 0}`;
-    let t = groundCache.get(key); if (!t) groundCache.set(key, t = paintGround(f.clan, mask, v, road));
-    const ox = (c.dx - c.dy) * T - GROUND_OX - x0, oy = (c.dx + c.dy) * T / 2 - GROUND_OY - y0;
+    const v = Math.floor(hsh(f.cx + c.dx, f.cy + c.dy, 19) * 3), road = c.kind === "gate";
+    tiles.push({ key: groundKey(f.clan, mask, v, road), clan: f.clan, mask, v, road, x: (c.dx - c.dy) * T - GROUND_OX - x0, y: (c.dx + c.dy) * T / 2 - GROUND_OY - y0 });
+  }
+  return { w: x1 - x0, h: y1 - y0, ox: -x0, oy: -y0, tiles };
+}
+
+const groundCache = new Map<string, Painted>();
+/** The whole compound's ground painted now (previews; the game blits the baked tiles of the atlas instead). */
+export function composeGround(f: HoldFort): Painted {
+  const plan = groundPlan(f), { w, h } = plan, data = new Uint8ClampedArray(w * h * 4);
+  for (const g of plan.tiles) {
+    let t = groundCache.get(g.key); if (!t) groundCache.set(g.key, t = paintGround(g.clan, g.mask, g.v, g.road));
     for (let y = 0; y < t.h; y++) for (let x = 0; x < t.w; x++) {
       const si = (y * t.w + x) * 4;
       if (!t.data[si + 3]) continue;
-      const di = ((oy + y) * w + ox + x) * 4;
+      const di = ((g.y + y) * w + g.x + x) * 4;
       data[di] = t.data[si]; data[di + 1] = t.data[si + 1]; data[di + 2] = t.data[si + 2]; data[di + 3] = t.data[si + 3];
     }
   }
-  return { w, h, ox: -x0, oy: -y0, data };
+  return { w, h, ox: plan.ox, oy: plan.oy, data };
 }
+
+// ---- the baked atlas (tools/art/holds.ts writes it, holdAssets.ts loads it) -------------------------------------
+export const ATLAS_W = 1024, ATLAS_PAD = 2;
+/** One clan's atlas: the frame of every piece (`pieceKey`) and ground tile (`groundKey`), with the cell's middle at (ox, oy) in the frame. */
+export interface AtlasMeta { w: number; h: number; frames: Record<string, { x: number; y: number; w: number; h: number; ox: number; oy: number }> }
+export const atlasFile = (k: ClanKey, ext: "png" | "json") => `atlas_${k}.${ext}`;
 
 // ---- layout: a fort's cells to pieces -----------------------------------------------------------------------
 /** A piece placed at a fort: offset in tiles from the Hold's middle tile (clusters sit on a half tile), and `foot` screen px added to its depth. */
