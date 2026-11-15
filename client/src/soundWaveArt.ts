@@ -23,8 +23,13 @@ type Ctx = { fillStyle: any; fillRect(x: number, y: number, w: number, h: number
 
 /** One glyph pixel (u texels square). */
 function px(c: Ctx, x: number, y: number, col: number, a = 1, u = 2) {
-  c.globalAlpha = a; c.fillStyle = hex(col); c.fillRect(Math.round(x), Math.round(y), u, u); c.globalAlpha = 1;
+  // clipped to the cell being drawn, so no frame paints into its neighbour on the sheet
+  const x0 = Math.max(Math.round(x), cell.x), y0 = Math.max(Math.round(y), cell.y), x1 = Math.min(Math.round(x) + u, cell.x + SOUND_WAVE_W), y1 = Math.min(Math.round(y) + u, cell.y + SOUND_WAVE_H);
+  if (x1 <= x0 || y1 <= y0) return;
+  c.globalAlpha = a; c.fillStyle = hex(col); c.fillRect(x0, y0, x1 - x0, y1 - y0); c.globalAlpha = 1;
 }
+/** The cell origin of the frame being drawn (px clips to it). */
+const cell = { x: 0, y: 0 };
 
 /** An eighth note, 9 x 10 glyph pixels: 2 = body, 1 = shade; the outline is added round it. */
 const NOTE = [
@@ -56,6 +61,7 @@ function note(c: Ctx, ox: number, oy: number, a: number, scale = 1) {
 
 /** Draws one frame into a 24x24 cell whose origin is (ox, oy). kind "flight": t in 0..1 loops; "impact": t in 0..1 plays once. */
 export function drawSoundWave(c: Ctx, ox: number, oy: number, t: number, kind: "flight" | "impact") {
+  cell.x = ox; cell.y = oy;
   if (kind === "flight") {
     const ph = t % 1, bob = Math.round(Math.sin(ph * Math.PI * 2)) * 2;
     note(c, ox + 1, oy + bob, 1);

@@ -1,7 +1,7 @@
 import { NOTES } from "../../shared/songs";
 
 /**
- * The Songweaver's chord lockout as a little clock on the Song orb (owner only, cosmetic). It shows while her `chlock`
+ * The Songweaver's chord lockout as a little clock in the HUD status row (owner only, cosmetic). It shows while her `chlock`
  * status word is on; a dark wedge sweeps clockwise from 12 o'clock over a bronze-framed note tile and the tile is fully
  * dark when NOTES.lockMs has passed. The server owns the lockout: the word going off hides the clock, whatever it shows.
  * The client has no owner-only remaining time (no field in Player.me), so the sweep starts when it first sees the word.

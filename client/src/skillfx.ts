@@ -118,7 +118,7 @@ export class SkillFx {
   private pool: Phaser.GameObjects.Image[] = [];
   private emitters: Emitter[] = [];
   private fields = new Map<string, { f: any; objs: Phaser.GameObjects.GameObject[]; born: number }>();
-  private shots = new Map<string, { s: any; g: Phaser.GameObjects.GameObject & { x: number; y: number }; look: string; born: number }>();
+  private shots = new Map<string, { s: any; g: Phaser.GameObjects.GameObject & { x: number; y: number }; look: string; born: number; tint?: number }>();
   private t = 0;
 
   constructor(private scene: Phaser.Scene, private ent: (id: string) => FxEntity | undefined, private meId: () => string) {
@@ -2020,7 +2020,7 @@ export class SkillFx {
       const light = this.scene.add.image(0, 0, "fx_glow").setTint(imb[1]).setBlendMode(Phaser.BlendModes.ADD).setScale(0.32 * size).setAlpha(0.7);
       g.addAt(light, 0);
     }
-    this.shots.set(id, { s, g, look, born: this.t });
+    this.shots.set(id, { s, g, look, born: this.t, tint: look === "wave" ? this.spawnTint : undefined }); // a note's colour is fixed here, for its whole flight and its impact
     return g;
   }
 
@@ -2039,8 +2039,8 @@ export class SkillFx {
     switch (look) {
       case "wave": {
         // The Songweaver's sound wave is a little music note (soundWaveArt.ts), upright, in its skill's scale-step colour
-        // (tickShots keeps the tint and frame current); a few tinted dots trail behind it along the flight line.
-        const tint = this.waveTint(s.owner), img = sc.add.image(0, 0, this.waveSheet(), "w0").setScale(size * NOTE_K / 1.5).setTint(tint);
+        // (tickShots keeps the frame current; the tint is fixed at spawn); a few tinted dots trail behind it along the flight line.
+        const tint = this.spawnTint = degreeColor(this.lastDeg.get(s.owner)), img = sc.add.image(0, 0, this.waveSheet(), "w0").setScale(size * NOTE_K / 1.5).setTint(tint);
         const trail = sc.add.container(0, 0, [0, 1, 2].map((i) => sc.add.rectangle((-5 - i * 3.5) * NOTE_K, 0, 2 - i * 0.4, 2 - i * 0.4, tint).setAlpha(0.8 - i * 0.22))).setAngle(deg);
         return box(light(tint, 0.45 * size * NOTE_K, 0.3), trail, img);
       }
@@ -2101,7 +2101,11 @@ export class SkillFx {
     }
   }
 
-  removeShot(id: string) { this.shots.delete(id); }
+  removeShot(id: string) {
+    const sh = this.shots.get(id);
+    if (sh?.tint !== undefined) { this.endedWaves.push({ x: sh.g.x, y: sh.g.y, tint: sh.tint, t: this.t }); if (this.endedWaves.length > 12) this.endedWaves.shift(); } // its impact message may land just after
+    this.shots.delete(id);
+  }
 
   private tickShots(dt: number) {
     for (const { s, g, look, born } of this.shots.values()) {
@@ -2117,9 +2121,7 @@ export class SkillFx {
       }
       switch (look) {
         case "wave": {
-          const img = (g as any).last as Phaser.GameObjects.Image, tint = this.waveTint(s.owner);
-          img.setFrame(`w${Math.floor(age / 70) % SOUND_WAVE_FLIGHT}`).setTint(tint);
-          for (const o of (g as any).list as any[]) { if (o.type === "Container") for (const r of o.list) r.setFillStyle(tint); else if (o !== img) o.setTint(tint); }
+          ((g as any).last as Phaser.GameObjects.Image).setFrame(`w${Math.floor(age / 70) % SOUND_WAVE_FLIGHT}`);
           break;
         }
         case "shuriken": (g as any).angle += 1400 * dt; if (Math.random() < 0.4) this.p(x, y, 0, 0xffffff, { life: 120, depth: DEPTH - 1 }); break;
@@ -2383,12 +2385,20 @@ export class SkillFx {
 
   /** Scale-step colour of each caster's latest note (from its "note" sfx event): the wave it throws takes that colour. */
   private lastDeg = new Map<string, string>();
-  private lastWave = 0xffd24d;
-  private waveTint(owner: string) { return (this.lastWave = degreeColor(this.lastDeg.get(owner))); }
+  /** Tint of the note being built (read by addShot) and the notes that just landed (their impact message may arrive after the shot is gone). */
+  private spawnTint = 0xffd24d;
+  private endedWaves: { x: number; y: number; tint: number; t: number }[] = [];
+  /** Colour of the note that hit at (x, y): the nearest live note shot, else one that ended there a moment ago, else gold. */
+  private shotTint(x: number, y: number): number {
+    let best = 0xffd24d, bd = 48 * 48;
+    for (const sh of this.shots.values()) if (sh.tint !== undefined) { const d = (sh.g.x - x) ** 2 + (sh.g.y - y) ** 2; if (d < bd) { bd = d; best = sh.tint; } }
+    for (const w of this.endedWaves) if (this.t - w.t < 800) { const d = (w.x - x) ** 2 + (w.y - y) ** 2; if (d < bd) { bd = d; best = w.tint; } }
+    return best;
+  }
 
   /** The note bursts into sparks where it lands (impact frames); on leaves or water it sinks and fades instead. */
   private waveBurst(x: number, y: number) {
-    const [lx, ly] = lift(5), tint = this.lastWave, mat = wallAt(x, y), soft = mat === "foliage" || mat === "water";
+    const [lx, ly] = lift(5), tint = this.shotTint(x, y), mat = wallAt(x, y), soft = mat === "foliage" || mat === "water";
     const img = this.scene.add.image(x + lx, y + ly, this.waveSheet(), `w${SOUND_WAVE_FLIGHT}`).setScale(NOTE_K / 1.5).setDepth(DEPTH + 1).setTint(tint);
     if (soft) {
       // swallowed: the note drops a few pixels, shrinks and fades; a leaf or a drop falls with it
@@ -2405,7 +2415,7 @@ export class SkillFx {
   /** A "bounce": the note flicks off the wall (a small hop, a tilt, then it fades) besides the material's sparks. */
   private noteFlick(x: number, y: number) {
     const [lx, ly] = lift(6), dir = Math.random() < 0.5 ? -1 : 1;
-    const im = this.scene.add.image(x + lx, y + ly, this.waveSheet(), "w0").setScale(0.55 * NOTE_K).setTint(this.lastWave).setDepth(DEPTH + 3);
+    const im = this.scene.add.image(x + lx, y + ly, this.waveSheet(), "w0").setScale(0.55 * NOTE_K).setTint(this.shotTint(x, y)).setDepth(DEPTH + 3);
     this.scene.tweens.add({ targets: im, x: im.x + dir * 12, angle: dir * 60, alpha: 0, duration: 420, ease: "Quad.easeOut", onComplete: () => im.destroy() });
     this.scene.tweens.add({ targets: im, y: im.y - 9, duration: 190, ease: "Quad.easeOut", yoyo: true });
   }
@@ -2520,7 +2530,7 @@ export class SkillFx {
         const cols = ev.mat === "wood" ? [0xc89a5a, 0x8d6a3a, 0xffe0a8] : ev.mat === "metal" ? [0xffffff, 0xbfe6ff, 0x9ad1ff] : [0xffffff, 0xd0d0d0, 0x9a9a9a];
         this.glow(x, y, 4, 9, cols[0], 160, 0.9);
         for (let i = 0; i < 7; i++) this.p(x, y, 4, pick(cols), { vx: rnd(-50, 50), vy: rnd(-30, 30), vz: rnd(10, 40), g: 140, life: rnd(180, 320), size: pick([1, 2]), size1: 0 });
-        this.tintRing(x, y, 12, this.lastWave, 8, 240, 4);
+        this.tintRing(x, y, 12, this.shotTint(x, y), 8, 240, 4);
         this.noteFlick(x, y);
         return true;
       }
@@ -2562,7 +2572,7 @@ export class SkillFx {
     rs.rings.push({ born: this.t });
   }
 
-  /** A "chord" event: all three rings flash and burst outwards, then the lockout starts. */
+  /** A "chord" event: all three rings flash and burst outwards (the lockout shows as a clock on the owner's HUD, lockClock.ts). */
   private chordRings(id: string, mode?: string) {
     const rs = this.ringState(id);
     rs.color = modeColor(mode);
@@ -2576,6 +2586,7 @@ export class SkillFx {
     for (const { f } of this.fields.values()) if (f.owner && skillById(f.skill)?.song) chorus.add(f.owner);
     for (const id of chorus) if (!this.songRings.has(id) && this.ent(id)) this.ringState(id);
     const t = this.t;
+    for (const id of this.lastDeg.keys()) if (!this.ent(id)) this.lastDeg.delete(id); // a dropped caster's note colour goes with it
     for (const [id, rs] of this.songRings) {
       const e = this.ent(id);
       if (!e) { rs.g.destroy(); this.songRings.delete(id); continue; }
@@ -2637,7 +2648,7 @@ export class SkillFx {
     }
   }
 
-  /** Song rings, resonance glow and shield bubbles from the status words (`words` is the entity's fx split on ","). */
+  /** Song rings and resonance glow from the status words (shields draw no bubble, see below) (`words` is the entity's fx split on ","). */
   private songStatus(e: FxEntity, g: Phaser.GameObjects.Graphics, words: string[], dt: number) {
     const x = e.sprite.x, y = e.sprite.y, top = e.top, xs = Math.round(x), ys = Math.round(y);
     let mode = "", res = 0, ring = false, shield = false;
