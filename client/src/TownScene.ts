@@ -71,6 +71,7 @@ import { updateHidebound } from "./questConceptArt";
 import { WarPlaque } from "./warPlaque";
 import { WarTroops } from "./warTroops";
 import { WarStandards } from "./warStandards";
+import { WarTabards } from "./warTabards";
 import { WarNotice } from "./warNotice";
 import type { WarView } from "../../shared/war/view";
 import { ART_K, CHAR_GROW, CHAR_SCALE, CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, ensureCharSheet, HD_CHARS, playCharAnim, preloadArt } from "./artAssets";
@@ -177,6 +178,7 @@ interface Entity {
   sprite: Phaser.GameObjects.Sprite;
   label?: Phaser.GameObjects.Text;
   titleLabel?: Phaser.GameObjects.Text; // heroes: the shown title, small and dim, between the name and the head
+  pennant?: Phaser.GameObjects.Image; stripe?: Phaser.GameObjects.Image; // heroes sworn to a clan: pennant beside the name, stripe under it (warTabards.ts)
   nameLift?: number;
   lvlColor?: string; // monsters: current colour of the "Lv N" label
   artOn?: boolean; // a clan trooper drawn with its painted sheet (until then an old monster look stands in)
@@ -416,6 +418,7 @@ export class TownScene extends Phaser.Scene {
   private heatGauge?: OverloadGauge;
   private warPlaque?: WarPlaque;
   private warStd?: WarStandards;
+  private tabards?: WarTabards; // clan pennants and Renown titles on heroes' name tags ("oaths")
   private warTroops?: WarTroops;
   /** How a server clan trooper sees this hero (shared/war/troops.ts troopStance), from the oath the "clan" message brought. */
   private troopStanceOf(weapon: string): TroopStance {
@@ -1572,6 +1575,7 @@ export class TownScene extends Phaser.Scene {
     this.warTroops = new WarTroops(this); // cosmetic clan patrols, derived from the war snapshot
     this.room.onMessage("war", (v) => { this.warTroops?.setWar(v); (this.warPlaque ??= new WarPlaque(document.getElementById("hud")!)).set(v); this.warStd?.setWar(v); this.warLast = v; });
     this.room.onMessage("clan", (m) => this.warStd?.setClan(m));
+    this.room.onMessage("oaths", (m) => (this.tabards ??= new WarTabards(this)).set(m)); // server/warOaths.ts
     this.room.onMessage("siege", (m) => { // the server's live siege battle (server/warSieges.ts): front holders on the rings and the plaque
       if (!m || typeof m.t !== "number" || !Array.isArray(m.fronts)) return;
       this.warTroops?.setSiege(m.fronts.length ? m.t : -1); this.warStd?.setSiege(m); (this.warPlaque ??= new WarPlaque(document.getElementById("hud")!)).setSiege(m);
@@ -2056,7 +2060,7 @@ export class TownScene extends Phaser.Scene {
     this.forms?.drop(id);
     this.lastMineHit.delete(id);
     if (e.mob && e.state.kind === "trooper" && e.state.dead && e.artOn && !e.culled) this.trooperCorpse(e);
-    e.sprite.destroy(); e.label?.destroy(); e.titleLabel?.destroy(); e.bar.destroy(); e.parts?.destroy(); e.bubble?.destroy(); e.shield?.destroy(); e.gear?.destroy();
+    e.sprite.destroy(); e.label?.destroy(); e.titleLabel?.destroy(); e.pennant?.destroy(); e.stripe?.destroy(); e.bar.destroy(); e.parts?.destroy(); e.bubble?.destroy(); e.shield?.destroy(); e.gear?.destroy();
     this.entities.delete(id);
   }
 
@@ -3300,7 +3304,7 @@ export class TownScene extends Phaser.Scene {
         h.push({ t: wall, x: e.sprite.x, y: e.sprite.y });
         while (h.length > 2 && wall - h[0].t > 1500) h.shift();
       }
-      if (e.waiting) { e.sprite.setVisible(false); e.label?.setVisible(false); e.titleLabel?.setVisible(false); continue; } // its sheet is still loading
+      if (e.waiting) { e.sprite.setVisible(false); e.label?.setVisible(false); e.titleLabel?.setVisible(false); e.pennant?.setVisible(false); e.stripe?.setVisible(false); continue; } // its sheet is still loading
       // Monsters off screen: hide them and skip the per-frame drawing (there are a lot of them)
       if (e.mob) {
         const v = this.cameras.main.worldView, M = 48;
@@ -3413,7 +3417,8 @@ export class TownScene extends Phaser.Scene {
         }
       }
       if (e.titleLabel) { // the shown title (Player.cosm, public) sits right over the head; the name moves up above it
-        const t = TITLES[unpackCosmetics(metaOf(p as any, META.cosm)).title] ?? "";
+        const cosm = TITLES[unpackCosmetics(metaOf(p as any, META.cosm)).title] ?? "", rank = this.tabards?.title(id) ?? "";
+        const t = cosm && rank ? `${cosm} · ${rank}` : cosm || rank; // the Renown rank of a sworn hero (warTabards.ts)
         if (e.titleLabel.text !== t) e.titleLabel.setText(t);
         const lift = t ? 9 : 0;
         setBaseDepth(e.titleLabel.setPosition(x, y - e.top - (p.hat ? 4 : 2)), e.sprite.y + 1).setVisible(!!t && !p.dead && !p.hidden && (id !== this.me || !!e.label?.visible));
@@ -3422,6 +3427,7 @@ export class TownScene extends Phaser.Scene {
       }
       e.bubble?.setPosition(x, y - e.top - 12 - (e.nameLift ?? 0)); // above the name label
       setBaseDepth(e.bar.clear(), e.sprite.y + 1);
+      if (!e.mob) this.tabards?.sync(id, e, !p.dead && !p.hidden);
       if (e.mob) this.champFx?.sync(id, e, p, x, y, now);
       this.fx.status(e, e.bar, dtMs / 1000);
       // (Stacks built by basic hits are shown by the skill keys, see chargeCell: no pips under the hero, Murat 2026-11-04)
