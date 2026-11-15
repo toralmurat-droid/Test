@@ -83,14 +83,14 @@ export function troopStats(k: ClanKey, level: number, officer = false): { hp: nu
     speed: d.speed * c.speed, cd: d.attackCooldownMs * c.cd };
 }
 
-/** The Mob.weapon value of a trooper of clan `k`. */
-export const troopWeapon = (k: ClanKey, officer = false) => (officer ? `${k}*` : k);
+/** The Mob.weapon value of a trooper of clan `k`: "<clan>", "<clan>*" for an officer, "<clan>^" for a supply cart (shared/war/caravans.ts). */
+export const troopWeapon = (k: ClanKey, officer = false, cart = false) => (cart ? `${k}^` : officer ? `${k}*` : k);
 
-/** A trooper's clan and rank from its Mob.weapon, or undefined for anything else. */
-export function parseTroop(w: unknown): { clan: ClanKey; officer: boolean } | undefined {
+/** A trooper's clan and rank from its Mob.weapon (a cart is a trooper too, so every trooper gate applies), or undefined for anything else. */
+export function parseTroop(w: unknown): { clan: ClanKey; officer: boolean; cart: boolean } | undefined {
   if (typeof w !== "string") return undefined;
-  const officer = w.endsWith("*"), k = officer ? w.slice(0, -1) : w;
-  return isClan(k) ? { clan: k, officer } : undefined;
+  const officer = w.endsWith("*"), cart = !officer && w.endsWith("^"), k = officer || cart ? w.slice(0, -1) : w;
+  return isClan(k) ? { clan: k, officer, cart } : undefined;
 }
 
 /** A trooper's level in territory `t`: soldiers at the middle of its monster band, officers at the top. */
@@ -112,9 +112,9 @@ export function troopStance(troop: ClanKey, hero: { clan?: ClanKey; level: numbe
   return hero.clan ? "enemy" : "neutral";
 }
 
-/** A short name for a trooper (name label, death messages): "Redfang soldier", "Redfang captain". */
-export function troopName(k: ClanKey, officer = false): string {
-  return `${TROOP_SHORT[k]} ${officer ? "captain" : "soldier"}`;
+/** A short name for a trooper (name label, death messages): "Redfang soldier", "Redfang captain", "Redfang supply cart". */
+export function troopName(k: ClanKey, officer = false, cart = false): string {
+  return `${TROOP_SHORT[k]} ${cart ? "supply cart" : officer ? "captain" : "soldier"}`;
 }
 /** The word a clan's soldiers go by (name tags): "The Hearthbound Wardens" -> "Warden". */
 const TROOP_SHORT: Record<ClanKey, string> = { wardens: "Warden", redfang: "Redfang", host: "Ossuary", hidekin: "Hide-Kin", veiled: "Veiled" };

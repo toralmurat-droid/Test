@@ -1,6 +1,7 @@
 /**
  * PvE balance simulator: bot heroes play the first zone (Lv 1-30) against its monsters and bosses.
- * Run: npx tsx tools/balance/pve.ts [runsPerCase] [--bosses] [--zones] [--act2] [--champions] [--troops] [--class=vampire] [--build=0|1|2] [--boss=king] [--no-execute] [--songweaver]
+ * Run: npx tsx tools/balance/pve.ts [runsPerCase] [--bosses] [--zones] [--act2] [--champions] [--troops] [--caravan] [--class=vampire] [--build=0|1|2] [--boss=king] [--no-execute] [--songweaver]
+ * --caravan: the hero alone raids a supply cart (shared/war/caravans.ts) with its 3 escorts at Lv 15 / 30 / 45: win = the cart falls.
  * --troops: the hero alone against a clan soldier, a captain and 3 soldiers of its level (shared/war/troops.ts), at Lv 8 / 20 / 45 (--clans: each clan at Lv 20).
  * --champions: one fight against each champion (shared/champions.ts, a 1D version of its affixes) beside the same plain monster.
  *
@@ -30,6 +31,7 @@ import { AFFIX_FX as CF, CHAMPION, type AffixKey } from "../../shared/champions"
 import { addHeat } from "../../shared/overload";
 import { CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
 import { TROOP_OFFICER, troopStats, WAR_TROOPS } from "../../shared/war/troops";
+import { CARAVAN, caravanHp } from "../../shared/war/caravans";
 
 type Build = 0 | 1 | 2;
 
@@ -489,6 +491,35 @@ function troopRun(cls: ClassKind, level: number, n: number, build: Build, seed: 
   return { won: w === h, kills, hpLostPerKill: Math.max(0, hp0 - h.hp) / h.maxHp / Math.max(1, kills), secPerKill: d.now / 1000 / Math.max(1, kills), heals: pack.healUsed, manas: pack.manaUsed };
 }
 
+/** A caravan raid (shared/war/caravans.ts): the cart stands still and never strikes; the fight is won when it falls. */
+class CaravanDuel extends PveDuel {
+  constructor(hero: F, mobs: MobF[], pack: Pack, public cart: MobF) { super(hero, mobs, pack, 0); }
+  mobBrain(m: MobF): number { return m === this.cart ? 0 : super.mobBrain(m); }
+  outcome(): F | null | undefined { return this.hero.dead ? this.mobs[0] : this.cart.dead ? this.hero : undefined; }
+}
+/** The hero alone raids a cart of its level with CARAVAN.escorts soldiers (clans in turn), 5 heal + 5 mana potions. */
+function caravanRun(cls: ClassKind, level: number, build: Build, seed: number, potions = 5): RunResult {
+  const h = make("h", cls, level, build), clan = CLAN_KEYS[seed % CLAN_KEYS.length];
+  const pack: Pack = { heal: potions, mana: potions, healUsed: 0, manaUsed: 0, size: potionSize(level), lastDrink: -1e9 };
+  const R = WAR_TROOPS.rush, J = WAR_TROOPS.javelin;
+  const escorts = Array.from({ length: CARAVAN.escorts }, (_, k) => {
+    const sp = mobSpec("trooper", level), st = troopStats(clan, level);
+    Object.assign(sp, { hp: st.hp, dmg: st.dmg, speed: st.speed, cd: st.cd, lunge: { min: R.min, max: R.max, every: R.everyMs, mult: R.dmgMult } });
+    sp.specials.push({ name: "Javelin", every: J.everyMs, windup: J.windupMs, min: J.min, max: J.max, radius: J.radius + 4, mult: J.dmgMult, at: "target", shot: { speed: J.speed, radius: J.radius } });
+    return new MobF(sp, "e" + k);
+  });
+  const cs = mobSpec("trooper", level);
+  Object.assign(cs, { hp: caravanHp(clan, level), dmg: 0, speed: 0, cd: 1e12, label: "cart" });
+  cs.poise *= CARAVAN.hpMult;
+  const cart = new MobF(cs, "cart");
+  const d = new CaravanDuel(h, [...escorts, cart], pack, cart), hp0 = h.hp;
+  cart.x = Math.max(0, Math.min(480, escorts[0].x + Math.sign(escorts[0].x - h.x) * 30)); // behind its escorts
+  let w: F | null | undefined;
+  while (d.now < 120000 && (w = d.step()) === undefined) { /* fight */ }
+  const kills = d.mobs.filter((m) => m.dead).length;
+  return { won: w === h, kills, hpLostPerKill: Math.max(0, hp0 - h.hp) / h.maxHp, secPerKill: d.now / 1000, heals: pack.healUsed, manas: pack.manaUsed };
+}
+
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 /** Try other numbers without editing the game: --hp=0.4 --dmg=0.15 (MOB_LEVEL per-level growth). */
 for (const a of process.argv) {
@@ -513,7 +544,21 @@ if (process.argv[1]?.includes("pve")) {
   const n = Number(process.argv[2]) || 30;
   const CHAMPS = process.argv.includes("--champions");
   const TROOPS = process.argv.includes("--troops");
-  const doBosses = !CHAMPS && !TROOPS && !process.argv.includes("--zones"), doZones = !CHAMPS && !TROOPS && !process.argv.includes("--bosses");
+  const CARAVANS = process.argv.includes("--caravan");
+  const doBosses = !CHAMPS && !TROOPS && !CARAVANS && !process.argv.includes("--zones"), doZones = !CHAMPS && !TROOPS && !CARAVANS && !process.argv.includes("--bosses");
+  if (CARAVANS) {
+    console.log(`Caravan raid: the hero alone vs a supply cart (x${CARAVAN.hpMult} soldier HP, no attack) and ${CARAVAN.escorts} escort soldiers of its level (clans in turn), 5 heal + 5 mana potions. Cell = win% (cart felled) / HP lost / fight s`);
+    console.log("".padEnd(10) + CLASSES.map((c) => c.padEnd(20)).join(""));
+    for (const L of [15, 30, 45]) {
+      let line = `Lv${L}`.padEnd(10);
+      for (const c of CLASSES) {
+        let won = 0, hp = 0, sec = 0;
+        for (let i = 0; i < n; i++) { const r = caravanRun(c, L, buildOf(i), i); won += r.won ? 1 : 0; hp += r.hpLostPerKill; sec += r.secPerKill; }
+        line += `${pct(won / n)}/${pct(hp / n)}/${(sec / n).toFixed(1)}s`.padEnd(20);
+      }
+      console.log(line);
+    }
+  }
   if (TROOPS) {
     console.log("Clan troopers: the hero alone vs N troopers of its level (clans in turn), 5 heal + 5 mana potions. Cell = win% / HP lost (whole fight) / fight s");
     console.log("".padEnd(18) + CLASSES.map((c) => c.padEnd(20)).join(""));

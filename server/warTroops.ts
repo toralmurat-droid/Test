@@ -52,13 +52,20 @@ export interface WarTroopsHost {
   shoot(mobId: string, clan: ClanKey, tx: number, ty: number, dmg: number, byName: string): void;
   /** A hero reached a new renown rank (the room tells them, as for the standards). */
   ranked(heroId: string, rank: string): void;
+  /** Troopers the caravans hold out of WAR_TROOPS.maxTroops right now (server/warCaravans.ts). */
+  reserved?(): number;
 }
 
 type Role = "march" | "guard";
 /** One place in a land's force: who fills it (or when its man fell). */
 interface Slot { role: Role; i: number; officer: boolean; id: string; fellAt: number }
 interface Land { t: number; clan?: ClanKey; lastHero: number; slots: Slot[] }
-interface Troop { t: number; clan: ClanKey; slot: Slot; nextPick: number; near: boolean; nextRush: number; rushUntil: number; rushHit: boolean; nextThrow: number; throwing: boolean }
+/** A soldier's fighting state: a patrol trooper's, or a caravan escort's (server/warCaravans.ts). */
+export interface Fighter { clan: ClanKey; officer: boolean; nextPick: number; near: boolean; nextRush: number; rushUntil: number; rushHit: boolean; nextThrow: number; throwing: boolean }
+/** Where a soldier fights: `leash` holds every foe and chase, `hunt` the wild monsters it goes for unprovoked. */
+export interface FightGround { leash(x: number, y: number): boolean; hunt(x: number, y: number): boolean }
+export const newFighter = (clan: ClanKey, officer: boolean): Fighter => ({ clan, officer, nextPick: 0, near: false, nextRush: 0, rushUntil: 0, rushHit: false, nextThrow: 0, throwing: false });
+interface Troop extends Fighter { t: number; slot: Slot; g: FightGround }
 
 const SLEEPING = -Infinity;
 /** A point (px) where a trooper may never stand or chase into: the safe squares, the stockade, monster-free ground. */
@@ -161,7 +168,7 @@ export class WarTroops {
     const awake = new Set(near.map(([t]) => t));
     for (const [t, land] of this.lands) if (!awake.has(t)) { this.clearLand(land); this.lands.delete(t); }
     near.sort((a, b) => a[1] - b[1]);
-    let budget = WAR_TROOPS.maxTroops;
+    let budget = Math.max(0, WAR_TROOPS.maxTroops - (this.h.reserved?.() ?? 0)); // caravans (server/warCaravans.ts) claim their share first
     for (const [t] of near) {
       const land = this.lands.get(t)!, clan = CLAN_KEYS[v!.owner[t]];
       if (!clan) { this.clearLand(land); continue; }
@@ -199,7 +206,9 @@ export class WarTroops {
     if (!m) return;
     m.hp = m.maxHp = troopStats(clan, level, s.officer).hp;
     s.id = id; s.fellAt = SLEEPING;
-    this.troops.set(id, { t: land.t, clan, slot: s, nextPick: 0, near: false, nextRush: 0, rushUntil: 0, rushHit: false, nextThrow: 0, throwing: false });
+    const t = land.t, W = WAR_TROOPS;
+    const g: FightGround = { leash: (x, y) => this.inLand(t, x, y, W.leashTiles), hunt: (x, y) => this.inLand(t, x, y, W.mobMarginTiles) };
+    this.troops.set(id, { ...newFighter(clan, s.officer), t, slot: s, g });
   }
 
   private drop(s: Slot) {
@@ -244,12 +253,12 @@ export class WarTroops {
    * The foe a trooper fights now: an enemy hero, an enemy's creature, a trooper of another clan, a wild monster of its
    * land that no hero they leave alone is fighting, or whatever hit it.
    */
-  private pick(m: TroopMob, id: string, tr: Troop, now: number): string {
+  private pick(m: TroopMob, id: string, tr: Fighter, g: FightGround, now: number): string {
     const W = WAR_TROOPS, R = W.aggroPx;
     let best = "", bs = 0;
     const consider = (tid: string, x: number, y: number, bonus: number) => {
       const d = Math.hypot(x - m.x, y - m.y), hated = tid === m.hateId ? m.hate : 0;
-      if (d >= (hated > 0 ? R * 2 : R) || offLimits(x, y) || !this.inLand(tr.t, x, y, W.leashTiles)) return;
+      if (d >= (hated > 0 ? R * 2 : R) || offLimits(x, y) || !g.leash(x, y)) return;
       const s = Math.max(0.05, 1 - d / R) + bonus + hated + (tid === m.target ? W.stick : 0);
       if (s > bs) { bs = s; best = tid; }
     };
@@ -261,11 +270,11 @@ export class WarTroops {
     const hated = m.hateId && m.hate > 0 ? this.h.mob(m.hateId) : undefined; // (the only one it sees from twice as far)
     for (const [oid, o] of hated ? [...this.h.mobsInBox(m.x, m.y, R), [m.hateId, hated] as [string, TroopMob]] : this.h.mobsInBox(m.x, m.y, R)) {
       if (oid === id || o.dead || o.hidden) continue;
-      if (o.kind === "trooper") { const k = parseTroop(o.weapon)?.clan; if (k && k !== tr.clan) consider(oid, o.x, o.y, W.troopBonus); continue; }
+      if (o.kind === "trooper") { const k = parseTroop(o.weapon); if (k && k.clan !== tr.clan && !k.cart) consider(oid, o.x, o.y, W.troopBonus); continue; } // (carts are for heroes to raid)
       if (o.owner) { if (this.stance(tr.clan, o.owner) === "enemy") consider(oid, o.x, o.y, 0); continue; }
       const fought = oid === m.hateId && m.hate > 0; // whatever hit it, it answers (within its leash)
       if (!fought && (o.summonFor || o.qwave || o.servant || o.title || o.tide || ELITE[o.kind as MobKind] || BOSS[o.kind as MobKind] || o.kind === "nightraider")) continue;
-      if (!fought && (!this.inLand(tr.t, o.x, o.y, W.mobMarginTiles) || this.busyElsewhere(o, tr.clan))) continue;
+      if (!fought && (!g.hunt(o.x, o.y) || this.busyElsewhere(o, tr.clan))) continue;
       consider(oid, o.x, o.y, 0);
     }
     return best;
@@ -275,71 +284,92 @@ export class WarTroops {
   step(m: TroopMob, id: string, dt: number, now: number) {
     const tr = this.troops.get(id);
     if (!tr) { this.h.remove(id); return; } // left over from a land that is gone (should not happen)
-    m.stunned = now < m.stunUntil; m.slowed = now < m.slowUntil;
-    if (m.stunned || m.broken) { m.winding = false; m.windUntil = 0; tr.throwing = false; tr.rushHit = false; }
-    if (m.stunned) { m.moving = false; return; }
-    if (now >= tr.nextPick) {
-      tr.nextPick = now + WAR_TROOPS.pickMs;
-      tr.near = this.seen(m, WAR_TROOPS.livePx);
-      m.target = tr.near ? this.pick(m, id, tr, now) : "";
-    }
+    if (this.think(m, id, tr, tr.g, now)) return;
     if (!tr.near) { // no hero near enough to see it: it just keeps its place, no walking and no fights (cheap)
       const post = this.postOf(tr.t, tr.slot, now);
       if ((Math.abs(post.x - m.x) > 1 || Math.abs(post.y - m.y) > 1) && !offLimits(post.x, post.y)) { m.x = m.homeX = post.x; m.y = m.homeY = post.y; }
       m.moving = false; m.windUntil = 0; m.winding = false;
       return;
     }
+    if (this.fight(m, id, tr, tr.g, dt, now)) return;
+    const post = this.postOf(tr.t, tr.slot, now), d = Math.hypot(post.x - m.x, post.y - m.y);
+    if (d > WAR_TROOPS.warpPx && !this.seen(m, WAR_TROOPS.warpUnseenPx) && !offLimits(post.x, post.y)) { m.x = post.x; m.y = post.y; m.moving = false; return; }
+    if (d < 2) { m.moving = false; this.face(m, tr, now); return; }
+    // in step with the column, a little quicker to catch up
+    this.walk(m, post.x, post.y, dt, d > WAR_TROOPS.slackPx ? this.speedOf(m, tr) : TROOP.speed * WAR_TROOPS.catchUp);
+  }
+
+  /** A soldier's walking speed now (slowed or not). */
+  speedOf(m: TroopMob, f: Fighter): number { return troopStats(f.clan, m.level, f.officer).speed * (m.slowed ? SLOW_MOB : 1); }
+
+  /**
+   * The start of a soldier's turn (patrols and caravan escorts alike): stun and break end its wind-ups, and every
+   * pickMs it looks whether a hero is near (`f.near`) and picks a foe on `g`. True when the turn is over (stunned).
+   */
+  think(m: TroopMob, id: string, f: Fighter, g: FightGround, now: number): boolean {
+    m.stunned = now < m.stunUntil; m.slowed = now < m.slowUntil;
+    if (m.stunned || m.broken) { m.winding = false; m.windUntil = 0; f.throwing = false; f.rushHit = false; }
+    if (m.stunned) { m.moving = false; return true; }
+    if (now >= f.nextPick) {
+      f.nextPick = now + WAR_TROOPS.pickMs;
+      f.near = this.seen(m, WAR_TROOPS.livePx);
+      m.target = f.near ? this.pick(m, id, f, g, now) : "";
+    }
+    return false;
+  }
+
+  /**
+   * A soldier fights its target: the rush, the javelin at an enemy hero, the wound-up blow, else it closes in. True when
+   * it did; false when it has no foe (left), so the caller walks it back to its place. Shared with the caravan escorts.
+   */
+  fight(m: TroopMob, id: string, tr: Fighter, g: FightGround, dt: number, now: number): boolean {
     // the target must still be fair game (a hero can swear another oath or step onto the safe square)
     const tp = m.target ? this.h.hero(m.target) : undefined, tm = !tp && m.target ? this.h.mob(m.target) : undefined;
     const t = tp ?? tm;
     if (m.target && (!t || (tp && (tp.dead || this.stance(tr.clan, m.target) !== "enemy" || this.h.hidden(m.target, now)))
-      || (tm && (tm.dead || tm.hidden)) || offLimits(t.x, t.y) || !this.inLand(tr.t, t.x, t.y, WAR_TROOPS.leashTiles))) { m.target = ""; m.windUntil = 0; m.winding = false; }
-    const st = troopStats(tr.clan, m.level, tr.slot.officer), speed = st.speed * (m.slowed ? SLOW_MOB : 1);
-    let gx: number, gy: number, pace: number;
-    if (!m.target) { tr.throwing = false; tr.rushHit = false; }
-    if (m.target && t) {
-      const W = WAR_TROOPS, dist = Math.hypot(t.x - m.x, t.y - m.y), reach = MOB_ATTACK_RANGE + (tm ? mobBody(tm.kind as MobKind) : W.heroBody);
-      const R = W.rush, J = WAR_TROOPS.javelin, by = troopName(tr.clan, tr.slot.officer);
-      // the rush lands: a blow on arrival, no wind-up
-      if (tr.rushHit && dist <= reach + W.rushSlack && !m.broken) {
-        tr.rushHit = false; tr.rushUntil = 0; m.lastAttack = now;
-        const dmg = Math.round(st.dmg * R.dmgMult);
-        if (tp) this.h.strikeHero(id, m.target, dmg, by); else this.h.strikeMob(id, m.target, dmg);
-        return;
-      }
-      if (tr.rushHit && now > tr.rushUntil + R.missGraceMs) tr.rushHit = false; // missed
-      // a javelin at an enemy hero a few steps away
-      if (tp && !m.broken && !m.windUntil && !tr.rushHit && (tr.throwing || (now >= tr.nextThrow && dist >= J.min && dist <= J.max))) {
-        if (!tr.throwing) { tr.throwing = true; tr.nextThrow = now + J.windupMs; m.winding = true; }
-        m.moving = false;
-        m.dir = Math.abs(t.x - m.x) > Math.abs(t.y - m.y) ? (t.x > m.x ? "right" : "left") : (t.y > m.y ? "down" : "up");
-        if (now < tr.nextThrow) return;
-        tr.throwing = false; m.winding = false; tr.nextThrow = now + J.everyMs; m.lastAttack = now;
-        this.h.shoot(id, tr.clan, t.x, t.y, Math.round(st.dmg * J.dmgMult), by);
-        return;
-      }
-      if (!m.broken && !m.windUntil && now >= tr.nextRush && dist >= R.min && dist <= R.max) { tr.nextRush = now + R.everyMs; tr.rushUntil = now + R.ms; tr.rushHit = true; }
-      if ((dist <= reach || m.windUntil) && !m.broken) {
-        m.moving = false;
-        m.dir = Math.abs(t.x - m.x) > Math.abs(t.y - m.y) ? (t.x > m.x ? "right" : "left") : (t.y > m.y ? "down" : "up");
-        if (m.windUntil) {
-          if (now >= m.windUntil) {
-            m.windUntil = 0; m.winding = false; m.lastAttack = now;
-            if (dist <= reach + W.swingSlack) {
-              if (tp) this.h.strikeHero(id, m.target, st.dmg, by); else this.h.strikeMob(id, m.target, st.dmg);
-            }
-          }
-        } else if (now - m.lastAttack >= st.cd) { m.windUntil = now + MOB_COMBAT.trooper.windupMs; m.winding = true; }
-        return;
-      }
-      gx = t.x; gy = t.y; pace = speed * (now < tr.rushUntil ? R.speedMult : 1);
-    } else {
-      const post = this.postOf(tr.t, tr.slot, now), d = Math.hypot(post.x - m.x, post.y - m.y);
-      if (d > WAR_TROOPS.warpPx && !this.seen(m, WAR_TROOPS.warpUnseenPx) && !offLimits(post.x, post.y)) { m.x = post.x; m.y = post.y; m.moving = false; return; }
-      gx = post.x; gy = post.y;
-      pace = d > WAR_TROOPS.slackPx ? speed : TROOP.speed * WAR_TROOPS.catchUp; // in step with the column, a little quicker to catch up
-      if (d < 2) { m.moving = false; this.face(m, tr, now); return; }
+      || (tm && (tm.dead || tm.hidden)) || offLimits(t.x, t.y) || !g.leash(t.x, t.y))) { m.target = ""; m.windUntil = 0; m.winding = false; }
+    if (!m.target || !t) { tr.throwing = false; tr.rushHit = false; return false; }
+    const st = troopStats(tr.clan, m.level, tr.officer), speed = st.speed * (m.slowed ? SLOW_MOB : 1);
+    const W = WAR_TROOPS, dist = Math.hypot(t.x - m.x, t.y - m.y), reach = MOB_ATTACK_RANGE + (tm ? mobBody(tm.kind as MobKind) : W.heroBody);
+    const R = W.rush, J = WAR_TROOPS.javelin, by = troopName(tr.clan, tr.officer);
+    // the rush lands: a blow on arrival, no wind-up
+    if (tr.rushHit && dist <= reach + W.rushSlack && !m.broken) {
+      tr.rushHit = false; tr.rushUntil = 0; m.lastAttack = now;
+      const dmg = Math.round(st.dmg * R.dmgMult);
+      if (tp) this.h.strikeHero(id, m.target, dmg, by); else this.h.strikeMob(id, m.target, dmg);
+      return true;
     }
+    if (tr.rushHit && now > tr.rushUntil + R.missGraceMs) tr.rushHit = false; // missed
+    // a javelin at an enemy hero a few steps away
+    if (tp && !m.broken && !m.windUntil && !tr.rushHit && (tr.throwing || (now >= tr.nextThrow && dist >= J.min && dist <= J.max))) {
+      if (!tr.throwing) { tr.throwing = true; tr.nextThrow = now + J.windupMs; m.winding = true; }
+      m.moving = false;
+      m.dir = Math.abs(t.x - m.x) > Math.abs(t.y - m.y) ? (t.x > m.x ? "right" : "left") : (t.y > m.y ? "down" : "up");
+      if (now < tr.nextThrow) return true;
+      tr.throwing = false; m.winding = false; tr.nextThrow = now + J.everyMs; m.lastAttack = now;
+      this.h.shoot(id, tr.clan, t.x, t.y, Math.round(st.dmg * J.dmgMult), by);
+      return true;
+    }
+    if (!m.broken && !m.windUntil && now >= tr.nextRush && dist >= R.min && dist <= R.max) { tr.nextRush = now + R.everyMs; tr.rushUntil = now + R.ms; tr.rushHit = true; }
+    if ((dist <= reach || m.windUntil) && !m.broken) {
+      m.moving = false;
+      m.dir = Math.abs(t.x - m.x) > Math.abs(t.y - m.y) ? (t.x > m.x ? "right" : "left") : (t.y > m.y ? "down" : "up");
+      if (m.windUntil) {
+        if (now >= m.windUntil) {
+          m.windUntil = 0; m.winding = false; m.lastAttack = now;
+          if (dist <= reach + W.swingSlack) {
+            if (tp) this.h.strikeHero(id, m.target, st.dmg, by); else this.h.strikeMob(id, m.target, st.dmg);
+          }
+        }
+      } else if (now - m.lastAttack >= st.cd) { m.windUntil = now + MOB_COMBAT.trooper.windupMs; m.winding = true; }
+      return true;
+    }
+    this.walk(m, t.x, t.y, dt, speed * (now < tr.rushUntil ? R.speedMult : 1));
+    return true;
+  }
+
+  /** One step toward (gx, gy) at `pace` px/s, never into the safe squares, the stockade or monster-free ground. */
+  walk(m: TroopMob, gx: number, gy: number, dt: number, pace: number) {
     const dx = gx - m.x, dy = gy - m.y, d = Math.hypot(dx, dy);
     const r = moveStep(m.x, m.y, dirInput(dx, dy), dt, Math.min(pace, d / Math.max(dt, 1e-3)));
     if (!offLimits(r.x, r.y)) { m.x = r.x; m.y = r.y; m.moving = r.moving; } else m.moving = false;
@@ -356,7 +386,7 @@ export class WarTroops {
   }
 
   /** Is a living hero within r (px, square) of the trooper? */
-  private seen(m: TroopMob, r: number): boolean {
+  seen(m: TroopMob, r: number): boolean {
     for (const [, p] of this.h.heroes()) if (!p.dead && Math.abs(p.x - m.x) < r && Math.abs(p.y - m.y) < r) return true;
     return false;
   }
