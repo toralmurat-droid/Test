@@ -170,6 +170,41 @@ export function isDecorSolidAt(px: number, py: number): boolean {
   return false;
 }
 
+/** A tile a hero can stand anywhere in: no map object, water or NPC prop over its middle or its inner corners. */
+function freeTile(tx: number, ty: number): boolean {
+  const cx = (tx + 0.5) * TILE, cy = (ty + 0.5) * TILE, e = TILE * 0.4;
+  for (const [dx, dy] of [[0, 0], [-e, -e], [e, -e], [-e, e], [e, e]]) if (isSolidAt(cx + dx, cy + dy) || isDecorSolidAt(cx + dx, cy + dy)) return false;
+  return true;
+}
+/** A tile with free ground all round it (its 8 neighbours too): a spawn there never lands boxed in by crates or stalls. */
+export function roomyTile(tx: number, ty: number): boolean {
+  for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) if (!freeTile(tx + i, ty + j)) return false;
+  return true;
+}
+/**
+ * True when a hero at (px, py) is stuck: their tile is blocked, or every tile beside it (up, down, left, right) is.
+ * A narrow lane or a dead end still counts as free.
+ */
+export function boxedInAt(px: number, py: number): boolean {
+  const tx = Math.floor(px / TILE), ty = Math.floor(py / TILE);
+  if (isSolidAt(px, py) || isDecorSolidAt(px, py)) return true;
+  return !freeTile(tx + 1, ty) && !freeTile(tx - 1, ty) && !freeTile(tx, ty + 1) && !freeTile(tx, ty - 1);
+}
+/** The centre of the nearest roomy tile to (px, py), ring by ring out to `maxR` tiles; undefined if none. */
+export function openGroundNear(px: number, py: number, maxR = 10): { x: number; y: number } | undefined {
+  const tx = Math.floor(px / TILE), ty = Math.floor(py / TILE);
+  for (let r = 1; r <= maxR; r++) {
+    let best: { x: number; y: number } | undefined, bd = Infinity;
+    for (let j = -r; j <= r; j++) for (let i = -r; i <= r; i++) {
+      if (Math.max(Math.abs(i), Math.abs(j)) !== r || !roomyTile(tx + i, ty + j)) continue;
+      const x = (tx + i + 0.5) * TILE, y = (ty + j + 0.5) * TILE, d = Math.hypot(x - px, y - py);
+      if (d < bd) { bd = d; best = { x, y }; }
+    }
+    if (best) return best;
+  }
+  return undefined;
+}
+
 /**
  * What Oakvale's villagers say when a Songweaver plays a major-key song near them (by NPC id, like the idle lines in
  * shared/quests.ts). A minor key or Discord in town gets no line. server/songs.ts BuskingLines says them (BUSKING).
