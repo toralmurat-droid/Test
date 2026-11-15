@@ -666,7 +666,7 @@ export const REDFANG_KINDS: MobKind[] = ["outrider", "crossbowman", "firebrand",
 export const SINKHOLES_AI = {
   quills: { range: 140, keepAway: 60, shotSpeed: 210, shotRadius: 3, mult: 0.95, volley: { everyMs: 5500, arrows: 3, spread: 0.2 } },
   hex: { range: 135, keepAway: 70, shotSpeed: 160, shotRadius: 3, mult: 1 },
-  stitch: { everyMs: 8000, castMs: 900, range: 6 * 32, hpFrac: 0.6, heal: 0.25 },
+  stitch: { everyMs: 8000, castMs: 900, range: 6 * 32, hpFrac: 0.6, heal: 0.25, eliteHeal: 0.08 }, // elites and bosses take far less: a ring of stitchers must not keep a chieftain up
   burrow: {
     delver: { minDist: 60, maxDist: 220, firstMs: 2500, everyMs: 8000, underMs: 1100, markMs: 650, radius: 30, dmgMult: 1.5, stunMs: 400 },
     mawfather: { minDist: 90, maxDist: 320, firstMs: 6000, everyMs: 14000, underMs: 1400, markMs: 900, radius: 52, dmgMult: 1.9, stunMs: 600 },

@@ -1,4 +1,4 @@
-import { HIDEKIN_KINDS, SINKHOLES_AI, type MobKind } from "../shared/constants";
+import { BOSS, ELITE, HIDEKIN_KINDS, SINKHOLES_AI, type MobKind } from "../shared/constants";
 
 /**
  * The Hide-Kin of the Mawdeep Sinkholes on the server (shared/constants.ts SINKHOLES_AI has the numbers): the Delvers'
@@ -140,7 +140,7 @@ export class HideKin {
       s.castUntil = 0; m.winding = false; m.lastAttack = now;
       const o = H.mob(s.stitchTo);
       if (o && !o.dead && !o.owner && Math.hypot(o.x - m.x, o.y - m.y) <= S.range * 1.3) {
-        const amount = Math.max(1, Math.round(o.maxHp * S.heal));
+        const amount = Math.max(1, Math.round(o.maxHp * (ELITE[o.kind as MobKind] || BOSS[o.kind as MobKind] ? S.eliteHeal : S.heal)));
         o.hp = Math.min(o.maxHp, o.hp + amount);
         H.broadcast("hidekin", { ev: "stitch", id, to: s.stitchTo, amount });
       }

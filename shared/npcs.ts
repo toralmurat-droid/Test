@@ -67,13 +67,13 @@ export const NPCS: Npc[] = [
   { id: "moorherbalist", name: "Mother Ysolde", title: "Herbwife", sprite: "moorherbalist", x: 77.5 * TILE, y: MR(106.75) * TILE, dir: "down", shop: "moorherbalist", where: "Cairnwatch (Act 3 moors), at her stall on the square" },
   { id: "moorarmourer", name: "Gorm", title: "Armour merchant", sprite: "moorarmourer", x: 84.5 * TILE, y: MR(111.6) * TILE, dir: "left", shop: "moorarmourer", where: "Cairnwatch (Act 3 moors), by the armoury" },
   // ---- The Rustwater Post, the drovers' and salt-miners' waystation in the Red Badlands (Act 4, shared/badlands.ts): round its
-  // square (placeholder names; sprites: existing sheets until tools/art paints rustmarshal / rustarmourer / rusthealer).
+  // square (placeholder names; own sheets from tools/art).
   // The Post's marshal stands before his hall: the badlands' quest chain starts with him
   { id: "rustmarshal", name: "Marshal Hesk Varro", title: "Marshal of the Rustwater Post", sprite: "rustmarshal", x: 226.5 * TILE, y: BR(87.75) * TILE, dir: "down", where: "the Rustwater Post (Act 4 badlands), before the marshal's hall" },
   { id: "rustarmourer", name: "Corra Flint", title: "Armour merchant", sprite: "rustarmourer", x: 232.5 * TILE, y: BR(87.75) * TILE, dir: "down", shop: "rustarmourer", where: "the Rustwater Post (Act 4 badlands), before the armoury" },
   { id: "rusthealer", name: "Old Sal", title: "Healer", sprite: "rusthealer", x: 236.5 * TILE, y: BR(87.75) * TILE, dir: "down", shop: "rusthealer", where: "the Rustwater Post (Act 4 badlands), at her stall on the square" },
   // ---- Ropewell, the trappers' and rope-makers' lodge in the Mawdeep Sinkholes (Act 5, shared/sinkholes.ts): before their
-  // halls on the square (placeholder names; sprites: existing sheets until tools/art paints ropewarden / ropearmourer / ropehealer).
+  // halls on the square (placeholder names; own sheets from tools/art).
   // The Lodge-Warden stands before his hall: the sinkholes' quest chain starts with him
   { id: "ropewarden", name: "Lodge-Warden Brannoc Tull", title: "Warden of Ropewell", sprite: "ropewarden", x: 108.5 * TILE, y: SR(23.75) * TILE, dir: "down", where: "Ropewell (Act 5 sinkholes), before the Lodge-Warden's hall" },
   { id: "ropearmourer", name: "Hesta Coil", title: "Armour merchant", sprite: "ropearmourer", x: 114.5 * TILE, y: SR(23.75) * TILE, dir: "down", shop: "ropearmourer", where: "Ropewell (Act 5 sinkholes), before the armoury" },

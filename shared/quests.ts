@@ -2611,7 +2611,7 @@ const SINK_QUESTS: QuestDef[] = [
     acceptText: "I'll clear the brook",
     steps: [
       { type: "kill", zone: "Hollowbrook Dells", kinds: ["cackler"], goal: 6, text: "Kill 6 Cacklers in Hollowbrook Dells", banner: ["New quest", "Hollowbrook Laughter"], obj: "Cacklers slain: {n} / {goal}", nag: "{n} of {goal}. They hunt in packs. Keep your back to a bank." },
-      { type: "kill", zone: "Hollowbrook Dells", kinds: ["sinkworm"], goal: 3, text: "Kill 3 Sinkworms in the brook", banner: ["The worms", "Kill 3 Sinkworms"], obj: "Sinkworms slain: {n} / {goal}", nag: "{n} of {goal}. They rise from the wet ground. Do not stand where the moss sinks." },
+      { type: "kill", zone: "Hollowbrook Dells", kinds: ["sinkworm"], goal: 3, text: "Kill 3 Gullet Worms in the brook", banner: ["The worms", "Kill 3 Gullet Worms"], obj: "Gullet Worms slain: {n} / {goal}", nag: "{n} of {goal}. They rise from the wet ground. Do not stand where the moss sinks." },
     ],
     outro: ["The brook runs quiet at last, and a trapper's boot floats down it with the laces still tied.", "The Warrens lie to the east. That is where the trappers' kin went."],
     reward: arcReward(32),
@@ -2681,7 +2681,7 @@ const SINK_QUESTS: QuestDef[] = [
     ],
     acceptText: "I'll cross the pits",
     steps: [
-      { type: "kill", zone: "The Pitfields", kinds: ["sinkworm"], goal: 5, text: "Kill 5 Sinkworms in the Pitfields", banner: ["New quest", "Over the Pitfields"], obj: "Sinkworms slain: {n} / {goal}", nag: "{n} of {goal}. They wait under the rims. Walk the firm ground between the sinks." },
+      { type: "kill", zone: "The Pitfields", kinds: ["sinkworm"], goal: 5, text: "Kill 5 Gullet Worms in the Pitfields", banner: ["New quest", "Over the Pitfields"], obj: "Gullet Worms slain: {n} / {goal}", nag: "{n} of {goal}. They wait under the rims. Walk the firm ground between the sinks." },
       { type: "use", zone: "The Pitfields", objects: SINK_PEGS, chest: false, text: "Cut the 3 hide-pegged ropes", banner: ["The ropes", "Cut the pegged ropes"], obj: "Ropes cut: {n} / {goal}", nag: "{n} of {goal}. They span the widest sinks, pegged at both ends." },
     ],
     outro: ["The last rope falls into its sink and is gone. The Pitfields lie open, and the Hide-Kin supply line is cut.", "South-east, a great palisade of root and hide on the far rise. Hidehall. They will have felt the ropes go."],
