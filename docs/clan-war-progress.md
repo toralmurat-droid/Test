@@ -759,6 +759,8 @@ Sims (`npx tsx tools/balance/war.ts 200 30 [--clever=<clan>]`):
   still have no quest.
 
 - Hold art rebuilt from the fort cells (2026-11-15): `client/src/holdArt.ts` paints per-cell pieces (`fortLayout`, `paintPiece`,
-  `paintGround`) from `fortOf(t, owner)`; `client/src/holdAssets.ts` (`HoldDraw`) bakes them to textures at run time (time-sliced),
-  one image per cell sorted by foot depth, one ground image per Hold; `warStandards.ts` rebuilds a Hold when its owner changes.
-  The baked PNGs and `tools/art/holds.ts` are gone. Preview: `npx tsx tools/art/preview/holds-sheet.ts out.png`.
+  `paintGround`) from `fortOf(t, owner)`; `tools/art/holds.ts` (`npm run art`) bakes every look any Hold
+  can need into one atlas per clan (`client/public/assets/holds/atlas_<clan>.png/.json`; `tests/holdatlas.test.ts` fails
+  when a fort change needs a look the atlas lacks: re-run the bake). `client/src/holdAssets.ts` (`HoldDraw`) loads the
+  clan's atlas lazily and builds a Hold in one call, one image per cell sorted by foot depth; `warStandards.ts` shows flat
+  cell blocks while an atlas loads and swaps the art in the same frame when a Hold's owner changes. Preview: `npx tsx tools/art/preview/holds-sheet.ts out.png`.
