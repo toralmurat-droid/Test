@@ -155,7 +155,6 @@ export class PveDuel extends Duel {
    * and monsters favour them, SUMMON.taunt), else the hero.
    */
   mobTarget(m: MobF): F {
-    if (m.spec.kind === "trooper" && !this.hero.dead) return this.hero; // server/warTroops.ts: a hero in sight outweighs a creature (heroBonus)
     let best: F = this.hero, bd = SUMMON.guardRange;
     for (const g of this.golemsOf(this.hero)) { const d = Math.abs(g.x - m.x); if (d < bd) { bd = d; best = g; } }
     return best;

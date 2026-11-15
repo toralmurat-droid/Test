@@ -236,7 +236,7 @@ Open points for M1:
 ## Tuning: troops vs classes (2026-11-15)
 
 - `TROOP_VETERAN.dmg` 0.05 -> 0.025 (Lv45 soldier damage x2.85 -> x1.93 over `mobScale`), `CARAVAN.hpMult` 5 -> 4.
-- `tools/balance/pve.ts`: troopers target the hero like the server (`server/warTroops.ts` `heroBonus` beats a creature);
-  the sim used to send them at golems, which made the Summoner look untouchable.
-- `pve.ts 40 --troops` Lv45 x3, before -> after: wizard 88 -> 100%, vampire 78 -> 93%, summoner 95 -> 100%, songweaver 33 -> 80%.
-  Summoner Lv8 x3 83 -> 40% (now hit like the others; vampire 28%). Caravan Lv45: 68/75/93/28 -> 88/88/100/68%.
+- `pve.ts 40 --troops` Lv45 x3, before -> after (win %): wizard 88 -> 98, vampire 78 -> 90, summoner 95 -> 100,
+  songweaver 33 -> 83. Caravan Lv45: 68/75/93/28 -> 88/85/100/70.
+- Summoner stays easy against troops: golems take the troopers' hate (Guardian moves it to the golem, `AGGRO.hitBase`
+  beats `heroBonus`), on the server as in the sim. Left as is; a golem-vs-trooper rule would be its own change.
