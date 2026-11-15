@@ -454,5 +454,5 @@ export function addWorldProps(scene: Phaser.Scene, light?: (x: number, y: number
     // the glow sits in the lantern: it hangs at texel x 22 of 32 (6 right of the sprite's centre), its middle ~71 texels above the foot
     if (s.kind === "wp_lantern_pole") light?.(s.x, s.y, LANTERN_LIFT, LANTERN_DX);
   }
-  addSaltmereProps(scene, light); // Saltmere's harbour: smacks, rowboats, buoy, posts, breakwater, quay (saltmereArt.ts)
+  addSaltmereProps(scene, light); // Saltmere's harbour: smacks, rowboats, buoy, posts, breakwater (saltmereArt.ts)
 }

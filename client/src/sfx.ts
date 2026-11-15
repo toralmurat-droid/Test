@@ -36,7 +36,7 @@ let voices = 0;
 const MAX_VOICES = 28;
 const lastPlay = new Map<string, number>();
 /** Sounds that ring for seconds (kept connected longer). */
-const LONG = new Set(["lootRare", "lootLegendary", "horn", "ritual", "ritualCall", "demonRise", "demonRoar", "shrine", "portalTravel", "portalWake", "necroWind", "heroDie", "levelup", "owl", "chime", "warcry", "motherInflate", "demonFire", "skelDie", "lutePluck", "swResonate", "swShatter", "swBounce", "swSnap", "swSwell", "caravan_raided", "caravan_arrived", "siege_front", "ram_wrecked", "ram_at_gate", "tunnel_open", "tunnel_collapse", "ritual_broken", "ritual_done"]);
+const LONG = new Set(["lootRare", "lootLegendary", "horn", "ritual", "ritualCall", "demonRise", "demonRoar", "shrine", "portalTravel", "portalWake", "ferryOff", "ferryOn", "necroWind", "heroDie", "levelup", "owl", "chime", "warcry", "motherInflate", "demonFire", "skelDie", "lutePluck", "swResonate", "swShatter", "swBounce", "swSnap", "swSwell", "caravan_raided", "caravan_arrived", "siege_front", "ram_wrecked", "ram_at_gate", "tunnel_open", "tunnel_collapse", "ritual_broken", "ritual_done"]);
 const AMBIENT = new Set(["crackle", "bird", "cricket", "chime", "owl", "step", "skelIdle", "blobGurgle", "crawl"]);
 
 const TOWNS = ["Oakvale", "Market Square", "Chapel of the Dawn", "The Rusty Tankard", "The Smithy", "Saltmere", "Hunter's Camp"];
@@ -440,6 +440,16 @@ const R: Record<string, Recipe> = {
   gate: (o, t, v, down) => { for (let i = 0; i < 7; i++) noise(o, t + i * 0.07, { type: "bandpass", f: 1800 + (i % 3) * 400, q: 6, dur: 0.05, vol: 0.09 * v, att: 0.003 }); tone(o, t, { type: "sawtooth", f: 70, f2: 55, dur: 0.5, vol: 0.05 * v, att: 0.05 }); if (down) thud(o, t + 0.55, 110, 0.4 * v, 0.16); },
   chest: (o, t, v) => { tone(o, t, { type: "sawtooth", f: 95, f2: 140, dur: 0.45, vol: 0.12 * v, vib: 12, vibHz: 18, att: 0.05 }); noise(o, t, { type: "bandpass", f: 700, q: 4, dur: 0.4, vol: 0.12 * v, att: 0.1 }); thud(o, t + 0.45, 140, 0.3 * v, 0.12); },
   shrine: (o, t, v) => { [0, 7, 12, 19].forEach((s, i) => bell(o, t + i * 0.12, 392 * 2 ** (s / 12), 2.2, 0.12 * v)); },
+  // Pell's ferry (broadcast sfx ev "ferry"): oar strokes and a ship's bell leaving the jetty, a bump and a bell on landing
+  ferryOff: (o, t, v) => {
+    bell(o, t, 659, 1.0, 0.1 * v);
+    for (let i = 0; i < 4; i++) { noise(o, t + 0.25 + i * 0.32, { type: "bandpass", f: 700, f2: 300, q: 1.2, dur: 0.22, vol: 0.22 * v, att: 0.05 }); thud(o, t + 0.3 + i * 0.32, 150, 0.12 * v, 0.08); }
+  },
+  ferryOn: (o, t, v) => {
+    noise(o, t, { type: "bandpass", f: 500, f2: 250, q: 1, dur: 0.3, vol: 0.2 * v });
+    thud(o, t + 0.28, 90, 0.4 * v, 0.2);
+    bell(o, t + 0.4, 784, 1.2, 0.12 * v); bell(o, t + 0.75, 784, 1.0, 0.08 * v);
+  },
   portalTravel: (o, t, v) => { tone(o, t, { f: 120, f2: 900, dur: 0.9, vol: 0.2 * v, att: 0.3, vib: 20, vibHz: 9 }); whoosh(o, t, 200, 3000, 0.9, 0.4 * v); bell(o, t + 0.8, 784, 1.2, 0.12 * v); },
   portalWake: (o, t, v) => { [0, 5, 7, 12].forEach((s) => tone(o, t, { type: "triangle", f: 220 * 2 ** (s / 12), dur: 2, vol: 0.09 * v, att: 0.4, vib: 3 })); bell(o, t + 0.3, 880, 1.5, 0.1 * v); },
   step: (o, t, v, kind = "grass") => {
@@ -1290,6 +1300,12 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
       case "ritual_broken": pos("ritual_broken", 1, undefined, { key: "rb" + (ev.x ?? "") + ":" + (ev.y ?? ""), minGap: 1500, reach: 1.8 }); break;
       case "ritual_done": pos("ritual_done", 1, undefined, { key: "rd" + (ev.x ?? "") + ":" + (ev.y ?? ""), minGap: 1500, reach: 2 }); break;
       case "caravan_arrived": case "caravan_delivered": pos("caravan_arrived", 1, undefined, { key: "ca" + (ev.id ?? ev.clan ?? ""), minGap: 500, reach: 2 }); break;
+      case "ferry": { // off at the jetty it left, then the landing (the rider hears both; others only what is near them)
+        const mine = ev.id === me();
+        if (mine) { play("ferryOff"); play("ferryOn", undefined, undefined, 1, undefined, { delay: 1.8 }); }
+        else { if (ev.x1 !== undefined) play("ferryOff", ev.x1, ev.y1, 0.9, undefined, { key: "fo" + ev.id, minGap: 300 }); if (ev.x !== undefined) play("ferryOn", ev.x, ev.y, 0.9, undefined, { key: "fn" + ev.id, minGap: 300, delay: 1.8 }); }
+        break;
+      }
       case "grimoire": if (ev.id === me()) pos("pageTurn", 1, ({ fire: "fire", cold: "frost", poison: "poison", shock: "lightning" } as Record<string, string>)[ev.el] ?? "arcane"); break;
     }
   });
