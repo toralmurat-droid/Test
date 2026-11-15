@@ -10,6 +10,7 @@ import { RAIDERS } from "../../../shared/raiders";
 import { AFFIX_KEYS, AFFIXES, type AffixKey } from "../../../shared/champions";
 import { CHAMP_WEAPONS } from "./look";
 import { WAR_SOLDIERS } from "./warLooks";
+import { CART_FRAMES, CART_H, CART_W, WAR_CARTS, paintCart } from "./warCarts";
 
 /**
  * Monster sheets for the iso look. Same textures as client/src/textures.ts mobTexture (6 frames:
@@ -631,6 +632,8 @@ export function buildMobs(out: string, ONLY?: string[]) {
     humanoid("mob_sunwright", "sunwright", 44, 48, 42 / 48, 1.25), // Act 2's final boss, drawn big like the Hollow King
     // the clan war's soldiers (warLooks.ts): 36 px wide so the fallen body fits; officers are taller
     ...WAR_SOLDIERS.map((k) => k.endsWith("_cap") || k.endsWith("_chief") || k.endsWith("_adept") ? humanoid(`mob_${k}`, k, 36, 34, 32 / 34, 0.95, false, 0, true) : humanoid(`mob_${k}`, k, 36, 32, 30 / 32, 0.9, false, 0, true)),
+    // the clan war's supply carts (warCarts.ts): 14 frames, 12 = staggering, 13 = wrecked
+    ...WAR_CARTS.map((k) => ({ key: `mob_${k}`, w: CART_W, h: CART_H, frames: CART_FRAMES, draw: (c: C2, f: number) => paintCart(c, SH, k, f) })),
     { key: "mob_scorpion", w: 36, h: 30, draw: (c: C2, f: number) => scorpionFrame(c, 36, 30, f) },
     // the Night Raiders (raiders.ts): one sheet for each of the Seven
     ...RAIDERS.map((R) => ({ key: `mob_nightraider_${R.key}`, w: RAIDER_W, h: RAIDER_H, draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintRaider(c, SH, R, dir as "down" | "up" | "right", pose, f); } })),
