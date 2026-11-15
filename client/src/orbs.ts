@@ -30,11 +30,18 @@ const mix = (a: number[], b: number[], t: number) => [a[0] + (b[0] - a[0]) * t, 
 
 const buffers = new WeakMap<CanvasRenderingContext2D, ImageData>(); // one pixel buffer per orb, reused (no garbage per redraw)
 
-function drawOrb(ctx: CanvasRenderingContext2D, frac: number, pal: Pal, t: number, shield = false) {
+/**
+ * `shield` = some absorb is up; `amt` = its size as a fraction of max HP (0 = unknown, e.g. a knight's guard: rim only).
+ * With an amount, a pale glass band sits on top of the liquid (frac .. frac + amt); past the brim it overflows (bright top edge).
+ */
+function drawOrb(ctx: CanvasRenderingContext2D, frac: number, pal: Pal, t: number, shield = false, amt = 0) {
   let img = buffers.get(ctx);
   if (!img) { img = ctx.createImageData(SIZE, SIZE); buffers.set(ctx, img); }
   const d = img.data;
   const level = C + R_IN - 2 * R_IN * Math.max(0, Math.min(1, frac)); // y of the liquid surface
+  const top = Math.max(0, Math.min(1, frac)) + amt, overflow = amt > 0 && top > 1; // the band's top, in orb heights
+  // Without overflow the band stacks on the liquid (level up to its top); with overflow it is the top `amt` of the orb, over the red.
+  const bandTop = overflow ? C - R_IN : C + R_IN - 2 * R_IN * top, bandBot = overflow ? C - R_IN + 2 * R_IN * Math.min(1, amt) : level + 1.2;
   for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) {
     const dx = x + 0.5 - C, dy = y + 0.5 - C, r = Math.hypot(dx, dy);
     if (r > R_OUT) continue;
@@ -58,12 +65,26 @@ function drawOrb(ctx: CanvasRenderingContext2D, frac: number, pal: Pal, t: numbe
       if ((hx * hx) / 110 + (hy * hy) / 50 < 1) c = mix(c, [255, 255, 255], 0.5 - ((hx * hx) / 110 + (hy * hy) / 50) * 0.35);
       if (r > R_IN * 0.8 && r < R_IN * 0.9 && dx > 0 && dy > 0 && dx * 0.6 < dy * 1.6 && dy * 0.6 < dx * 1.6) c = mix(c, [255, 255, 255], 0.18);
       if (shield) {
-        // A Songweaver shield (Pedal Point...): a pale glassy pane over the whole orb, a bright rim, and a glint that sweeps round it.
-        // Drawn in chunky 2 px steps so it stays pixel art. Only presence is known to the client, so the pane is always full.
-        const rim = r > R_IN - 4, a = Math.atan2(dy, dx), sweep = Math.cos(a - t * 1.6);
-        c = mix(c, [190, 226, 255], rim ? 0.55 + 0.3 * Math.max(0, sweep) : 0.12 + 0.04 * Math.sin(t * 2));
-        if (rim && r > R_IN - 2 && sweep > 0.9) c = [255, 255, 255];
-        if (!rim && ((x >> 1) + (y >> 1)) % 6 === 0) c = mix(c, [230, 245, 255], 0.22); // faint glass facets
+        // An absorb shield: pale glass stacked on the liquid (amt known), or just a glinting rim when only its presence is known.
+        // Chunky 2 px steps keep it pixel art.
+        const a = Math.atan2(dy, dx), sweep = Math.cos(a - t * 1.6), rim = r > R_IN - 4;
+        const yy = y + 0.5, inBand = amt > 0 && yy >= bandTop && yy < bandBot;
+        const onRed = inBand && overflow && yy >= level;
+        if (inBand) {
+          c = mix(c, [200, 236, 255], (onRed ? 0.3 : 0.55) + 0.2 * lit + 0.03 * Math.sin(t * 2)); // pale blue glass lit like the sphere, no stripes; translucent over the red
+          if (!rim && ((x >> 2) * 7 + (y >> 2) * 13) % 17 === 0) c = mix(c, [236, 246, 255], 0.16); // a few sparse facets
+          if (!overflow && yy - bandTop < 1.8) c = mix(c, [240, 250, 255], 0.8); // the band's top edge
+          if (overflow && bandBot - yy < 1.8) c = mix(c, [240, 250, 255], 0.7); // its lower edge, over the red
+        }
+        if (amt <= 0 || inBand) {
+          if (rim) c = mix(c, [190, 226, 255], 0.55 + 0.3 * Math.max(0, sweep));
+          if (rim && r > R_IN - 2 && sweep > 0.9) c = [255, 255, 255];
+        }
+        if (amt <= 0) c = mix(c, [190, 226, 255], 0.08 + 0.04 * Math.sin(t * 2));
+        if (overflow) { // more shield than room: the top of the glass glows
+          const g = Math.max(0, 1 - (yy - (C - R_IN)) / 9) * Math.max(0, 1 - Math.abs(dx) / (R_IN * 0.8));
+          if (g > 0) c = mix(c, [255, 252, 232], Math.min(0.85, g * (rim ? 1.1 : 0.8) + 0.1 * Math.sin(t * 4) * g));
+        }
       }
     } else {
       // bronze rim: dark edges, light on the top left, rivets
@@ -260,23 +281,34 @@ export class OrbHud {
   private drain: { from: number; to: number; at: number } | null = null;
   private seenMp = 0;
   private shield = false;
+  private shownAmt = 0; // the shield amount drawn, in HP points: eases down, jumps up
+  private amtAt = 0;
 
-  update(hp: number, maxHp: number, mp: number, maxMp: number, song = false, shield = false) {
+  /** `shieldAmt` = remaining absorb in HP points (Player.me.shield); `shield` = some shield is up even if its size is unknown (guard). */
+  update(hp: number, maxHp: number, mp: number, maxMp: number, song = false, shield = false, shieldAmt = 0) {
     this.setSong(song);
     if (song) this.mp.parentElement!.classList.toggle("full", maxMp > 0 && mp / maxMp >= 0.9);
     const now = performance.now();
     const fh = maxHp > 0 ? hp / maxHp : 0, realMp = maxMp > 0 ? mp / maxMp : 0;
     const fm = this.drainLevel(realMp, song, now);
     this.layout();
-    const { hpTxt, mpTxt } = orbTexts(hp, maxHp, mp, maxMp);
+    const amt = shieldAmt > 0 && maxHp > 0 ? shieldAmt : 0;
+    const dtA = Math.min(250, now - (this.amtAt || now)); this.amtAt = now;
+    this.shownAmt = amt >= this.shownAmt ? amt : amt + (this.shownAmt - amt) * Math.exp(-dtA / 140); // the band shrinks smoothly
+    if (this.shownAmt - amt < 0.5) this.shownAmt = amt;
+    shield = shield || this.shownAmt > 0;
+    const { hpTxt, mpTxt } = orbTexts(hp, maxHp, mp, maxMp, Math.round(amt));
     const flipped = shield !== this.shield;
     // a shield glints all the time, and a draining gauge must draw every frame: both skip the 120 ms slosh throttle
     if (!flipped && !this.drain && !(shield && now - this.last.at >= 60) && !orbNeedsRedraw(this.last, fh, fm, hpTxt, mpTxt, now)) return;
     this.shield = shield;
     const t = now / 1000;
-    drawOrb(this.hp.getContext("2d")!, fh, RED, t, shield);
+    drawOrb(this.hp.getContext("2d")!, fh, RED, t, shield, maxHp > 0 ? this.shownAmt / maxHp : 0);
     drawOrb(this.mp.getContext("2d")!, fm, song ? GOLD : BLUE, t + 1.7);
-    this.hpTxt.textContent = hpTxt;
+    const cut = hpTxt.indexOf(" +");
+    if (cut < 0) this.hpTxt.textContent = hpTxt;
+    else { this.hpTxt.textContent = hpTxt.slice(0, cut) + " "; const b = document.createElement("b"); b.textContent = hpTxt.slice(cut + 1); this.hpTxt.appendChild(b); }
+    this.hpTxt.classList.toggle("shd", cut >= 0);
     this.mpTxt.textContent = mpTxt;
     this.last.hp = fh; this.last.mp = fm; this.last.at = now; this.last.hpTxt = hpTxt; this.last.mpTxt = mpTxt;
   }
