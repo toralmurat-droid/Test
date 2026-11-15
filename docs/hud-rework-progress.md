@@ -67,3 +67,33 @@ unique monsters (`Mob.summonFor` is not synced), so every other titled monster i
   gauge drops below that column when it reaches down to it); Tide card in `#topright` above the quest tracker.
 - Stray grey "-28" near the HP orb in town: source not found, needs a repro.
 - Named monsters: the client can't tell them from quest targets; a synced Mob flag would.
+
+## E – character, inventory and skills panel (decided 2026-11-15)
+Mockups: session scratchpad `hud/C/panels.cjs`, `panels2.cjs` (restyle the real panel in the running game); renders
+`hud/C/sheets/mock-B2-character-1920.png`, `mock-C-inventory-1920.png`, `mock-D-skills-1920.png`.
+Owner approved all six:
+- A: the stat sheet column (`#spsheet`) leaves every tab; all stats live once, on Character.
+- B: Character in two columns. Left: name, "Wizard · level 50", XP bar (gold gradient), stat points, four attribute rows
+  (value, + button, one plain effect line), Reset points + cost. Right: Offense, Defense, Resistances (element icons),
+  a "?" for elemental reactions instead of the paragraph. **With colour:** attribute colours (STR red, STA amber,
+  MAG blue, DEX green) on a small tag, the name, a left stripe and a faint row tint; stat values tinted by kind
+  (health red, mana blue, spell damage violet, attack/damage orange, crit/attack speed gold, move speed green);
+  Offense header orange with a crossed-swords mark, Defense blue with a shield mark.
+- C: Inventory = doll + bag, one dim hint line, loot filter behind a small ⚙. Item details become a compare card beside
+  the panel (the hovered item vs what you wear, changes in green/red). Doll slots show faint icons, not words.
+- D: Skills: one hint line + "?", points left as a badge on the Skills tab, details readable (no tiny caps),
+  "No points to spend" dim instead of red.
+- E: tabs and headers in the normal pixel font, sentence case, no letter-spacing; tiny font only for numbers/keys.
+- F: panel ~860 px wide (was ~1060), bronze frame like the elite monster plate.
+
+## F – quest log (decided 2026-11-15)
+Mockup: session scratchpad `hud/C/qmock.cjs`; renders `hud/C/qlog/mock-active-1920.png`, `mock-completed-1366.png`.
+Owner approved all six:
+- Q1: list ~270 px, one-line titles, grouped by story chain with its progress ("The Gloam · 4 of 12"), level small at the right.
+- Q2: tabs Active / Completed / Rumours with counts; completed greyed with a tick.
+- Q3: detail = title, one meta line ("Given by Brann · Mirror Pond · level 4+"), description, each objective once with
+  its count inside its bar (later steps dimmed), reward row with icons.
+- Q4: one way to track: ◆ per row (hollow = not tracked) and a "◆ Tracked" toggle by the title; the big button and
+  the footer hint go.
+- Q5: bronze frame, sentence-case pixel-font headers, ~860 px, centred; the list scrolls inside at 1366x768.
+- Q6: "Show on map" opens the world map at the objective.
