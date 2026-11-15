@@ -42,13 +42,11 @@ const SETUPS = [
       // the mouse is not over any monster in a headless run: pin the hovered monster (the top monster bar shows the ear icons)
       Object.defineProperty(S.pointer, "hoverId", { get: () => window.__hover });
       Object.defineProperty(S.pointer, "inspectId", { get: () => window.__hover });
-      // record the sfx events and chat hints the client handled
+      // record the sfx events the client handled (the sound hints are in the monster plate's Alt details, not in chat)
       const so = S.songEvent.bind(S);
       S.songEvent = (ev) => { window.log.push(ev); return so(ev); };
       const sy = S.npcs.say.bind(S.npcs);
       S.npcs.say = (id, t) => { const r = sy(id, t); window.log.push({ ev: "npcsay", id, text: t, shown: r }); return r; };
-      const cn = S.chatNote.bind(S);
-      S.chatNote = (t, c) => { window.log.push({ ev: "hint", text: t }); return cn(t, c); };
     });
     const send = (t, m) => page.evaluate(([t, m]) => window.S.room.send(t, m), [t, m]);
     const chat = (t) => send("chat", t);
@@ -98,11 +96,13 @@ const SETUPS = [
       if (!found) return { found: false };
       await chat(`/tp ${Math.floor(found.x / 32) - 3} ${Math.floor(found.y / 32)}`);
       await page.waitForTimeout(800);
-      // hover a second monster of the kind (not hit yet): the top monster bar (#monsterbar .mb-ear) shows the ear and note icons with the tooltip
+      // hover a second monster of the kind (not hit yet): the monster plate (#monsterbar) shows the ear and note icons and the sound hint with Alt held (the hint no longer goes to chat)
       await page.evaluate(([kind, id]) => { const S = window.S, m = S.entities.get(S.me); let bd = 1e9; window.__hover = id; S.entities.forEach((e, k) => { if (!e.mob || e.culled || e.state.dead || e.state.kind !== kind || k === id) return; const d = Math.hypot(e.sprite.x - m.sprite.x, e.sprite.y - m.sprite.y); if (d < bd) { bd = d; window.__hover = k; } }); }, [kind, found.id]);
+      await page.keyboard.down("Alt");
       await page.waitForTimeout(1500); // the headless frame rate is 2-3 fps
-      result[tag + "-ear"] = await page.evaluate(() => { const bar = document.querySelector("#monsterbar"), ear = bar?.querySelector(".mb-ear"); return bar && !bar.hidden && ear ? { vis: true, icons: ear.querySelectorAll("img").length, tip: ear.textContent, name: bar.querySelector(".mb-name")?.textContent } : { vis: false }; });
+      result[tag + "-ear"] = await page.evaluate(() => { const bar = document.querySelector("#monsterbar"), ear = bar?.querySelector(".mb-hint"); return bar && !bar.hidden && ear ? { vis: true, icons: ear.querySelectorAll("img").length, tip: ear.textContent, name: bar.querySelector(".mb-name")?.textContent } : { vis: false }; });
       await shot(`${tag}-ear`);
+      await page.keyboard.up("Alt");
       for (let i = 0; i < 14; i++) {
         const t = await page.evaluate((id) => { const e = window.S.entities.get(id); return e && !e.state.dead ? { x: e.state.x, y: e.state.y } : null; }, found.id);
         if (!t) break;
@@ -129,7 +129,7 @@ const SETUPS = [
     result.skeleton = await fightAt(94, 100, "skeleton", "5-skeleton", ["sg_shrill", "sg_crack"]);
     result.events = await page.evaluate(() => {
       const c = {}; for (const e of window.log) c[e.ev === "soundhit" ? `soundhit:${e.tier}${e.match ? "+match" : ""}` : e.ev] = (c[e.ev === "soundhit" ? `soundhit:${e.tier}${e.match ? "+match" : ""}` : e.ev] ?? 0) + 1;
-      return { counts: c, hints: window.log.filter((e) => e.ev === "hint").map((e) => e.text), resonate: window.log.filter((e) => e.ev === "resonate").slice(0, 2), note: window.log.filter((e) => e.ev === "note").slice(0, 3).map((e) => e.s + ":" + e.deg) };
+      return { counts: c, resonate: window.log.filter((e) => e.ev === "resonate").slice(0, 2), note: window.log.filter((e) => e.ev === "note").slice(0, 3).map((e) => e.s + ":" + e.deg) };
     });
     result.errors = errors.slice(0, 8); // Colyseus `refId not found` / decode errors show up now and then (known, see CLAUDE.md gotchas)
     report[name] = result;

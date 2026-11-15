@@ -1,8 +1,8 @@
 /* HUD places (client/src/hudSlots.ts). Every HUD element has its own spot; nothing is placed with its own
    absolute offsets any more. Loaded after every other stylesheet, selectors are "body #id" like weathered.css. */
 
-/* ---- Top centre: the monster bar (monsterBar.css) takes the first 10 + ~100 px; --topband is where notices may start. */
-:root { --topband: 128px; }
+/* ---- Top centre: the monster plate (monsterBar.css) takes up to ~150 px (crest, statues, one extra row); --topband is where notices may start. */
+:root { --topband: 150px; }
 body #partytoast { top: max(var(--topband), 15%); } /* clear of the tallest bar (champion, two affixes, ear line) */
 
 /* ---- Top right: one column, pill -> minimap + dial -> location -> respawn line -> tracker -> feed.

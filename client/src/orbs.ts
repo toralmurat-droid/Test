@@ -71,7 +71,7 @@ function drawOrb(ctx: CanvasRenderingContext2D, frac: number, pal: Pal, t: numbe
  * The two statues guarding the orbs (Murat 2026-11-07): a demon of dark red stone on the left, an angel of pale marble
  * on the right. Painted small (44 x 60) with shapes and shown scaled up, pixelated.
  */
-const ST_W = 44, ST_H = 60;
+export const ST_W = 44, ST_H = 60;
 function statueCanvas(cv: HTMLCanvasElement) {
   cv.width = ST_W; cv.height = ST_H;
   const g = cv.getContext("2d")!;
@@ -85,7 +85,7 @@ function statueCanvas(cv: HTMLCanvasElement) {
   return { g, poly, ell, line, plinth };
 }
 
-function drawDemon(cv: HTMLCanvasElement) {
+export function drawDemon(cv: HTMLCanvasElement) {
   const { g, poly, ell, line, plinth } = statueCanvas(cv);
   const D = "#1c1010", M = "#3c2220", L = "#5e3a33", H = "#80564a";
   // bat wings spread behind: ribs and a ragged membrane
@@ -112,7 +112,7 @@ function drawDemon(cv: HTMLCanvasElement) {
   plinth("#140c0b", "#2e1c1a", "#4a302b");
 }
 
-function drawAngel(cv: HTMLCanvasElement) {
+export function drawAngel(cv: HTMLCanvasElement) {
   const { g, poly, ell, line, plinth } = statueCanvas(cv);
   const D = "#4a4640", M = "#8a847a", L = "#b8b1a4", H = "#e2dccd";
   // halo

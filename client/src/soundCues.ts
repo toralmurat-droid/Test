@@ -1,16 +1,15 @@
 import type Phaser from "phaser";
-import { hintFor, MUFFLED, RINGING } from "./songTables";
+import { MUFFLED, RINGING } from "./songTables";
 
 /**
  * Songweaver sound-hit cues (cosmetic): the "soundhit" sfx event says how a monster heard a hit. The server sends the
  * matching "hit" first, then "soundhit" in the same tick (the hit, then afterHit; a killing blow sends no soundhit),
- * so the damage number is tinted gold (ringing) or grey (muffled) after the fact. Also the once-per-kind chat hint
- * (the ear and note icons are in the top monster bar now).
+ * so the damage number is tinted gold (ringing) or grey (muffled) after the fact. The ear and note icons and the
+ * sound hint text are in the monster plate (monsterBar.ts), no longer in chat.
  */
 export class SoundCues {
   private lastNum = new Map<string, { t: number; obj: Phaser.GameObjects.Text }>();
   private wordAt = new Map<string, number>();
-  private hinted = new Set<string>();
 
   /** The colour a sound hit gets, or undefined for a plain one. */
   private static tint(tier: string, match: boolean) {
@@ -24,11 +23,8 @@ export class SoundCues {
     this.lastNum.set(id, { t: now, obj });
   }
 
-  /**
-   * The "soundhit" event. `word` prints a short label (throttled per monster). Returns the chat hint to show, if this
-   * is the first time this monster kind was heard (the caller says whether the hit is mine / close).
-   */
-  onSoundHit(ev: { id: string; tier: string; match?: boolean }, now: number, word: (text: string, col: string) => void, hint?: { kind: string; name: string }): string | undefined {
+  /** The "soundhit" event. `word` prints a short label (throttled per monster). */
+  onSoundHit(ev: { id: string; tier: string; match?: boolean }, now: number, word: (text: string, col: string) => void) {
     const col = SoundCues.tint(ev.tier, !!ev.match);
     if (col) {
       const n = this.lastNum.get(ev.id);
@@ -38,11 +34,5 @@ export class SoundCues {
         word(col === RINGING ? (ev.match ? "in tune" : "ringing") : "muffled", col);
       }
     }
-    if (hint && !this.hinted.has(hint.kind)) {
-      this.hinted.add(hint.kind);
-      const t = hintFor(hint.kind);
-      if (t) return `${hint.name}: ${t}`;
-    }
-    return undefined;
   }
 }

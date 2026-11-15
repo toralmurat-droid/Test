@@ -104,7 +104,7 @@ Two keyboard layouts, picked in the game menu (**Esc**) (`client/src/keymode.ts`
 - **Spell keys:** the mouse walks, spells on Q W E R T and 1–5, X dodge, D / F potions, V ranged weapon, G use,
   H character, C bag, K skill tree.
 
-In both: Enter chat, M world map, J quest log, P party, I ideas, N news (patch notes), Alt+Enter full screen.
+In both: Enter chat, M world map, J quest log, P party, I ideas, N news (patch notes), Alt+Enter full screen, hold Alt over a monster for its details.
 Chat emotes: /wave /cheer /laugh /sit /sleep.
 
 ### Viewing aids

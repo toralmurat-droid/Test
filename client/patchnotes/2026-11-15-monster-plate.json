@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-15",
+  "title": "A tidier monster plate",
+  "changes": [
+    "The plate at the top of the screen is now small and calm: level, name, a thin health bar and icons for what a monster is weak to, resists and suffers from. Its frame shows how special it is, from plain bronze up to a demon-guarded boss plate.",
+    "Champions and elites add a row with their traits. Hold Alt to see everything in words: what each trait does, weaknesses, health numbers and more.",
+    "Songweavers: the hints about how a monster hears moved out of the chat. Hold Alt over a monster to read them."
+  ]
+}
