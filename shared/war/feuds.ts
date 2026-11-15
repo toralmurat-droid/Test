@@ -32,8 +32,11 @@ export const FEUD = {
   tiers: [4, 10, 20],
   /** Points never climb past this (so decay brings a rampage down in a sane time). */
   maxPts: 30,
-  /** One point is forgiven per this long without a new kill of that clan's people. */
-  decayMs: 3 * 60_000,
+  /** One point is forgiven per this long without a new kill of that clan's people (Wanted lasts ~40 min, Hunted hours:
+   * the way out is meant to be death at the clan's hands)... */
+  decayMs: 10 * 60_000,
+  /** ...and time logged out counts this much (logging out is never the quickest way out). */
+  offlineDecay: 0.5,
   /** A Wanted hero is seen this many times as far... */
   sight: 2,
   /** ...and chased this many tiles farther past the land's leash (WAR_TROOPS.leashTiles). */
@@ -51,7 +54,7 @@ export const FEUD = {
     leashTiles: 12,
   },
   /** A hero sworn to the clan who kills a Wanted hero: renown and valor, once per target per UTC day. */
-  bounty: { renown: 15, valor: 3 },
+  bounty: { renown: 15, valor: 3, perDay: 3 },
 };
 
 /** Tier names (index: wantedTier). */
@@ -197,10 +200,10 @@ export function settleFeud(f: FeudState, k: ClanKey) {
 
 const num = (v: unknown, lo: number, hi: number): number | undefined => (typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : undefined);
 /**
- * A saved feud made safe: unknown clans and junk dropped, numbers clamped, offline decay applied, expired entries gone.
- * Old saves (no feud) give {}.
+ * A saved feud made safe: unknown clans and junk dropped, numbers clamped, decay applied (at FEUD.offlineDecay when
+ * `offline`: a save being loaded), expired entries gone. Old saves (no feud) give {}.
  */
-export function cleanFeud(raw: unknown, now: number): FeudState {
+export function cleanFeud(raw: unknown, now: number, offline = false): FeudState {
   const out: FeudState = {};
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
   for (const k of CLAN_KEYS) {
@@ -209,7 +212,11 @@ export function cleanFeud(raw: unknown, now: number): FeudState {
     const r = e as Record<string, unknown>, c: FeudEntry = {};
     const until = num(r.until, 0, now + FEUD.grudgeMs), pts = num(r.pts, 0, FEUD.maxPts), at = num(r.at, 0, now), paid = num(r.paid, 0, utcDay(now));
     if (until !== undefined && until > now) c.until = until;
-    if (pts) { c.pts = snapPts(pts); c.at = at ?? now; }
+    if (pts) {
+      c.pts = snapPts(pts); c.at = at ?? now;
+      // a save loaded after time away: that time decays at FEUD.offlineDecay (mapped back onto the online clock)
+      if (offline) c.at = now - (now - c.at) * FEUD.offlineDecay;
+    }
     if (paid !== undefined && Number.isInteger(paid)) c.paid = paid;
     if (c.until !== undefined || c.pts !== undefined || c.paid !== undefined) out[k] = c;
   }

@@ -3,12 +3,13 @@
  * rank only reach other clients through server/warOaths.ts) and the minutes sworn heroes spend in a standard's ring, reported to the war as valor.
  */
 import { heroValor, STANDARD, standardAt, isClan, nextOathAt } from "../shared/war/standards";
-import type { ClanKey } from "../shared/war/clans";
+import { CLANS, type ClanKey } from "../shared/war/clans";
+import { wantedTier, type FeudState } from "../shared/war/feuds";
 import { RENOWN_RANKS, rankOf } from "../shared/war/renown";
 import { rallyRenown } from "../shared/war/rules";
 import { addValor, warState } from "./war";
 
-export interface WarHero { clan?: ClanKey; clanAt: number; dead: boolean; level: number; x: number; y: number; lastAct: number; renown: number }
+export interface WarHero { clan?: ClanKey; clanAt: number; dead: boolean; level: number; x: number; y: number; lastAct: number; renown: number; feud?: FeudState }
 export interface ClanView { clan: ClanKey | ""; next: number; minLevel: number; renown: number }
 
 export const clanView = (p: WarHero): ClanView => ({ clan: p.clan ?? "", next: nextOathAt(p.clan, p.clanAt), minLevel: STANDARD.minLevel, renown: Math.floor(p.renown) });
@@ -24,6 +25,7 @@ export function swear(p: WarHero, want: unknown, now = Date.now()): string {
   if (p.level < STANDARD.minLevel) return `Heroes swear from level ${STANDARD.minLevel}.`;
   if (p.clan === want) return "";
   if (now < nextOathAt(p.clan, p.clanAt)) return "You swore an oath less than a day ago.";
+  if (wantedTier(p.feud, want, now) >= 1) return `${CLANS[want].name} will not take the oath of a wanted man.`; // (shared/war/feuds.ts: the debt is paid in blood first)
   p.clan = want; p.clanAt = now;
   return "";
 }

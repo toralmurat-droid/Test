@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { startRoom, until, wait } from "./helpers/room";
 import { TILE } from "../shared/constants";
 import { SAFE_ZONE } from "../shared/map";
-import { CLAN_KEYS, type ClanKey } from "../shared/war/clans";
+import { CLANS, CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import { newMinds } from "../shared/war/doctrine";
 import { atWar, borderPairs, FEUD, killPoints, pairOf, snapPts, utcDay, wantedTier } from "../shared/war/feuds";
 import { garrisonSpots, patrolOf, TROOP } from "../shared/war/patrols";
@@ -12,6 +12,7 @@ import { HOLDS } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
 import { parseTroop, WAR_TROOPS } from "../shared/war/troops";
 import { _resetWar, _valorOf, warState } from "../server/war";
+import { swear } from "../server/warHeroes";
 
 /** An Act 1 land with a patrol and guard posts, away from Oakvale, whose holder borders some clans and not others. */
 const W0 = newWar(), B0 = borderPairs(W0.owner);
@@ -228,6 +229,49 @@ test("feuds (room): a sworn killer claims the bounty on a Wanted hero once per U
   } finally { await srv.stop(); }
 });
 
+test("feuds (room): no bounty farming (party, own clan, FEUD.bounty.perDay per killer) and no oath to a clan that wants you", async () => {
+  const srv = await startRoom();
+  freshWar();
+  try {
+    const V = await setup(srv), K = await setup(srv);
+    const room = V.room, owner = OWNER();
+    K.p.clan = owner;
+    const wanted = () => { V.p.dead = false; V.p.hp = V.p.maxHp; V.p.feud = { [owner]: { pts: FEUD.tiers[0] + 1, at: Date.now(), until: Date.now() + 60_000 } }; };
+    const kill = () => room.damagePlayer(V.id, 1e9, K.p.name, [0, 0], 0, { from: K.id });
+    // a party member of the clan: the feud is settled, no bounty
+    V.p.party = K.p.party = "alts";
+    wanted(); kill();
+    assert.equal(wantedTier(V.p.feud, owner, Date.now()), 0, "settled by a party member");
+    assert.equal(K.p.renown, 0, "but no bounty");
+    V.p.party = K.p.party = "";
+    // a victim sworn to the killer's own clan: no bounty
+    V.p.clan = owner;
+    wanted(); kill();
+    assert.equal(wantedTier(V.p.feud, owner, Date.now()), 0);
+    assert.equal(K.p.renown, 0, "own clan: no bounty");
+    V.p.clan = undefined;
+    // at most FEUD.bounty.perDay per killer per day (each a fresh target here: the per-target day is cleared)
+    for (let i = 0; i < FEUD.bounty.perDay + 2; i++) { wanted(); kill(); }
+    assert.equal(K.p.renown, FEUD.bounty.renown * FEUD.bounty.perDay, "capped per killer per day");
+    assert.equal(K.p.claims, FEUD.bounty.perDay);
+    const snap = room.snapshot(K.p);
+    assert.deepEqual([snap.claimDay, snap.claims], [utcDay(Date.now()), FEUD.bounty.perDay], "the count is saved");
+    K.p.claims = 0;
+    room.restore(K.p, JSON.parse(JSON.stringify(snap)));
+    assert.equal(K.p.claims, FEUD.bounty.perDay, "and read back");
+    K.p.claimDay = utcDay(Date.now()) - 1;
+    wanted(); kill();
+    assert.equal(K.p.renown, FEUD.bounty.renown * (FEUD.bounty.perDay + 1), "a new day: a new count");
+    // no oath while Wanted by that clan
+    wanted(); V.p.clan = undefined; V.p.clanAt = 0;
+    assert.equal(swear(V.p, owner), `${CLANS[owner].name} will not take the oath of a wanted man.`);
+    assert.equal(V.p.clan, undefined);
+    assert.equal(swear(V.p, CLAN_KEYS.find((k) => k !== owner)!), "", "another clan takes it");
+    V.p.clan = undefined; V.p.clanAt = 0; V.p.feud = {};
+    assert.equal(swear(V.p, owner), "", "with the debt paid, the clan takes it");
+  } finally { await srv.stop(); }
+});
+
 test("feuds (room): a hero's saved feud is read back on loading (offline decay applied) and the join messages carry it", async () => {
   const srv = await startRoom();
   freshWar();
@@ -237,10 +281,10 @@ test("feuds (room): a hero's saved feud is read back on loading (offline decay a
     const owner = OWNER();
     p.feud = { [owner]: { pts: FEUD.tiers[0] + 2, at: Date.now(), until: Date.now() + 60_000 } };
     const saved = JSON.parse(JSON.stringify(room.snapshot(p))); // what the store keeps (accounts.ts HeroSave.feud)
-    saved.feud[owner].at -= 2 * FEUD.decayMs; // two decay steps pass while they are away
+    saved.feud[owner].at -= 4 * FEUD.decayMs; // four decay periods away count as two (FEUD.offlineDecay)
     const q = other.p;
     room.restore(q, saved);
-    assert.equal(q.feud[owner].pts, FEUD.tiers[0], "loaded, with offline decay");
+    assert.equal(q.feud[owner].pts, FEUD.tiers[0], "loaded, with offline decay at half rate");
     other.got.length = 0;
     room.feuds.join(other.id);
     assert.ok(await until(() => other.got.some(([t, v]) => t === "feud" && v.c?.[owner]?.p === FEUD.tiers[0])), "the owner's view");

@@ -263,6 +263,7 @@ export class PointerControls {
     if (this.host.blocked() || !this.host.me()) return;
     const button = forced ?? p.button;
     if (button !== 0 && button !== 2) return;
+    if (button === 0 && forced === undefined && (p.event as MouseEvent | undefined)?.ctrlKey) return; // Ctrl+click: strike at a clan on purpose (warFeud.ts)
     this.held = button;
     this.stuck = 0;
     this.firedAt = 0;

@@ -4,7 +4,6 @@ import { CLANS, type ClanKey } from "../../shared/war/clans";
 import {
   atWar, FEUD, feudFromView, grudgeActive, ptsOf, setWarPairs, WANTED_TIERS, wantedTier, type FeudState, type WantedMarks,
 } from "../../shared/war/feuds";
-import { liveReachPx } from "../../shared/war/holdWalls";
 import { HOLDS, STANDARD } from "../../shared/war/standards";
 import { parseTroop, TROOP_SHORT, troopStance, type TroopStance } from "../../shared/war/troops";
 import { territoryAt } from "../../shared/war/view";
@@ -16,8 +15,9 @@ import "./warFeud.css";
 
 /**
  * Feuds on the client (look and input only, rule 5; the server decides in server/warFeuds.ts):
- * - Shift+click on a trooper or a Hold of a clan that leaves the hero alone asks once per clan per session ("Strike the
- *   Redfang? ...") and sends the intent ("provoke"); hovering one with Shift held shows a hint.
+ * - Ctrl+click on a trooper or the middle of a Hold of a clan that leaves the hero alone asks every time ("Strike the
+ *   Redfang? ...") and only then sends the intent ("provoke"); hovering one with Ctrl held shows a hint. (Shift+click is
+ *   the attack in place, client/src/pointer.ts, which skips Ctrl+clicks.)
  * - The hero's own feuds ("feud" message) feed the stance (troop name colours, the attack cursor): a provoked clan's
  *   names turn orange. A badge in the top-left column shows Wanted tiers with the next decay, and how the clan of the
  *   land underfoot sees the hero ("At war with you" / "Neutral" / "Hunting you").
@@ -42,12 +42,10 @@ export class WarFeud {
   /** The hero's own feuds, rebuilt on this client's clock from the server's view. */
   state: FeudState = {};
   private marks = new Map<string, WantedMarks>();
-  /** Clans the hero agreed to strike this session (no second question). */
-  private asked = new Set<ClanKey>();
   private badge = document.createElement("div");
   private hint = document.createElement("div");
   private ask?: HTMLDivElement;
-  private shift = false;
+  private ctrl = false;
   private nextHud = 0;
   private lastHtml = "";
 
@@ -66,7 +64,7 @@ export class WarFeud {
     scene.input.on("pointerdown", (p: Phaser.Input.Pointer) => this.down(p));
     scene.input.on("pointermove", (p: Phaser.Input.Pointer) => this.hover(p));
     scene.events.on(Phaser.Scenes.Events.UPDATE, () => this.frame());
-    const key = (e: KeyboardEvent) => { this.shift = e.shiftKey; };
+    const key = (e: KeyboardEvent) => { this.ctrl = e.ctrlKey; if (!this.ctrl) this.hint.hidden = true; };
     window.addEventListener("keydown", key); window.addEventListener("keyup", key);
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => { window.removeEventListener("keydown", key); window.removeEventListener("keyup", key); this.badge.remove(); this.hint.remove(); this.ask?.remove(); });
   }
@@ -119,7 +117,7 @@ export class WarFeud {
     const me = this.h.me();
     if (!me || me.dead || me.level < STANDARD.minLevel) return undefined;
     const w = this.world(p);
-    let best: { clan: ClanKey; msg: { id: string } } | undefined, bd = 20;
+    let best: { clan: ClanKey; msg: { id: string } } | undefined, bd = 14; // (right under the cursor)
     for (const [id, e] of this.h.entities()) {
       const s = e.state;
       if (!e.mob || !s || s.kind !== "trooper" || s.dead || s.hidden) continue;
@@ -129,8 +127,9 @@ export class WarFeud {
       if (d < bd) { bd = d; best = { clan: tr.clan, msg: { id } }; }
     }
     if (best) return best;
+    // a Hold: only its middle (the banner and the cells round it), never the whole fort
     const tx = Math.floor(w.x / TILE), ty = Math.floor(w.y / TILE), land = territoryAt(tx, ty);
-    const hold = land && HOLDS.find((x) => x.t === land.id), r = land ? Math.max(liveReachPx(land.id), 3 * TILE) : 0;
+    const hold = land && HOLDS.find((x) => x.t === land.id), r = 1.5 * TILE;
     if (!hold || Math.abs(hold.x - w.x) > r || Math.abs(hold.y - w.y) > r) return undefined;
     const clan = this.holderOf(land!.id);
     return clan && this.stance(clan) === "neutral" ? { clan, msg: { hold: land!.id } } : undefined;
@@ -138,25 +137,25 @@ export class WarFeud {
   private holderOf(t: number): ClanKey | undefined { return this.h.holder(t); }
 
   private hover(p: Phaser.Input.Pointer) {
-    const t = this.shift || (p.event as MouseEvent | undefined)?.shiftKey ? this.target(p) : undefined;
+    const t = !this.ask && (this.ctrl || (p.event as MouseEvent | undefined)?.ctrlKey) ? this.target(p) : undefined;
     this.hint.hidden = !t;
     if (!t) return;
-    this.hint.textContent = `Shift+click: strike at the ${TROOP_SHORT[t.clan]}`;
+    this.hint.textContent = `Ctrl+click: strike at the ${TROOP_SHORT[t.clan]}`;
     this.hint.style.left = `${p.event ? (p.event as MouseEvent).clientX + 18 : 0}px`;
     this.hint.style.top = `${p.event ? (p.event as MouseEvent).clientY + 18 : 0}px`;
   }
 
   private down(p: Phaser.Input.Pointer) {
-    if (p.button !== 0 || !(p.event as MouseEvent | undefined)?.shiftKey || this.ask) return;
+    if (p.button !== 0 || !(p.event as MouseEvent | undefined)?.ctrlKey || this.ask) return;
     const t = this.target(p);
     if (!t) return;
     const me = this.h.me();
     if (me && isSafeZone(me.x, me.y)) { this.flash("Not here: blood is never spilled on safe ground."); return; }
-    if (this.asked.has(t.clan)) { this.room.send("provoke", t.msg); return; }
-    this.confirm(t.clan, () => { this.asked.add(t.clan); this.room.send("provoke", t.msg); });
+    this.hint.hidden = true;
+    this.confirm(t.clan, () => this.room.send("provoke", t.msg)); // asked every time: nothing is remembered
   }
 
-  /** The one question per clan per session, in the pixel font. */
+  /** The question before every provocation, in the pixel font. Enter / Esc answer it only while it is open and no text field has the focus. */
   private confirm(clan: ClanKey, yes: () => void) {
     const box = document.createElement("div");
     box.id = "warfeudask";
@@ -168,7 +167,12 @@ export class WarFeud {
     const ok = document.createElement("button"); ok.textContent = "Strike";
     const no = document.createElement("button"); no.textContent = "Leave them be";
     const close = () => { box.remove(); this.ask = undefined; window.removeEventListener("keydown", key, true); };
-    const key = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); close(); } else if (e.key === "Enter") { e.stopPropagation(); close(); yes(); } };
+    const key = (e: KeyboardEvent) => {
+      const f = document.activeElement as HTMLElement | null;
+      if ((e.key !== "Escape" && e.key !== "Enter") || (f && (f.tagName === "INPUT" || f.tagName === "TEXTAREA" || f.isContentEditable))) return;
+      e.stopPropagation(); e.preventDefault(); close();
+      if (e.key === "Enter") yes();
+    };
     ok.onclick = () => { close(); yes(); };
     no.onclick = close;
     row.append(ok, no); box.append(q, sub, row);

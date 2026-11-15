@@ -141,6 +141,10 @@ test("feuds: cleanFeud drops junk and unknown clans, clamps, applies offline dec
   assert.equal(f.wardens!.at, now);
   assert.deepEqual(f.hidekin, { paid: utcDay(now) });
   assert.deepEqual(cleanFeud({ redfang: { pts: 2, at: now - FEUD.decayMs * 10 } }, now), {}, "decayed away offline");
+  // a save being loaded: time away decays at FEUD.offlineDecay
+  const away = cleanFeud({ redfang: { pts: 12, at: now - FEUD.decayMs * 6 } }, now, true);
+  assert.equal(away.redfang!.pts, 12 - 6 * FEUD.offlineDecay, "six periods away count as three");
+  assert.ok(FEUD.decayMs * FEUD.tiers[0] >= 40 * 60_000, "Wanted lasts about 40 minutes online");
   assert.deepEqual(cleanFeud({ redfang: { paid: utcDay(now) - 1 } }, now), {}, "yesterday's bounty day goes");
   // round trip through JSON (the save)
   assert.deepEqual(cleanFeud(JSON.parse(JSON.stringify(f)), now), f);

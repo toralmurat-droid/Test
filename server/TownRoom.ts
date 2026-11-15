@@ -1302,6 +1302,7 @@ export class TownRoom extends Room<TownState> {
       ...(p.clan ? { clan: p.clan, clanAt: p.clanAt } : {}), ...(p.renown > 0 ? { renown: p.renown } : {}),
       ...(p.writ ? { writ: { ...p.writ } } : {}), ...(p.writN > 0 ? { writDay: p.writDay, writN: p.writN } : {}),
       ...(Object.keys(p.feud).length ? { feud: cleanFeud(p.feud, Date.now()) } : {}), // grudges, kill points, bounty day (server/warFeuds.ts)
+      ...(p.claims > 0 ? { claimDay: p.claimDay, claims: p.claims } : {}), // feud bounties claimed today (FEUD.bounty.perDay)
       ...(p.cls === "summoner" ? { grimoire: this.grimoireOf(p), suTree: SUMMONER_TREE } : {}),
       ...songSave(p.cls, p.sk),
       ...this.songs.save(p),
@@ -1369,7 +1370,8 @@ export class TownRoom extends Room<TownState> {
     { const o = cleanOath(s.clan, s.clanAt); p.clan = o.clan; p.clanAt = o.clanAt; p.renown = cleanRenown(s.renown); } // clan war oath (server/warHeroes.ts)
     p.writ = cleanWrit(s.writ, p.clan); p.writDay = Math.max(0, Math.floor(num(s.writDay))); p.writN = Math.max(0, Math.floor(num(s.writN))); // war writs (server/warWrits.ts)
     p.feast = cleanFeast(s.feast);
-    p.feud = cleanFeud(s.feud, Date.now()); // feuds (shared/war/feuds.ts): offline decay applied; older saves have none
+    p.feud = cleanFeud(s.feud, Date.now(), true); // feuds (shared/war/feuds.ts): time away decays at half rate; older saves have none
+    p.claimDay = Math.max(0, Math.floor(num(s.claimDay))); p.claims = Math.max(0, Math.floor(num(s.claims)));
     setMeta(p, META.flags, num(s.flags)); setMeta(p, META.cosm, num(s.cosm)); // choices (me.flags) and cosmetics (cosm), kept apart from the chains' progress
     p.titles = cleanOwned(s.titles, num(s.cosm)); // titles earned; saves from before the list own the one they show
     p.mentor = cleanMentor(s.mentor);

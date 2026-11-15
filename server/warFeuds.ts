@@ -30,7 +30,7 @@ import { addValor, warNow, warState } from "./war";
 import { newFighter, type FightGround, type Fighter, type TroopHero, type TroopMob, type WarTroops } from "./warTroops";
 
 /** A hero as the feuds read and change it (TownRoom's Player). */
-export interface FeudHero extends TroopHero { feud: FeudState }
+export interface FeudHero extends TroopHero { feud: FeudState; party?: string; claimDay?: number; claims?: number }
 
 export interface FeudHost {
   heroes(): Iterable<[string, FeudHero]>;
@@ -143,7 +143,8 @@ export class WarFeuds {
   /**
    * A hero died. `killer`: the hero who struck the last blow, or `clan`: the trooper's clan (or a javelin's). A hero sworn
    * to a clan who killed one of its enemies earns kill points; death at a clan's hands settles that clan's account, and
-   * a sworn killer of a Wanted hero claims the bounty (once per target per UTC day).
+   * a sworn killer of a Wanted hero claims the bounty: once per target per UTC day, at most FEUD.bounty.perDay per killer
+   * per day, never on a hero sworn to the killer's own clan or in the killer's party (no farming with friends or alts).
    */
   onHeroDeath(victimId: string, killer: { hero?: string; clan?: ClanKey }, now = Date.now()) {
     const v = this.h.hero(victimId);
@@ -154,8 +155,9 @@ export class WarFeuds {
     if (!clan || !v.feud[clan]) return;
     decayFeud(v.feud, now);
     const tier = wantedTier(v.feud, clan, now), e = v.feud[clan];
-    if (k && k.clan === clan && tier >= 1 && e && e.paid !== utcDay(now)) {
-      e.paid = utcDay(now);
+    const day = utcDay(now), claims = k && k.claimDay === day ? k.claims ?? 0 : 0;
+    if (k && k.clan === clan && tier >= 1 && e && e.paid !== day && v.clan !== clan && !(v.party && v.party === k.party) && claims < FEUD.bounty.perDay) {
+      e.paid = day; k.claimDay = day; k.claims = claims + 1;
       const was = rankOf(k.renown);
       k.renown += FEUD.bounty.renown * rallyRenown(warState(), clan);
       const t = territoryAt(Math.floor(v.x / TILE), Math.floor(v.y / TILE));
