@@ -79,7 +79,7 @@ const GATE_HINT: Record<1 | 2 | 3 | 4, string> = {
   1: "Step through the waygate, just outside Oakvale's south gate",
   2: "Step through the waygate in the Sunstone Circle, south-west of Kel Ashar",
   3: "Touch the Cairnwatch portal stone, or step back through the Moorgate by the stone ring",
-  4: "Touch the portal stone at Rustwater Post, or walk back through the Red Pass at the badlands' east edge",
+  4: "Walk back through the Red Pass at the badlands' east edge",
 };
 /** Act 1's way to the moors: the Moorgate is not Oakvale's south waygate. */
 const MOORGATE_HINT = "Step through the Moorgate in the forest north of the Hollow Throne";

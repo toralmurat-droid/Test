@@ -343,7 +343,7 @@ export class Minimap {
   private save() {
     const z = encodeFog(this.seen); // always the compressed form (a few KB): the raw one could hit the storage quota
     try { localStorage.setItem(this.key, z); }
-    catch { try { localStorage.removeItem(this.key); localStorage.setItem(this.key, z); } catch (e) { console.warn("minimap: fog not saved", e); } }
+    catch (e) { console.warn("minimap: fog not saved (kept in memory, retried on the next save)", e); } // never remove the stored copy: it may be the only one
   }
 
   private paintFog(x0: number, y0: number, w: number, h: number) {
