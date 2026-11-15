@@ -4,6 +4,7 @@ import { buildDesert, D, inDesertRow, KEL_MARKET, WAYGATE_OAKVALE } from "./dese
 import { buildMoors, CAIRN_PORTAL, CAIRN_SQUARE, MOORSGATE_OAKVALE, MR } from "./moors";
 import { BR, buildBadlands, REDPASS_OAKVALE, RUSTWATER_PORTAL, RUSTWATER_SQUARE } from "./badlands";
 import { buildSinkholes, ROPEWELL_PORTAL, ROPEWELL_SQUARE, SINKWAY_OAKVALE, SR } from "./sinkholes";
+import { buildCrown, CR, crownwayDais, crownwayFrom, TOLLCROSS_SQUARE } from "./crown";
 import { JETTY_RUNS, SALT_BUILDINGS, SALT_HARBOUR_STREET, SALT_LANE, SALT_PIERS, SALT_RACKS, SALT_SQUARE, SALT_TOWN, SALT_UPPER_LANE } from "./saltmere";
 
 /** Mirror Pond, in tiles (centre and radii of its water): the Songweaver's Mirror Pond Air is played on its shore (shared/songbook.ts). */
@@ -44,8 +45,11 @@ export const T = {
   // Act 5, the Mawdeep Sinkholes (shared/sinkholes.ts; loam cliffs are CLIFF, the client paints them brown there): moss
   // underfoot (walkable ground), sinkhole pits, Hide-Kin burrow mounds and cave mouths (solid)
   MOSS: 60, PIT: 61, BURROW: 62, CAVE: 63,
+  // Act 6, the Crown of the Marches (shared/crown.ts; granite cliffs are CLIFF, the client paints them pale there):
+  // cracked marble court paving underfoot (walkable ground), fallen statues, broken spires and braziers (solid)
+  MARBLE: 64, STATUE: 65, SPIRE: 66, BRAZIER: 67,
 } as const;
-export const TILE_COUNT = 64;
+export const TILE_COUNT = 68;
 export const EMPTY = -1;
 
 /** A named region. `mobs` hints which monsters belong there (empty or missing = none, e.g. inside the village). */
@@ -120,6 +124,8 @@ export const MOORS_SAFE = { x: CAIRN_SQUARE.x, y: MR(CAIRN_SQUARE.y), w: CAIRN_S
 export const BADLANDS_SAFE = { x: RUSTWATER_SQUARE.x, y: BR(RUSTWATER_SQUARE.y), w: RUSTWATER_SQUARE.w, h: RUSTWATER_SQUARE.h };
 /** Act 5's safe zone: Ropewell's square (shared/sinkholes.ts), in map tiles. */
 export const SINKHOLES_SAFE = { x: ROPEWELL_SQUARE.x, y: SR(ROPEWELL_SQUARE.y), w: ROPEWELL_SQUARE.w, h: ROPEWELL_SQUARE.h };
+/** Act 6's safe zone: Tollcross Square (shared/crown.ts), in map tiles. */
+export const CROWN_SAFE = { x: TOLLCROSS_SQUARE.x, y: CR(TOLLCROSS_SQUARE.y), w: TOLLCROSS_SQUARE.w, h: TOLLCROSS_SQUARE.h };
 /** Act 1's second safe zone: Saltmere's harbour square (shared/saltmere.ts), in map tiles. */
 export const SALT_SAFE = { x: SALT_SQUARE.x, y: SALT_SQUARE.y, w: SALT_SQUARE.w, h: SALT_SQUARE.h };
 
@@ -978,6 +984,14 @@ function buildWorld() {
     });
     curve([[G.x + 1, G.y - 3], [G.x + 4, G.y - 7], [G.x + 7, G.y - 10], [G.x + 9, G.y - 12]], 1, T.DIRT, (x, y) => { if (objects[y][x] === EMPTY || NATURE.has(objects[y][x])) road(x, y, 1, 1); });
   }
+  // ---------- 14e. The Greenward Gate on the coast east of Gullrock Cove (Act 6's Crownway, shared/crown.ts): a dais of
+  // old flagstones under the Stormbreak Crags, a path north through the trees to the coast road. Cut after the
+  // reachability pass like the Sinkway's, so the rest of Act 1 stays exactly as it was (outside its CROWNWAYS box).
+  {
+    const c = crownwayFrom("oakvale"), G = c.home, B = c.box;
+    crownwayDais(c, ground, objects, EMPTY, T, 351, (o) => NATURE.has(o));
+    curve([[G.x, G.y - 3], [G.x - 1, G.y - 7], [G.x - 2, G.y - 10], [G.x - 3, G.y - 13]], 1, T.DIRT, (x, y) => { if (x >= B.x0 && x <= B.x1 && y >= B.y0 && y <= B.y1 && (objects[y][x] === EMPTY || NATURE.has(objects[y][x]))) road(x, y, 1, 1); });
+  }
 
   const areas: Area[] = [
     { name: "Market Square", ...SQ },
@@ -1059,6 +1073,11 @@ function buildWorld() {
   for (const k of sinkholes.roads) roads.add(k);
   areas.push(...sinkholes.areas);
   posts.push(...sinkholes.posts);
+  // ---------- 20. Act 6: the Crown of the Marches, in its own band under the sinkholes (shared/crown.ts) ----------
+  const crown = buildCrown(T, ground, objects, EMPTY);
+  for (const k of crown.roads) roads.add(k);
+  areas.push(...crown.areas);
+  posts.push(...crown.posts);
   return { ground, objects, areas, posts, roads, broken, makeshift };
 }
 
@@ -1336,7 +1355,7 @@ export function randomSpawn(): { x: number; y: number } {
   return { x: (ROADS.RX + 1.5) * TILE, y: (ROADS.RY + 1.5) * TILE };
 }
 
-/** The market squares (Oakvale's, Saltmere's harbour square, Kel Ashar's, Cairnwatch's, the Rustwater Post's, Ropewell's) are safe zones: no damage there, and monsters will not enter. */
+/** The market squares (Oakvale's, Saltmere's harbour square, Kel Ashar's, Cairnwatch's, the Rustwater Post's, Ropewell's, Tollcross's) are safe zones: no damage there, and monsters will not enter. */
 export function isSafeZone(px: number, py: number): boolean {
   const tx = Math.floor(px / TILE), ty = Math.floor(py / TILE);
   const z = SAFE_ZONE;
@@ -1350,7 +1369,9 @@ export function isSafeZone(px: number, py: number): boolean {
   const b = BADLANDS_SAFE; // Act 4: the Rustwater Post's square
   if (tx >= b.x && ty >= b.y && tx < b.x + b.w && ty < b.y + b.h) return true;
   const s = SINKHOLES_SAFE; // Act 5: Ropewell's square
-  return tx >= s.x && ty >= s.y && tx < s.x + s.w && ty < s.y + s.h;
+  if (tx >= s.x && ty >= s.y && tx < s.x + s.w && ty < s.y + s.h) return true;
+  const c = CROWN_SAFE; // Act 6: Tollcross Square
+  return tx >= c.x && ty >= c.y && tx < c.x + c.w && ty < c.y + c.h;
 }
 
 /** Random walkable point outside the village palisade, where monsters live. */

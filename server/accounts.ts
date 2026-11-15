@@ -39,7 +39,7 @@ export interface HeroSave {
   beastId?: number; beastStage?: number; beastCount?: number; beastVer?: number;
   /** Portal stones this hero has woken (shared/portals.ts ids). */
   portals?: string[];
-  /** The act the hero was in when saved (2 = the desert, 3 = the moors, 4 = the badlands, 5 = the sinkholes, shared/act2.ts): they log back in there. */
+  /** The act the hero was in when saved (2 = the desert, 3 = the moors, 4 = the badlands, 5 = the sinkholes, 6 = the Crown, shared/act2.ts): they log back in there. */
   act?: number;
   /** Bounty board hunt in progress (shared/bounty.ts) and how many this hero has finished. */
   bounty?: BountyState; bountyDone?: number;
