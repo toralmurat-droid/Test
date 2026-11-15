@@ -13,7 +13,7 @@ const named = new Set([...SPAWN_ZONES.map((z) => z.name), ...AREAS.map((a) => a.
 
 test("badlands chain: a side arc (no chain index moves), eight quests from Marshal Varro climbing to Old Rourke", () => {
   assert.ok(ci >= ZONE_ARCS.length && arc.quests.length >= 6 && arc.quests.length <= 8);
-  assert.equal(SIDE_ARCS[SIDE_ARCS.length - 1], arc, "last of SIDE_ARCS");
+  assert.ok(SIDE_ARCS.includes(arc), "a side arc");
   assert.ok(NPCS.some((n) => n.id === "rustmarshal"));
   assert.ok(arc.quests.every((d) => d.giver === "rustmarshal"), "one giver");
   arc.quests.forEach((d, i) => {

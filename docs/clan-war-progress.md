@@ -690,3 +690,12 @@ Sims (`npx tsx tools/balance/war.ts 200 30 [--clever=<clan>]`):
   0.0% in every run.
 - Open: like the moors, the badlands meet the rest at one gate, so their war is quiet; Vulture's Roost and Rattlesnake
   Gulch still have no quest.
+
+## NL-6: the Mawdeep Sinkholes, Ropewell quests and words (2026-11-15, sinkholes PR #448)
+- Side arc `sinkholes` ("The Rope and the Maw"), last in `SIDE_ARCS`, from Lodge-Warden Brannoc Tull (`ropewarden`): Rootfall
+  Rope (Lv 30), Hollowbrook Laughter (31), The Old Warren (32), the Hide-Chieftain of Tunneltop (34, talking summon
+  Gorrow Splitear), Mosslight Snares (35), Over the Pitfields (36), Hidehall (40), The Maw-Father (42; the talking
+  `mawfather` summon, Lv 45, own, no night: he is awake day and night).
+- The chain ties to Act 1's Hide Rite: the trappers' kin were taken into the warrens. Warden idle line added; the two
+  Ropewell traders already had shop greetings. Test: `tests/sinkholes-quests.test.ts`.
+- Open: the sinkholes' war land; Gnawed Bank, Scratchroot Burrows and Rushmere Hollows have no quest.

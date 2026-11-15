@@ -75,9 +75,9 @@ export const NPCS: Npc[] = [
   // ---- Ropewell, the trappers' and rope-makers' lodge in the Mawdeep Sinkholes (Act 5, shared/sinkholes.ts): before their
   // halls on the square (placeholder names; sprites: existing sheets until tools/art paints ropewarden / ropearmourer / ropehealer).
   // The Lodge-Warden stands before his hall: the sinkholes' quest chain starts with him
-  { id: "ropewarden", name: "Lodge-Warden Brannoc Tull", title: "Warden of Ropewell", sprite: "huntsman", x: 108.5 * TILE, y: SR(23.75) * TILE, dir: "down", where: "Ropewell (Act 5 sinkholes), before the Lodge-Warden's hall" },
-  { id: "ropearmourer", name: "Hesta Coil", title: "Armour merchant", sprite: "moorarmourer", x: 114.5 * TILE, y: SR(23.75) * TILE, dir: "down", shop: "ropearmourer", where: "Ropewell (Act 5 sinkholes), before the armoury" },
-  { id: "ropehealer", name: "Mother Fennick", title: "Herb-wife", sprite: "moorherbalist", x: 119.5 * TILE, y: SR(23.75) * TILE, dir: "down", shop: "ropehealer", where: "Ropewell (Act 5 sinkholes), at her stall on the square" },
+  { id: "ropewarden", name: "Lodge-Warden Brannoc Tull", title: "Warden of Ropewell", sprite: "ropewarden", x: 108.5 * TILE, y: SR(23.75) * TILE, dir: "down", where: "Ropewell (Act 5 sinkholes), before the Lodge-Warden's hall" },
+  { id: "ropearmourer", name: "Hesta Coil", title: "Armour merchant", sprite: "ropearmourer", x: 114.5 * TILE, y: SR(23.75) * TILE, dir: "down", shop: "ropearmourer", where: "Ropewell (Act 5 sinkholes), before the armoury" },
+  { id: "ropehealer", name: "Mother Fennick", title: "Herb-wife", sprite: "ropehealer", x: 119.5 * TILE, y: SR(23.75) * TILE, dir: "down", shop: "ropehealer", where: "Ropewell (Act 5 sinkholes), at her stall on the square" },
   // ---- Zone quest givers (Murat 2026-11-10: "more zone quests, real exploration arcs"): each lives out in their zone and
   // starts a short arc there that moves on through it and ends out in the field (shared/quests.ts ZONE_ARCS)
   { id: "huntsman", name: "Huntmaster Bryn", title: "Hunter", sprite: "huntsman", ...standNear(28, 18), dir: "left", where: "the Hunter's Camp, north-west of Oakvale" },

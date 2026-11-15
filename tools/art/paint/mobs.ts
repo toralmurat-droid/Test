@@ -7,6 +7,7 @@ import { lastRig, pixelAlpha, pixelize, shrink } from "./body";
 import { paintRaider, RAIDER_H, RAIDER_W } from "./raiders";
 import { HOUND_H, HOUND_W, WRAITH_H, WRAITH_W, paintHound, paintWraith } from "./moors";
 import { RATTLER_H, RATTLER_W, VULTURE_H, VULTURE_W, WARHOUND_H, WARHOUND_W, paintRattler, paintVulture, paintWarhound } from "./badlands";
+import { SINKWORM_H, SINKWORM_W, paintSinkworm } from "./sinkholes";
 import { paintWisp, WISP_H, WISP_W, type WispElement } from "./wisps";
 import { RAIDERS } from "../../../shared/raiders";
 import { AFFIX_KEYS, AFFIXES, type AffixKey } from "../../../shared/champions";
@@ -651,6 +652,15 @@ export function buildMobs(out: string, ONLY?: string[]) {
     { key: "mob_warhound", w: WARHOUND_W, h: WARHOUND_H, draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintWarhound(c, SH, dir as "down" | "up" | "right", pose, f); } },
     { key: "mob_vulture", w: VULTURE_W, h: VULTURE_H, draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintVulture(c, SH, dir as "down" | "up" | "right", pose, f); } },
     { key: "mob_rattler", w: RATTLER_W, h: RATTLER_H, draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintRattler(c, SH, dir as "down" | "up" | "right", pose, f); } },
+    // Act 5, the Mawdeep Sinkholes: the Hide-Kin (look.ts delver..mawfather) and the Gullet Worm (sinkholes.ts)
+    humanoid("mob_delver", "delver", 24, 30, 27.5 / 30, 0.88),
+    humanoid("mob_cackler", "cackler", 22, 30, 27.5 / 30, 0.86),
+    humanoid("mob_stagkin", "stagkin", 28, 38, 35 / 38, 0.98),
+    humanoid("mob_quillback", "quillback", 26, 30, 27.5 / 30, 0.88),
+    humanoid("mob_stitcher", "stitcher", 24, 34, 31.5 / 34, 0.92),
+    humanoid("mob_hidechief", "hidechief", 34, 38, 35 / 38, 1.12),
+    humanoid("mob_mawfather", "mawfather", 46, 50, 46 / 50, 1.34),
+    { key: "mob_sinkworm", w: SINKWORM_W, h: SINKWORM_H, draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintSinkworm(c, SH, dir as "down" | "up" | "right", pose, f); } },
     // the clan war's soldiers (warLooks.ts): 36 px wide so the fallen body fits; officers are taller
     ...WAR_SOLDIERS.map((k) => k.endsWith("_cap") || k.endsWith("_chief") || k.endsWith("_adept") ? humanoid(`mob_${k}`, k, 36, 34, 32 / 34, 0.95, false, 0, true) : humanoid(`mob_${k}`, k, 36, 32, 30 / 32, 0.9, false, 0, true)),
     // the clan war's supply carts (warCarts.ts): 14 frames, 12 = staggering, 13 = wrecked
@@ -692,7 +702,7 @@ export function buildMobs(out: string, ONLY?: string[]) {
       const c = body.getContext("2d"), sc = shadow.getContext("2d");
       c.scale(HI, HI); sc.scale(HI, HI);
       SH = sc; s.draw(c, f); SH = null;
-      const blob = !/wisp|war_|skeleton|bandit|bride|necromancer|demon|crawler|hollowking|gnawkin|tuskborn|silkwretch|duskwing|packlord|hornbrute|hidemother|crowseer|gnasher|weaver|nomad|scorpion|sanddead|veiled|camelfolk|sphinx|sunwright|wight|boghag|bonehound|mistwraith|legionary|cairnlord|barrowking|nightraider|outrider|crossbowman|firebrand|redcaptain|rourke|warhound|vulture|rattler/.test(s.key);
+      const blob = !/wisp|war_|skeleton|bandit|bride|necromancer|demon|crawler|hollowking|gnawkin|tuskborn|silkwretch|duskwing|packlord|hornbrute|hidemother|crowseer|gnasher|weaver|nomad|scorpion|sanddead|veiled|camelfolk|sphinx|sunwright|wight|boghag|bonehound|mistwraith|legionary|cairnlord|barrowking|nightraider|outrider|crossbowman|firebrand|redcaptain|rourke|warhound|vulture|rattler|delver|cackler|stagkin|quillback|stitcher|hidechief|mawfather|sinkworm/.test(s.key);
       const b = shrink(body, "mb", tw, th);
       if (s.key.startsWith("mob_champ_")) pixelize(b, tw, th, true); // a detail, not a body: no ground grime
       else pixelize(b, tw, th, true, blob ? { y0: Math.round(th * 0.7), y1: th, mud: 0.14, sat: 0.9 } : { y0: Math.round(th * 0.72), y1: th, mud: s.key.includes("bandit") ? 0.38 : 0.2 });

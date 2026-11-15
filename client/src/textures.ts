@@ -312,7 +312,8 @@ const PAINTED_MOBS = ["slime", "blobling", "shooterblob", "warriorblob", "healer
   "nomad", "scorpion", "sanddead", "veiled", "camelfolk", "sphinx", "sunwright", "nightraider",
   "golem_fire", "golem_cold", "golem_poison", "golem_shock", "golem_colossus", "bride",
   "wight", "boghag", "bonehound", "mistwraith", "legionary", "cairnlord", "barrowking",
-  "outrider", "crossbowman", "firebrand", "warhound", "vulture", "rattler", "redcaptain", "rourke"]; // Act 4, the Red Badlands (tools/art/paint/look.ts, badlands.ts); Act 3, the Grey Barrow Moors (tools/art/paint/look.ts, moors.ts)
+  "outrider", "crossbowman", "firebrand", "warhound", "vulture", "rattler", "redcaptain", "rourke",
+  "delver", "cackler", "stagkin", "quillback", "stitcher", "sinkworm", "hidechief", "mawfather"]; // Act 5, the Mawdeep Sinkholes (tools/art/paint/look.ts, sinkholes.ts); Act 4, the Red Badlands (tools/art/paint/look.ts, badlands.ts); Act 3, the Grey Barrow Moors (tools/art/paint/look.ts, moors.ts)
 /** The Colossus is painted once per element (Mob.weapon holds it, shared/summons.ts). */
 const COLOSSUS_ELEMENTS = ["fire", "cold", "poison", "shock"];
 /** The wisps' painted sheets (tools/art/paint/wisps.ts), one per element. */
@@ -346,6 +347,10 @@ const PAINTED_LOOK: Record<string, { top: number; bar: number; oy: number; scale
   outrider: { top: 24, bar: 14, oy: 27.5 / 30 }, crossbowman: { top: 25, bar: 14, oy: 27.5 / 30 }, firebrand: { top: 27, bar: 14, oy: 31.2 / 32 },
   warhound: { top: 14, bar: 12, oy: 21 / 24 }, vulture: { top: 30, bar: 16, oy: 31 / 34 }, rattler: { top: 14, bar: 12, oy: 19 / 22 },
   redcaptain: { top: 44, bar: 28, oy: 32 / 34, scale: 1.35 }, rourke: { top: 60, bar: 36, oy: 40 / 44, scale: 1.55 }, // Lv 40 warlord: nearly as tall as the Hollow King
+  // Act 5, the Mawdeep Sinkholes (tools/art/paint/look.ts, sinkholes.ts): the worm 32x28; the chieftain and the Maw-Father are elite and boss
+  delver: { top: 25, bar: 14, oy: 27.5 / 30 }, cackler: { top: 25, bar: 14, oy: 27.5 / 30 }, stagkin: { top: 34, bar: 18, oy: 35 / 38 }, quillback: { top: 25, bar: 14, oy: 27.5 / 30 },
+  stitcher: { top: 30, bar: 16, oy: 31.5 / 34 }, sinkworm: { top: 24, bar: 12, oy: 25 / 28 },
+  hidechief: { top: 50, bar: 30, oy: 35 / 38, scale: 1.45 }, mawfather: { top: 68, bar: 40, oy: 46 / 50, scale: 1.65 },
   // the clan war's soldiers (tools/art/paint/warLooks.ts): art-only keys, not MobKinds; line soldiers 36x32 frames, officers 36x34
   ...Object.fromEntries(["war_warden", "war_redfang", "war_host", "war_hidekin", "war_veiled"].map((k) => [k, { top: 27, bar: 14, oy: 30 / 32 }])),
   ...Object.fromEntries(["war_warden_cap", "war_redfang_chief", "war_host_cap", "war_hidekin_chief", "war_veiled_adept"].map((k) => [k, { top: 30, bar: 16, oy: 32 / 34 }])),
@@ -401,13 +406,11 @@ export const mobLook = (kind: string, weapon = "") => MOB_LOOK[kind === "trooper
  * monster's look ([kind, weapon]). Once tools/art paints mob_<kind>, add it to PAINTED_MOBS / PAINTED_LOOK and drop it here.
  */
 const MOORS_STANDIN: Record<string, [string, string]> = {
-  // Act 5, the Mawdeep Sinkholes (shared/constants.ts SINKHOLES_KINDS), until tools/art paints them
-  delver: ["gnawkin", ""], cackler: ["warhound", ""], stagkin: ["tuskborn", ""], quillback: ["silkwretch", ""],
-  stitcher: ["crowseer", ""], sinkworm: ["rattler", ""], hidechief: ["packlord", ""], mawfather: ["hidemother", ""],
 };
 /** The old pixel look (?pixel=1) of the moors monsters: no pixel sheets, so each wears an older monster's. */
 const MOORS_PIXEL: Record<string, string> = { wight: "skeleton", boghag: "nomad", bonehound: "gnawkin", mistwraith: "skeletonmage", legionary: "skeleton", cairnlord: "necromancer", barrowking: "necromancer",
-  outrider: "bandit", crossbowman: "bandit", firebrand: "nomad", warhound: "gnawkin", vulture: "skeletonmage", rattler: "bandit", redcaptain: "bandit", rourke: "necromancer" }; // Act 4 (the pixel look has no sheets for them)
+  outrider: "bandit", crossbowman: "bandit", firebrand: "nomad", warhound: "gnawkin", vulture: "skeletonmage", rattler: "bandit", redcaptain: "bandit", rourke: "necromancer",
+  delver: "gnawkin", cackler: "gnawkin", stagkin: "tuskborn", quillback: "silkwretch", stitcher: "crowseer", sinkworm: "bandit", hidechief: "packlord", mawfather: "hidemother" }; // Acts 4 and 5 (the pixel look has no sheets for them)
 /** The stand-in's size entry for a moors monster (MOB_LOOK, filled at load and again once the painted looks are in). */
 function lookStandins() { if (!SMOOTH) for (const [k, st] of Object.entries(MOORS_PIXEL)) if (MOB_LOOK[st]) MOB_LOOK[k] ??= MOB_LOOK[st];
   for (const [k, [st]] of Object.entries(MOORS_STANDIN)) if (MOB_LOOK[st] && !PAINTED_MOBS.includes(k)) MOB_LOOK[k] = MOB_LOOK[st]; }

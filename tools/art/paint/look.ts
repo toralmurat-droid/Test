@@ -46,9 +46,11 @@ export interface Look {
   /** The other half of the beast-folk: a man's face, the animal's head flayed back as a hood (the rest is beast). */
   beastHood?: boolean;
   /** What the rite grew on their backs: a naked tail, spider legs, wings that beat. */
+  /** Act 5 (Mawdeep Sinkholes, the Hide-Kin): a porcupine's back of quills (colour of the dark bands), big digging claws on the hands (claw colour), bone and charm fetishes hanging from the belt (cord colour). */
+  quills?: number; claws?: number; fetishes?: number;
   tail?: number; spiderLegs?: number; wings?: { col: number; kind: "bat" | "feather"; rest?: boolean; tip?: number };
 }
-export type BeastHead = "rat" | "boar" | "spider" | "bat" | "wolf" | "bull" | "bear" | "crow" | "camel" | "lion";
+export type BeastHead = "rat" | "boar" | "spider" | "bat" | "wolf" | "bull" | "bear" | "crow" | "camel" | "lion" | "mole" | "hyena" | "stag" | "quill";
 
 /** Monsters painted with the same body code (sheets built by paint/mobs.ts). */
 export const MOB_LOOKS: Record<string, Look> = {
@@ -319,6 +321,66 @@ export const MOB_LOOKS: Record<string, Look> = {
     torso: "robe", torsoCol: 0xa8683e, trim: 0xe0c090, vest: 0x7a3a24, apron: 0xe4d8bc, sash: 0xa3231b, belt: 0x4a3020,
     legs: "dress", legCol: 0x6a3a28, boots: 0x3a281c, bootStyle: "shoe",
     sleeve: 0xa8683e, arms: "cloth", glove: 0xb88a64, weapon: "none", fx: 0xffffff, back: "cape", capeCol: 0xb88a58, capeShort: true, basket: 0x8a6a3a, build: 0.92,
+  },
+  // ---- Act 5, the Mawdeep Sinkholes: the Hide-Kin, the Warrens' beast-folk gone feral in the pits. Damp earth, hide, bone, moss.
+  delver: { // mole: a stooped, blind-eyed digger with a pink star-nose, great spade-claws, a moss-stained hide
+    skin: 0x6a5a4c, beast: "mole", hairStyle: "none", head: "none", eyeGlow: 0xd8c090,
+    torso: "bare", torsoCol: 0x54483e, belt: 0x2e2218, harness: true, legs: "fur", legCol: 0x463c32, boots: 0x3a3028, bootStyle: "bare",
+    sleeve: 0x54483e, arms: "bare", glove: 0x54483e, bracer: 0x3a3a26, weapon: "none", fx: 0xd8d0b8, claws: 0xe2d8bc, stoop: 1.2, build: 1.18, tail: 0xc09a8a,
+  },
+  cackler: { // hyena: hunched, spotted tan hide, a ragged dark mane, a wide bared grin, a bone-handled hooked knife
+    skin: 0x9a7a4a, beast: "hyena", hairStyle: "none", head: "none", eyeGlow: 0xffc03a,
+    torso: "leather", torsoCol: 0x8a6a40, trim: 0x3a2a1a, belt: 0x2e2218, buckle: 0xe2d8bc, legs: "fur", legCol: 0x7a5a38, boots: 0x3a2a1c, bootStyle: "wrap",
+    sleeve: 0x9a7a4a, arms: "bare", bracer: 0x3a2a1a, glove: 0x3a2a1a, weapon: "dagger", fx: 0xffe0b0, back: "pelt", capeCol: 0x6a4a2a, stoop: 1.6, build: 1.0, tail: 0x7a5a38,
+  },
+  stagkin: { // stag: a tall, lean charger under a branching rack of antlers, a hide of damp brown, a bone-studded harness
+    skin: 0x8a6a4c, beast: "stag", hairStyle: "none", head: "none", eyeGlow: 0xff8a3a,
+    torso: "leather", torsoCol: 0x4a382a, trim: 0x2a1e16, belt: 0x2a1e16, buckle: 0xe2d8bc, harness: true, legs: "fur", legCol: 0x5a4430, boots: 0x2a1e16, bootStyle: "wrap",
+    sleeve: 0x8a6a4c, arms: "bare", bracer: 0x4a382a, glove: 0x2a1e16, weapon: "spear", bladeCol: 0xe2d8bc, fx: 0xffd0a0, back: "pelt", capeCol: 0x5a4632, build: 1.2, tail: 0xd8c8a8,
+  },
+  quillback: { // porcupine: a squat thrower hunched under a fan of banded quills, a bandolier of spare ones
+    skin: 0x7a6a58, beast: "quill", hairStyle: "none", head: "none", eyeGlow: 0xffe080,
+    torso: "leather", torsoCol: 0x4a3c30, trim: 0x2a2018, belt: 0x2a2018, buckle: 0xe2d8bc, harness: true, legs: "fur", legCol: 0x3e3228, boots: 0x2a2018, bootStyle: "wrap",
+    sleeve: 0x7a6a58, arms: "bare", bracer: 0x3a2e24, glove: 0x2a2018, weapon: "none", fx: 0xf0e8d0, quills: 0x2a2220, stoop: 0.8, build: 1.1,
+  },
+  stitcher: { // a Hide-Stitcher: a shaman in a patchwork robe of mismatched hides, a face-cloth, a long bone needle, fetishes on every cord
+    skin: 0xa88a6e, hair: 0x2a2018, hairStyle: "long", mask: 0x6a5a40, eye: 0x1a1008, eyeGlow: 0xffa83a,
+    head: "hood", headCol: 0x6a4e36, headTrim: 0xe2d8bc,
+    torso: "robe", torsoCol: 0x5a4a38, trim: 0xe2d8bc, vest: 0x7a5a3a, sash: 0x6a2a1a, belt: 0x2a2018, buckle: 0xe2d8bc,
+    legs: "robe", legCol: 0x4a3c2e, boots: 0x2a2018, bootStyle: "wrap",
+    sleeve: 0x6a5a40, arms: "cloth", glove: 0x3a2e24, weapon: "spear", bladeCol: 0xe8dfc4, bladeLen: 1.1, fx: 0xe8dfc4, back: "pelt", capeCol: 0x4e4a30, fetishes: 0xd8cfb4, build: 0.98,
+  },
+  hidechief: { // the Hide-Chieftain: a bear's skin worn whole, the head a hood over a scarred man's face, a bone-bound maul
+    skin: 0xa07a5e, hairStyle: "none", beard: 0x2a1e16, beardStyle: "full", beast: "bear", beastHood: true, head: "none", eye: 0xff8a2a,
+    torso: "bare", torsoCol: 0x4a3626, belt: 0x241a14, buckle: 0xe2d8bc, harness: true, legs: "fur", legCol: 0x3e2e22, boots: 0x241a14, bootStyle: "wrap",
+    sleeve: 0x4a3626, arms: "bare", bracer: 0x2e2218, glove: 0x241a14, weapon: "hammer", bladeCol: 0x8a8070, fx: 0xff9a70, back: "pelt", capeCol: 0x4a3626, fetishes: 0xe2d8bc, build: 1.5, notched: true,
+  },
+  mawfather: { // the Maw-Father: a vast old patriarch, mole-faced and bear-built, scarred and mossed, a crown of bone, a hide cloak
+    skin: 0x6a5a4c, beast: "mole", hairStyle: "none", head: "none", eyeGlow: 0xffd080,
+    torso: "bare", torsoCol: 0x54483e, trim: 0x3a3a26, belt: 0x241a14, buckle: 0xe2d8bc, harness: true, legs: "fur", legCol: 0x3e342a, boots: 0x2a2018, bootStyle: "bare",
+    sleeve: 0x54483e, arms: "bare", bracer: 0x3a3a26, glove: 0x54483e, weapon: "hammer", bladeCol: 0x8a8070, fx: 0xffb070, back: "pelt", capeCol: 0x3e3226, claws: 0xe2d8bc, fetishes: 0xe2d8bc, stoop: 1.0, build: 1.6, tail: 0xc09a8a, notched: true,
+  },
+  // Ropewell, the lodge-town on the lip of the sinkholes: Lodge-Warden Brannoc Tull, Hesta Coil the armourer, Mother Fennick the herb-wife
+  ropewarden: {
+    skin: 0xb48862, hair: 0x4a3a2a, hairStyle: "short", beard: 0x5a4a38, beardStyle: "full", eye: 0x2a1c10,
+    head: "hood", headCol: 0x5a4632, headTrim: 0xd8cdb0,
+    torso: "leather", torsoCol: 0x5e4a36, trim: 0xd8cdb0, tabard: { col: 0x4a5a34, trim: 0x2a3418, emblem: 0xd8cdb0 }, belt: 0x2a1e14, buckle: 0xc9a050,
+    legs: "trousers", legCol: 0x4a3c2c, boots: 0x2a1e14, bootStyle: "wrap",
+    sleeve: 0x6a5238, arms: "cloth", bracer: 0x3a2a1c, glove: 0x2a1e14, weapon: "spear", fx: 0xffffff, back: "pelt", capeCol: 0x6a5a48, fetishes: 0xc8b890, build: 1.12,
+  },
+  ropearmourer: {
+    skin: 0xc49a76, hair: 0x6a3a22, hairStyle: "ponytail", eye: 0x2a1a10,
+    head: "bandana", headCol: 0x4a5a34, headTrim: 0x2a3418,
+    torso: "shirt", torsoCol: 0xb8a888, apron: 0x4a3322, belt: 0x2a1e14, buckle: 0xc9a050,
+    legs: "trousers", legCol: 0x4a4034, boots: 0x2a1e14, bootStyle: "leather",
+    sleeve: 0xc49a76, arms: "bare", bracer: 0x4a3322, glove: 0x2a1e14, weapon: "hammer", fx: 0xffffff, fetishes: 0xb8a070, build: 1.1,
+  },
+  ropehealer: {
+    skin: 0xbc9272, hair: 0xc8c4b8, hairStyle: "long", eye: 0x3a2a1a,
+    head: "hood", headCol: 0x6a7a44, headTrim: 0xd8cc9c,
+    torso: "robe", torsoCol: 0x5e6a3a, trim: 0xd8cc9c, vest: 0x7a5a38, apron: 0xe0d6b8, sash: 0x8a4a2a, belt: 0x4a3a24,
+    legs: "dress", legCol: 0x4a5430, boots: 0x3a2c1c, bootStyle: "shoe",
+    sleeve: 0x5e6a3a, arms: "cloth", glove: 0xbc9272, weapon: "none", fx: 0xffffff, back: "cape", capeCol: 0x4a5a30, capeShort: true, basket: 0x7a6a3a, build: 0.94,
   },
   // summoned by a skeleton ritual (BONES.ritual): a hulking red brute with horns, a bone harness and a cleaver
   demon: {

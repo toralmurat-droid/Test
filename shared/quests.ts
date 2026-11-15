@@ -6,6 +6,7 @@ import { chamberAt, COCOONS, CRYPT_FLOORS, DEN, FLOORS, HIGH_CHOIR, SINKHOLE, TO
 import { D, FURNACE, KEL_ASHAR } from "./desert";
 import { BARROW_FIELDS, CAIRN_SQUARE, KINGS_MOUND, MR } from "./moors";
 import { BR, FANGROCK_KEEP, RUSTWATER_SQUARE } from "./badlands";
+import { GREAT_MAW, ROPEWELL_SQUARE, SR } from "./sinkholes";
 import { xpStep } from "./classes";
 import { type BargainSpec, type CarrySpec, type ChoiceId, type ChoiceSpec, choiceOf, type HoldSpec, nextStage, type PickSpec, sayFor, stepObjects, type SyncSpec, type UnseenSpec } from "./questSteps";
 
@@ -2569,12 +2570,171 @@ const BAD_QUESTS: QuestDef[] = [
   },
 ];
 
+// ---- Act 5: the Mawdeep Sinkholes, from Ropewell (Lv 30-45; shared/sinkholes.ts, docs/clan-war-progress.md) ----
+/** Where things are, said from Ropewell's square (the sinkholes' own compass). */
+function dirFromRope(tx: number, ty: number): string {
+  const q = ROPEWELL_SQUARE, cx = q.x + q.w / 2, cy = SR(q.y + q.h / 2);
+  const k = (Math.round(Math.atan2(ty - cy, tx - cx) / (Math.PI / 4)) + 8) % 8;
+  return ["east", "south-east", "south", "south-west", "west", "north-west", "north", "north-east"][k];
+}
+const rdir = (name: string) => { const z = zoneByName(name); return dirFromRope(z.x + z.w / 2, z.y + z.h / 2); };
+const SINK_LINES = [obj("sink_line1", "clue", "Snapped trap-line", "Search", "Rootfall Slopes", 0.25, 0.45), obj("sink_line2", "clue", "Snapped trap-line", "Search", "Rootfall Slopes", 0.55, 0.7), obj("sink_line3", "clue", "Snapped trap-line", "Search", "Rootfall Slopes", 0.8, 0.4)];
+const SINK_MARKS = [obj("sink_mark1", "cairn", "Kin-mark stone", "Read", "The Old Warren", 0.3, 0.4), obj("sink_mark2", "cairn", "Kin-mark stone", "Read", "The Old Warren", 0.55, 0.68), obj("sink_mark3", "cairn", "Kin-mark stone", "Read", "The Old Warren", 0.72, 0.4)];
+const SINK_SNARES = [obj("sink_snare1", "nest", "Hide-Kin snare-pit", "Spring", "Mosslight Fen", 0.25, 0.4), obj("sink_snare2", "nest", "Hide-Kin snare-pit", "Spring", "Mosslight Fen", 0.55, 0.7), obj("sink_snare3", "nest", "Hide-Kin snare-pit", "Spring", "Mosslight Fen", 0.78, 0.42)];
+const SINK_PEGS = [obj("sink_peg1", "clue", "Hide-pegged rope", "Cut", "The Pitfields", 0.22, 0.45), obj("sink_peg2", "clue", "Hide-pegged rope", "Cut", "The Pitfields", 0.5, 0.7), obj("sink_peg3", "clue", "Hide-pegged rope", "Cut", "The Pitfields", 0.8, 0.4)];
+const SINK_QUESTS: QuestDef[] = [
+  {
+    id: "rootfall", title: "Rootfall Rope", giver: "ropewarden", zone: "Rootfall Slopes", minLevel: 30,
+    description: `Lodge-Warden Brannoc Tull says the trap-lines on the Rootfall Slopes, ${rdir("Rootfall Slopes")} of Ropewell, keep snapping. Thin the stagkin that charge the lines, then search what is left of them.`,
+    offer: [
+      "You came down the Sinkway. Good. Few do twice.",
+      "I am Brannoc Tull, Warden of Ropewell. We are trappers and rope-makers, and the lodge hangs on scaffolds round that hole in the ground because the ground itself cannot be trusted.",
+      `The trap-lines on the Rootfall Slopes, ${rdir("Rootfall Slopes")} of here, keep snapping, and it is not the weather. Stagkin first, then search the lines.`,
+    ],
+    acceptText: "I'll go to the Slopes",
+    steps: [
+      { type: "kill", zone: "Rootfall Slopes", kinds: ["stagkin"], goal: 6, text: "Kill 6 Stagkin on the Rootfall Slopes", banner: ["New quest", "Rootfall Rope"], obj: "Stagkin slain: {n} / {goal}", nag: "{n} of {goal}. They charge from the high ground. Step aside at the last moment." },
+      { type: "use", zone: "Rootfall Slopes", objects: SINK_LINES, chest: false, text: "Search the 3 snapped trap-lines", banner: ["Snapped lines", "Search the trap-lines"], obj: "Lines searched: {n} / {goal}", nag: "{n} of {goal}. They run down the slope between the old stakes." },
+    ],
+    outro: ["Every line was cut clean with a knife, not torn. A stagkin cannot hold a knife.", "Hide-Kin work. Somebody wants the trappers off the slopes."],
+    reward: arcReward(31),
+    after: "Cut clean, you say. Then it is the Hide-Kin, and not the beasts. I had hoped it was the beasts.",
+  },
+  {
+    id: "hollowbrook", title: "Hollowbrook Laughter", giver: "ropewarden", zone: "Hollowbrook Dells", minLevel: 31, auto: true,
+    description: `Cacklers lurk in the Hollowbrook Dells, ${rdir("Hollowbrook Dells")} of Ropewell, and the sinkworms have come up in the brook. Thin both, so the trappers can cross.`,
+    offer: [
+      "Hollowbrook is the way to the old warrens, and the Hide-Kin have filled it with cacklers. You hear them long before you see them.",
+      "The worms came up with the last rains. I cannot say if it is chance. Nothing here is chance for long.",
+      "Cacklers first, worms after. I want the brook open.",
+    ],
+    acceptText: "I'll clear the brook",
+    steps: [
+      { type: "kill", zone: "Hollowbrook Dells", kinds: ["cackler"], goal: 6, text: "Kill 6 Cacklers in Hollowbrook Dells", banner: ["New quest", "Hollowbrook Laughter"], obj: "Cacklers slain: {n} / {goal}", nag: "{n} of {goal}. They hunt in packs. Keep your back to a bank." },
+      { type: "kill", zone: "Hollowbrook Dells", kinds: ["sinkworm"], goal: 3, text: "Kill 3 Sinkworms in the brook", banner: ["The worms", "Kill 3 Sinkworms"], obj: "Sinkworms slain: {n} / {goal}", nag: "{n} of {goal}. They rise from the wet ground. Do not stand where the moss sinks." },
+    ],
+    outro: ["The brook runs quiet at last, and a trapper's boot floats down it with the laces still tied.", "The Warrens lie to the east. That is where the trappers' kin went."],
+    reward: arcReward(32),
+    after: "The brook runs clear. You have done more for the lodge in a day than the watch did in a year.",
+  },
+  {
+    id: "oldwarren", title: "The Old Warren", giver: "ropewarden", zone: "The Old Warren", minLevel: 32, auto: true,
+    description: `The trappers' kin were taken into the Old Warren, ${rdir("The Old Warren")} of Ropewell. Read the Hide-Kin's kin-mark stones and cut down the delvers who dig there.`,
+    offer: [
+      "My brother and his two girls went into the Old Warren to trap, three winters ago. The Hide-Kin took them. They call it a Hide Rite.",
+      "They mark every family they take on a stone. If there is a name I know, it will be there.",
+      "Read three stones. The Delvers come up under your feet, so mind the ground.",
+    ],
+    acceptText: "I'll read the stones",
+    steps: [
+      { type: "use", zone: "The Old Warren", objects: SINK_MARKS, chest: false, text: "Read the 3 kin-mark stones", banner: ["New quest", "The Old Warren"], obj: "Stones read: {n} / {goal}", nag: "{n} of {goal}. They stand at the mouths of the burrows." },
+      { type: "kill", zone: "The Old Warren", kinds: ["delver"], goal: 6, text: "Kill 6 Delvers in the Old Warren", banner: ["The diggers", "Kill 6 Delvers"], obj: "Delvers slain: {n} / {goal}", nag: "{n} of {goal}. They tunnel under you. Move when the ground shakes." },
+    ],
+    outro: ["Three names on the third stone, cut small. Brannoc's brother, and his girls, and a line of Hide-Kin script beneath.", "Taken in. Not killed. The Rite means what it says: they are being kept."],
+    reward: arcReward(33),
+    after: "Taken in, not killed. Three winters I thought them dead. I do not know if this is better.",
+  },
+  {
+    id: "tunneltop", title: "The Hide-Chieftain of Tunneltop", giver: "ropewarden", zone: "Tunneltop", minLevel: 34, auto: true,
+    description: `A Hide-Chieftain named Gorrow Splitear holds Tunneltop, ${rdir("Tunneltop")} of Ropewell, and his men guard the road to the kin. Cut down his stitchers, then him.`,
+    offer: [
+      "The stones say the Rite's road runs through Tunneltop. A Hide-Chieftain keeps it: Gorrow Splitear.",
+      "He has his stitchers about him, and he howls up cacklers when he is hurt. I would not go in alone, and I would not go in slow.",
+      "Break his stitchers. Then break him.",
+    ],
+    acceptText: "I'll take Gorrow",
+    steps: [
+      { type: "kill", zone: "Tunneltop", kinds: ["stitcher"], goal: 5, text: "Kill 5 Stitchers on Tunneltop", banner: ["New quest", "The Hide-Chieftain of Tunneltop"], obj: "Stitchers slain: {n} / {goal}", nag: "{n} of {goal}. They sew their own wounds shut. Strike them down fast." },
+      { type: "kill", zone: "Tunneltop", kinds: ["hidechief"], goal: 1, own: true,
+        summon: { parts: ["hidechief"], level: 36, title: "Gorrow Splitear, Hide-Chieftain", hpMult: 1.5, ...spotIn("Tunneltop", 0.5, 0.5),
+          voice: { wake: ["A trapper's dog, sniffing at my hill. Come up, little rope-maker.", "The Rite is older than your lodge, and it will outlast it."], taunt: ["Kin, to me! A rope-maker climbs our hill!", "You cut our snares. Now we cut you."], half: ["I have bled for the Hide-Kin since before you were weaned. One more cut does not frighten me."], death: ["The Maw... will... take you... as well..."] } },
+        text: "Bring down Gorrow Splitear", banner: ["GORROW SPLITEAR", "Bring down the Hide-Chieftain"], obj: "Gorrow Splitear brought down: {n} / {goal}", nag: "He howls up cacklers at half health. Break the pack first, then him." },
+    ],
+    outro: ["The Chieftain goes down in his own spoil, and on his belt hangs a key of bone and a strip of hide cut with the trappers' mark.", "From Tunneltop you can see the whole fen laid out below, silver in the moss, and beyond it a long dark line of pits."],
+    reward: arcReward(36, true),
+    after: "Gorrow is down. Then the kin are held further in. I will keep the key, and the hope.",
+  },
+  {
+    id: "mosslight", title: "Mosslight Snares", giver: "ropewarden", zone: "Mosslight Fen", minLevel: 35, auto: true,
+    description: `The Hide-Kin pit-snare the paths of Mosslight Fen, ${rdir("Mosslight Fen")} of Ropewell, to keep trappers from the kin. Spring the snares and thin the quillbacks that guard them.`,
+    offer: [
+      "Mosslight Fen is where the kin were walked through. The Hide-Kin dug snare-pits along every path, and set quillbacks to watch them.",
+      "Spring three snares. You will see the way the pits are laid, and I will know the way they went.",
+      "Quillbacks throw their spines at a distance. Close with them or stay clear.",
+    ],
+    acceptText: "I'll spring the snares",
+    steps: [
+      { type: "kill", zone: "Mosslight Fen", kinds: ["quillback"], goal: 5, text: "Kill 5 Quillbacks in Mosslight Fen", banner: ["New quest", "Mosslight Snares"], obj: "Quillbacks slain: {n} / {goal}", nag: "{n} of {goal}. Their spines fly as you come in. Take them in a rush." },
+      { type: "use", zone: "Mosslight Fen", objects: SINK_SNARES, chest: false, text: "Spring the 3 Hide-Kin snare-pits", banner: ["The snares", "Spring the snare-pits"], obj: "Snares sprung: {n} / {goal}", nag: "{n} of {goal}. They lie under moss mats along the fen paths." },
+    ],
+    outro: ["Under the last snare, a little braid of rope-makers' twine, still knotted in the lodge's way. A child's work.", "She was alive when she passed this way, and she left it for someone to find."],
+    reward: arcReward(37),
+    after: "Twine, knotted our way. She left it on purpose. She knew we would come.",
+  },
+  {
+    id: "pitfields", title: "Over the Pitfields", giver: "ropewarden", zone: "The Pitfields", minLevel: 36, auto: true,
+    description: `The way to Hidehall crosses the Pitfields, ${rdir("The Pitfields")} of Ropewell, where the Hide-Kin hang ropes across the sinks. Cut the sinkworms down, then cut the pegged ropes that mark the road.`,
+    offer: [
+      "Past the fen lies the Pitfields: a hundred sinks, and a worm in every second one. Nobody crosses without a rope.",
+      "The Hide-Kin peg their ropes across the pits. Cut three, and their road across is gone, and so is their easy supply.",
+      "Mind the worms. I have lost good men to them.",
+    ],
+    acceptText: "I'll cross the pits",
+    steps: [
+      { type: "kill", zone: "The Pitfields", kinds: ["sinkworm"], goal: 5, text: "Kill 5 Sinkworms in the Pitfields", banner: ["New quest", "Over the Pitfields"], obj: "Sinkworms slain: {n} / {goal}", nag: "{n} of {goal}. They wait under the rims. Walk the firm ground between the sinks." },
+      { type: "use", zone: "The Pitfields", objects: SINK_PEGS, chest: false, text: "Cut the 3 hide-pegged ropes", banner: ["The ropes", "Cut the pegged ropes"], obj: "Ropes cut: {n} / {goal}", nag: "{n} of {goal}. They span the widest sinks, pegged at both ends." },
+    ],
+    outro: ["The last rope falls into its sink and is gone. The Pitfields lie open, and the Hide-Kin supply line is cut.", "South-east, a great palisade of root and hide on the far rise. Hidehall. They will have felt the ropes go."],
+    reward: arcReward(38),
+    after: "The ropes cut. Then Hidehall is on its own. Good. It will make them angry, and angry men are careless.",
+  },
+  {
+    id: "hidehall", title: "Hidehall", giver: "ropewarden", zone: "Hidehall", minLevel: 40, auto: true,
+    description: `Hidehall, ${rdir("Hidehall")} of Ropewell, is the Hide-Kin's seat. Cut through its quillback towers and stitchers to reach the road to the Great Maw.`,
+    offer: [
+      "Hidehall. Walls of hide stretched on root, and two Hide-Chieftains over a garrison of stitchers and spine-throwers. It is the Hide-Kin's seat, and the way to the Maw runs beneath it.",
+      "My brother's girls were taken there. Past it, they say, is the Maw-Father, and he is what the Rite is for.",
+      "Take the walls first. Bring me back whoever you can.",
+    ],
+    acceptText: "I'll take the Hall",
+    steps: [
+      { type: "kill", zone: "Hidehall", kinds: ["quillback"], goal: 6, text: "Kill 6 Quillbacks on Hidehall's towers", banner: ["New quest", "Hidehall"], obj: "Quillbacks slain: {n} / {goal}", nag: "{n} of {goal}. They hold the lookout towers. Close the distance quickly." },
+      { type: "kill", zone: "Hidehall", kinds: ["stitcher"], goal: 5, text: "Cut down 5 Hidehall Stitchers", banner: ["The garrison", "Cut down 5 Stitchers"], obj: "Stitchers slain: {n} / {goal}", nag: "{n} of {goal}. They keep to the inner yard. Do not let them mend." },
+    ],
+    outro: ["Past the last gate, a slope of packed earth runs down into the dark, and the air that comes up smells of old stone and wet fur.", "On the wall, scratched small, three names. Under them: \"We wait.\""],
+    reward: arcReward(41),
+    after: "We wait. Three winters they have waited. I will not have them wait a fourth.",
+  },
+  {
+    id: "mawfather", title: "The Maw-Father", giver: "ropewarden", zone: "The Great Maw", minLevel: 42, auto: true,
+    description: `The Maw-Father lies in the Great Maw, ${rdir("The Great Maw")} of Ropewell, awake by day and by night. Go down to his ledge and end the Rite.`,
+    offer: [
+      "The Maw-Father. The oldest of the Hide-Kin, and the biggest. They say he was a man once, and a trapper too, before the Rite made him a lord of the ground.",
+      "He sits on a ledge in the Great Maw and he does not sleep. Not by day, not by night.",
+      "The rim path keeps out of his sight. The ledge does not. Go down, and bring my family up.",
+    ],
+    acceptText: "I'll go down",
+    steps: [
+      { type: "reach", at: { ...at(GREAT_MAW.x, SR(GREAT_MAW.y), 14, "the rim of the Great Maw") }, zone: "The Great Maw", text: "Go to the rim of the Great Maw", banner: ["New quest", "The Maw-Father"], obj: `Go to the rim of the Great Maw (${rdir("The Great Maw")} of Ropewell)`, nag: "Take the road past Hidehall and keep to the rim path. He is below you." },
+      { type: "kill", zone: "The Great Maw", kinds: ["mawfather"], goal: 1, own: true,
+        summon: { parts: ["mawfather"], level: 45, title: "The Maw-Father", hpMult: 2, ...spotIn("The Great Maw", 0.5, 0.5),
+          voice: { wake: ["Little rope-maker. I smelled your lodge on the wind before you left it.", "I have been here since the first sink opened. I was here before the word 'trapper'."], taunt: ["The ground is mine. Every hole in it. Every tooth.", "Come down. The Maw is hungry, and so am I.", "Kin! The deep is open! Come and watch him fall!"], half: ["You are still standing. It has been a long time since anyone was. Do not mistake me for tired."], death: ["The Rite... is broken... they will... come up... into the light..."] } },
+        text: "Defeat the Maw-Father", banner: ["THE MAW-FATHER", "Defeat the Maw-Father"], obj: "The Maw-Father defeated: {n} / {goal}", nag: "He burrows, drops rock from above and calls his kin. Keep moving and watch for the shadow on the ground." },
+    ],
+    outro: ["The Maw-Father goes down with a sound like a slope giving way, and the ledge shakes for a long moment after.", "From the dark behind him, three small figures come up the ramp, blinking. Ropewell will have its kin back. Of the Hide-Kin's war, there is still more to hear."],
+    reward: arcReward(45, true),
+    after: "They are home. Thin, and silent, and alive. I have no words for it. Drink at my fire any time, friend. The lodge is yours.",
+  },
+];
+
 /** Side arcs (QuestChain.local, after ZONE_ARCS in CHAINS): `needs` gates the first offer. */
 export const SIDE_ARCS: { id: string; name: string; quests: QuestDef[]; needs?: (p: Quester | undefined) => boolean }[] = [
   { id: "letters", name: "Two Letters", quests: LETTER_QUESTS, needs: (p) => chainDone(p, RED_CHAIN) },
   { id: "penance", name: "Penance", quests: PENANCE_QUESTS, needs: (p) => choiceOf(p, "bargain") === 1 && chainDone(p, BEAST_CHAIN) },
   // Act 4: the Red Badlands, from the Rustwater Post (a side arc so no chain index moves; local giver, later quests `auto`)
   { id: "badlands", name: "The Redfang Road", quests: BAD_QUESTS },
+  // Act 5: the Mawdeep Sinkholes, from Ropewell (a side arc, last, so no chain index moves)
+  { id: "sinkholes", name: "The Rope and the Maw", quests: SINK_QUESTS },
 ];
 const ARC_OBJECTS: QuestObject[] = [...ZONE_ARCS, ...SIDE_ARCS].flatMap((a) => a.quests.flatMap((d) => d.steps.flatMap(stepObjects)));
 
@@ -2844,6 +3004,7 @@ const IDLE: Record<string, string> = {
   mourner3: "I build boats. Corin built better ones. I keep thinking he'll walk up the lane and say so.",
   ilka: "Don't look at me like that. Keep walking.",
   rustmarshal: "Water's free, the roof's free, and nobody here pays the Redfang a copper. That's the Post's whole law. Fangrock doesn't like it, and now that you've been out there, neither do you.",
+  ropewarden: "Hold the rope and watch your footing. The ground round here gives way when it likes, and the Hide-Kin are no steadier. Every trapper at Ropewell has lost somebody to the Mawdeep, and none of us has stopped looking.",
   cairncaptain: "Keep to the corpse roads, and if a barrow calls your name, don't answer. Four hundred years the Wardens have held these cairns shut. I mean to be the captain who doesn't lose them.",
   alewife: "Ale's cold, the gossip's warm. Pull up a barrel, love. Whatever happens in this valley, it comes past my cart sooner or later.",
 };
