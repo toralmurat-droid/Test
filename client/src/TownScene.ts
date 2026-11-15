@@ -761,11 +761,14 @@ export class TownScene extends Phaser.Scene {
       if (me) this.floatText(me.x, me.y - 30, text, color, PIXEL_FONT, 1.3);
       this.feed(text);
     }));
-    this.room.onMessage("writ", (v) => this.bounty?.showWrit(v, (text, color) => {
-      const me = this.entities.get(this.me)?.sprite;
-      if (me) this.floatText(me.x, me.y - 30, text, color, PIXEL_FONT, 1.3);
-      this.feed(text);
-    }));
+    this.room.onMessage("writ", (v) => {
+      if (v && v.active !== undefined && this.minimap) this.minimap.writ = v.active; // the writ's land is outlined on the maps
+      this.bounty?.showWrit(v, (text, color) => {
+        const me = this.entities.get(this.me)?.sprite;
+        if (me) this.floatText(me.x, me.y - 30, text, color, PIXEL_FONT, 1.3);
+        this.feed(text);
+      });
+    });
     this.room.onMessage("shrine", ({ left, by, boon }) => {
       this.shrine?.setLeft(left);
       if (!boon) return;
@@ -1604,7 +1607,8 @@ export class TownScene extends Phaser.Scene {
       this.warTroops?.setSiege(m.fronts.length ? m.t : -1); this.warStd?.setSiege(m); (this.warPlaque ??= new WarPlaque(document.getElementById("hud")!)).setSiege(m);
     });
     this.room.onMessage("rituals", (m) => { (this.warRituals ??= new WarRituals(this)).set(m); (this.warPlaque ??= new WarPlaque(document.getElementById("hud")!)).setRitual(this.warRituals); });
-    this.room.onMessage("tunnels", (m) => { if (m && Array.isArray(m.mouths)) this.tunnelMouths = m.mouths; }); // Hide-Kin tunnel mouths (server/warTunnels.ts), kept for a war-table marker later
+    this.room.onMessage("tunnels", (m) => { if (m && Array.isArray(m.mouths)) { this.tunnelMouths = m.mouths; if (this.minimap) this.minimap.tunnels = m.mouths; } });
+    this.room.onMessage("warplan", (m) => { if (this.minimap && m && Array.isArray(m.march)) this.minimap.plan = m; }); // the own clan's attacks of the last war tick (server/warIntel.ts)
     const warNotice = new WarNotice(document.getElementById("hud")!);
     this.room.onMessage("warev", (e) => warNotice.show(e, this.entities.get(this.me)?.sprite));
     this.room.onMessage("warraid", (r) => warNotice.raid(r, this.entities.get(this.me)?.sprite)); // the Night Raiders strike the leading clan's lands
@@ -3547,7 +3551,7 @@ export class TownScene extends Phaser.Scene {
     this.grimoire?.update(meEnt?.state?.cls);
     this.waygates?.update(meEnt?.state, meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near);
     this.portals?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near || !!this.shrine?.near);
-    if (this.minimap) this.minimap.war = this.warLast; // the war table layer (warTable.ts)
+    if (this.minimap) { this.minimap.war = this.warLast; this.minimap.clan = this.warStd?.clan || undefined; } // the war table layer (warTable.ts) and the war overlays (warMap.ts)
     if (this.minimap && this.npcs) this.minimap.markers = [...this.npcs.markers, ...(this.portals?.markers() ?? []), ...(this.bounty?.markers() ?? []), ...(this.dungeon?.markers() ?? []), ...(this.waygates?.markers() ?? []), ...(this.qcarry?.markers() ?? []), ...(this.tide?.markers() ?? [])];
 
     const mine = meEnt?.state;

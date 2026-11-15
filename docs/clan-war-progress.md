@@ -794,3 +794,12 @@ killing clan members. `shared/war/feuds.ts` (rules, `FEUD`), `server/warFeuds.ts
   `maxTroops`. Death to that clan settles everything; a sworn killer gets a bounty (15 renown, 3 valor) once per target
   per UTC day. Saved as optional `HeroSave.feud` (no version bump).
 - Open: no war-map markers for squads or wanted heroes; the Songweaver struggles against Marked squads alone (`pve.ts --hunters`).
+
+## W1: war on the map (2026-11-15, PR #463)
+Murat 2026-11-15 wants the war to feel real (plan W1-W7: overlay, free engagement + wanted, growing Holds, roads and
+marching columns, big battles, capturable towns, walkable capitals). W1: `client/src/warMap.ts` draws on the world map
+and minimap: discovered Holds (client fog, `minimap.isSeen`), hover intel (`shared/war/intel.ts` `holdIntel`), siege
+rings + countdowns (shown under fog), `WarView.hot` hatching + `frontEdges` lines, the own clan's last-tick attacks,
+caravans and tunnel mouths from the per-clan `"warplan"` message (`server/warIntel.ts`, sworn heroes only), the writ land,
+and a Calls to arms panel (`callsToArms`). Note: `hot` is public, so other clans see which lands were attacked (not by
+whom or from where). The plan shows last tick's attacks, not the next ones.
