@@ -78,7 +78,7 @@ export const MILESTONES: Milestone[] = [
       { name: "Continent design: regions, borders between regions, level bands, design page v0.3", owner: "Lead Designer", status: "done" },
       { name: "Regions in the war map: territories grouped by land, links between lands, capitals move home", owner: "Gameplay Engineers", status: "done", note: "Oakvale Lands 21, Sunscar 10; forward capitals step down when a homeland is built" },
       { name: "The Red Badlands (Redfang homeland, west)", owner: "World + Art + Narrative", status: "later" },
-      { name: "The Grey Barrow Moors (Ossuary Host homeland, north-east)", owner: "World + Art + Narrative", status: "doing", note: "The land and the Moorgate are open; outpost, monsters, quests and the war come next", pr: 440 },
+      { name: "The Grey Barrow Moors (Ossuary Host homeland, north-east)", owner: "World + Art + Narrative", status: "doing", note: "Open: the Moorgate, Cairnwatch (outpost, portal stone, bounty board), seven new monsters, the Barrow-King and a quest chain. The war land is still to come", pr: 441 },
       { name: "The Mawdeep Sinkholes (Hide-Kin homeland, south)", owner: "World + Art + Narrative", status: "later" },
       { name: "The Crown of the Marches (neutral prize in the middle)", owner: "World + Gameplay", status: "later" },
     ],

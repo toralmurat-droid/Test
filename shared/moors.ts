@@ -87,7 +87,7 @@ function noise(x: number, y: number, scale: number, seed: number) {
 export interface MoorsTiles {
   GRASS_DARK: number; TALL_GRASS: number; DIRT: number; WATER: number; FLAGS: number; RUBBLE: number; COBBLE: number;
   ROCK: number; BUSH: number; STUMP: number; CLIFF: number;
-  HEATHER: number; BOG: number; BARROW: number; STANDING_STONE: number; BONE_PILE: number;
+  HEATHER: number; BOG: number; BARROW: number; STANDING_STONE: number; BONE_PILE: number; SIGNPOST: number;
   // Cairnwatch: grey stone halls under slate, a timber palisade, the yard's props
   PALISADE: number; ROOF_SLATE: number; WALL_STONE: number; WINDOW_STONE: number; DOOR: number; WELL: number;
   BARREL: number; CRATE: number; HAY: number; STALL_BLUE: number; BONFIRE: number; CAMPFIRE: number; FENCE: number; TENT: number;
@@ -381,5 +381,29 @@ export function buildMoors(T: MoorsTiles, ground: number[][], objects: number[][
     ...FENS.map((f) => A(f.name, f.x - f.rx - 3, f.y - f.ry - 3, f.rx * 2 + 6, f.ry * 2 + 6)),
     A("The Grey Barrow Moors", 0, 0, W, H),
   ];
-  return { areas, roads };
+  // signposts at the road junctions (local tiles; shared/map.ts puts each on the free tile beside the nearest road)
+  const R = STONE_RINGS, B = BARROW_FIELDS;
+  const wanted: { x: number; y: number; to: string[] }[] = [
+    { x: gate[0] + 3, y: gate[1] + 5, to: ["Cairnwatch", "The Moorgate"] },                                    // out of the moorgate
+    { x: O.x + O.w + 3, y: O.y + 7, to: ["The Grey Ring", "Blackwater Fen", "Cairnwatch"] },                   // Cairnwatch's east gate
+    { x: O.x + 2, y: O.y - 4, to: ["Sorrow Mire", "Cairnwatch"] },                                             // the north-west way
+    { x: ox + 2, y: oy + 4, to: ["Thane's Rest", "Cairnwatch"] },                                              // south-east way
+    { x: R[0].x - 2, y: R[0].y - 8, to: ["The Cairnfield", "The Grey Ring", "Cairnwatch"] },                   // Grey Ring, north way
+    { x: 188, y: 102, to: ["The Hollow Mounds", "The Drowned Hollow", "Blackwater Fen"] },                      // Fen Road fork
+    { x: 204, y: 106, to: ["The Host's Muster", "Kingsbarrow", "The Drowned Hollow"] },                        // the Host's crossroads
+    { x: 224, y: 82, to: ["Kingsbarrow", "The Drowned Hollow"] },                                              // the climb
+    { x: B[1].x - 4, y: B[1].y - B[1].ry - 3, to: ["The Nine Widows", "Kingsbarrow"] },                        // north of Kingsbarrow
+  ];
+  const posts: { x: number; y: number; to: string[] }[] = []; // map tiles, as shared/map.ts SIGNPOSTS wants them
+  for (const p of wanted) {
+    let best: [number, number] | undefined, bd = Infinity;
+    for (let j = -3; j <= 3; j++) for (let i = -3; i <= 3; i++) {
+      const x = p.x + i, y = p.y + j;
+      if (!inBand(x, y) || getO(x, y) !== EMPTY || roads.has((y + Y0) * W + x) || getG(x, y) === T.WATER) continue;
+      if (![[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => roads.has((y + dy + Y0) * W + x + dx))) continue;
+      if (Math.hypot(i, j) < bd) { bd = Math.hypot(i, j); best = [x, y]; }
+    }
+    if (best) { setO(best[0], best[1], T.SIGNPOST); posts.push({ x: best[0], y: best[1] + Y0, to: p.to }); }
+  }
+  return { areas, roads, posts };
 }

@@ -983,6 +983,7 @@ function buildWorld() {
   const moors = buildMoors(T, ground, objects, EMPTY);
   for (const k of moors.roads) roads.add(k);
   areas.push(...moors.areas);
+  posts.push(...moors.posts); // the moors' signposts (set in shared/moors.ts)
   return { ground, objects, areas, posts, roads, broken, makeshift };
 }
 

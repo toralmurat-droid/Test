@@ -4,28 +4,30 @@ import { CHAINS, chainState, inZone, QUEST_ITEMS, ZONE_ARCS, packQuest } from ".
 import { NPCS } from "../shared/npcs";
 import { SPAWN_ZONES } from "../shared/spawns";
 import { AREAS, isSolidAt } from "../shared/map";
-import { actOfTile, DESERT_Y0, TILE } from "../shared/constants";
+import { actOfTile, TILE } from "../shared/constants";
 import { startRoom, wait } from "./helpers/room";
 
 const named = new Set([...SPAWN_ZONES.map((z) => z.name), ...AREAS.map((a) => a.name)]);
-const kindsIn = (desert: boolean) => new Set(SPAWN_ZONES.filter((z) => (actOfTile(z.x, z.y) === 2) === desert).flatMap((z) => Object.keys(z.mobs)));
+const kindsIn = (act: number) => new Set(SPAWN_ZONES.filter((z) => actOfTile(z.x, z.y) === act).flatMap((z) => Object.keys(z.mobs)));
+/** The levels a zone arc may span in each act. */
+const ACT_LEVELS: Record<number, [number, number]> = { 1: [1, 30], 2: [30, 50], 3: [20, 36] };
 
 test("zone arcs: givers out in their zone, steps in real zones, objects and bosses on open ground in them", () => {
   for (const arc of ZONE_ARCS) {
     const giver = NPCS.find((n) => n.id === arc.quests[0].giver)!;
     assert.ok(giver, `${arc.id}: giver ${arc.quests[0].giver}`);
     assert.ok(!isSolidAt(giver.x, giver.y), `${arc.id}: ${giver.name} stands on open ground`);
-    const desert = giver.y >= DESERT_Y0 * TILE;
+    const act = actOfTile(giver.x / TILE, giver.y / TILE);
     for (const [i, d] of arc.quests.entries()) {
       assert.equal(d.giver, giver.id, `${d.id}: one giver per arc`);
       assert.equal(!!d.auto, i > 0, `${d.id}: later quests of an arc carry on by themselves`);
-      assert.ok(d.minLevel >= (desert ? 30 : 1) && d.minLevel <= (desert ? 50 : 30), `${d.id}: level fits its act`);
+      assert.ok(d.minLevel >= ACT_LEVELS[act][0] && d.minLevel <= ACT_LEVELS[act][1], `${d.id}: level fits its act`);
       assert.notEqual(d.steps[d.steps.length - 1].type, "talk", `${d.id}: ends out in the field`);
       assert.ok(d.outro?.length, `${d.id}: says what happened where it ended`);
       for (const s of d.steps) {
         if (s.zone) assert.ok(named.has(s.zone), `${d.id}: zone ${s.zone} exists`);
         if (s.type === "collect") assert.ok(QUEST_ITEMS[s.item!], `${d.id}: item ${s.item}`);
-        if ((s.type === "kill" || s.type === "collect") && !s.summon) assert.ok(s.kinds!.some((k) => kindsIn(desert).has(k)), `${d.id}: its monsters live in this act`);
+        if ((s.type === "kill" || s.type === "collect") && !s.summon) assert.ok(s.kinds!.some((k) => kindsIn(act).has(k)), `${d.id}: its monsters live in this act`);
         for (const o of s.objects ?? []) {
           assert.ok(inZone(s.zone!, o.x, o.y), `${d.id}: ${o.id} stands in ${s.zone}`);
           assert.ok(!isSolidAt(o.x, o.y - 4), `${d.id}: ${o.id} on open ground`);

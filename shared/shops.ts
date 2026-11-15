@@ -166,14 +166,14 @@ export const SHOPS: Record<string, Shop> = {
     levelHeads: true,
   },
   moorarmourer: {
-    greeting: "Iron rings over boiled leather, and a hood against the mist. The dead out there bite cold. Wear something thick.",
+    greeting: "Gorm. Iron rings over boiled leather, and a hood against the mist. The dead out there bite cold, and the Wardens' wives knit the liners. Wear something thick.",
     stock: armourStock("moorarmourer"),
     buys: ARMOUR_SLOTS,
     levelHeads: true,
   },
   // Cairnwatch's herbwife (Act 3): Medium and Greater flasks; she buys and fuses loose runes like Morwen and Zahra
   moorherbalist: {
-    greeting: "Bog-myrtle, sundew, a drop of something stronger. Red keeps you breathing, blue keeps you thinking. Carved stones? I'll take them, or fuse four.",
+    greeting: "Mother Ysolde, dear. Bog-myrtle, sundew, a drop of something stronger. Red keeps you breathing, blue keeps you thinking. Carved stones? I'll take them, or fuse four. Never take a candle from a hag.",
     stock: [...potionStock("potion", [1, 2]), ...potionStock("mpotion", [1, 2])],
     buys: ["rune"],
   },

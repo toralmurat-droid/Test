@@ -4,6 +4,7 @@ import { SPAWN_ZONES, SpawnZone } from "./spawns";
 import { npcById } from "./npcs";
 import { chamberAt, COCOONS, CRYPT_FLOORS, DEN, FLOORS, HIGH_CHOIR, SINKHOLE, TOTEMS, UNDER_FLOORS, WATER_THRONE } from "./dungeon";
 import { D, FURNACE, KEL_ASHAR } from "./desert";
+import { BARROW_FIELDS, CAIRN_SQUARE, KINGS_MOUND, MR } from "./moors";
 import { xpStep } from "./classes";
 import { type BargainSpec, type CarrySpec, type ChoiceId, type ChoiceSpec, choiceOf, type HoldSpec, nextStage, type PickSpec, sayFor, stepObjects, type SyncSpec, type UnseenSpec } from "./questSteps";
 
@@ -129,6 +130,9 @@ export const QUEST_ITEMS: Record<string, QuestItemDef> = {
   skyiron: { name: "Sky-Iron", plural: "Sky-Iron" },
   caravanseal: { name: "Caravan Seal", plural: "Caravan Seals" },
   pearl: { name: "Dune-Pearl", plural: "Dune-Pearls" },
+  // Act 3, the Grey Barrow Moors (MOOR_QUESTS)
+  candle: { name: "Corpse-Candle", plural: "Corpse-Candles" },
+  barrowkey: { name: "Barrow-Key", plural: "Barrow-Keys" },
 };
 
 // ---- Map objects you use with E ----
@@ -2150,7 +2154,165 @@ const TWOHANDS_QUESTS: QuestDef[] = [
   },
 ];
 
-/** The zone arcs, each its own chain (QuestChain.local): Act 1 then Act 2. */
+// -- Act 3: the Grey Barrow Moors, from Cairnwatch (Lv 20-35; shared/moors.ts, docs/clan-war-progress.md moors PR2) --
+/** Where things are, said from Cairnwatch's square (the moors' own compass). */
+function dirFromCairn(tx: number, ty: number): string {
+  const q = CAIRN_SQUARE, cx = q.x + q.w / 2, cy = MR(q.y + q.h / 2);
+  const k = (Math.round(Math.atan2(ty - cy, tx - cx) / (Math.PI / 4)) + 8) % 8;
+  return ["east", "south-east", "south", "south-west", "west", "north-west", "north", "north-east"][k];
+}
+const cdir = (name: string) => { const z = zoneByName(name); return dirFromCairn(z.x + z.w / 2, z.y + z.h / 2); };
+const MOOR_CAIRNS = [obj("moor_cairn1", "cairn", "Toppled cairn", "Raise", "The Grey Ring", 0.2, 0.5), obj("moor_cairn2", "cairn", "Toppled cairn", "Raise", "The Grey Ring", 0.5, 0.2), obj("moor_cairn3", "cairn", "Toppled cairn", "Raise", "The Grey Ring", 0.78, 0.62)];
+const MOOR_THANES = [obj("moor_thane1", "grave", "Thane's barrow-stone", "Read", "Thane's Rest", 0.25, 0.35), obj("moor_thane2", "grave", "Thane's barrow-stone", "Read", "Thane's Rest", 0.55, 0.7), obj("moor_thane3", "grave", "Thane's barrow-stone", "Read", "Thane's Rest", 0.8, 0.3)];
+const MOOR_BEACONS = [obj("moor_beacon1", "wardlamp", "Warden's fen-lamp", "Light", "Blackwater Fen", 0.2, 0.4), obj("moor_beacon2", "wardlamp", "Warden's fen-lamp", "Light", "Blackwater Fen", 0.5, 0.75), obj("moor_beacon3", "wardlamp", "Warden's fen-lamp", "Light", "Blackwater Fen", 0.82, 0.35)];
+const MOOR_WIDOWS = [obj("moor_widow1", "seal", "Widow-stone", "Read the names", "The Nine Widows", 0.25, 0.4), obj("moor_widow2", "seal", "Widow-stone", "Read the names", "The Nine Widows", 0.5, 0.78), obj("moor_widow3", "seal", "Widow-stone", "Read the names", "The Nine Widows", 0.78, 0.45)];
+const mt = (r: { x: number; y: number }) => ({ x: (r.x + 0.5) * TILE, y: MR(r.y) * TILE });
+const MOOR_QUESTS: QuestDef[] = [
+  {
+    id: "wightsring", title: "The Cairns Are Open", giver: "cairncaptain", zone: "The Grey Ring", minLevel: 20,
+    description: `Warden-Captain Edra Vane says the wardens' cairns at the Grey Ring, ${cdir("The Grey Ring")} of Cairnwatch, have been thrown down from inside. Put the wights back and raise the cairns.`,
+    offer: [
+      "Stand easy. You came in by the moorgate, so you've seen the mist. It is not weather. It is breath.",
+      "Under every mound on these moors lies a soldier of the Ossuary Host, buried standing with his spear. We, the Cairn Wardens, keep the cairns on top shut. That is all we do, and we have done it for four hundred years.",
+      `The cairns at the Grey Ring, ${cdir("The Grey Ring")} of here, were thrown down last week. From beneath. Kill the wights that came out, then raise the stones again.`,
+    ],
+    acceptText: "I'll shut them again",
+    steps: [
+      { type: "kill", zone: "The Grey Ring", kinds: ["wight"], goal: 8, text: "Kill 8 Barrow-Wights at the Grey Ring", banner: ["New quest", "The Cairns Are Open"], obj: "Barrow-Wights slain: {n} / {goal}", nag: "{n} of {goal}. They walk the stones of the Grey Ring." },
+      { type: "use", zone: "The Grey Ring", objects: MOOR_CAIRNS, chest: false, text: "Raise the 3 toppled cairns", banner: ["Shut the barrows", "Raise the cairns"], obj: "Cairns raised: {n} / {goal}", nag: "{n} of {goal}. Stack the stones as they lie, and the old rite does the rest." },
+    ],
+    outro: ["The last stone settles and the ground goes quiet. Scratched on the lowest stone, in a Warden's hand: \"They are not breaking out. They are being called.\"", "Every grave opened faces the same way: north-west, to the bogs."],
+    reward: arcReward(21),
+    after: "Called. Aye. That's the word I was afraid of. Go on to the mire, and mind the hags.",
+  },
+  {
+    id: "mirehags", title: "Candles in the Mire", giver: "cairncaptain", zone: "Sorrow Mire", minLevel: 22, auto: true,
+    description: `The bog-hags of Sorrow Mire, ${cdir("Sorrow Mire")} of Cairnwatch, light corpse-candles to lead the dead. Break the hags and take their candles.`,
+    offer: [
+      "The bog-hags of Sorrow Mire are living folk, of a sort. They were here before the Host, and they trade with the dead as other people trade at a market.",
+      "They light corpse-candles on the mire, and where a candle goes, a wight follows. Someone has been paying for candles, and the hags are lighting more than they ever did.",
+      "Thin them out. And bring me the candles. I want to see who made the wax.",
+    ],
+    acceptText: "I'll go into the mire",
+    steps: [
+      { type: "kill", zone: "Sorrow Mire", kinds: ["boghag"], goal: 6, text: "Kill 6 Bog Hags in Sorrow Mire", banner: ["New quest", "Candles in the Mire"], obj: "Bog Hags slain: {n} / {goal}", nag: "{n} of {goal}. They keep to the black pools. Mind their brood." },
+      { type: "collect", zone: "Sorrow Mire", kinds: ["boghag"], item: "candle", chance: { boghag: 0.4 }, goal: 4, text: "Take 4 Corpse-Candles from the hags", banner: ["Grave-wax", "Take 4 Corpse-Candles"], obj: "Corpse-Candles: {n} / {goal}", nag: "{n} of {goal}. The hags carry them on a cord at the belt." },
+    ],
+    outro: ["Pale wax, and in every candle a thumbnail of bone. The wax is cast with a mark pressed into the base: a skull inside a ring of spears.", "The Host's own mark. The hags were only the chandlers. The dead have been giving the orders."],
+    reward: arcReward(22),
+    after: "The Host's mark on grave-wax. They are not stirring in their sleep. They are awake.",
+  },
+  {
+    id: "thanesrest", title: "Thane's Rest", giver: "cairncaptain", zone: "Thane's Rest", minLevel: 23, auto: true,
+    description: `The Host's thanes lie at Thane's Rest, ${cdir("Thane's Rest")} of Cairnwatch. Read their stones, and cut down the legionaries who guard them.`,
+    offer: [
+      "The thanes of the Host are buried at Thane's Rest. Each barrow has a stone with the thane's name and the name of the legion he led.",
+      "I want those names. If the legions are marching again, I need to know whose, and how many.",
+      "The legionaries stand guard there. They were guarding it in life, too. Cut through them.",
+    ],
+    acceptText: "I'll read the stones",
+    steps: [
+      { type: "use", zone: "Thane's Rest", objects: MOOR_THANES, chest: false, text: "Read the 3 thanes' barrow-stones", banner: ["New quest", "Thane's Rest"], obj: "Barrow-stones read: {n} / {goal}", nag: "{n} of {goal}. They stand at the heads of the biggest mounds." },
+      { type: "kill", zone: "Thane's Rest", kinds: ["legionary"], goal: 6, text: "Cut down 6 Host Legionaries", banner: ["The legion stands", "Cut down 6 Host Legionaries"], obj: "Legionaries slain: {n} / {goal}", nag: "{n} of {goal}. Wait for the swing, then strike." },
+    ],
+    outro: ["Three stones, three thanes, and under each name the same line: \"Until the King calls.\"", "Every barrow-lid is slid open and every grave is empty. The thanes have gone to the King."],
+    reward: arcReward(23),
+    after: "Until the King calls. I knew that as a lullaby. I will not sing it again.",
+  },
+  {
+    id: "cairnlord", title: "The Cairn-Lord", giver: "cairncaptain", zone: "The Cairnfield", minLevel: 25, auto: true,
+    description: `A Cairn-Lord of the Host walks the Cairnfield, ${cdir("The Cairnfield")} of Cairnwatch, gathering the dead behind him. Break his escort and break him.`,
+    offer: [
+      "North of here is the Cairnfield, rows of mounds as far as you can see. That is where a Cairn-Lord has risen.",
+      "A Cairn-Lord is the thane's own captain, the last to be buried and the first to be called. If the dead are marching, he is the one marching them.",
+      "Cut down his wights. Then go and put him back in the ground.",
+    ],
+    acceptText: "I'll go north",
+    steps: [
+      { type: "kill", zone: "The Cairnfield", kinds: ["wight"], goal: 8, text: "Kill 8 Barrow-Wights in the Cairnfield", banner: ["New quest", "The Cairn-Lord"], obj: "Barrow-Wights slain: {n} / {goal}", nag: "{n} of {goal}. They rise out of the mounds in rows." },
+      { type: "kill", zone: "The Cairnfield", kinds: ["cairnlord"], goal: 1, own: true,
+        summon: { parts: ["cairnlord"], level: 28, title: "Maelgar, Cairn-Lord of the North Rows", hpMult: 1.5, ...mt(BARROW_FIELDS[0]),
+          voice: { wake: ["I was called. I came. Who calls me now?", "The rows are full, living one. There is room for one more."], taunt: ["I stood at the King's shield four hundred years. Do you think you are the first to try me?", "Kneel. It is only dirt."], half: ["Bone is patient. Bone does not bleed. Bone waits."], death: ["The King... will count me... absent..."] } },
+        text: "Put down Maelgar, the Cairn-Lord", banner: ["THE CAIRN-LORD WALKS", "Put down Maelgar"], obj: "The Cairn-Lord put down: {n} / {goal}", nag: "He stands among the mounds. Cut down his wights as they rise, and keep clear of his stomp." },
+    ],
+    outro: ["Maelgar falls apart like a dropped sack of stones. On his breastplate, a ring of black iron with a single word cut into it: \"MUSTER\".", "East, then. Where the Fen Road ends, the Host has a camp."],
+    reward: arcReward(26, true),
+    after: "A Cairn-Lord. And only a lieutenant. Something bigger is giving the orders.",
+  },
+  {
+    id: "blackwater", title: "Lamps on the Black Water", giver: "cairncaptain", zone: "Blackwater Fen", minLevel: 26, auto: true,
+    description: `The Wardens' fen-lamps in Blackwater Fen, ${cdir("Blackwater Fen")} of Cairnwatch, have gone out, and the mist-wraiths walk the causeway. Relight them.`,
+    offer: [
+      "The Fen Road crosses Blackwater Fen on a causeway. The Wardens kept three lamps along it to keep the mist-wraiths off the road.",
+      "The lamps have gone dark. Nobody has crossed the fen alive in a month.",
+      "Take a flame. Light the lamps, and kill what you meet. The road is the only way east.",
+    ],
+    acceptText: "I'll light the lamps",
+    steps: [
+      { type: "use", zone: "Blackwater Fen", objects: MOOR_BEACONS, chest: false, text: "Relight the 3 Wardens' fen-lamps", banner: ["New quest", "Lamps on the Black Water"], obj: "Fen-lamps lit: {n} / {goal}", nag: "{n} of {goal}. They stand along the causeway in the fen." },
+      { type: "kill", zone: "Blackwater Fen", kinds: ["mistwraith"], goal: 6, text: "Kill 6 Mist-Wraiths in the fen", banner: ["Lamps lit", "Kill 6 Mist-Wraiths"], obj: "Mist-Wraiths slain: {n} / {goal}", nag: "{n} of {goal}. They drift in out of the mist. Fight them by the lamps." },
+    ],
+    outro: ["The three lamps burn yellow across the black water, and the mist backs off them like a dog from a fire.", "By their light you see how many tracks lead east along the causeway. Hundreds. Marching in step."],
+    reward: arcReward(27),
+    after: "I saw the lamps from the wall. First light on the fen in a month. Thank you.",
+  },
+  {
+    id: "ninewidows", title: "The Nine Widows", giver: "cairncaptain", zone: "The Nine Widows", minLevel: 29, auto: true,
+    description: `At the Nine Widows, ${cdir("The Nine Widows")} of Cairnwatch, nine stones carry the names of the women who buried the Barrow-King. Read what they say of how he was put to sleep.`,
+    offer: [
+      "North, on the high way, nine tall stones stand in a ring: the Widows. They are the wives of the nine thanes the Barrow-King led out to die, and it was they who sang him to sleep.",
+      "Their stones carry the words of the rite. If we are to put him back to sleep, I need those words.",
+      "The wraiths gather round the stones and weep. Do not stand among them long.",
+    ],
+    acceptText: "I'll read the stones",
+    steps: [
+      { type: "use", zone: "The Nine Widows", objects: MOOR_WIDOWS, chest: false, text: "Read 3 of the Widow-stones", banner: ["New quest", "The Nine Widows"], obj: "Widow-stones read: {n} / {goal}", nag: "{n} of {goal}. The wraiths cluster at the foot of each." },
+      { type: "kill", zone: "The Nine Widows", kinds: ["mistwraith"], goal: 6, text: "Kill 6 Mist-Wraiths at the Widows", banner: ["The weeping ring", "Kill 6 Mist-Wraiths"], obj: "Mist-Wraiths slain: {n} / {goal}", nag: "{n} of {goal}." },
+    ],
+    outro: ["Three verses, cut in the stone. \"Sleep, King, in the ground you took. Sleep, and the dead will keep your hall.\" And at the foot: \"He wakes when the ring is broken, at night, in his own mound.\"", "The ring is broken. Two of the Widows lie face down in the heather."],
+    reward: arcReward(29),
+    after: "At night, in his own mound. Kingsbarrow. So that is where this ends.",
+  },
+  {
+    id: "kingsbarrow", title: "The Road to Kingsbarrow", giver: "cairncaptain", zone: "Kingsbarrow", minLevel: 31, auto: true,
+    description: `Kingsbarrow, ${cdir("Kingsbarrow")} of Cairnwatch, is a hill of legions round the Barrow-King's mound. Fight through them and take a barrow-key.`,
+    offer: [
+      "Kingsbarrow is a hill of legion graves ringed round the King's own mound. All of them are open now, and every grave has someone standing in it.",
+      "The mound's door is locked with the Host's own iron. The legion captains carry the keys, by their custom. Take one.",
+      "When you have it, go in at nightfall. He sleeps in the day, even now.",
+    ],
+    acceptText: "I'll break through",
+    steps: [
+      { type: "kill", zone: "Kingsbarrow", kinds: ["legionary"], goal: 8, text: "Fight through 8 Host Legionaries at Kingsbarrow", banner: ["New quest", "The Road to Kingsbarrow"], obj: "Legionaries slain: {n} / {goal}", nag: "{n} of {goal}. They hold the slope in rows. Fight them in the gaps." },
+      { type: "collect", zone: "Kingsbarrow", kinds: ["legionary"], item: "barrowkey", chance: { legionary: 0.25 }, goal: 1, text: "Take a Barrow-Key from a legionary", banner: ["The King's door", "Take a Barrow-Key"], obj: "Barrow-Keys: {n} / {goal}", nag: "A legion captain wears it on a chain. Keep cutting." },
+    ],
+    outro: ["The key is black iron, cold enough to sting, cut in the shape of a skull.", "Above you the mound stands against the sky, and the door in its side is already ajar. Go in at night, and he will be waiting."],
+    reward: arcReward(31),
+    after: "Black iron, a skull's head. I have heard of that key. Come back from the mound.",
+  },
+  {
+    id: "barrowking", title: "The Barrow-King", giver: "cairncaptain", zone: "The Barrow-King's Mound", minLevel: 33, auto: true,
+    description: `The Barrow-King sleeps in his mound at Kingsbarrow, ${cdir("The Barrow-King's Mound")} of Cairnwatch. He wakes at night. Put him back in the ground.`,
+    offer: [
+      "He is the first of the Host and the last, a king who would not be buried. He is the reason for all of it: the cairns, the Wardens, the fort, every night I have stood on that wall.",
+      "I cannot go with you. The Wardens hold the cairns, and if the cairns open, nothing is left. So it is you.",
+      "Go at night. Put him in the ground, and keep him there.",
+    ],
+    acceptText: "I'll end it",
+    steps: [
+      { type: "reach", at: { ...mt(KINGS_MOUND), r: 9 * TILE, label: "The Barrow-King's Mound" }, zone: "The Barrow-King's Mound", text: "Go to the Barrow-King's Mound", banner: ["New quest", "The Barrow-King"], obj: `Go to the Barrow-King's Mound (${cdir("The Barrow-King's Mound")} of Cairnwatch)`, nag: "Follow the climb to Kingsbarrow and keep to the road." },
+      { type: "kill", zone: "The Barrow-King's Mound", kinds: ["barrowking"], goal: 1, own: true,
+        summon: { parts: ["barrowking"], level: 35, title: "Aldric Hollowcrown, the Barrow-King", hpMult: 2, ...mt(KINGS_MOUND),
+          voice: { wake: ["Who stands in my hall with a heartbeat?", "Four hundred years I slept. Four hundred, and still they could not pour enough earth on me."], taunt: ["My legions marched through a dozen kingdoms. You will not trouble them.", "Rise, my host. We have a guest.", "The living are so loud. So brief."], half: ["You think me broken? I was broken before the first spade. I am the Host. The Host does not end."], death: ["Count... the legions... one by one... and none... shall answer..."] } },
+        text: "Defeat the Barrow-King", banner: ["THE BARROW-KING WAKES", "Defeat Aldric Hollowcrown"], obj: "The Barrow-King defeated: {n} / {goal}", nag: "He wakes at night, on his own mound. Bring down his legion as it rises, then keep clear of the rockfall.", night: true },
+    ],
+    outro: ["The crown rolls from his skull and lies still. For the first time in four hundred years the mist begins to thin.", "Far behind you, on Cairnwatch's wall, a horn sounds once: the Wardens' sign for the cairns held shut. But the Host's camp in the east still burns with fires, and the dead there are not all his."],
+    reward: arcReward(35, true),
+    after: "The wall is quiet. I will stand it anyway. Come and drink with the Wardens whenever you like. You have earned the stool.",
+  },
+];
+
+/** The zone arcs, each its own chain (QuestChain.local): Act 1, 2, then 3. */
 export const ZONE_ARCS: { id: string; name: string; quests: QuestDef[]; needs?: (p: Quester | undefined) => boolean }[] = [
   { id: "mill", name: "Millbrook's Bad Water", quests: MILL_QUESTS },
   { id: "hunt", name: "The Lost Hunt", quests: HUNT_QUESTS },
@@ -2170,6 +2332,8 @@ export const ZONE_ARCS: { id: string; name: string; quests: QuestDef[]; needs?: 
   { id: "wheel", name: "Hold the Wheel", quests: WHEEL_QUESTS, needs: (p) => chainDone(p, chainIx("mill")) },
   { id: "unseen", name: "Unseen", quests: UNSEEN_QUESTS, needs: (p) => (chainState(p, chainIx("spire"))?.questId ?? 0) > SPIRE_QUESTS.findIndex((d) => d.id === "mirrorpath") },
   { id: "twohands", name: "Two Hands", quests: TWOHANDS_QUESTS, needs: (p) => (chainState(p, chainIx("under"))?.questId ?? 0) >= UNDER_QUESTS.findIndex((d) => d.id === "canopic") },
+  // Act 3: the Grey Barrow Moors, from Cairnwatch
+  { id: "moors", name: "The Grey Barrow Road", quests: MOOR_QUESTS },
 ];
 
 // ---- Side arcs: short local chains that may end on a hand-in (unlike ZONE_ARCS), stored in the shared Player.quests map the same way ----
@@ -2518,7 +2682,7 @@ const IDLE: Record<string, string> = {
   mourner2: "Gran would've hated all this fuss. She'd have wanted the kettle on.",
   mourner3: "I build boats. Corin built better ones. I keep thinking he'll walk up the lane and say so.",
   ilka: "Don't look at me like that. Keep walking.",
-  cairncaptain: "Keep to the corpse roads, and if a barrow calls your name, don't answer. The Host has been counting its dead again.", // placeholder until the moors chain is written
+  cairncaptain: "Keep to the corpse roads, and if a barrow calls your name, don't answer. Four hundred years the Wardens have held these cairns shut. I mean to be the captain who doesn't lose them.",
   alewife: "Ale's cold, the gossip's warm. Pull up a barrel, love. Whatever happens in this valley, it comes past my cart sooner or later.",
 };
 /**
