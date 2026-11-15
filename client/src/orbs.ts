@@ -223,7 +223,7 @@ export class OrbHud {
     if (!d) return real;
     const k = Math.min(1, (now - d.at) / DRAIN_MS);
     if (k >= 1) { this.drain = null; return real; }
-    return d.from + (d.to - d.from) * (1 - (1 - k) * (1 - k)); // fast at first, settling at the bottom
+    return d.from + (d.to - d.from) * (1 - (1 - k) ** 1.6); // fast at first, settling at the bottom
   }
 
   /** The Songweaver's right orb is the song gauge: gold, labelled "Song", pulsing when nearly full. */
