@@ -85,3 +85,15 @@ Owner approved all six:
   "No points to spend" dim instead of red.
 - E: tabs and headers in the normal pixel font, sentence case, no letter-spacing; tiny font only for numbers/keys.
 - F: panel ~860 px wide (was ~1060), bronze frame like the elite monster plate.
+
+## F – quest log (decided 2026-11-15)
+Mockup: session scratchpad `hud/C/qmock.cjs`; renders `hud/C/qlog/mock-active-1920.png`, `mock-completed-1366.png`.
+Owner approved all six:
+- Q1: list ~270 px, one-line titles, grouped by story chain with its progress ("The Gloam · 4 of 12"), level small at the right.
+- Q2: tabs Active / Completed / Rumours with counts; completed greyed with a tick.
+- Q3: detail = title, one meta line ("Given by Brann · Mirror Pond · level 4+"), description, each objective once with
+  its count inside its bar (later steps dimmed), reward row with icons.
+- Q4: one way to track: ◆ per row (hollow = not tracked) and a "◆ Tracked" toggle by the title; the big button and
+  the footer hint go.
+- Q5: bronze frame, sentence-case pixel-font headers, ~860 px, centred; the list scrolls inside at 1366x768.
+- Q6: "Show on map" opens the world map at the objective.
