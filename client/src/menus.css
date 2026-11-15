@@ -146,23 +146,7 @@ body #npcdialog .sh-empty { color: #a8977a; }
 body #npcdialog .nd-btns button.nd-bye { color: #c9b48a; }
 
 /* ---------- Quest log (J) and tracker ---------- */
-body #questlog .ql-close { padding: 0 2px; line-height: 0; }
 body #questlog .ql-cat, body #questlog .ql-meta, body #questlog .help { color: #a8977a; }
-body #questlog .ql-item { border-radius: 0; color: #d8ccb4; opacity: 1; }
-body #questlog .ql-item:hover { color: #ffd98a; }
-body #questlog .ql-item.sel { background: rgba(15, 10, 6, .7); border-left-color: #e3bf6a; color: #ffd98a; font-weight: normal; }
-body #questlog h3 { color: #e3bf6a; font-weight: normal; }
-body #questlog .ql-badge { background: #3e6a24; color: #e4ffc8; border-radius: 0; font-weight: normal; box-shadow: 0 0 0 1px #080504; }
-body #questlog .ql-steps .done { color: #8fae6a; }
-body #questlog .ql-steps .now { color: #f0e0b8; font-weight: normal; }
-body #questlog .ql-steps .now .ic { color: #e3bf6a; }
-body #questlog .ql-steps .todo { color: #6d6250; }
-body #questlog .ql-bar { background: #0f0a06; border-radius: 0; box-shadow: 0 0 0 1px #080504, 0 0 0 2px #6a5232; }
-body #questlog .ql-bar div { background: #6f9f3a; box-shadow: inset 0 2px #9fd060; }
-body #questlog .ql-now { color: #c9a45a; }
-body #questlog .ql-reward { font-weight: normal; color: #f0e0b8; }
-body #questlog .bang { color: #ffb030; }
-body #questlog .ql-trackrow input { accent-color: #b8893a; }
 body #questtracker { background: rgba(15, 10, 6, .82); border-left: 3px solid #a8823a; border-radius: 0; box-shadow: 0 0 0 1px #080504;
   text-shadow: 2px 2px #050302; color: #eadfc8; }
 body #questtracker .qt-title { color: #e3bf6a; font-weight: normal; }
@@ -221,18 +205,6 @@ body #questbtn { position: absolute; left: 50%; bottom: -104px; transform: trans
   padding: 2px 8px; font-size: 18px; font-family: var(--pixel-font); white-space: nowrap; pointer-events: auto; }
 body #questbtn small { color: #a8977a; margin-left: 5px; font-size: 18px; font-family: var(--pixel-font); }
 body #questbtn .pxi { margin-right: 4px; }
-body #questlog .ql-item { display: flex; align-items: center; gap: 6px; }
-body #questlog .ql-cathint { float: right; text-transform: none; letter-spacing: 0; }
-body #questlog .ql-tbox { flex: none; width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
-  background: #0f0a06; box-shadow: 0 0 0 1px #080504, 0 0 0 2px #6a5232; }
-body #questlog .ql-tbox:hover { box-shadow: 0 0 0 1px #080504, 0 0 0 2px #e3bf6a; }
-body #questlog .ql-tbox .pxi { width: 10px; height: 10px; margin: 0; }
-body #questlog .ql-item:not(.tracked) .ql-name { opacity: .75; }
-body #questlog .ql-trackbtn { display: inline-flex; align-items: center; gap: 4px; margin-top: 10px; padding: 2px 8px;
-  border: 6px solid transparent; border-image: var(--wf-btn) 4 fill / 6px / 0 repeat; image-rendering: pixelated; background: none;
-  color: #eadfc8; font: 18px var(--pixel-font); text-shadow: 2px 2px #050302; cursor: pointer; }
-body #questlog .ql-trackbtn.on { color: #b9e08a; }
-body #questlog .ql-trackbtn:hover { color: #ffd98a; filter: brightness(1.25); }
 
 /* ---------- Side panel: Character / Inventory / Skills tabs + live stats block (sidepanel.ts) ---------- */
 body #sidepanel { position: absolute; right: 12px; top: 12px; max-height: calc(100% - 152px); width: min(680px, calc(100% - 24px)); z-index: 8;

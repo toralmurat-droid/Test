@@ -222,7 +222,7 @@ export class NpcLayer {
     this.addSurroundings(scene);
     this.objects = new QuestObjects(scene);
     this.rumours.onEnd = (e) => this.onRumourEnd(e);
-    this.log.rumours = { html: () => this.rumours.logHtml(), active: () => !!this.rumours.current() };
+    this.log.rumours = { html: () => this.rumours.logHtml(), active: () => !!this.rumours.current(), count: () => this.rumours.st?.offers.filter((o) => !o.done).length ?? 0 };
   }
 
   /** A rumour ended (server "rumour" end): banner in the pixel lettering, and the outro as a story card when it was solved. */
