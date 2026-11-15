@@ -11,7 +11,7 @@ import { TILE, type Dir } from "../shared/constants";
 import { underground } from "../shared/dungeon";
 import { blocked } from "../shared/movement";
 import { CLANS, type ClanKey } from "../shared/war/clans";
-import { CARAVAN, caravanGold, caravanHp, caravanLand, caravanLevel, caravanLines, caravanOffLimits, caravanRoute, caravansOnRoad, caravanTripMs, routePos, type CaravanLine, type CaravanRoute } from "../shared/war/caravans";
+import { CARAVAN, caravanGold, caravanHp, caravanLand, caravanLevel, caravanLines, caravanOffLimits, caravanRoute, caravansOnRoad, caravanTripMs, roadKnown, routePos, type CaravanLine, type CaravanRoute } from "../shared/war/caravans";
 import { RENOWN_RANKS, rankOf } from "../shared/war/renown";
 import { targetsOf } from "../shared/war/rules";
 import { STANDARD } from "../shared/war/standards";
@@ -89,6 +89,9 @@ export class WarCaravans {
     if (!v) { for (const l of [...this.live.values()]) this.drop(l); this.trips.clear(); return; }
     const owner = v.owner.map(clanOfIndex), key = owner.join();
     if (key !== this.linesKey) { this.linesKey = key; this.lines = caravanLines(owner); }
+    // warm one unbuilt road per tick, so a board read or a hero arriving never pays for several at once
+    const cold = this.lines.find((l) => !roadKnown(l.a, l.b));
+    if (cold) caravanRoute(cold.a, cold.b);
     const heroes: TroopHero[] = [];
     for (const [, p] of this.h.heroes()) if (!p.dead && !underground(p.y)) heroes.push(p);
     // escort time: a sworn hero of the cart's clan beside it

@@ -6,12 +6,13 @@
  * sieges the clan is in first, then the lands under the most pressure. Writs pay gold, renown and valor, never XP.
  * The server (server/warWrits.ts) counts progress and pays; this module only decides what is legal and what it is worth.
  */
-import { caravanLines, caravanRoute, type CaravanLine } from "./caravans";
+import { CARAVAN, caravanLines, caravanRoute, type CaravanLine } from "./caravans";
 import { CLAN_KEYS, type ClanKey } from "./clans";
 import { patrolOf } from "./patrols";
 import { bordersOf, landOf, targetsOf, type WarState } from "./rules";
 import { STANDARD, STANDARDS, isClan } from "./standards";
 import { TERRITORIES } from "./territories";
+import { WAR_TROOPS } from "./troops";
 
 export const WRIT = {
   /** Offers on a board at most. */
@@ -137,7 +138,8 @@ export function writOffers(s: WarState, clan: ClanKey, level: number, act: numbe
   const rank = (t: number) => (sieged(t) ? 1e9 : 0) + (s.pressure[t] ?? 0);
   // each kind's candidates: a land, and for escort / raid the caravan line too
   type Cand = { t: number; line?: CaravanLine };
-  const pool = Object.fromEntries(WRIT_KINDS.map((k) => [k, (isRoadKind(k) ? writLines(s, clan, k) : writLands(s, clan, k).map((t): Cand => ({ t })))
+  const carts = CARAVAN.live && WAR_TROOPS.live; // no carts on the roads: no escort or raid writs
+  const pool = Object.fromEntries(WRIT_KINDS.map((k) => [k, (isRoadKind(k) ? (carts ? writLines(s, clan, k) : []) : writLands(s, clan, k).map((t): Cand => ({ t })))
     .filter((c) => fits(c.t)).sort((a, b) => rank(b.t) - rank(a.t) || a.t - b.t || (a.line ? a.line.a - b.line!.a || a.line.b - b.line!.b : 0))])) as Record<WritKind, Cand[]>;
   const start = Math.floor(r() * WRIT_KINDS.length), order = WRIT_KINDS.map((_, i) => WRIT_KINDS[(start + i) % WRIT_KINDS.length]);
   const n = order.length, used = new Set<number>(), lines = new Set<string>(), out: Writ[] = [];
