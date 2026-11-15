@@ -1,4 +1,5 @@
-import { TILE } from "../../shared/constants";
+import { DESERT_Y0, inBadlandsBand, inDeepRow, inMoorsBand, TILE, UNDER_END, WORLD_H } from "../../shared/constants";
+import { floorAt } from "../../shared/dungeon";
 import { AREAS } from "../../shared/map";
 import { SPAWN_ZONES } from "../../shared/spawns";
 import { npcById } from "../../shared/npcs";
@@ -77,4 +78,20 @@ export function mapFocus(d: QuestDef, q: QuestState | undefined, finished: boole
   if (g) return { x: g.x, y: g.y, label: g.name, kind: "giver" };
   const z = SPAWN_ZONES.find((s) => s.name === d.zone) ?? AREAS.find((a) => a.name === d.zone);
   return z ? { x: (z.x + z.w / 2) * TILE, y: (z.y + z.h / 2) * TILE, label: d.zone, kind: "zone" } : undefined;
+}
+
+/** The part of the world a point lies in, as the world map frames it (it shows one at a time, Minimap.bounds). */
+export interface MapArea { key: string; name: string }
+
+/** Which map area a world point (px) is in, with a name for "travel there" hints. */
+export function mapAreaOf(px: number, py: number): MapArea {
+  const tx = Math.floor(px / TILE), ty = Math.floor(py / TILE);
+  const f = floorAt(tx, ty);
+  if (f) return { key: `floor${f.id}`, name: f.name };
+  if (ty >= WORLD_H && ty < UNDER_END) return { key: "under", name: "the Mawdeep Warrens" };
+  if (inBadlandsBand(ty)) return { key: "badlands", name: "the Red Badlands" };
+  if (inMoorsBand(ty)) return { key: "moors", name: "the Grey Barrow Moors" };
+  if (inDeepRow(ty)) return { key: "deep", name: "the deep dungeons" };
+  if (ty >= DESERT_Y0) return { key: "desert", name: "the Sunscar desert" };
+  return { key: "world", name: "Oakvale's lands" };
 }

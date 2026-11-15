@@ -86,7 +86,7 @@ Owner approved all six:
 - E: tabs and headers in the normal pixel font, sentence case, no letter-spacing; tiny font only for numbers/keys.
 - F: panel ~860 px wide (was ~1060), bronze frame like the elite monster plate.
 
-## F – quest log (decided 2026-11-15)
+## F – quest log (decided and built 2026-11-15)
 Mockup: session scratchpad `hud/C/qmock.cjs`; renders `hud/C/qlog/mock-active-1920.png`, `mock-completed-1366.png`.
 Owner approved all six:
 - Q1: list ~270 px, one-line titles, grouped by story chain with its progress ("The Gloam · 4 of 12"), level small at the right.
@@ -97,3 +97,4 @@ Owner approved all six:
   the footer hint go.
 - Q5: bronze frame, sentence-case pixel-font headers, ~860 px, centred; the list scrolls inside at 1366x768.
 - Q6: "Show on map" opens the world map at the objective.
+F as built: `questlog.ts` (+ `questlog.css`, pure helpers in `questLogView.ts`), "Show on map" via `Minimap.showAt/canShow` (the map only shows the hero's own area, so a quest elsewhere shows "In the Sunscar desert: travel there to see it on the map" instead). Chain progress = finished quests of the chain / all its quests.

@@ -4,7 +4,7 @@ import { act2Missing } from "../../shared/act2";
 import { icon as pxIcon } from "./pixelicons";
 import { plateArt } from "./plateArt";
 import { CHAINS, chainOpen, chainState, SUN_CHAIN, tutorialDone, Quester } from "../../shared/quests";
-import { groupByChain, logEntries, mapFocus, objectiveRows, type LogEntry, type MapFocus } from "./questLogView";
+import { groupByChain, logEntries, mapAreaOf, mapFocus, objectiveRows, type LogEntry, type MapFocus } from "./questLogView";
 
 type QuestState = (Quester & { cls?: string }) | undefined;
 type Tab = "active" | "done" | "rumours";
@@ -30,10 +30,10 @@ export class QuestLog {
   private untracked = new Set<string>();
   /** Where "Show on map" points for the quest on show (set by render) */
   private focus?: MapFocus;
-  /** Opens the world map centred on a world point (px); set by the scene */
-  onShowMap?: (x: number, y: number) => void;
-  /** Tavern Rumours (client/src/rumours.ts): detail page, active flag, number of offers still open today; undefined until Mags has sent anything */
-  rumours?: { html: () => string; active: () => boolean; count?: () => number };
+  /** The scene's world map: open it on a world point (px), and say whether it can (it only shows the hero's area) */
+  map?: { show: (x: number, y: number) => void; can: (x: number, y: number) => boolean };
+  /** Tavern Rumours (client/src/rumours.ts): detail page, active flag, how many offers the hero could take now (undefined: Mags has sent nothing yet, no badge) */
+  rumours?: { html: () => string; active: () => boolean; count?: (hero: QuestState) => number | undefined };
 
   constructor() {
     this.el.id = "questlog";
@@ -52,7 +52,7 @@ export class QuestLog {
       if (tab) { this.tab = tab.dataset.tab as Tab; this.sel = ""; this.html = ""; return; }
       if (t.closest("[data-map]")) {
         const f = this.focus;
-        if (f) { this.toggle(false); this.onShowMap?.(f.x, f.y); }
+        if (f && (!this.map || this.map.can(f.x, f.y))) { this.toggle(false); this.map?.show(f.x, f.y); }
         return;
       }
       const tr = t.closest<HTMLElement>("[data-track]");
@@ -107,6 +107,14 @@ export class QuestLog {
       `<span class="ql-name">${esc(e.d.title)}</span><span class="ql-lv">Lv ${e.d.minLevel}</span></div>`;
   }
 
+  /** "Show on map", or where the quest is when the open map (the hero's area only) can't show it */
+  private mapRow(): string {
+    const f = this.focus;
+    if (!f) return "";
+    if (!this.map || this.map.can(f.x, f.y)) return `<div class="ql-acts"><button class="ql-map" data-map="1" title="Open the world map (M) on ${esc(f.label)}">Show on map</button></div>`;
+    return `<div class="ql-acts"><span class="ql-away">In ${esc(mapAreaOf(f.x, f.y).name)}: travel there to see it on the map</span></div>`;
+  }
+
   private detail(e: LogEntry, p: QuestState): string {
     const { d, done } = e;
     const q = chainState(p, e.chain), g = npcById(d.giver);
@@ -122,7 +130,7 @@ export class QuestLog {
       `<p>${esc(d.description)}</p>` +
       `<h4>Objectives</h4>${rows}` +
       `<h4>Reward${done ? " (received)" : ""}</h4><div class="ql-reward"><span>${pxIcon("star")}${r.xp} XP</span><span>${pxIcon("coin")}${r.gold} gold</span><span>${pxIcon("potion")}${r.potions} potions</span></div>` +
-      (this.focus ? `<div class="ql-acts"><button class="ql-map" data-map="1" title="Open the world map (M) on ${esc(this.focus.label)}">Show on map</button></div>` : "");
+      this.mapRow();
   }
 
   render(p: QuestState) {
@@ -130,8 +138,8 @@ export class QuestLog {
     const { active, done } = logEntries(p);
     const rum = this.rumours;
     const tab: Tab = this.tab === "rumours" && rum ? "rumours" : this.tab === "done" ? "done" : this.tab === "active" ? "active" : active.length || !done.length ? "active" : "done";
-    const tabBtn = (t: Tab, name: string, n: number) => `<button class="ql-tab${tab === t ? " on" : ""}" data-tab="${t}">${name}<small>${n}</small></button>`;
-    const tabs = `<div class="ql-tabs">${tabBtn("active", "Active", active.length)}${tabBtn("done", "Completed", done.length)}${rum ? tabBtn("rumours", "Rumours", rum.count?.() ?? (rum.active() ? 1 : 0)) : ""}</div>`;
+    const tabBtn = (t: Tab, name: string, n?: number) => `<button class="ql-tab${tab === t ? " on" : ""}" data-tab="${t}">${name}${n === undefined ? "" : `<small>${n}</small>`}</button>`;
+    const tabs = `<div class="ql-tabs">${tabBtn("active", "Active", active.length)}${tabBtn("done", "Completed", done.length)}${rum ? tabBtn("rumours", "Rumours", rum.count?.(p)) : ""}</div>`;
     const entries = tab === "done" ? done : active;
     const cur = entries.find((e) => e.key === this.sel) ?? entries[0];
     this.focus = tab !== "rumours" && cur ? mapFocus(cur.d, chainState(p, cur.chain), cur.done) : undefined;

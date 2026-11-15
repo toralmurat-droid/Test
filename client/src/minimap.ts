@@ -336,6 +336,12 @@ export class Minimap {
     this.clampCam();
   }
 
+  /** Is this world point (px) in the area the map shows (the hero's)? Elsewhere the map can't centre on it. */
+  canShow(px: number, py: number) {
+    const b = this.bounds(), tx = px / TILE, ty = py / TILE;
+    return tx >= b.x0 && tx < b.x1 && ty >= b.y0 && ty < b.y1;
+  }
+
   /** Opens the world map centred on a world point (px), zoomed in a little: the quest log's "Show on map". */
   showAt(px: number, py: number) {
     this.toggle(true);

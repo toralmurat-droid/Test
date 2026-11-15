@@ -1,8 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CHAINS, packQuest } from "../shared/quests";
-import { chainProgress, groupByChain, logEntries, mapFocus, objectiveRows } from "../client/src/questLogView";
-import { chainState } from "../shared/quests";
+import { CHAINS, chainState, packQuest } from "../shared/quests";
+import { withChoice } from "../shared/questSteps";
+import { SPAWN_ZONES } from "../shared/spawns";
+import { DESERT_Y0, TILE, WORLD_H } from "../shared/constants";
+import { chainProgress, groupByChain, logEntries, mapAreaOf, mapFocus, objectiveRows } from "../client/src/questLogView";
 
 const hero = (quests: Record<string, number>) => ({ level: 10, quests, cls: "wizard" });
 const ci = (id: string) => CHAINS.findIndex((c) => c.id === id);
@@ -40,4 +42,34 @@ test("mapFocus: objective point of the current step, giver once finished", () =>
   const live = mapFocus(d, q, false)!, old = mapFocus(d, q, true)!;
   assert.equal(live.kind, "objective");
   assert.equal(old.kind, "giver");
+});
+
+test("objectiveRows: class text (Songweaver's book) and branch steps left out", () => {
+  const ti = ci("tutorial"), d = CHAINS[ti].quests[0];
+  const at = (cls: string) => objectiveRows(d, { questId: 0, questStage: 1, questCount: 0, chain: ti }, { level: 1, quests: {}, cls }, false).map((r) => r.text);
+  assert.ok(at("wizard").includes("Wear the weapon the blob dropped"));
+  assert.ok(at("songweaver").includes("Wear the book the blob dropped"));
+  assert.ok(!at("songweaver").includes("Wear the weapon the blob dropped"));
+  // the Two Letters chain: each choice sees only its own branch
+  const qd = CHAINS[ci("letters")].quests.find((x) => x.steps.some((s) => s.onlyIf))!;
+  const branch = qd.steps.filter((s) => s.onlyIf);
+  const texts = (v: number) => objectiveRows(qd, undefined, { level: 20, quests: {}, flags: withChoice(0, "letters", v) }, true).map((r) => r.text);
+  assert.ok(branch.length >= 2);
+  for (const v of [1, 2]) {
+    const mine = branch.filter((s) => s.onlyIf!.v.includes(v)), other = branch.filter((s) => !s.onlyIf!.v.includes(v));
+    assert.ok(mine.every((s) => texts(v).includes(s.text)));
+    assert.ok(other.every((s) => !texts(v).includes(s.text)));
+  }
+});
+
+test("mapFocus falls back to the zone when the giver is unknown; mapAreaOf names the area", () => {
+  const z = SPAWN_ZONES[0];
+  const d = { ...CHAINS[0].quests[0], giver: "nobody", zone: z.name };
+  const f = mapFocus(d, undefined, true)!;
+  assert.equal(f.kind, "zone");
+  assert.equal(f.x, (z.x + z.w / 2) * TILE);
+  assert.equal(mapFocus({ ...d, zone: "Nowhere" }, undefined, true), undefined);
+  assert.equal(mapAreaOf(100 * TILE, 100 * TILE).name, "Oakvale's lands");
+  assert.equal(mapAreaOf(100 * TILE, (DESERT_Y0 + 20) * TILE).name, "the Sunscar desert");
+  assert.notEqual(mapAreaOf(100 * TILE, (WORLD_H + 2) * TILE).key, "world");
 });

@@ -71,3 +71,4 @@ html body #questlog .ql-map:hover { border-color: #a8823a; color: #ffd98a; filte
 #questlog .ql-steps .now .ic { color: #e3bf6a; }
 #questlog .ql-now { color: #c9a45a; }
 #questlog .ql-detail .ql-bar { margin: 3px 0 2px; max-width: 260px; }
+#questlog .ql-away { color: #a8977a; }

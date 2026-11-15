@@ -28,11 +28,11 @@ body #stashprompt, body #boardprompt , body #warprompt { border-image-source: va
 body #hero h2, body #tree h2, body #gear h2, body #tradepanel h2, body #stashpanel h2, body #partypanel h2, body #bountypanel h2 , body #warpanel h2 {
   margin: 0 0 6px; font-size: 22px; font-family: var(--title-font); font-weight: normal; color: #e3bf6a; letter-spacing: 2px; text-align: center;
   border-bottom: 2px solid #45331e; padding-bottom: 4px; text-shadow: 2px 2px #050302; }
-body #questlog .ql-head, body #portalmenu .pt-head { border-bottom: 2px solid #45331e; padding-bottom: 4px; margin-bottom: 8px; }
-body #questlog h2, body #portalmenu h2 { font: 22px var(--title-font); color: #e3bf6a; letter-spacing: 2px; }
-body #hero h3, body #gear h3, body #tradepanel h3, body #stashpanel h3, body #npcdialog h4, body #questlog h4, body #bountypanel h3 , body #warpanel h3 {
+body #portalmenu .pt-head { border-bottom: 2px solid #45331e; padding-bottom: 4px; margin-bottom: 8px; }
+body #portalmenu h2 { font: 22px var(--title-font); color: #e3bf6a; letter-spacing: 2px; }
+body #hero h3, body #gear h3, body #tradepanel h3, body #stashpanel h3, body #npcdialog h4, body #bountypanel h3 , body #warpanel h3 {
   color: #c9a45a; font-weight: normal; letter-spacing: 2px; }
-body #hero .help, body #tree .help, body #gear .help, body #questlog .help, body #tradepanel .help, body #stashpanel .help, body #bountypanel .help , body #warpanel .help { color: #a8977a; }
+body #hero .help, body #tree .help, body #gear .help, body #tradepanel .help, body #stashpanel .help, body #bountypanel .help , body #warpanel .help { color: #a8977a; }
 body #hero b, body #gear b, body #tree b { font-weight: normal; }
 
 /* ---------- Buttons: dark leather with a bronze lip ---------- */
@@ -146,7 +146,6 @@ body #npcdialog .sh-empty { color: #a8977a; }
 body #npcdialog .nd-btns button.nd-bye { color: #c9b48a; }
 
 /* ---------- Quest log (J) and tracker ---------- */
-body #questlog .ql-cat, body #questlog .ql-meta, body #questlog .help { color: #a8977a; }
 body #questtracker { background: rgba(15, 10, 6, .82); border-left: 3px solid #a8823a; border-radius: 0; box-shadow: 0 0 0 1px #080504;
   text-shadow: 2px 2px #050302; color: #eadfc8; }
 body #questtracker .qt-title { color: #e3bf6a; font-weight: normal; }
