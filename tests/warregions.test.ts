@@ -13,6 +13,10 @@ import type { Kv } from "../server/store";
 /** Captured on claude/war-regions before regions.ts existed: the war map and the starting shares must not move. */
 const GOLDEN = "95e472c3a2d732c56d6da0e4761c1e3bccd61c0006ec6d6f037227554b5a9aa3";
 
+test("regions: territory names are unique (the saved war is matched by name)", () => {
+  assert.equal(new Set(TERRITORIES.map((t) => t.name)).size, TERRITORIES.length);
+});
+
 test("regions: today's war map is unchanged (golden fingerprint of borders, capitals and starting owners)", () => {
   const s = JSON.stringify({ t: TERRITORIES.map((t) => [t.id, t.name, [...t.near].sort((a, b) => a - b), t.capitalOf ?? null]), o: initialOwners() });
   assert.equal(createHash("sha256").update(s).digest("hex"), GOLDEN);

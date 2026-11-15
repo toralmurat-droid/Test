@@ -112,7 +112,7 @@ export async function startWar(store?: Kv) {
   saved = war ?? fresh(Date.now());
   if (!war) {
     if (got) await kv.set(`${KEY}-old-${Date.now()}`, got); // a war that cannot be read: kept aside, not lost
-    console.log(got ? "War: the saved war is malformed, a new war begins (old one kept)" : "War: a new war begins");
+    console.log(got ? "War: the saved war cannot be read or mapped to this map, a new war begins (old one kept)" : "War: a new war begins");
   } else {
     const old = got!.names;
     if (old && (old.length !== war.names!.length || old.some((n, i) => n !== war.names![i]))) {
