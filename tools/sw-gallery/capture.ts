@@ -19,7 +19,7 @@ import { materialAt, type Material } from "../../shared/acoustics";
 const pw: any = (() => { try { return require("playwright"); } catch { return require("playwright-core"); } })();
 const { chromium } = pw;
 const ROOT = path.resolve(__dirname, "../..");
-const OUT = process.env.OUT || path.join(ROOT, "sw-gallery-out");
+const OUT = process.env.OUT || path.join(tmpdir(), "sw-gallery-out"); // not in the repo
 const SERVER_PORT = Number(process.env.PORT || 2690); // the built client is served by the built server (run `npm run build` first)
 const FPS = Number(process.env.FPS || 25);
 const W = 576, H = 432; // the browser viewport; the canvas inside is drawn at 2x (1152x864) and clips keep that size
