@@ -1,13 +1,12 @@
-# Keeps the public skills page (play.fmtpa.ch/skills, client/skills.html) in step with the game: after a merge, if
+# Keeps the public skills page (play.fmtpa.ch/skills, client/skills.html) in step with the game: when run, if
 # the skills or their looks changed (tools/skill-clips/sources.ts hashes those files), every skill is filmed again
 # in the built game (tools/skill-clips/capture.ts) and the new clips are committed to the default branch.
-# Runs once a night (filming takes ~45 min of paid Actions time, so not after every merge), or by hand.
+# Runs only when started by hand (Actions > Skill clips > Run workflow): filming takes ~45 min of paid Actions time.
+# Murat's rule (2026-11-15): film only when explicitly asked.
 # Pushes made with GITHUB_TOKEN do not start other workflows, so this never loops.
 name: Skill clips
 
 on:
-  schedule:
-    - cron: "30 3 * * *" # nightly, 03:30 UTC
   workflow_dispatch:
     inputs:
       force:
