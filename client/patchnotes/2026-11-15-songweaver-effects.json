@@ -1,5 +1,6 @@
 {
   "date": "2026-11-15",
+  "patch": 265,
   "title": "Clearer Songweaver effects and a tidier HUD",
   "changes": [
     "Shields no longer draw a bubble around heroes: your own shield shows on your health orb, and other heroes' shields show as a rim on their health bar.",
