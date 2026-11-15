@@ -1,6 +1,6 @@
 /**
- * Heroes in the clan war (shared/war/standards.ts): the oath (saved per hero, sent with the "clan" message, never
- * synced to other clients yet) and the minutes sworn heroes spend in a standard's ring, reported to the war as valor.
+ * Heroes in the clan war (shared/war/standards.ts): the oath (saved per hero, sent with the "clan" message; clan and
+ * rank only reach other clients through server/warOaths.ts) and the minutes sworn heroes spend in a standard's ring, reported to the war as valor.
  */
 import { heroValor, STANDARD, standardAt, isClan, nextOathAt } from "../shared/war/standards";
 import type { ClanKey } from "../shared/war/clans";
