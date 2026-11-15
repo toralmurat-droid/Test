@@ -1,4 +1,5 @@
 import { test } from "node:test";
+import { BEAST_CHAIN, CHAINS, CROWN_CHAIN, packQuest } from "../shared/quests";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
@@ -183,11 +184,21 @@ test("crown: Lv 40-50 climbing inward from the rim, the Crownways open at Lv 40,
     assert.equal(g.to, b.id); assert.equal(b.to, g.id);
     assert.ok(isCrownGate(g) && isCrownGate(b) && !isSinkholesGate(g));
     assert.equal(gateOpen(g, { level: 39 } as never), false);
-    assert.equal(gateOpen(b, { level: 40 } as never), true);
+    assert.equal(gateOpen(b, { level: 40 } as never), c.from !== "sunscar", `${c.name}: Lv 40 only (the Sun Gate also wants Act 2)`);
     assert.equal(gateColdNote(g, undefined), "The road is barred. Return at level 40.");
     assert.equal(homelandGate(g)?.act, 6);
   }
   assert.ok(!isCrownGate(waygateById("sinkway")!) && !isCrownGate(waygateById("oakvale")!));
+  // the Sun Gate is no way round Act 2's lock: both ends want Ostrevar and the Hide-Mother beaten as well as Lv 40
+  const done = (ch: number) => packQuest(CHAINS[ch].quests.length, 0, 0);
+  const keys = { quests: { gloam: done(0), bone: done(1), red: done(2), crown: done(CROWN_CHAIN), tut: done(CHAINS.findIndex((q) => q.id === "tutorial")), beast: done(BEAST_CHAIN) } };
+  for (const sg of [home("sunscar"), gate("sunscar")]) {
+    assert.equal(gateOpen(sg, { level: 50, quests: {} } as never), false, `${sg.id}: shut without Act 2`);
+    assert.match(gateColdNote(sg, { level: 50, quests: {} } as never), /Ostrevar/);
+    assert.equal(gateColdNote(sg, { level: 39, quests: {} } as never), "The road is barred. Return at level 40.");
+    assert.equal(gateOpen(sg, { level: 40, ...keys } as never), true, `${sg.id}: open with Act 2 and Lv 40`);
+    assert.equal(gateOpen(sg, { level: 39, ...keys } as never), false);
+  }
   assert.deepEqual(HOMELAND_GATES.map((h) => [h.act, h.level]), [[3, 20], [4, 25], [5, 30], [6, 40]]);
   assert.ok(actOpen(6, { level: 40 } as never) && !actOpen(6, { level: 39 } as never));
   for (const act of [1, 2, 3, 4, 5, 6]) { const q = actSpawn(act, randomSpawn); assert.equal(actAt(q.y, q.x), act, `act ${act} spawn`); }

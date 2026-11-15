@@ -88,15 +88,17 @@ export function act2Missing(p: Quester | undefined): string[] {
 export const moorsOpen = (p: { level: number } | undefined) => !!p && p.level >= MOORS_LEVEL.min;
 /** True once the hero is strong enough for the badlands (Act 4): hero level only, no quest. */
 export const badlandsOpen = (p: { level: number } | undefined) => !!p && p.level >= BADLANDS_LEVEL.min;
+/** The Sun Gate's two ends lead into or out of the Sunscar, so they also want Act 2 unlocked (no way round its lock). */
+export const isSunGate = (g: Waygate) => g.id === "crown_sunscar" || g.id === "crownway_sunscar";
 /** Whether gate `g` is awake for this hero. */
 export const gateOpen = (g: Waygate, p: (Quester & { level: number }) | undefined) => {
   const h = homelandGate(g);
-  return h ? !!p && p.level >= h.level : act2Open(p);
+  return h ? !!p && p.level >= h.level && (!isSunGate(g) || act2Open(p)) : act2Open(p);
 };
 /** The note a hero gets at a cold gate. */
 export function gateColdNote(g: Waygate, p: Quester | undefined): string {
   const h = homelandGate(g);
-  if (h) return `${h.shut} Return at level ${h.level}.`;
+  if (h && (!isSunGate(g) || ((p as { level?: number } | undefined)?.level ?? 0) < h.level)) return `${h.shut} Return at level ${h.level}.`;
   const miss = act2Missing(p);
   return `The waygate's stones are cold. It will wake when ${miss.join(" and ")} ${miss.length > 1 ? "are" : "is"} beaten.`;
 }
