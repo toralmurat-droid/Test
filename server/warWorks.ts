@@ -21,6 +21,7 @@ import { TERRITORIES } from "../shared/war/territories";
 import { parseTroop, troopLevel, troopStance, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
 import { ramBlocked, ramHp, ramPos, ramSpeed, ramStep, SIEGE_WORKS, type RamView } from "../shared/war/works";
 import { warNow } from "./war";
+import type { SiegeHero } from "./warSieges";
 import { newFighter, type FightGround, type Fighter, type TroopHero, type TroopMob, type WarTroops } from "./warTroops";
 
 export interface WorksHost {
@@ -29,7 +30,7 @@ export interface WorksHost {
   remove(id: string): void;
   mob(id: string): TroopMob | undefined;
   mobsInBox(x: number, y: number, r: number): Iterable<[string, TroopMob]>;
-  heroes(): Iterable<[string, TroopHero]>;
+  heroes(): Iterable<[string, SiegeHero]>;
   hero(id: string): TroopHero | undefined;
   broadcast(type: string, msg: unknown): void;
   /** A hero reached a new renown rank. */
@@ -167,7 +168,8 @@ export class WarWorks {
       const k = parseTroop(o.weapon);
       if (k && k.clan === r.def && !k.object) near.push(o);
     }
-    for (const [, p] of this.h.heroes()) if (!p.dead && !underground(p.y) && troopStance(r.def, p) === "ally") near.push(p);
+    const now = Date.now(); // an idle hero (STANDARD.idleMs) holds nothing, as at the fronts
+    for (const [, p] of this.h.heroes()) if (!p.dead && !underground(p.y) && now - p.lastAct <= STANDARD.idleMs && troopStance(r.def, p) === "ally") near.push(p);
     return ramBlocked(x, y, near);
   }
 

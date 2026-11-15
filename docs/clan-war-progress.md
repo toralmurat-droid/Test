@@ -366,7 +366,7 @@ Open points for M1:
 - Message: the `"siege"` view gains an optional `ram: {x, y, hp, maxHp, state}` (`rolling` / `held` / `gate`), sent on
   spawn, wreck, and when the state or the HP quarter changes (checked once a second). Server -> client only.
 - Client: the ram uses `war_ram_<clan>` through `warSoldierTexture` (asset `mob_war_ram_host.webp`, the carts' 14-frame
-  layout, still to come from the art branch); while the art manifest does not list it, `trooperArt` falls back to the
+  layout, painted by `tools/art/paint/warRam.ts`); while the art manifest does not list it, `trooperArt` falls back to the
   clan's cart sheet. Cart idle / stagger frames apply to the ram. Sounds `ram_wrecked` (bone crack and timber crash) and
   `ram_at_gate` (a hollow boom on the gate). The plaque's fronts line adds "· Ram rolling / held / at the gate n%".
 - Balance (`npx tsx tools/balance/pve.ts 40 --siege`, new ram table: the hero alone vs the ram + 2 crew of its level,
@@ -377,4 +377,5 @@ Open points for M1:
   ram rolls): before 7.68 ms tick avg (p95 12.3), 18 siege troopers; after 6.56 (p95 10.0), 23 incl. ram and crew;
   `SIEGE=host` (new: forces a Host-led siege) 8.55 (p95 14.6). Shared machine, noisy. No dropped bots.
 - `npx tsx tools/balance/war.ts 200 30`: unchanged.
-- Not done: ram art (`mob_war_ram_host.webp`, another branch); works for other clans; a ram marker on the war table.
+- A defender-sworn hero holds the ram only while active (`STANDARD.idleMs`), like at the fronts.
+- Not done: works for other clans; a ram marker on the war table.
