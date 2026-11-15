@@ -36,12 +36,13 @@ export function setupChatToggle(hud: HTMLElement, log: HTMLElement, input: HTMLI
     try { localStorage.setItem(KEY, hidden ? "1" : "0"); } catch { /* storage off */ }
     apply(); btn.blur();
   });
+  let blurAt = 0;
   new MutationObserver((muts) => {
-    if (!hidden || typing) return;
+    if (!hidden || typing || performance.now() - blurAt < 1000) return; // (the server's echo of the line you just sent)
     for (const m of muts) unread += m.addedNodes.length;
     apply();
   }).observe(log, { childList: true });
   input.addEventListener("focus", () => { typing = true; unread = 0; apply(); });
-  input.addEventListener("blur", () => { typing = false; apply(); });
+  input.addEventListener("blur", () => { typing = false; blurAt = performance.now(); apply(); });
   apply();
 }

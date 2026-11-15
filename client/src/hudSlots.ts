@@ -67,9 +67,14 @@ export function refreshHudRects() {
     const r = document.getElementById(id)?.getBoundingClientRect();
     if (r && r.width > 0 && r.height > 0) boxes.push({ left: r.left, top: r.top, right: r.right, bottom: r.bottom });
   }
+  // where the top-left column ends, in HUD px, for the Heat gauge below it (hudSlots.css #overload)
+  const hud = document.getElementById("hud")!, tl = document.getElementById("topleft");
+  const k = hud.getBoundingClientRect().width / (hud.offsetWidth || 1) || 1, hr = hud.getBoundingClientRect();
+  const tb = tl && tl.getBoundingClientRect().height > 0 ? `${Math.round((tl.getBoundingClientRect().bottom - hr.top) / k)}px` : "0px";
+  if (document.documentElement.style.getPropertyValue("--topleft-bottom") !== tb) document.documentElement.style.setProperty("--topleft-bottom", tb);
 }
 
-/** Is a world label at this screen point (CSS px of the window) under the top-right column? */
+/** Is a world label at this screen point (CSS px of the window) under the top-right or top-left column? */
 export function hudOccludes(sx: number, sy: number): boolean {
   if (performance.now() - measuredAt > 250) refreshHudRects();
   return boxesHit(boxes, sx, sy);
