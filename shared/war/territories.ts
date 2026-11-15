@@ -14,7 +14,7 @@ import { capitalsOf, REGION_LINKS, REGIONS, type Region, type RegionLink } from 
 export interface Territory {
   id: number;
   name: string; // = the spawn zone's name
-  act: 1 | 2;
+  act: 1 | 2 | 3;
   /** The land it lies in (a REGIONS key): borders, starting shares and cart roads stay inside a land. */
   region: string;
   x: number; y: number; w: number; h: number; // tiles

@@ -84,6 +84,8 @@ Only the classes in `ACTIVE_CLASSES` can be played. Archived classes keep their 
   `shared/spawns.ts`).
 - **Act 2 — the Sunscar** (`shared/desert.ts`, `shared/act2.ts`): a desert reached through the old waygate south of
   Oakvale once Act 1's last bosses are down, with the city of Kel Ashar and a final boss, Ishael the Sunwright, at the Sun Furnace.
+- **Act 3 — the Grey Barrow Moors** (`shared/moors.ts`): the Ossuary Host's barrow country (levels 20-35), reached
+  through the Moorgate in the forest north of the Hollow Throne once a hero reaches level 20. Its outpost, monsters and quests are coming.
 - **Dungeons** (`shared/dungeon.ts`): the Mawdeep, the Lantern Crypt and the Undercity.
 - **Quests** (`shared/quests.ts`): zone quest arcs in both acts, quest bosses (some only at night).
 - **Bounty boards** (`shared/bounty.ts`): pick a hunt for your level, paid when the last kill lands.

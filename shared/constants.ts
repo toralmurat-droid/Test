@@ -16,11 +16,20 @@ export const DESERT_H = 216;
 export const DEEP_Y0 = DESERT_Y0 + DESERT_H + 8;
 export const DEEP_END = DEEP_Y0 + 64;
 export const DEEP_SPLIT = 144;
-export const MAP_H = DEEP_END + 4; // tiles: overworld, underground band, rock, desert, rock, deep band
+/** Act 3, the Grey Barrow Moors (shared/moors.ts): the Ossuary Host's homeland, its own band under the deep band's rock. */
+export const MOORS_Y0 = DEEP_END + 8;
+export const MOORS_H = 176;
+export const MAP_H = MOORS_Y0 + MOORS_H + 4; // tiles: overworld, underground band, rock, desert, rock, deep band, rock, moors
 /** True in the deep band (tiles). */
 export const inDeepRow = (ty: number) => ty >= DEEP_Y0 && ty < DEEP_END;
-/** Which act a tile belongs to: the desert and the Undercity are Act 2, the rest (the Lantern Crypt too) Act 1. */
-export const actOfTile = (tx: number, ty: number): 1 | 2 => (ty >= DESERT_Y0 && !(ty >= DEEP_Y0 - 4 && tx < DEEP_SPLIT) ? 2 : 1);
+/** True for a map row in the moors band, with the rock strip round it (so a tile there is never mistaken for the desert's). */
+export const inMoorsBand = (ty: number) => ty >= MOORS_Y0 - 4;
+/**
+ * Which act a tile belongs to: the moors band is Act 3; the desert and the Undercity Act 2; the rest (the Lantern
+ * Crypt too) Act 1. The moors test comes first: every row from the desert down used to count as Act 2.
+ */
+export const actOfTile = (tx: number, ty: number): 1 | 2 | 3 =>
+  inMoorsBand(ty) ? 3 : ty >= DESERT_Y0 && !(ty >= DEEP_Y0 - 4 && tx < DEEP_SPLIT) ? 2 : 1;
 export const TICK_RATE = 20; // server updates per second
 export const PLAYER_SPEED = 90; // px per second (default; classes override, see classes.ts)
 export const PLAYER_RADIUS = 5; // collision half-size in px
@@ -349,6 +358,17 @@ export const regionSpecialLevel = (l: number) => Math.min(REGION_LEVEL.special, 
 export const ACT2_LEVEL = { min: 30, mob: 47, special: 50 };
 export const act2MobLevel = (l: number) => Math.min(ACT2_LEVEL.mob, Math.max(ACT2_LEVEL.min, Math.round(l)));
 export const act2SpecialLevel = (l: number) => Math.min(ACT2_LEVEL.special, Math.max(ACT2_LEVEL.min, Math.round(l)));
+/**
+ * Act 3, the Grey Barrow Moors: Lv 20-35, open from hero Lv 20 (shared/act2.ts moorsOpen). Regular monsters Lv 20-33,
+ * a level every `tilesPerLevel` tiles away from the moorgate (shared/spawns.ts baseLevelAt).
+ */
+export const MOORS_LEVEL = { min: 20, mob: 33, special: 35, tilesPerLevel: 10 };
+export const moorsMobLevel = (l: number) => Math.min(MOORS_LEVEL.mob, Math.max(MOORS_LEVEL.min, Math.round(l)));
+export const moorsSpecialLevel = (l: number) => Math.min(MOORS_LEVEL.special, Math.max(MOORS_LEVEL.min, Math.round(l)));
+/** A regular monster's level held to its act's band (act from actOfTile). */
+export const actMobLevel = (act: number, l: number) => (act === 3 ? moorsMobLevel(l) : act === 2 ? act2MobLevel(l) : regionMobLevel(l));
+/** A merged blob, demon, elite or boss: its act's special ceiling. */
+export const actSpecialLevel = (act: number, l: number) => (act === 3 ? moorsSpecialLevel(l) : act === 2 ? act2SpecialLevel(l) : regionSpecialLevel(l));
 
 export const MOB_ATTACK_RANGE = 14; // px
 

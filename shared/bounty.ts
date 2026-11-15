@@ -73,8 +73,8 @@ export function rng(seed: number) {
   return () => { s = (s + 0x6d2b79f5) >>> 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t ^= t + Math.imul(t ^ (t >>> 7), 61 | t); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
 
-/** A zone with a monster to hunt (not a wild zone, not an empty lair) in Act 1 (or Act 2 with `desert`). Shared with the rumours. */
-export const huntable = (z: SpawnZone, desert = false) => !z.wild && !!signature(z) && (actOfTile(z.x, z.y) === 2) === desert;
+/** A zone with a monster to hunt (not a wild zone, not an empty lair) in Act 1 (or Act 2 with `desert`; never the moors yet). Shared with the rumours. */
+export const huntable = (z: SpawnZone, desert = false) => !z.wild && !!signature(z) && actOfTile(z.x, z.y) === (desert ? 2 : 1);
 /** The zone's levels overlap the hero's level ±`by` (bounties and rumours: work about the hero's level). */
 export const nearLevel = (z: SpawnZone, level: number, by = 2) => z.levels[0] <= level + by && z.levels[1] >= level - by;
 

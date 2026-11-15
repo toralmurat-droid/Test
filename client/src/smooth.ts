@@ -133,6 +133,9 @@ export function hiResTexture(scene: Phaser.Scene, key: string, w: number, h: num
   tex.refresh();
 }
 
+/** The big painted canvas of a hiResTexture (moorsArt.ts recolours the desert's cliffs from it). */
+export const hiCanvas = (key: string) => HI.get(key);
+
 /** Forgets a hiResTexture's big canvas (call when its texture is removed). */
 export const dropHiRes = (key: string) => HI.delete(key);
 

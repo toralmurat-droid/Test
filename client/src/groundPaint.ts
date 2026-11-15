@@ -27,6 +27,8 @@ export interface GroundData {
   desert?: { y0: number; y1: number };
   /** 1 on the desert's cliff tiles: their ground is the mountains' rock top (the outer steps stand up as blocks, iso.ts). */
   cliff?: Uint8Array;
+  /** Act 3's moors band (shared/moors.ts), rows y0..y1: cool grey-green heath, peat, bog and granite; the cliffs' top is grey rock. */
+  moors?: { y0: number; y1: number };
 }
 
 // Tile ids (shared/map.ts T)
@@ -34,6 +36,14 @@ const GRASS = 0, GRASS_DARK = 1, TALL = 2, FLOWERS = 3, DIRT = 4, COBBLE = 5, SA
 const FLOOR = 39, RUBBLE = 40, FLAGS = 42;
 /** Painting a desert pixel (set per pixel in paintChunk): the grounds take their Act 2 looks. */
 let DESERT = false;
+/** Painting a moors pixel: the grounds take their Act 3 looks (moorsMaterial). */
+let MOORS = false;
+const pal = (a: string[]) => a.map((h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]);
+const HEATHP = pal(["#2c2c36", "#3e3a4a", "#544c60", "#6c6078", "#84788f", "#9a90a4"]);
+const PEATP = pal(["#2a2824", "#3a3730", "#4c473d", "#605a4c", "#766f5e", "#8c846f"]);
+const MOORGRASS = pal(["#2a3430", "#37453d", "#475a4b", "#5a705c", "#6f8570", "#849a84"]);
+const BOGP = pal(["#141c1a", "#1d2a27", "#283a35", "#364b44", "#455c53", "#58705f"]);
+const GRANITE = pal(["#3a3d42", "#50545a", "#686c72", "#82868c", "#9ca0a5", "#b4b7ba"]);
 const SANDP = ["#7e5a30", "#9c7340", "#b88c50", "#cfa262", "#e0b676", "#eccb8e"].map((h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]);
 const CLAYP = ["#6a4028", "#7e5032", "#94623e", "#a8744a", "#ba8658", "#c99868"].map((h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]);
 const SSTONE = ["#4f3a28", "#6d5236", "#8a6c48", "#a6875c", "#bea06f", "#d2b684"].map((h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]);
@@ -123,6 +133,7 @@ const COB_LINE = hx("#1b1714"), JOINT = ["#241c15", "#3a2e22", "#4f4030"].map(hx
 
 function material(t: number, wx: number, wy: number, sx: number, sy: number, depth: number, now: number): number {
   if (DESERT && t !== WATER && t !== BRIDGE) return desertMaterial(t, wx, wy, sx, sy);
+  if (MOORS && t !== WATER && t !== BRIDGE) return moorsMaterial(t, wx, wy, sx, sy);
   let r = 0, g = 0, b = 0, ht = 0.5;
   // big, slow grime and damp patches shared by every land material (muted, weathered look)
   const grime = fbm(wx / 110, wy / 110, 91);
@@ -363,6 +374,41 @@ function ramp(p: number[][], lv: number, sx: number, sy: number) {
 }
 
 /**
+ * Act 3's grounds, in the desert's dithered ramp style but cold: HEATHER = grey-violet heath with pale bloom specks,
+ * BOG = near-black murk with green sheen, GRASS kinds = grey-green moor grass, DIRT / SAND = peat and gravel,
+ * COBBLE / FLAGS / FLOOR / RUBBLE = grey granite slabs.
+ */
+function moorsMaterial(t: number, wx: number, wy: number, sx: number, sy: number): number {
+  const m = fbm(wx / 60, wy / 60, 501), n = vn(wx / 6, wy / 6, 502);
+  switch (t) {
+    case 51: { // heather
+      const bloom = hash2(Math.floor(wx * 0.9), Math.floor(wy * 0.9), 503) > 0.9;
+      ramp(HEATHP, 2.2 + (m - 0.5) * 2.2 + (n - 0.5) * 1.2 + (bloom ? 1.1 : 0), sx, sy);
+      return 0.5;
+    }
+    case 52: { // bog: dark water-logged ground, a faint sheen where the puddles lie
+      const sheen = vn(wx / 12, wy / 9, 504);
+      ramp(BOGP, 1.6 + (m - 0.5) * 1.6 + (sheen > 0.68 ? 1.4 : 0), sx, sy);
+      return 0.2;
+    }
+    case DIRT: case SAND: case FIELD: case CROPS: {
+      ramp(PEATP, 2.4 + (m - 0.5) * 2 + (hash2(Math.floor(wx), Math.floor(wy), 505) > 0.94 ? 1.2 : 0), sx, sy);
+      return 0.3;
+    }
+    case COBBLE: case FLAGS: case FLOOR: case RUBBLE: {
+      const cx = Math.floor(wx / 8), cy = Math.floor(wy / 8), e = Math.min(wx - cx * 8, (cx + 1) * 8 - wx, wy - cy * 8, (cy + 1) * 8 - wy);
+      if (e < 0.7) { ramp(GRANITE, 0.6, sx, sy); return 0.35; }
+      ramp(GRANITE, 2.6 + (hash2(cx, cy, 506) - 0.5) * 1.6 + (n - 0.5), sx, sy);
+      return 0.65;
+    }
+    default: { // the grasses: cold moor grass with paler tussocks
+      ramp(MOORGRASS, 2.3 + (m - 0.5) * 2.4 + (n - 0.5) * 1.4 + (hash2(Math.floor(wx * 1.2), Math.floor(wy * 1.2), 507) > 0.93 ? 0.9 : 0), sx, sy);
+      return 0.45;
+    }
+  }
+}
+
+/**
  * Act 2's grounds (Murat 2026-11-08: all desert themed), in the same dithered pixel style as the rest:
  * SAND = dunes with wind ripples, lit on the slopes facing the top-left sun; DIRT = baked red clay with polygon cracks
  * and gravel; GRASS = the oases' dusty green; COBBLE / FLAGS / FLOOR / RUBBLE = sandstone paving, slabs and rubble.
@@ -514,7 +560,7 @@ export function paintChunk(g: GroundData, f: Fields, sx0: number, sy0: number, c
   const c1 = new Float32Array(3), c2 = new Float32Array(3);
   const add = (t: number, k: number) => {
     if (k <= 0) return;
-    t %= g.tileCount ?? 51; // display grids carry art-row variants (shared/map.ts TILE_COUNT)
+    t %= g.tileCount ?? 56; // display grids carry art-row variants (shared/map.ts TILE_COUNT = 56; not imported: map.ts builds the world on load)
     if (t === BRIDGE) t = WATER;
     if (t === GRASS_DARK || t === TALL || t === FLOWERS || t === GRASS) { gw[t] += k; t = GRASS; } // one grass, see G_DARK
     if (wt[t] === 0) types.push(t);
@@ -525,6 +571,7 @@ export function paintChunk(g: GroundData, f: Fields, sx0: number, sy0: number, c
     for (let i = 0; i < W; i++) {
       const sx = sx0 + (i + 0.5) / res;
       const wx = sy + sx / 2, wy = sy - sx / 2;
+      MOORS = !!g.moors && wy / tile >= g.moors.y0 - 2 && wy / tile < g.moors.y1;
       DESERT = !!g.desert && wy / tile >= g.desert.y0 - 2 && wy / tile < g.desert.y1;
       // wavy borders: warp the lookup point
       const u = wx + (vn(wx / 45, wy / 45, 3) - 0.5) * 18 + (vn(wx / 15, wy / 15, 1) - 0.5) * 10 + (vn(wx / 4, wy / 4, 4) - 0.5) * 4;
@@ -594,7 +641,7 @@ export function paintChunk(g: GroundData, f: Fields, sx0: number, sy0: number, c
         const ao = field(f.ao, wx / tile - 0.5, wy / tile - 0.5);
         if (ao > 0) { const k = 1 - 0.45 * ao; r *= k; gg *= k; b *= k; }
       }
-      if (g.cave && wy / tile >= g.cave.y0 - 8 && !DESERT) {
+      if (g.cave && wy / tile >= g.cave.y0 - 8 && !DESERT && !MOORS) {
         const ty = wy / tile, cv = g.cave;
         const deep = !!cv.deep && ty >= cv.deep[0] - 0.5 && ty < cv.deep[1] + 0.5;
         if (cv.end !== undefined && ty >= cv.end && !deep) { r = VOID[0]; gg = VOID[1]; b = VOID[2]; } // the rock between the Mawdeep and the desert
@@ -617,6 +664,14 @@ export function paintChunk(g: GroundData, f: Fields, sx0: number, sy0: number, c
           const pit = hash2(Math.floor(wx * 1.3), Math.floor(wy * 1.3), 462);
           r = 0xb8; gg = 0x86; b = 0x4e; // desertArt.ts TOP: the cliffs' sunlit top
           if (pit < 0.08) { r = 0xcf; gg = 0x9e; b = 0x62; } else if (pit > 0.93) { r = 0x9a; gg = 0x6a; b = 0x40; }
+        }
+      }
+      if (MOORS && f.cliff) { // the crags' top: weathered grey granite
+        const ck = field(f.cliff, wx / tile - 0.5, wy / tile - 0.5) + (vn(wx / 5, wy / 5, 560) - 0.5) * 0.35;
+        if (ck > 0.55) {
+          const pit = hash2(Math.floor(wx * 1.3), Math.floor(wy * 1.3), 562);
+          r = 0x8a; gg = 0x8e; b = 0x94; // cool grey top (tileset.ts / moors cliff art: keep in step)
+          if (pit < 0.08) { r = 0xa6; gg = 0xaa; b = 0xb0; } else if (pit > 0.93) { r = 0x6e; gg = 0x72; b = 0x78; }
         }
       }
       if (lands.length) {

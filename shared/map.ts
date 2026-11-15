@@ -1,6 +1,7 @@
 import { MAP_H as FULL_H, MAP_W, PLAYER_RADIUS, TILE, UNDER_END, WORLD_H, type MobKind } from "./constants";
 import { CRYPT_DOOR, FLOORS, LAIRS, SEA_END, SHORTCUTS, SINKHOLE, UNDER_SHAFT, type Floor } from "./dungeon";
 import { buildDesert, D, inDesertRow, KEL_MARKET, WAYGATE_OAKVALE } from "./desert";
+import { buildMoors, MOORSGATE_OAKVALE } from "./moors";
 
 /** Mirror Pond, in tiles (centre and radii of its water): the Songweaver's Mirror Pond Air is played on its shore (shared/songbook.ts). */
 export const MIRROR_POND = { x: 24, y: 94, rx: 9, ry: 6 };
@@ -31,8 +32,11 @@ export const T = {
   SIGNPOST: 44,
   // Act 2, the desert (shared/desert.ts): sandstone peaks, date palms, mud-brick houses and walls, nomad tents, bleached bones
   CLIFF: 45, PALM: 46, ADOBE: 47, ADOBE_WALL: 48, TENT: 49, BONES: 50,
+  // Act 3, the Grey Barrow Moors (shared/moors.ts): heather and bog underfoot (walkable ground), burial mounds,
+  // standing stones and heaped bones (solid objects)
+  HEATHER: 51, BOG: 52, BARROW: 53, STANDING_STONE: 54, BONE_PILE: 55,
 } as const;
-export const TILE_COUNT = 51;
+export const TILE_COUNT = 56;
 export const EMPTY = -1;
 
 /** A named region. `mobs` hints which monsters belong there (empty or missing = none, e.g. inside the village). */
@@ -894,6 +898,18 @@ function buildWorld() {
     grow(path);
   }
 
+  // ---------- 14b. The moorgate at the north-east edge (Act 3, shared/act2.ts): a dais cut into the border forest
+  // north of the Hollow Throne, a path down to the throne's clearing. Only trees, bushes and stones give way. Cut after
+  // the reachability pass, so the rest of Act 1 stays exactly as it was; the path joins the dais to open ground.
+  {
+    const G = MOORSGATE_OAKVALE;
+    disk(G.x + 0.5, G.y + 0.5, 3.6, 3.2, (x, y, d) => {
+      if (NATURE.has(objects[y][x])) setO(x, y, EMPTY);
+      if (objects[y][x] === EMPTY && ground[y][x] !== T.WATER) setG(x, y, d < 0.5 ? (hash(x, y, 321) < 0.8 ? T.FLAGS : T.RUBBLE) : d < 0.8 && hash(x, y, 322) < 0.5 ? T.RUBBLE : T.GRASS_DARK);
+    });
+    curve([[G.x, G.y + 3], [G.x + 1, G.y + 7], [G.x - 2, G.y + 12], [HOLLOW.cx + 3, HOLLOW.cy - 10]], 1, T.DIRT, (x, y) => { if (objects[y][x] === EMPTY || NATURE.has(objects[y][x])) road(x, y, 1, 1); });
+  }
+
   const areas: Area[] = [
     { name: "Market Square", ...SQ },
     { name: "Chapel of the Dawn", x: 86, y: 50, w: 12, h: 7 },
@@ -959,6 +975,10 @@ function buildWorld() {
     { name: "Mawdeep Sinkhole", x: SINKHOLE.x - 5, y: SINKHOLE.y - 5, w: 11, h: 10 },
     { name: "The Kharsun Well", x: UNDER_SHAFT.x - 3, y: UNDER_SHAFT.y - 3, w: 7, h: 7 });
   areas.push(...desert.areas);
+  // ---------- 17. Act 3: the Grey Barrow Moors, in their own band under the deep band (shared/moors.ts) ----------
+  const moors = buildMoors(T, ground, objects, EMPTY);
+  for (const k of moors.roads) roads.add(k);
+  areas.push(...moors.areas);
   return { ground, objects, areas, posts, roads, broken, makeshift };
 }
 

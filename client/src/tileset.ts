@@ -659,6 +659,38 @@ const DRAW: Record<number, (p: Painter, f: number, v: number) => void> = {
     p.disc(8, 8, 5, 2.2, 0xb08a5a); p.disc(8, 8, 2.8, 1.1, 0x8b6a40);
     p.px(2, 13, 0x4e301a); p.px(13, 13, 0x4e301a);
   },
+  // Act 3, the Grey Barrow Moors (the iso view draws the objects from moorsArt.ts; these are the top-down tiles and minimap colours)
+  [T.HEATHER]: (p) => {
+    p.fill(0x4a4056);
+    for (let k = 0; k < 70; k++) p.fpx(p.ri(SZ), p.ri(SZ), 0x5c506a);
+    for (let k = 0; k < 50; k++) p.fpx(p.ri(SZ), p.ri(SZ), 0x382f44);
+    for (let k = 0; k < 14; k++) p.fpx(p.ri(SZ), p.ri(SZ), 0x8c7c9c); // bloom
+    for (let k = 0; k < 8; k++) { const x = p.ri(SZ - 2), y = p.ri(SZ - 2); p.fpx(x, y, 0x4a6a4c); p.fpx(x + 1, y, 0x3a5a3e); } // grass tufts
+  },
+  [T.BOG]: (p) => {
+    p.fill(0x1f2b28);
+    for (let k = 0; k < 60; k++) p.fpx(p.ri(SZ), p.ri(SZ), 0x2a3a35);
+    for (let k = 0; k < 40; k++) p.fpx(p.ri(SZ), p.ri(SZ), 0x151e1c);
+    for (let k = 0; k < 2; k++) { const x = 3 + p.ri(SZ - 10), y = 4 + p.ri(SZ - 8); p.frect(x, y, 6, 3, 0x101614); p.frect(x + 1, y, 4, 1, 0x3a5048); } // a puddle with a sheen
+  },
+  [T.BARROW]: (p) => {
+    p.disc(8, 14, 7.5, 1.8, SHADOW);
+    p.disc(8, 10.5, 7.6, 5.6, 0x3a4a3a);
+    p.disc(7.5, 9.6, 6.4, 4.4, 0x4e6450);
+    p.disc(6, 7.6, 3.2, 1.8, 0x6a8466);
+    p.speckle(0x6a5a78, 6, 3, 6, 10, 6);
+  },
+  [T.STANDING_STONE]: (p) => {
+    p.disc(8, 14.5, 4.5, 1.3, SHADOW);
+    p.rect(5, 2, 6, 12, 0x6a7078); p.rect(5, 2, 2, 12, 0x8a9097); p.rect(9, 2, 2, 12, 0x464b52); p.rect(6, 1, 4, 1, 0x8a9097);
+    p.speckle(0x7f9868, 5, 5, 3, 6, 10);
+  },
+  [T.BONE_PILE]: (p) => {
+    p.disc(8, 14, 6.5, 1.6, SHADOW);
+    p.disc(8, 11.5, 6, 3, 0x38312a);
+    p.rect(4, 9, 8, 1, 0x9aa586); p.rect(5, 11, 7, 1, 0x7a8668); p.disc(6.5, 8.6, 1.9, 1.5, 0xb0bb9c); p.disc(10.5, 9.6, 1.6, 1.3, 0xa0ab8c);
+    p.px(6, 8, 0x1c221d); p.px(7, 8, 0x1c221d);
+  },
 };
 
 /**
@@ -674,7 +706,7 @@ export const ROWS = 128;
  * palisades and signposts are painted as sprites, so the 112 palisade/signpost mask rows are never drawn there.
  */
 export const COMMON_ROWS = 16;
-const VARIED = new Set<number>([T.GRASS, T.TALL_GRASS, T.FLOWERS, T.DIRT, T.COBBLE, T.SAND, T.WATER, T.FLOOR, T.FLAGS, T.FIELD, T.BRIDGE]);
+const VARIED = new Set<number>([T.GRASS, T.TALL_GRASS, T.FLOWERS, T.DIRT, T.COBBLE, T.SAND, T.WATER, T.FLOOR, T.FLAGS, T.FIELD, T.BRIDGE, T.HEATHER, T.BOG]);
 const CONNECTED = new Set<number>([T.RUIN, T.BEAM, T.PALISADE]);
 const LIGHT = new Set<number>([T.GRASS, T.TALL_GRASS, T.FLOWERS]);
 
