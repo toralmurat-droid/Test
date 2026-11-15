@@ -5,6 +5,18 @@
 :root { --topband: 150px; }
 body #partytoast { top: max(var(--topband), 15%); } /* clear of the tallest bar (champion, two affixes, ear line) */
 
+/* ---- Top left: one column, war plaque -> war news notice -> party frame. The plaque is the widest and rarest; the notice
+   drops in under it (it is short-lived, so the party frame below only moves for a few seconds). Width of the plaque (~356 px with the "You hold" line). */
+body #topleft { position: absolute; top: 8px; left: 8px; width: max-content; max-width: 364px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; pointer-events: none; }
+body #topleft > #warplaque { order: 1; }
+body #topleft > #warnotice { order: 2; }
+body #topleft > #partyframe { order: 3; margin-left: 4px; }
+body #topleft > * { flex: none; }
+body #partyframe { position: relative; left: auto; top: auto; }
+/* the Heat gauge (overloadGauge.css) sits mid-left: it drops below the top-left column when the column reaches down to it
+   (--topleft-bottom, HUD px, set by hudSlots.ts; 141 = half the gauge plus a gap) */
+body #overload { top: max(50%, calc(var(--topleft-bottom, 0px) + 141px)); }
+
 /* ---- Top right: one column, pill -> minimap + dial -> location -> respawn line -> tracker -> feed.
    The feed follows the tracker whatever its height, so no script measures it. 264 = room for the online pill (261 px measured at its widest; the dial is 234 px, right-aligned, 8 px from the edge). */
 body #topright { position: absolute; top: 8px; right: 8px; width: 264px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; pointer-events: none; }
@@ -12,8 +24,11 @@ body #topright > #online { order: 1; pointer-events: auto; }
 body #topright > #mapbox { order: 2; }
 body #topright > #location { order: 3; }
 body #topright > #stats { order: 4; }
+body #topright > #tidebox { order: 5; }
 body #topright > #questtracker { order: 6; }
 body #topright > #feed { order: 7; width: 100%; }
+/* the Tide card takes ~66 px of the column: the tracker's height cap (npcs.css) gives it up */
+body #topright:has(> #tidebox:not([hidden])) > #questtracker { max-height: max(90px, calc(100vh - 396px - 150px)); }
 body #stats:empty { display: none; }
 body #stats { pointer-events: none; }
 /* the pill keeps one width: icon, count, ping and fps each have a fixed, right-aligned cell */

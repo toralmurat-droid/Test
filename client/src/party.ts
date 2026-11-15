@@ -2,6 +2,7 @@ import "./party.css";
 import { PARTY } from "../../shared/party";
 import { TRADE } from "../../shared/trade";
 import { nearbyEmptyMessage } from "./hudLogic";
+import { hudSlot } from "./hudSlots";
 
 /**
  * Player groups (shared/party.ts): the Group button / P key opens a panel to invite nearby heroes or leave,
@@ -48,7 +49,8 @@ export class PartyUI {
         }
       });
     }
-    hud.append(this.panel, this.frame, this.ask, this.toast);
+    hud.append(this.panel, this.ask, this.toast);
+    hudSlot("topleft").append(this.frame); // under the war plaque (flex order, hudSlots.css)
   }
 
   get open() { return !this.panel.hidden; }

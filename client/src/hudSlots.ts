@@ -3,11 +3,12 @@ import { onWorldScale, uiScale } from "./worldscale";
 /**
  * HUD places (PR B of the HUD rework): every HUD element has its own spot, so nothing overlaps.
  * - `#topright`: a flex column (online pill, minimap + dial, location, quest tracker, feed).
+ * - `#topleft`: a flex column (war plaque, war news notice, party frame).
  * - `#midstack`: bottom centre above the bar: `#promptstack` (interact prompt, level-up note) over `#statusrow` (chord widget, buffs).
  * - The bottom bar (orbs, skill bar, XP bar) is never drawn below 100%: `--barzoom` (see `barScale`).
  */
 
-export type HudSlotName = "topright" | "promptstack" | "statusrow";
+export type HudSlotName = "topright" | "topleft" | "promptstack" | "statusrow";
 
 /** The container a HUD widget mounts in (static in index.html; made on the spot if a page lacks it). */
 export function hudSlot(name: HudSlotName): HTMLElement {
@@ -54,7 +55,7 @@ export function boxesHit(boxes: readonly Box[], x: number, y: number, pad = 0): 
 }
 
 // The HUD parts world labels hide under: measured on resize and every 250 ms, not once per label
-const OCCLUDERS = ["topright"];
+const OCCLUDERS = ["topright", "topleft"];
 let boxes: Box[] = [];
 let measuredAt = -1e9;
 /** Measure the boxes now (screen px). */
@@ -66,9 +67,14 @@ export function refreshHudRects() {
     const r = document.getElementById(id)?.getBoundingClientRect();
     if (r && r.width > 0 && r.height > 0) boxes.push({ left: r.left, top: r.top, right: r.right, bottom: r.bottom });
   }
+  // where the top-left column ends, in HUD px, for the Heat gauge below it (hudSlots.css #overload)
+  const hud = document.getElementById("hud")!, tl = document.getElementById("topleft");
+  const k = hud.getBoundingClientRect().width / (hud.offsetWidth || 1) || 1, hr = hud.getBoundingClientRect();
+  const tb = tl && tl.getBoundingClientRect().height > 0 ? `${Math.round((tl.getBoundingClientRect().bottom - hr.top) / k)}px` : "0px";
+  if (document.documentElement.style.getPropertyValue("--topleft-bottom") !== tb) document.documentElement.style.setProperty("--topleft-bottom", tb);
 }
 
-/** Is a world label at this screen point (CSS px of the window) under the top-right column? */
+/** Is a world label at this screen point (CSS px of the window) under the top-right or top-left column? */
 export function hudOccludes(sx: number, sy: number): boolean {
   if (performance.now() - measuredAt > 250) refreshHudRects();
   return boxesHit(boxes, sx, sy);

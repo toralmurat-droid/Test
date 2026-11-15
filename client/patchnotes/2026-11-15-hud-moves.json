@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-15",
+  "title": "Tidier screen corners",
+  "changes": [
+    "The war plaque and war news now sit at the top left of the screen, above your group frame, so they no longer hide behind the monster bar.",
+    "The Gloam Tide meter is now a card in the top-right column, right above your quests.",
+    "A small chat button next to the chat box hides or shows the chat log. It remembers your choice and counts new messages while hidden."
+  ]
+}

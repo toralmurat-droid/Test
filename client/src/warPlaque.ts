@@ -5,6 +5,7 @@
  */
 import { CLANS, CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
 import { territoryAt, type WarView } from "../../shared/war/view";
+import { hudSlot } from "./hudSlots";
 import "./warPlaque.css";
 
 const hex = (c: number) => `#${c.toString(16).padStart(6, "0")}`;
@@ -40,7 +41,7 @@ export class WarPlaque {
     this.el = document.createElement("div");
     this.el.id = "warplaque";
     this.el.hidden = true;
-    parent.appendChild(this.el);
+    hudSlot("topleft").append(this.el); // top-left column (hudSlots.css)
   }
 
   set(v: WarView) { this.view = v; this.shown = ""; }

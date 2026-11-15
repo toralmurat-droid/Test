@@ -1,0 +1,14 @@
+/* Chat log toggle (chatToggle.ts): a small bronze button at the right end of the chat box */
+body.chat-hidden #chatlog { display: none; }
+body #chattoggle { position: absolute; left: calc(12px + min(400px, calc(100% - 140px)) - 30px); bottom: 16px; width: 24px; height: 24px; padding: 0; z-index: 3;
+  display: flex; align-items: center; justify-content: center; cursor: pointer; pointer-events: auto;
+  background: #0f0a06; border: 1px solid #6b4c22; box-shadow: 0 0 0 1px #080504; }
+body #chattoggle:hover { border-color: #e3bf6a; background: #2a1c0c; }
+body #chattoggle .pxi { width: 20px; height: 20px; image-rendering: pixelated; }
+body #chattoggle.off .pxi { opacity: .5; }
+body #chattoggle b { position: absolute; right: -5px; top: -7px; min-width: 14px; height: 14px; padding: 0 2px; box-sizing: border-box; text-align: center;
+  font: 12px/14px var(--tiny-font, var(--pixel-font)); font-weight: normal; color: #fff; background: #b8322a; box-shadow: 0 0 0 1px #080504; }
+body #chattoggle b[hidden] { display: none; }
+/* room for the button inside the input */
+body #chat { padding-right: 34px; }
+body.orbhud-on #chattoggle { left: calc(8px + var(--chat-w) - 30px); bottom: calc(var(--chat-bottom) + 8px); }
