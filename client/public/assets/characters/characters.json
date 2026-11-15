@@ -54,7 +54,10 @@
   "moorarmourer",
   "rustmarshal",
   "rustarmourer",
-  "rusthealer"
+  "rusthealer",
+  "ropewarden",
+  "ropearmourer",
+  "ropehealer"
  ],
  "image": "{name}.png",
  "frameWidth": 64,

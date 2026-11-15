@@ -124,7 +124,7 @@ export function badlandsSpawn(): { x: number; y: number } {
 }
 /**
  * Ropewell's square (shared/sinkholes.ts): where heroes in the sinkholes come back after dying, and where they log in
- * if they left from Act 5. Ropewell is still bare ground; free ground only, the Sinkway's arrival spot if none is found.
+ * if they left from Act 5. Free ground only (the well stands in its middle), the Sinkway's arrival spot if none is found.
  */
 export function sinkholesSpawn(): { x: number; y: number } {
   const Q = ROPEWELL_SQUARE, r = PLAYER_RADIUS;
