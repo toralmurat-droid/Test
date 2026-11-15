@@ -25,7 +25,7 @@ export function swear(p: WarHero, want: unknown, now = Date.now()): string {
   if (p.level < STANDARD.minLevel) return `Heroes swear from level ${STANDARD.minLevel}.`;
   if (p.clan === want) return "";
   if (now < nextOathAt(p.clan, p.clanAt)) return "You swore an oath less than a day ago.";
-  if (wantedTier(p.feud, want, now) >= 1) return `${CLANS[want].name} will not take the oath of a wanted man.`; // (shared/war/feuds.ts: the debt is paid in blood first)
+  if (wantedTier(p.feud, want, now) >= 1) return `${CLANS[want].name} will not take the oath of a wanted hero.`; // (shared/war/feuds.ts: the debt is paid in blood first)
   p.clan = want; p.clanAt = now;
   return "";
 }

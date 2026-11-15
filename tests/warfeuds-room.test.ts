@@ -264,7 +264,7 @@ test("feuds (room): no bounty farming (party, own clan, FEUD.bounty.perDay per k
     assert.equal(K.p.renown, FEUD.bounty.renown * (FEUD.bounty.perDay + 1), "a new day: a new count");
     // no oath while Wanted by that clan
     wanted(); V.p.clan = undefined; V.p.clanAt = 0;
-    assert.equal(swear(V.p, owner), `${CLANS[owner].name} will not take the oath of a wanted man.`);
+    assert.equal(swear(V.p, owner), `${CLANS[owner].name} will not take the oath of a wanted hero.`);
     assert.equal(V.p.clan, undefined);
     assert.equal(swear(V.p, CLAN_KEYS.find((k) => k !== owner)!), "", "another clan takes it");
     V.p.clan = undefined; V.p.clanAt = 0; V.p.feud = {};
