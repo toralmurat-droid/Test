@@ -36,7 +36,7 @@ let voices = 0;
 const MAX_VOICES = 28;
 const lastPlay = new Map<string, number>();
 /** Sounds that ring for seconds (kept connected longer). */
-const LONG = new Set(["lootRare", "lootLegendary", "horn", "ritual", "ritualCall", "demonRise", "demonRoar", "shrine", "portalTravel", "portalWake", "necroWind", "heroDie", "levelup", "owl", "chime", "warcry", "motherInflate", "demonFire", "skelDie", "lutePluck", "swResonate", "swShatter", "swBounce", "swSnap", "swSwell"]);
+const LONG = new Set(["lootRare", "lootLegendary", "horn", "ritual", "ritualCall", "demonRise", "demonRoar", "shrine", "portalTravel", "portalWake", "necroWind", "heroDie", "levelup", "owl", "chime", "warcry", "motherInflate", "demonFire", "skelDie", "lutePluck", "swResonate", "swShatter", "swBounce", "swSnap", "swSwell", "caravan_raided", "caravan_arrived"]);
 const AMBIENT = new Set(["crackle", "bird", "cricket", "chime", "owl", "step", "skelIdle", "blobGurgle", "crawl"]);
 
 const TOWNS = ["Oakvale", "Market Square", "Chapel of the Dawn", "The Rusty Tankard", "The Smithy", "Saltmere", "Hunter's Camp"];
@@ -628,6 +628,28 @@ const R: Record<string, Recipe> = {
   // branches shaking, a shout, the thump of the landing
   treeDrop: (o, t, v, pitch = 1) => { noise(o, t, { type: "bandpass", f: 2600, q: 0.8, dur: 0.35, vol: 0.3 * v }); R.shout(o, t + 0.05, v * 0.9, pitch); thud(o, t + 0.38, 90, 0.45 * v, 0.2); },
   ambush: (o, t, v) => { noise(o, t, { type: "lowpass", f: 700, dur: 0.25, vol: 0.4 * v }); whoosh(o, t, 400, 2000, 0.2, 0.3 * v); },
+  // Clan war supply caravans (server broadcast("sfx", { ev: "caravan_roll" | "caravan_raided" | "caravan_arrived", x, y })).
+  // Rolling: a soft wooden creak and two dull hoof beats with a pinch of rattle; short, meant to be repeated now and then
+  caravan_roll: (o, t, v) => {
+    tone(o, t, { type: "sawtooth", f: rnd(150, 175), f2: rnd(115, 135), dur: 0.38, vol: 0.05 * v, att: 0.08, vib: 4, vibHz: 9 });
+    noise(o, t, { type: "bandpass", f: 700, f2: 420, q: 5, dur: 0.34, vol: 0.05 * v, att: 0.1 });
+    thud(o, t + 0.05, 95, 0.12 * v, 0.1); thud(o, t + 0.33, 85, 0.1 * v, 0.1);
+    rattle(o, t + 0.1, 3, 0.3, 0.04 * v, 1800);
+  },
+  // Raided: planks splintering, a heavy crash, then coins and goods spilling over the ground
+  caravan_raided: (o, t, v) => {
+    thud(o, t, 70, 0.75 * v, 0.3);
+    noise(o, t, { type: "bandpass", f: 1800, f2: 500, q: 1.2, dur: 0.22, vol: 0.5 * v });
+    for (let i = 0; i < 5; i++) { const tt = t + 0.02 + i * 0.045 + rnd(0, 0.03); noise(o, tt, { type: "bandpass", f: rnd(900, 2400), q: 6, dur: 0.05, vol: 0.28 * v }); tone(o, tt, { type: "square", f: rnd(180, 330), f2: 90, dur: 0.05, vol: 0.06 * v }); }
+    thud(o, t + 0.22, 55, 0.5 * v, 0.28);
+    for (let i = 0; i < 9; i++) bell(o, t + 0.3 + i * 0.055 + rnd(0, 0.04), rnd(2200, 3600), 0.22, rnd(0.04, 0.08) * v);
+    rattle(o, t + 0.3, 6, 0.5, 0.1 * v, 3200);
+  },
+  // Arrived: a short two-note horn over a bell, the caravan is home
+  caravan_arrived: (o, t, v) => {
+    [[0, 0.28, 1], [0.3, 0.55, 1.5]].forEach(([s, d, m]) => [1, 2, 3].forEach((k, i) => tone(o, t + s, { type: "sawtooth", f: 196 * m * k, f2: 198 * m * k, dur: d, vol: (0.2 / (1 + i)) * v, att: 0.04, vib: 0.8 * k, vibHz: 5 })));
+    bell(o, t + 0.3, 1175, 1.1, 0.12 * v); bell(o, t + 0.34, 1568, 1.1, 0.08 * v);
+  },
 };
 
 // ---------------------------------------------------------------------------------------------------------
@@ -1101,6 +1123,10 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
       case "lanterndim": case "lanternout": case "lanternpass": case "wavehorn": case "odohurt": case "graveright": case "gravewrong": case "seen":
       case "sealturn": case "sealsync": case "bargain": case "tidefull": case "tidemarch": case "tideend":
         pos(ev.ev, 0.9, undefined, { key: "qc" + ev.ev, minGap: 250, ...(ev.ev === "wavehorn" || ev.ev.startsWith("tide") ? { reach: 2.2 } : {}) }); break;
+      // clan war supply caravans: heard near the cart (x, y, or the cart's id) and carrying far, the arrival horn most of all
+      case "caravan_roll": pos("caravan_roll", 0.8, undefined, { key: "cr" + (ev.id ?? ""), minGap: 700 }); break;
+      case "caravan_raided": pos("caravan_raided", 1, undefined, { key: "cx" + (ev.id ?? ""), minGap: 300, reach: 1.6 }); break;
+      case "caravan_arrived": pos("caravan_arrived", 1, undefined, { key: "ca" + (ev.id ?? ""), minGap: 500, reach: 2 }); break;
       case "grimoire": if (ev.id === me()) pos("pageTurn", 1, ({ fire: "fire", cold: "frost", poison: "poison", shock: "lightning" } as Record<string, string>)[ev.el] ?? "arcane"); break;
     }
   });

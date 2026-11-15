@@ -1244,5 +1244,35 @@
   "h": 32,
   "scale": 1.5,
   "frames": 14
+ },
+ "mob_war_cart_wardens": {
+  "w": 72,
+  "h": 44,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_cart_redfang": {
+  "w": 72,
+  "h": 44,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_cart_host": {
+  "w": 72,
+  "h": 44,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_cart_hidekin": {
+  "w": 72,
+  "h": 44,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_cart_veiled": {
+  "w": 72,
+  "h": 44,
+  "scale": 1.5,
+  "frames": 14
  }
 }
