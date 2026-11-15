@@ -18,7 +18,7 @@ Work branch: `claude/wizardly-franklin-nedywr`. Shipped in two PRs:
 ## Plan
 | # | Phase | Status |
 |---|---|---|
-| 1 | Coastal sound bed (surf, gulls by day, rigging, bell buoy), optional `saltmere-tune.mp3` slot | todo |
+| 1 | Coastal sound bed (surf, gulls by day, rigging, bell buoy), optional `saltmere-tune.mp3` slot | done |
 | 2 | Harbour props: moored boats, rowboats, bell buoy, lobster pots, mooring posts, breakwater; gulls | todo |
 | 3 | Layout (`shared/saltmere.ts`, `shared/map.ts`): tavern, chandlery, smokehouse, 3 cottages, Upper Lane, Harbour Street, flagstone harbour square = safe zone, jetties at Gullrock and Heronwreck | done |
 | 3b | Building art: tavern and smokehouse styles, signs, smoke, quay edge | todo |
@@ -38,3 +38,7 @@ Work branch: `claude/wizardly-franklin-nedywr`. Shipped in two PRs:
   Reserved: `SALT_STASH` (137,189), `SALT_JETTIES` (147,204 / 189,194 / 37,201), `WATCH_FIRE` (160,195). Outside
   `SALT_BOXES` the overworld is unchanged (hash in `tests/badlands.test.ts`; 9 tiles in rows 166-167 come from the
   reachability pass, which no longer cuts the old way out of the woods).
+- 2026-11-15: phase 1 done. Coast bed in `client/src/sfx.ts` (`coastTick`: surf by sea-row count y >= 180, gulls by
+  day, pier creaks and hull knocks within 6 tiles of a pier in Saltmere, a distant bell buoy). Music: optional
+  `saltmere` track (`/assets/music/saltmere-tune.mp3`), `SALT_TOWNS` in `client/src/music.ts`; without the file
+  Saltmere keeps the village tune. Not yet listened to in a browser: volumes untuned.
