@@ -356,7 +356,7 @@ export class Minimap {
   toggle(open = !this.isOpen) {
     if (open && !this.isOpen) { this.cam = undefined; this.follow = false; } // opens on the explored area, as before
     this.overlay.classList.toggle("open", open);
-    if (!open) { this.held.clear(); this.ptrs.clear(); }
+    if (!open) { this.held.clear(); this.ptrs.clear(); this.focus = undefined; } // a Show-on-map not drawn yet ends with the map
     this.last = 0;
   }
 

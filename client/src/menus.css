@@ -4,7 +4,7 @@
 
 /* ---------- Pixel icons ---------- */
 .pxi { width: 20px; height: 20px; image-rendering: pixelated; vertical-align: -5px; margin-right: 5px; flex: none; }
-small .pxi, .help .pxi, #slotpick small .pxi, #treeinfo .istat .pxi { width: 14px; height: 14px; vertical-align: -3px; margin-right: 3px; }
+small .pxi, .help .pxi, #slotpick small .pxi { width: 14px; height: 14px; vertical-align: -3px; margin-right: 3px; }
 #stats .pxi { width: 14px; height: 14px; vertical-align: -3px; margin-right: 3px; }
 .sh-row button .pxi, .sh-gold .pxi, .ql-reward .pxi { width: 16px; height: 16px; vertical-align: -4px; margin: 0 0 0 3px; }
 .ql-reward .pxi { margin: 0 4px 0 0; }
@@ -78,11 +78,6 @@ body .tnode .pips, body .tnode .nlv { background: #0f0a06; border-radius: 0; }
 body .tnode .nlv { color: #c9b48a; }
 body .tnode kbd { background: #e3bf6a; color: #120c06; }
 body .tnode:hover { outline-color: #ffd98a; }
-body #treeinfo { background: #0f0a06; border: 2px solid #45331e; box-shadow: inset 0 0 0 1px #080504; color: #d8ccb4; font-size: 18px; font-family: var(--pixel-font); }
-body #treeinfo .ihead b { color: #f0e0b8; font-weight: normal; }
-body #treeinfo .ttype.pas, body #treeinfo .istat { color: #a8977a; }
-body #treeinfo .ipath { color: #a8977a; }
-body #treeinfo .istat.can { color: #c8f59a; }
 /* hover card beside a skill tile (talents.ts showTip, Murat 2026-11-08): bronze frame like #tip, the full details */
 body #skilltip { position: fixed; z-index: 10000; pointer-events: none; display: none; width: 300px; padding: 0 4px;
   border: 18px solid transparent; border-image: var(--wf-bronze) 9 fill / 18px / 0 repeat; image-rendering: pixelated;
@@ -228,7 +223,6 @@ body #spbody #hero, body #spbody #tree, body #spbody #gear { position: static; t
 body #spbody #hero h2, body #spbody #tree h2 { font-size: 17px; }
 body #spbody #tree .treewrap { margin: 0 auto; }
 body #spbody #treebranches { justify-content: center; }
-body #spbody #treeinfo { min-width: 0; width: 100%; }
 body #spbody #gearcols { gap: 10px; }
 body #spbody #gearleft { flex: 0 0 250px; }
 body #spbody #geartop { flex-direction: column; align-items: stretch; gap: 6px; }
@@ -250,14 +244,6 @@ body .gcell.gjunk::after { content: ""; position: absolute; inset: 6px; pointer-
   background: linear-gradient(45deg, transparent calc(50% - 2px), #c0402c calc(50% - 2px), #c0402c calc(50% + 2px), transparent calc(50% + 2px)),
               linear-gradient(-45deg, transparent calc(50% - 2px), #c0402c calc(50% - 2px), #c0402c calc(50% + 2px), transparent calc(50% + 2px)); opacity: .8; }
 
-/* Skills tab: what a skill does sits in a short bar under the tree (Murat 2026-11-08: the flyout popup was in the way) */
-body #spbody #treeinfo { position: static; width: 100%; max-height: none; margin-top: 6px; padding: 6px 10px; box-sizing: border-box;
-  display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 12px; align-items: start; font-size: 15px; }
-body #spbody #treeinfo:empty { display: none; }
-body #spbody #treeinfo .ihead { grid-row: span 6; }
-body #spbody #treeinfo .ihead > div, body #spbody #treeinfo .pips { display: none; }
-body #spbody #treeinfo p, body #spbody #treeinfo .idmg { margin: 0 0 2px; grid-column: 2; }
-body #spbody #treeinfo .ipath, body #spbody #treeinfo .iscale, body #spbody #treeinfo .iparts { display: none; }
 
 /* Skill tree, Diablo 2 style (talents.ts): school tabs, a grey stone slab, square bronze-framed tiles with a rank box,
    carved arrows painted on the slab, "N skill choices remaining" along the bottom */
