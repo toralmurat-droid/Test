@@ -34,6 +34,8 @@ export const mat = (pal: number[], bias = 0, k = 1): Mat => (l, _s, _t, x, y) =>
 
 export class IsoPaint {
   private zb: Float32Array;
+  /** Optional: told which model point (u, v, z) won each pixel, so a caller can clip or outline by ownership. */
+  onPlot?: (x: number, y: number, u: number, v: number, z: number) => void;
   constructor(public p: Pen, public W: number, public H: number, public ox: number, public oy: number) {
     this.zb = new Float32Array(W * H).fill(-1e9);
   }
@@ -53,7 +55,7 @@ export class IsoPaint {
     if (x < 0 || y < 0 || x >= this.W || y >= this.H) return false;
     const d = u + v + z + bias, i = y * this.W + x;
     if (d < this.zb[i]) return false;
-    this.zb[i] = d; this.p.px(x, y, c);
+    this.zb[i] = d; this.p.px(x, y, c); this.onPlot?.(x, y, u, v, z);
     return true;
   }
   /** A parametric surface (s, t in 0..1) returning its point and normal; sampled finely enough to leave no holes. */

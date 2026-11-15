@@ -757,3 +757,8 @@ Sims (`npx tsx tools/balance/war.ts 200 30 [--clever=<clan>]`):
 - Open: the Hide-Kin end at 16.2%, about their homeland and no more (they start with no land outside it and the Sinkway is
   far from Hidehall); not rallied (10 of 62 is just over the line). Gnawed Bank, Scratchroot Burrows and Rushmere Hollows
   still have no quest.
+
+- Hold art rebuilt from the fort cells (2026-11-15): `client/src/holdArt.ts` paints per-cell pieces (`fortLayout`, `paintPiece`,
+  `paintGround`) from `fortOf(t, owner)`; `client/src/holdAssets.ts` (`HoldDraw`) bakes them to textures at run time (time-sliced),
+  one image per cell sorted by foot depth, one ground image per Hold; `warStandards.ts` rebuilds a Hold when its owner changes.
+  The baked PNGs and `tools/art/holds.ts` are gone. Preview: `npx tsx tools/art/preview/holds-sheet.ts out.png`.
