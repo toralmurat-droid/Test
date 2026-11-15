@@ -95,7 +95,7 @@ import { attackProfile, ATTACK_WORDS, isWeaponType, poseSheet, profileOf, weapon
 import { talentMult, talentPoints, spentPoints } from "../../shared/talents";
 import { activeSkills, skillLearned } from "../../shared/slots";
 import { TideHud } from "./tide";
-import { DROP_KEY, LANTERN_OBJECT, LOCK_TIP, QuestCarry } from "./questCarry";
+import { DROP_KEY, LOCK_TIP, QuestCarry } from "./questCarry";
 import { actionKey, actionOfKey, type KeyAction, keyMode, keyModeName, onKeyMode, setKeyMode, slotCount, slotKey, slotOfKey, wasdWalks } from "./keymode";
 import { iconImg } from "./skillIcons";
 import { TalentMenu } from "./talents";
@@ -705,7 +705,7 @@ export class TownScene extends Phaser.Scene {
       const why = reqProblem(id, reqInfoOf(st));
       this.side?.setPreview(canWear(cls, id) ? { label: `wear ${gearName(id, cls)}${why ? ` (${why})` : ""}`, eq: wearing(wornOf(st), id), ignoreReq: true } : undefined);
     };
-    this.npcs.objects.setLight((x, y, lift) => this.details?.addLight(x, y, 0x7ff3ff, 1.5, 0.55, 0.06, lift)); // lit spirit lanterns shine at night
+    this.npcs.objects.setLight((x, y, lift, color = 0x7ff3ff, scale = 1.5) => this.details?.addLight(x, y, color, scale, 0.55, 0.06, lift)); // lit spirit lanterns and watch-fires shine at night
     // Morwen's camp and Brann's forge after dusk: coal glow under her brew, lantern light in the tent doorway
     for (const d of NPC_DECOR) {
       if (d.prop === "wc_rig") this.details?.addLight(d.x * TILE, d.y * TILE, 0xff6a2a, 1.5, 0.6, 0.15, 9, -7);
@@ -3559,7 +3559,7 @@ export class TownScene extends Phaser.Scene {
     this.stash?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near);
     this.bounty?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near || !!this.stash?.near);
     if (this.npcs) { this.npcs.hidePrompt = !!this.chests?.near || !!this.shrine?.near || !!this.portals?.near || !!this.waygates?.near || !!this.stash?.near || !!this.bounty?.near; this.npcs.extraBlock = (this.bounty?.trackerBlock() ?? "") + (this.bounty?.writBlock() ?? "") + (this.qcarry?.trackerBlock(this.me, (id) => this.entities.get(id)?.state?.name ?? "A friend") ?? ""); }
-    this.npcs?.objects.setHidden(LANTERN_OBJECT, !!this.qcarry?.update(this.me, (id) => this.entities.get(id)));
+    this.npcs?.objects.hideCarried(this.qcarry?.update(this.me, (id) => this.entities.get(id)));
     this.npcs?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, meEnt?.state);
     this.grimoire?.update(meEnt?.state?.cls);
     this.waygates?.update(meEnt?.state, meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near);
