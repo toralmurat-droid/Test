@@ -78,9 +78,12 @@ test("renown: a full minute at a standard earns it, ranks rise, saves stay clean
   const p: WarHero = { clan: "wardens", clanAt: 0, dead: false, level: 1, x: std.x, y: std.y, lastAct: t0, renown: RENOWN_RANKS[1].at - 1 };
   const pr = new Presence();
   let ups: [string, string][] = [];
-  for (let i = 1; i <= 59; i++) ups.push(...pr.tick([["a", p]], t0 + i * 1000));
+  const minutes: [string, number][] = [], onMinute = (id: string, t: number) => minutes.push([id, t]);
+  for (let i = 1; i <= 59; i++) ups.push(...pr.tick([["a", p]], t0 + i * 1000, onMinute));
   assert.equal(p.renown, RENOWN_RANKS[1].at - 1, "no renown before a full minute");
-  ups.push(...pr.tick([["a", p]], t0 + 60_000));
+  assert.equal(minutes.length, 0, "no minute reported yet");
+  ups.push(...pr.tick([["a", p]], t0 + 60_000, onMinute));
+  assert.deepEqual(minutes, [["a", std.t]], "the full minute is reported with its territory (war writs)");
   assert.equal(p.renown, RENOWN_RANKS[1].at - 1 + heroValor(1, std.t));
   assert.deepEqual(ups, [["a", RENOWN_RANKS[1].name]], "the rank-up is reported once");
   assert.equal(clanView(p).renown, Math.floor(p.renown));

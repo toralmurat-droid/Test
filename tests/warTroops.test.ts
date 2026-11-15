@@ -122,11 +122,11 @@ test("WarTroops: kill valor goes to sworn heroes of another clan in the land, ca
   wt.tick(1000);
   const kill = (by: string) => {
     const [id, m] = [...mobs].find(([, m]) => !m.dead && parseTroop(m.weapon)?.clan === owner)!;
-    m.dead = true; wt.killed(m, id, by);
+    m.dead = true; return wt.killed(m, id, by);
   };
-  kill("own"); kill("free");
+  assert.equal(kill("own"), undefined, "no writ credit for the own clan"); assert.equal(kill("free"), undefined, "nor for the unsworn");
   assert.equal(heroes.get("own")!.renown + heroes.get("free")!.renown, 0, "own clan and unsworn heroes earn nothing");
-  for (let i = 0; i < WAR_TROOPS.killValorPerTick + 3; i++) kill("a");
+  for (let i = 0; i < WAR_TROOPS.killValorPerTick + 3; i++) assert.deepEqual(kill("a"), { t: LAND.id, clan: owner }, "a rival in the land: writ credit, cap or not");
   assert.equal(heroes.get("a")!.renown, WAR_TROOPS.killValorPerTick * WAR_TROOPS.killValor, "capped this war tick");
   s.tick++; // the next war tick
   wt.tick(2000); // (fills nothing: the fallen wait respawnMs)
@@ -134,7 +134,7 @@ test("WarTroops: kill valor goes to sworn heroes of another clan in the land, ca
   kill("a");
   assert.equal(heroes.get("a")!.renown, WAR_TROOPS.killValorPerTick * WAR_TROOPS.killValor + WAR_TROOPS.killValor, "a new tick, new valor");
   heroes.get("a")!.x = 0; heroes.get("a")!.y = 0; // outside the land
-  kill("a");
+  assert.equal(kill("a"), undefined, "no writ credit from outside the land");
   assert.equal(heroes.get("a")!.renown, WAR_TROOPS.killValorPerTick * WAR_TROOPS.killValor + WAR_TROOPS.killValor, "only inside the land");
 });
 

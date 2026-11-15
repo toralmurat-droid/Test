@@ -162,3 +162,29 @@ Open points for M1:
   siege battles stay cosmetic.
 - Next: siege battles with server troops; the class spread (summoners barely touched behind their golems, the
   Songweaver struggles against three at Lv 45).
+
+## M2: War writs (2026-11-15)
+
+- Rules and numbers: `shared/war/writs.ts` (`WRIT`), text: `shared/war/writText.ts` (2-3 lines per clan per kind in
+  the leader's voice), server: `server/warWrits.ts` (`WarWrits` behind a narrow `WritHost`), client: the "War Writs"
+  section of the bounty board panel and a tracker block (`client/src/bounty.ts`).
+- Separate from bounties: a hero holds one bounty and one writ. Three kinds:
+  - `rout`: kill 6-8 soldiers of another clan in land X (a target of the hero's clan, held by a rival, with a patrol);
+    the killer must stand in X (`WarTroops.killed` now returns `{t, clan}` for such a kill, before the per-tick valor
+    cap, so writs count past the cap).
+  - `hold`: 5 full minutes at a standard of X (own border lands or targets), from `Presence.tick`'s new `onMinute`.
+  - `clear`: kill 10 wild monsters (no troopers, summons, tide marchers, quest waves or quest monsters) of at least
+    X's lowest level inside one of the clan's own lands X.
+- Offers: `writOffers(war, clan, level, act, seed)`, up to 3, one land each, the board's act and the hero's level
+  (`levels[0] <= L+3 && levels[1] >= L-5`); sieges the clan is in first, then highest pressure (takes the full
+  `WarState`: pressure is not in the `WarView`). Seed = war tick + writs finished today (dropping does not reroll).
+  Unsworn or under `STANDARD.minLevel`: a note, no offers.
+- Pay at completion: gold `(12 + land level x 6) x goldMult` (land level = middle of its band), renown 15, valor 8 for
+  the clan in X; gold and renown x `1 + WRIT.rally x max(0, 1 - lands / fair share)` (rally 0.5). No XP. 3 per UTC day.
+- Withdrawn (no pay, not counted) when X changes hands (checked every war tick and on join) or the hero swears to
+  another clan; the Herald says so in the hero's chat.
+- Saves: optional `writ`, `writDay`, `writN` on `HeroSave`; plain fields on `Player` (no `@type`); `cleanWrit` drops
+  junk, unknown kinds, a territory whose id no longer matches its name, and another clan's writ. Old saves load with none.
+- Message contract: client -> server `"writ"`: `{}` | `{take: 0|1|2}` (at a board, sworn) | `{drop: true}`, anything
+  else ignored, through `allow("ask")`. Server -> client `"writ"`: `{board?, offers?, active?, left?, note?, done?, err?}`.
+- Next: caravans on supply roads.

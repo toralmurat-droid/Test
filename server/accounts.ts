@@ -1,5 +1,6 @@
 import type { BountyState } from "../shared/bounty";
 import type { RumourState } from "../shared/rumours";
+import type { WritState } from "../shared/war/writs";
 import type { MentorState } from "../shared/quests";
 // Player accounts: name + password, with one saved hero per class.
 // Saves live in a JSON file on the server (SAVE_FILE, default data/saves.json).
@@ -46,6 +47,8 @@ export interface HeroSave {
   clan?: string; clanAt?: number;
   /** Clan war renown (shared/war/renown.ts); kept when the hero changes clan. */
   renown?: number;
+  /** War writ in progress (shared/war/writs.ts), and the UTC day / count of writs finished (the daily limit); missing = none. */
+  writ?: WritState; writDay?: number; writN?: number;
   /** Gear wear 0-100: removed 2026-11-13, old saves may still carry it; ignored on load and no longer written. */
   wear?: number;
   /** Devour (shared/devour.ts): monsters eaten per family. */

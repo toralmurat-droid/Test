@@ -103,9 +103,11 @@ import { ASK_BURST, ASK_PER_SEC, Bucket, CHAT_BURST, CHAT_PER_SEC, CRAFT_BURST, 
 
 import { Player } from "./player";
 import { byPart, hitBy } from "./hitBy";
-import { attachWar, onWar, warNow } from "./war";
+import { addValor, attachWar, onWar, warNow, warState } from "./war";
 import { clanView, cleanOath, Presence, swear } from "./warHeroes";
 import { WarTroops } from "./warTroops";
+import { WarWrits } from "./warWrits";
+import { cleanWrit } from "../shared/war/writs";
 import { WAR_TROOPS } from "../shared/war/troops";
 import type { ClanKey } from "../shared/war/clans";
 import { cleanRenown } from "../shared/war/renown";
@@ -632,9 +634,19 @@ export class TownRoom extends Room<TownState> {
     ranked: (pid, rank) => { const c = this.clients.getById(pid), p = this.state.players.get(pid); if (c && p) { c.send("clan", clanView(p)); c.send("chat", { id: "", name: "Herald", text: `Your renown grows: you are now ${rank}.` }); } },
   });
 
+  /** War writs (server/warWrits.ts): clan work from the bounty boards, apart from the hunts. */
+  private writs = new WarWrits({
+    hero: (id) => this.state.players.get(id), heroes: () => this.state.players.entries(),
+    send: (id, type, msg) => this.clients.getById(id)?.send(type, msg),
+    chat: (id, name, text) => this.clients.getById(id)?.send("chat", { id: "", name, text }),
+    war: () => warState(), addValor, pay: (id, gold) => this.payHero(id, gold),
+    ranked: (pid, rank) => { const c = this.clients.getById(pid), p = this.state.players.get(pid); if (c && p) { c.send("clan", clanView(p)); c.send("chat", { id: "", name: "Herald", text: `Your renown grows: you are now ${rank}.` }); } },
+    save: (id) => { const p = this.state.players.get(id); if (p) saveHero(p.name, p.cls, this.snapshot(p)); },
+  });
+
   onCreate() {
     liveRooms.add(this);
-    const offNews = attachWar(this), offTroops = onWar((v) => this.warTroops.onWar(v)); // the clan war (server/war.ts) runs on its own; the room passes on the news
+    const offNews = attachWar(this), offTroops = onWar((v) => { this.warTroops.onWar(v); this.writs.onWar(v); }); // the clan war (server/war.ts) runs on its own; the room passes on the news
     this.offWar = () => { offNews(); offTroops(); };
     this.limitMessages();
     this.qsteps = new QuestSteps({
@@ -695,7 +707,7 @@ export class TownRoom extends Room<TownState> {
     });
     // Clan war heroes (server/warHeroes.ts): oaths, and minutes at the standards reported as valor
     this.clock.setInterval(() => {
-      for (const [id, rank] of this.warPresence.tick(this.state.players.entries())) {
+      for (const [id, rank] of this.warPresence.tick(this.state.players.entries(), Date.now(), (id, t) => this.writs.standardMinute(id, t))) {
         const c = this.clients.getById(id), p = this.state.players.get(id);
         if (c && p) { c.send("clan", clanView(p)); c.send("chat", { id: "", name: "Herald", text: `Your renown grows: you are now ${rank}.` }); }
       }
@@ -706,6 +718,7 @@ export class TownRoom extends Room<TownState> {
       if (!p || !this.allow("ask", client)) return;
       const err = msg && msg.swear !== undefined ? swear(p, msg.swear) : "";
       client.send("clan", { ...clanView(p), err });
+      if (!err) this.writs.oathChanged(client.sessionId); // a writ for the old clan is withdrawn
     });
     this.setState(new TownState());
     copyPatches(this); // each socket gets its own copy of a patch (deflate compresses later; server/patchCopy.ts)
@@ -791,6 +804,8 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("travel", (client, msg: { to?: string }) => this.travel(client, msg?.to));
     this.onMessage("waygate", (client) => this.useWaygate(client));
     this.onMessage("bounty", (client, msg: { take?: number; drop?: boolean }) => this.bountyMsg(client, msg ?? {}));
+    // War writs: {} = resend, {take: 0..2} at a bounty board when sworn, {drop: true} (checked in server/warWrits.ts)
+    this.onMessage("writ", (client, msg: unknown) => { if (this.allow("ask", client)) this.writs.msg(client.sessionId, msg); });
     // Tavern Rumours: {take: 0..2} by Mags, {drop: true}, {} = resend (checked in server/rumours.ts)
     this.onMessage("rumour", (client, msg: unknown) => { if (this.allow("ask", client)) this.rumours.msg(client.sessionId, msg); });
     // The Apprentice: {on: boolean} by Captain Hale, {} = resend (checked in server/apprentice.ts)
@@ -1039,6 +1054,7 @@ export class TownRoom extends Room<TownState> {
     if (p.cls === "songweaver") client.send("songbook", this.songs.msg(p)); // her songs and materials (owner only)
     const war = warNow(); if (war) client.send("war", war); // the clan war front plaque (client/src/warPlaque.ts)
     client.send("clan", clanView(p));
+    this.writs.join(client.sessionId); // a war writ in progress (or withdrawn while away)
     console.log(`${p.name} the ${CLASSES[p.cls].name} joined (${this.clients.length} online)`);
   }
 
@@ -1143,6 +1159,7 @@ export class TownRoom extends Room<TownState> {
       flags: metaOf(p, META.flags) || undefined, cosm: metaOf(p, META.cosm) || undefined,
       titles: p.titles || undefined, mentor: p.mentor && { ...p.mentor, names: [...p.mentor.names] },
       ...(p.clan ? { clan: p.clan, clanAt: p.clanAt } : {}), ...(p.renown > 0 ? { renown: p.renown } : {}),
+      ...(p.writ ? { writ: { ...p.writ } } : {}), ...(p.writN > 0 ? { writDay: p.writDay, writN: p.writN } : {}),
       ...(p.cls === "summoner" ? { grimoire: this.grimoireOf(p), suTree: SUMMONER_TREE } : {}),
       ...songSave(p.cls, p.sk),
       ...this.songs.save(p),
@@ -1208,6 +1225,7 @@ export class TownRoom extends Room<TownState> {
     p.bounty = cleanBounty(s.bounty);
     p.rumour = cleanRumour(s.rumour, rumourDay(Date.now()), p.level); // another day's rumours start over
     { const o = cleanOath(s.clan, s.clanAt); p.clan = o.clan; p.clanAt = o.clanAt; p.renown = cleanRenown(s.renown); } // clan war oath (server/warHeroes.ts)
+    p.writ = cleanWrit(s.writ, p.clan); p.writDay = Math.max(0, Math.floor(num(s.writDay))); p.writN = Math.max(0, Math.floor(num(s.writN))); // war writs (server/warWrits.ts)
     p.feast = cleanFeast(s.feast);
     setMeta(p, META.flags, num(s.flags)); setMeta(p, META.cosm, num(s.cosm)); // choices (me.flags) and cosmetics (cosm), kept apart from the chains' progress
     p.titles = cleanOwned(s.titles, num(s.cosm)); // titles earned; saves from before the list own the one they show
@@ -5337,6 +5355,7 @@ export class TownRoom extends Room<TownState> {
     if (a && !m.tide) for (let c = 0; c < CHAINS.length; c++) this.questKill(attackerId, a, m, c); // marchers fill no quest or bounty
     if (a && !m.tide) this.ownerCredit(attackerId, a, m); // someone's own quest monster, felled by their group (decision 9)
     if (a && !m.tide) this.bountyKill(attackerId, a, m);
+    if (a && !m.tide) this.writs.mobKilled(attackerId, m); // a clear writ (server/warWrits.ts)
     if (a) this.tide.kill(attackerId, m); // a blob fills the Gloam Tide's meter (server/tide.ts)
     if (a) this.rumours.kill(attackerId, targetId); // a rumour's ambusher (server/rumours.ts)
     // Kill XP: every group member in the same zone gets it (the killer alone when solo)
@@ -5447,7 +5466,10 @@ export class TownRoom extends Room<TownState> {
     if (m.kind === "sunwright" && m.uPhase) this.bossSay(targetId, SUNWRIGHT.lines.death);
     if (m.voice) this.bossSay(targetId, m.voice.death);
     if (m.kind === "nightraider") this.raiderGone(m, targetId, true, killerName);
-    if (m.kind === "trooper") this.warTroops.killed(m, targetId, attackerId); // its slot refills at the Hold; valor for a sworn killer
+    if (m.kind === "trooper") { // its slot refills at the Hold; valor for a sworn killer, and a rout writ counts it
+      const k = this.warTroops.killed(m, targetId, attackerId);
+      if (k) this.writs.trooperKilled(attackerId, k.t, k.clan);
+    }
     if (m.champ) this.champs.died(m, targetId); // its ballista falls with it
     m.dead = true; m.hp = 0;
     if (m.owner) this.summons.delete(targetId);
