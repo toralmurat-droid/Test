@@ -58,42 +58,6 @@
 #npcdialog .sh-fuse { background: #4a3a6e; color: #fff; border-color: #2c2244; }
 #npcdialog .sh-empty { font: 18px var(--pixel-font); color: #7a6a44; }
 
-/* Quest log (J) */
-#questlog { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(620px, calc(100% - 32px)); max-height: calc(100vh - 140px); overflow-y: auto;
-  background: #e9dcb8; border: 3px solid #8b5e34; border-radius: 6px; box-shadow: inset 0 0 0 2px #c9b98a, 0 6px 18px rgba(0,0,0,.6);
-  color: #2a1f10; font: 18px/1.35 var(--pixel-font); pointer-events: auto; z-index: 21; padding: 10px 16px 6px; }
-#questlog[hidden] { display: none; }
-#questlog .ql-head { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #b8a676; margin-bottom: 8px; }
-#questlog h2 { margin: 0; font: 22px var(--title-font); color: #6b4a22; }
-#questlog .ql-close { border: 0; background: none; font: 22px var(--title-font); cursor: pointer; color: #6b4a22; }
-#questlog .ql-body { display: flex; gap: 14px; }
-#questlog .ql-list { flex: 0 0 150px; font: 18px var(--pixel-font); }
-#questlog .ql-cat { color: #7a6a44; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 4px; }
-#questlog .ql-item { padding: 4px 6px; border-radius: 3px; border-left: 3px solid transparent; cursor: pointer; margin-bottom: 2px; opacity: .8; }
-#questlog .ql-item.sel { background: rgba(139,94,52,.18); border-left-color: #ffb703;  opacity: 1; }
-#questlog .ql-next { font-size: 18px; font-family: var(--pixel-font); margin-top: 8px; }
-#questlog .ql-detail { flex: 1; min-width: 0; }
-#questlog h3 { margin: 0; font: 18px var(--pixel-font); color: #3d5a1e; }
-#questlog h4 { margin: 10px 0 4px; font: 18px var(--pixel-font); color: #6b4a22; text-transform: uppercase; letter-spacing: 2px; }
-#questlog .ql-meta { font: 18px var(--pixel-font); color: #7a6a44; }
-#questlog .ql-badge { font: 18px var(--pixel-font); background: #2e7d32; color: #fff; padding: 1px 6px; border-radius: 8px; vertical-align: middle; }
-#questlog .ql-steps { list-style: none; margin: 0; padding: 0; font: 18px var(--pixel-font); }
-#questlog .ql-steps li { padding: 2px 0; }
-#questlog .ql-steps .ic { display: inline-block; width: 20px;  }
-#questlog .ql-steps .done { color: #6f8f3a; text-decoration: line-through; }
-#questlog .ql-steps .now { color: #2a1f10;  }
-#questlog .ql-steps .now .ic { color: #d97a00; }
-#questlog .ql-steps .todo { color: #9a8a64; }
-#questlog .ql-bar { position: relative; height: 14px; margin: 3px 0 2px 20px; background: #3a2a10; border-radius: 3px; overflow: hidden; max-width: 260px; }
-#questlog .ql-bar div { height: 100%; background: linear-gradient(#9be564, #4f8f2a); }
-#questlog .ql-bar span { position: absolute; inset: 0; text-align: center; font: 18px/14px var(--pixel-font); color: #fff; text-shadow: 2px 2px #000; }
-#questlog .ql-now { color: #6b4a22; }
-#questlog .ql-reward { display: flex; gap: 12px; flex-wrap: wrap; font: 18px var(--pixel-font); }
-#questlog .ql-trackrow { display: block; margin-top: 10px; font: 18px var(--pixel-font); cursor: pointer; }
-#questlog .ql-none { font: 18px var(--pixel-font); }
-#questlog .bang { color: #d97a00; }
-#questlog .help { text-align: right; font: 18px var(--pixel-font); color: #7a6a44; margin: 6px 0 0; }
-@media (max-width: 600px) { #questlog .ql-body { flex-direction: column; } #questlog .ql-list { flex: none; } }
 
 /* Tracker: steps, progress bar, direction */
 #questtracker { cursor: pointer; pointer-events: auto; }

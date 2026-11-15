@@ -223,7 +223,7 @@ export class NpcLayer {
     this.addSurroundings(scene);
     this.objects = new QuestObjects(scene);
     this.rumours.onEnd = (e) => this.onRumourEnd(e);
-    this.log.rumours = { html: () => this.rumours.logHtml(), active: () => !!this.rumours.current() };
+    this.log.rumours = { html: () => this.rumours.logHtml(), active: () => !!this.rumours.current(), count: (hero) => { const st = this.rumours.st; return !st ? undefined : tutorialDone(hero) && !this.rumours.current() ? st.offers.filter((o) => !o.done).length : 0; } }; // offers Mags would give now (her dialog's gate); none received yet: no badge
   }
 
   /** A rumour ended (server "rumour" end): banner in the pixel lettering, and the outro as a story card when it was solved. */

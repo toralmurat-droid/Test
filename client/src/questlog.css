@@ -1,0 +1,74 @@
+/* Quest log (J), client/src/questlog.ts. Bronze frame comes inline from plateArt("elite"), like the side panel.
+   Fonts only per pixelfont.css: title 22, text 18, tiny 12. `html body` beats the shared panel rules in menus.css. */
+html body #questlog { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 21; pointer-events: auto;
+  width: min(860px, calc(100% - 24px)); max-height: calc(100% - 230px); display: flex; flex-direction: column; box-sizing: border-box;
+  padding: 2px 10px 10px; color: #eadfc8; font: 18px/1.35 var(--pixel-font); filter: drop-shadow(0 6px 10px rgba(0, 0, 0, .7)); }
+html body #questlog[hidden] { display: none; }
+#questlog .ql-head { display: flex; align-items: center; gap: 18px; flex: none; border-bottom: 2px solid #3a2a18; padding-bottom: 4px; margin: 0 0 8px; }
+#questlog h2 { margin: 0 10px 0 0; font: 22px var(--title-font); color: #ffd98a; letter-spacing: 0; text-align: left; border: 0; padding: 0; }
+#questlog .ql-tabs { display: flex; gap: 18px; }
+html body #questlog .ql-tab { border: 0; border-image: none; background: none; padding: 2px 4px; color: #a8977a; font: 18px var(--pixel-font); cursor: pointer; text-shadow: 2px 2px #050302; }
+html body #questlog .ql-tab:hover { color: #ffd98a; filter: none; }
+html body #questlog .ql-tab.on { color: #ffd98a; box-shadow: inset 0 -2px #e3bf6a; }
+#questlog .ql-tab small { color: #7a6a52; margin-left: 4px; }
+html body #questlog .ql-close { margin-left: auto; border: 0; border-image: none; background: none; padding: 0 2px; line-height: 0; cursor: pointer; }
+html body #questlog .ql-close:hover { filter: brightness(1.4); }
+#questlog .ql-body { display: grid; grid-template-columns: 270px minmax(0, 1fr); gap: 16px; min-height: 0; flex: 0 1 auto; overflow: hidden; }
+#questlog .ql-list, #questlog .ql-detail { overflow-y: auto; min-height: 0; padding-right: 6px; scrollbar-width: thin; scrollbar-color: #6b4c22 #120d08; }
+#questlog .ql-story { display: flex; justify-content: space-between; align-items: center; color: #e3bf6a; margin: 8px 0 2px; white-space: nowrap; }
+#questlog .ql-story:first-child { margin-top: 0; }
+#questlog .ql-story small { color: #a8977a; }
+#questlog .ql-item { display: flex; align-items: center; gap: 6px; padding: 2px 4px; cursor: pointer; color: #d8ccb4; white-space: nowrap; }
+#questlog .ql-item:hover { color: #ffd98a; }
+#questlog .ql-item.sel { background: #2a1d10; box-shadow: inset 3px 0 #e3bf6a; color: #ffd98a; }
+#questlog .ql-item.done { color: #7a6a52; }
+#questlog .ql-item:not(.tracked):not(.done) .ql-name { opacity: .75; }
+#questlog .ql-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#questlog .ql-lv { font: 12px var(--tiny-font); color: #7a6a52; flex: none; }
+#questlog .ql-tick { flex: none; width: 14px; height: 14px; display: inline-flex; }
+#questlog .ql-tick .pxi { width: 14px; height: 14px; margin: 0; opacity: .6; }
+/* the tracking diamond: filled = tracked, hollow = not (drawn, so no font glyph is needed) */
+#questlog .ql-dia { flex: none; width: 14px; height: 14px; display: inline-grid; place-items: center; cursor: pointer; }
+#questlog .ql-dia i { width: 8px; height: 8px; transform: rotate(45deg); box-sizing: border-box; border: 2px solid #8a6a34; background: none; }
+#questlog .ql-dia.on i { border-color: #e3bf6a; background: #ffd98a; }
+#questlog .ql-dia:hover i { border-color: #ffd98a; }
+#questlog .ql-next { margin: 10px 0 0; color: #a8977a; }
+#questlog .ql-none { margin: 0; color: #a8977a; }
+#questlog .bang { color: #ffb030; font-weight: normal; }
+
+#questlog .ql-title { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+#questlog h3 { margin: 0; font: 22px var(--title-font); color: #ffd98a; letter-spacing: 0; }
+html body #questlog .ql-detail > h3 { font: 22px var(--title-font); }
+html body #questlog .ql-detail h3 { font-size: 22px; font-family: var(--title-font); color: #ffd98a; }
+#questlog .ql-meta { color: #a8977a; margin: 2px 0 8px; }
+#questlog .ql-detail p { margin: 0 0 10px; line-height: 1.35; }
+html body #questlog h4 { font: 18px var(--pixel-font); color: #e3bf6a; letter-spacing: 0; margin: 10px 0 4px; }
+html body #questlog .ql-trk { display: inline-flex; align-items: center; gap: 6px; flex: none; padding: 0 8px; border: 2px solid #6b4c22; border-image: none; background: #1a120b;
+  color: #a8977a; font: 18px var(--pixel-font); cursor: pointer; text-shadow: 2px 2px #050302; }
+html body #questlog .ql-trk.on { border-color: #a8823a; color: #ffd98a; }
+html body #questlog .ql-trk:hover { filter: brightness(1.25); }
+#questlog .ql-obj { display: grid; grid-template-columns: minmax(0, 1fr) 150px; gap: 10px; align-items: center; margin: 3px 0; color: #f0e0b8; }
+#questlog .ql-obj.todo { color: #6d6250; }
+#questlog .ql-obj.done { color: #8fae6a; }
+#questlog .ql-bar { position: relative; height: 18px; background: #120c06; box-shadow: 0 0 0 1px #080504, 0 0 0 2px #4a3a22; }
+#questlog .ql-bar div { position: absolute; inset: 0 auto 0 0; background: linear-gradient(#5fae4a, #3d7e2e); }
+#questlog .ql-obj.done .ql-bar div { background: #3f5a2a; }
+#questlog .ql-bar span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font: 12px var(--tiny-font); color: #fff; }
+#questlog .ql-bar .pxi { width: 14px; height: 14px; margin: 0; }
+#questlog .ql-reward { display: flex; gap: 16px; flex-wrap: wrap; color: #f0e0b8; }
+#questlog .ql-reward .pxi { width: 16px; height: 16px; vertical-align: -4px; margin: 0 4px 0 0; }
+#questlog .ql-acts { display: flex; gap: 8px; margin-top: 12px; }
+html body #questlog .ql-map { border: 2px solid #6b4c22; border-image: none; background: #1a120b; padding: 0 8px; color: #eadfc8; font: 18px var(--pixel-font); cursor: pointer; text-shadow: 2px 2px #050302; }
+html body #questlog .ql-map:hover { border-color: #a8823a; color: #ffd98a; filter: none; }
+
+/* the Rumours page (rumours.ts logHtml) keeps its own markup */
+#questlog .ql-steps { list-style: none; margin: 0; padding: 0; }
+#questlog .ql-steps li { padding: 2px 0; }
+#questlog .ql-steps .ic { display: inline-block; width: 20px; }
+#questlog .ql-steps .ic .pxi { width: 14px; height: 14px; vertical-align: -2px; margin: 0; }
+#questlog .ql-steps .done { color: #8fae6a; }
+#questlog .ql-steps .now { color: #f0e0b8; }
+#questlog .ql-steps .now .ic { color: #e3bf6a; }
+#questlog .ql-now { color: #c9a45a; }
+#questlog .ql-detail .ql-bar { margin: 3px 0 2px; max-width: 260px; }
+#questlog .ql-away { color: #a8977a; }
