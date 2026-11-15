@@ -12,7 +12,7 @@
  * one tile wider on each side.
  */
 export const SALT_TOWN = { x: 125, y: 168, w: 36, h: 31 };
-/** The flagstone harbour square on the sand between the two piers: Saltmere's safe zone (shared/map.ts SALT_SAFE). */
+/** The cobbled harbour square on the sand between the two piers: Saltmere's safe zone (shared/map.ts SALT_SAFE). */
 export const SALT_SQUARE = { x: 135, y: 188, w: 12, h: 7 };
 /** The beach lane's row, and the columns of the two piers out over the water (the Harbour Street pier is the east one). */
 export const SALT_LANE = 186;

@@ -41,7 +41,7 @@ test("saltmere: the harbour square is a safe zone inside the village, flagstones
     assert.ok(inRect(SALT_TOWN, x, y), `square tile ${x},${y} in Saltmere`);
     assert.equal(areaAt((x + 0.5) * TILE, (y + 0.5) * TILE), "Saltmere");
     assert.ok(isSafeZone((x + 0.5) * TILE, (y + 0.5) * TILE), `safe at ${x},${y}`);
-    assert.equal(GROUND[y][x], T.FLAGS, `flagstones at ${x},${y}`);
+    assert.equal(GROUND[y][x], T.COBBLE, `cobbles at ${x},${y}`);
     assert.ok(noMobsAt((x + 0.5) * TILE, (y + 0.5) * TILE));
   }
   // just outside, on every side, it is not

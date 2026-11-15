@@ -586,8 +586,8 @@ function buildWorld() {
     road(px - 1, cy + 4, 3, 1);
     setO(px + 1, cy - 1, T.BARREL); setO(px - 1, cy - 2, T.CRATE);
   }
-  const SSQ = SALT_SQUARE; // the harbour square: worn flagstones, open to the lane above and the piers either side
-  clearO(SSQ.x, SSQ.y, SSQ.w, SSQ.h); rectG(SSQ.x, SSQ.y, SSQ.w, SSQ.h, T.FLAGS);
+  const SSQ = SALT_SQUARE; // the harbour square: cobbled like Oakvale's (Act 1 paints FLAGS as grass), open to the lane above and the piers either side
+  clearO(SSQ.x, SSQ.y, SSQ.w, SSQ.h); rectG(SSQ.x, SSQ.y, SSQ.w, SSQ.h, T.COBBLE);
   setO(SSQ.x + SSQ.w - 1, SSQ.y + SSQ.h - 1, T.CRATE); setO(SSQ.x + 1, SSQ.y + SSQ.h - 1, T.BARREL);
   for (const [fx, fy] of [[153, 189], [154, 189], ...SALT_RACKS]) setO(fx, fy, T.FENCE); // drying racks: nets on the beach, fish by the smokehouse
   setO(138, 183, T.WELL); setO(129, 189, T.CAMPFIRE); setO(131, 183, T.BARREL); setO(132, 183, T.CRATE); setO(159, 183, T.HAY);

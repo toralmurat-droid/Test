@@ -20,7 +20,7 @@ Work branch: `claude/wizardly-franklin-nedywr`. Shipped in two PRs:
 |---|---|---|
 | 1 | Coastal sound bed (surf, gulls by day, rigging, bell buoy), optional `saltmere-tune.mp3` slot | done |
 | 2 | Harbour props: moored boats, rowboats, bell buoy, lobster pots, mooring posts, breakwater; gulls | done |
-| 3 | Layout (`shared/saltmere.ts`, `shared/map.ts`): tavern, chandlery, smokehouse, 3 cottages, Upper Lane, Harbour Street, flagstone harbour square = safe zone, jetties at Gullrock and Heronwreck | done |
+| 3 | Layout (`shared/saltmere.ts`, `shared/map.ts`): tavern, chandlery, smokehouse, 3 cottages, Upper Lane, Harbour Street, cobbled harbour square = safe zone, jetties at Gullrock and Heronwreck | done |
 | 3b | Building art: tavern and smokehouse styles, signs, smoke, quay edge | done |
 | 4 | Respawn at the nearer town; second stash chest on the square (same account stash) | done |
 | 5 | People: Bess Tanner (smokehouse), Hob Wick (chandler shop), Marta (tavern), Agna (net-mender), Pell (after the Redfang chain); fisherfolk routines; town reacts to the Redfang chain | done (racks/lanterns reacting per hero: not done) |
@@ -100,3 +100,5 @@ Work branch: `claude/wizardly-franklin-nedywr`. Shipped in two PRs:
   Tests: `tests/ferry.test.ts`. Not done (client): Pell's dialog / jetty prompt with the stop list and fee, the oars and
   bell sound for `ev: "ferry"`, a `ferryno` float text, and the arrival look (today `why` set gives the dark-red quest
   fade in `client/src/TownScene.ts`).
+- 2026-11-15: the harbour square is COBBLE, not FLAGS: Act 1's iso ground painter draws FLAGS as dark grass (on purpose,
+  for the war camps), so the square was invisible in game. Oakvale's square is COBBLE too.
