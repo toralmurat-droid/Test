@@ -1,5 +1,6 @@
 {
   "date": "2026-11-15",
+  "patch": 264,
   "title": "A tidier hero panel and item cards",
   "changes": [
     "The Character, Inventory and Skills panel is narrower and has a bronze frame. Your stats show once, on the Character tab, with colours, and each attribute says in one line what a point gives you.",
