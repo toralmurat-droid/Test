@@ -5,7 +5,8 @@
 import { heroValor, STANDARD, standardAt, isClan, nextOathAt } from "../shared/war/standards";
 import type { ClanKey } from "../shared/war/clans";
 import { RENOWN_RANKS, rankOf } from "../shared/war/renown";
-import { addValor } from "./war";
+import { rallyRenown } from "../shared/war/rules";
+import { addValor, warState } from "./war";
 
 export interface WarHero { clan?: ClanKey; clanAt: number; dead: boolean; level: number; x: number; y: number; lastAct: number; renown: number }
 export interface ClanView { clan: ClanKey | ""; next: number; minLevel: number; renown: number }
@@ -46,7 +47,8 @@ export class Presence {
       const n = e && e.std === s.id ? e.n + 1 : 1;
       if (n >= 60) {
         const v = heroValor(p.level, s.t), was = rankOf(p.renown);
-        if (addValor(s.t, p.clan!, v)) p.renown += v; // effort the war counted earns the hero renown (shared/war/renown.ts)
+        // effort the war counted earns the hero renown (shared/war/renown.ts), more while the war rallies for their clan
+        if (addValor(s.t, p.clan!, v)) p.renown += v * rallyRenown(warState(), p.clan);
         const rank = rankOf(p.renown);
         if (rank > was) ranked.push([id, RENOWN_RANKS[rank].name]);
         this.secs.set(id, { std: s.id, n: 0 });

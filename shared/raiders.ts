@@ -108,4 +108,7 @@ export const NIGHT_RAID = {
   charge: { min: 50, max: 160, ms: 800, speed: 2.1, mult: 1.6, cooldownMs: 3500 },
   /** Its massive weapon sweeps: everyone this close to the one it hits takes `mult` of the blow */
   cleave: { r: 30, mult: 0.6 },
+  /** While they hunt the war's leading clan (shared/war/rules.ts huntedClan): extra prey score for its sworn heroes and
+   *  its soldiers and carts (about a third of the sight range's worth of closeness) */
+  huntPrey: 0.35,
 };

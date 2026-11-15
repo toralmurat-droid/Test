@@ -57,6 +57,7 @@
 #bountypanel .wr-head { margin-top: 12px; padding-top: 6px; border-top: 2px solid #6b5a3a; }
 #bountypanel .wr-row { padding-left: 8px; }
 #bountypanel .wr-renown { color: #e9c35a; }
+#bountypanel .wr-rally { color: #9fe07a; }
 #bountypanel .wr-valor { color: #c9a0ff; }
 #bountypanel .wr-say { color: #c9b89a; font-size: 18px; font-family: var(--pixel-font); margin-top: 2px; }
 #bountypanel .wr-err { color: #ff8a6a; font-size: 18px; font-family: var(--pixel-font); margin: 4px 0; }

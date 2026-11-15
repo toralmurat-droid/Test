@@ -590,3 +590,40 @@ Sims (`npx tsx tools/balance/war.ts 200 30 [--clever=host]`):
   Grey Ring capital (orchestrator's call, 2026-11-15) gives the other clans a foothold in the moors and fixes both.
   Capitals for all four other clans in the moors overshot (Host 11.7%, ruse no gain).
 - Open: the moors' war is quiet (one gate, one owner); Weeping Stones / Drowned Hollow / Host's Muster still have no quest.
+
+## M2: Night Raiders hunt the leading clan; Rally for the weakest (2026-11-15)
+
+- Rules and numbers in `shared/war/rules.ts` (`WAR`), so the live war and `tools/balance/war.ts` run the same brakes:
+  - `huntedClan(owner)`: a clan over `leaderShare` (30%, ahead of the next), or at least `huntShare` (26%) and `huntLead`
+    (2) territories ahead of every other. `nightRaid(s, phase)`: by night (phase 2) the Night Raiders strike `huntLands`
+    (2) of its non-capital border lands, weakest Control first (then most pressed, then lowest id): each loses
+    `huntControl` (4) Control, and the hunted army loses `raidersHit` (3%, as before, which used to need over 30%).
+  - `rallyClan(owner)`: the clan with the least land when that is under `rallyBelow` (0.8) x a fair share; a tie goes to
+    CLAN_KEYS order (the smaller army would hand it back and forth). Its heroes' valor counts `rallyValor` (1.3) in
+    `warTick` before `valorForce` (so `valorCap` still caps a crowd); renown at standards and for troop kills grows
+    `rallyRenown` (1.25) times (`rallyRenown()` in `server/warHeroes.ts`, `server/warTroops.ts`); its writs pay
+    `WRIT.rallyClan` (1.25) times on top of the old underdog bonus (`writRally`). The income rally (`WAR.rally`) is unchanged.
+- Live (`server/war.ts`): `tickOnce` reads `nightRaid` before `warTick` (like the tunnel strikes) and keeps the struck lands
+  in memory (`lastRaided`, not saved). Listeners get a third argument `WarNews` `{raid?, rally?}`; `attachWar` sends a
+  Herald line and `warraid` `{clan, ts}` for a raid, a Herald line when the Rally passes or ends. The room tells sworn
+  heroes of the newly rallied clan what it means (`rallyTell`), and on login. `WarView` gained optional `hunt`, `raided`,
+  `rally` (message only, no schema field). The writ board view has `rally: true` for the rallied clan's sworn.
+- In the room the riders hunt too: `NIGHT_RAID.huntPrey` (0.35) extra prey score for the hunted clan's sworn heroes and
+  its soldiers and carts (`raiderPrey`).
+- Client: `warraid` -> horn and notice in a struck land (`warNotice.ts`, the existing horn), plaque line ("Night Raiders
+  struck here" / "The Night Raiders hunt its holder" / "Rally for ..."), war table: violet dashed ring on struck lands,
+  "hunted" / "Rally" after the clan in the legend; bounty board: a Rally line over the writs. No new sfx `ev`.
+- Saves: none changed. Schema: none changed.
+- Sim, 200 wars x 30 days, no players, before -> after (avg / most land): Wardens 21.6/23.8 -> 21.7/26.2, Redfang
+  21.9/28.6 -> 21.9/28.6, Host 21.4/23.8 -> 21.4/23.8, Hide-Kin 15.7/21.4 -> 15.7/21.4, Veiled 19.3/21.4 -> 19.4/21.4;
+  flips 2.04 -> 2.00 a day; domination (one clan over 30% for over 3 days) 0.0% -> 0.0%. The Raiders hunt on 4.5% of
+  night ticks (always Redfang); the Rally is on 43.5% of ticks for the Hide-Kin, 5.8% for the Veiled.
+  Ruses (`--clever`), clan's land with the ruse before -> after: Host 22.7 -> 22.6%, Redfang 21.2 -> 21.2%, Hide-Kin
+  15.6 -> 15.6%, Wardens 19.5 -> 20.1%; domination 0.0% throughout.
+- New sim flags: `--zeal=<clan|all>[:valor]` (sworn heroes add that valor a tick at the clan's main target) and
+  `--old-brakes` (the brakes before this change) to see the brakes with players. 100 x 30, old -> new brakes: Redfang
+  carried by players (30 valor) 24.6% -> 24.2%, hunted on 25% of nights; a crowd for Redfang (200) 25.0% -> 24.5%; every
+  clan's heroes alike (30 each): Hide-Kin 14.9% -> 15.5%, Redfang 24.5% -> 24.1%. Flips per day rise with the brakes on
+  under zeal (5.8 -> 7.7): the struck borders change hands more. Domination 0.0% in every run.
+- Open: the exit criterion "live" needs days of live play to check (the live war runs the same rules). The brakes rarely
+  bite without players (no clan gets far ahead); they matter once players carry a clan.

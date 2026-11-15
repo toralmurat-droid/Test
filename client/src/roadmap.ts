@@ -66,7 +66,7 @@ export const MILESTONES: Milestone[] = [
       { name: "Swear to a clan, tabards, Renown ranks", owner: "Gameplay + Art", status: "done", note: "Oaths, Renown ranks and clan pennants on name tags live" },
       { name: "War writs on bounty boards, caravans on supply roads", owner: "Gameplay + Narrative", status: "done" },
       { name: "War table map (world map overlay)", owner: "Client & UI", status: "done" },
-      { name: "Night Raiders hunt the leading clan; Rally for the weakest", owner: "Gameplay Engineers", status: "later" },
+      { name: "Night Raiders hunt the leading clan; Rally for the weakest", owner: "Gameplay Engineers", status: "done", note: "Raiders strike the leader's borders by night; the weakest clan's heroes rally" },
       { name: "Clan troops and holds for all five clans", owner: "Art Director", status: "done", note: "Troops fight on the server; painted soldiers, carts and Holds live" },
     ],
   },

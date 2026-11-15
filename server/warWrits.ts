@@ -10,7 +10,7 @@ import { caravanLines, type CaravanLine } from "../shared/war/caravans";
 import { nearestBoard } from "../shared/bounty";
 import { CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import { RENOWN_RANKS, rankOf } from "../shared/war/renown";
-import type { WarState } from "../shared/war/rules";
+import { rallyClan, type WarState } from "../shared/war/rules";
 import { STANDARD } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
 import { clanOfIndex, type WarView } from "../shared/war/view";
@@ -35,8 +35,8 @@ export interface WritHost {
   save(id: string): void;
 }
 
-/** Server -> client "writ". `active` null = no writ; `left` = writs the hero may still finish today. */
-export interface WritMsg { board?: string; offers?: Writ[]; active?: WritState | null; left?: number; note?: string; done?: Writ & { valor: number }; err?: string }
+/** Server -> client "writ". `active` null = no writ; `left` = writs the hero may still finish today; `rally`: the war rallies for the hero's clan (its writs pay more). */
+export interface WritMsg { board?: string; offers?: Writ[]; active?: WritState | null; left?: number; note?: string; done?: Writ & { valor: number }; err?: string; rally?: true }
 
 export const SWEAR_FIRST = "Swear to a clan at a standard to take war writs.";
 
@@ -65,6 +65,7 @@ export class WarWrits {
     if (!sworn) out.note = SWEAR_FIRST;
     else if (!left) out.note = `You have finished ${WRIT.perDay} war writs today. New ones at dawn (UTC).`;
     else if (board && war) out.offers = writOffers(war, p.clan!, p.level, actOfTile(Math.floor(board.x / TILE), Math.floor(board.y / TILE)), war.tick + this.doneToday(p, now));
+    if (sworn && war && rallyClan(war) === p.clan) out.rally = true;
     return out;
   }
 

@@ -21,7 +21,8 @@ import { RENOWN_RANKS, rankOf } from "../shared/war/renown";
 import { TERRITORIES } from "../shared/war/territories";
 import { columnLead, parseTroop, troopLevel, troopStats, troopName, troopStance, troopWeapon, WAR_TROOPS, type TroopStance } from "../shared/war/troops";
 import type { WarView } from "../shared/war/view";
-import { addValor, warNow } from "./war";
+import { rallyRenown } from "../shared/war/rules";
+import { addValor, warNow, warState } from "./war";
 
 /** The parts of a hero this module reads (TownRoom's Player). */
 export interface TroopHero { name: string; clan?: ClanKey; level: number; x: number; y: number; dead: boolean; renown: number }
@@ -126,7 +127,7 @@ export class WarTroops {
     if (add <= 0) return out;
     this.valor.set(p.name, { tick: v.tick, n: used + add });
     const was = rankOf(p.renown);
-    if (addValor(tr.t, p.clan, add)) p.renown += add; // effort the war counted earns renown, as at the standards (server/warHeroes.ts)
+    if (addValor(tr.t, p.clan, add)) p.renown += add * rallyRenown(warState(), p.clan); // effort the war counted earns renown, as at the standards (server/warHeroes.ts)
     const rank = rankOf(p.renown);
     if (rank > was) this.h.ranked(killerId, RENOWN_RANKS[rank].name);
     return out;
