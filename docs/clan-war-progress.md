@@ -642,3 +642,51 @@ Sims (`npx tsx tools/balance/war.ts 200 30 [--clever=host]`):
 - Marshal Varro's idle line reworded. The armourer's and healer's shop greetings (`shared/shops.ts`) were already written.
 - Tests: `tests/badlands-quests.test.ts` (shape, and the whole chain start to finish).
 - Not done: Vulture's Roost and Rattlesnake Gulch have no quest; the war land (Redfang territories in Act 4) is still to come.
+
+## NL-5: the Red Badlands at war (2026-11-15, PR #446)
+The badlands are the second homeland at war after the acts: Redfang fights from home, as the Host does on the moors (NL-3).
+- `shared/war/regions.ts`: "badlands" (The Red Badlands, W, home `redfang`) now has `contains: actOfTile === 4` and one
+  capital, the Redfang seat at **Fangrock** (the clan's stockade in the far west). `REGION_LINKS` gains **The Red Pass**
+  (`REDPASS_OAKVALE` <-> `REDPASS_BADLANDS`): Mirror Pond <-> The Saltlick Flats.
+- With the homeland built, `capitalsOf` drops Redfang's forward capitals (Redfang Hollow, Dustrider Camp): ordinary
+  territories now. Only the Hide-Kin's forward capitals (Thornwood, the Humpback Mesas) are left.
+- Sanctuaries: Fangrock Keep is Old Rourke's alone (boss-only, a lair like the Barrow-King's Mound), the open badlands are
+  `wild`. The Rustwater Post lies outside every zone (a no-mob area): a safe hub out of the war, like Cairnwatch.
+- 52 territories: Oakvale 21, Sunscar 10, moors 11, badlands 10 (ids 42-51; Acts 1-3 keep ids 0-41, so active writs keep
+  their ids): Saltlick Flats, Drovers' Draw, the Hanging Arches, the Cinnabar Pits, Bloodstone Mesa, Talon Fort, Vulture's
+  Roost, Rattlesnake Gulch, Gallows Canyon, Fangrock. A new war starts 11/11/10/10/10 (Wardens, Veiled / Host, Hide-Kin,
+  Redfang). Golden fingerprint in `tests/warregions.test.ts` refreshed on purpose.
+- Saved war: `migrateWar` by name, as for the moors: Acts 1-3 keep holder, Control, forts, sieges, pressure, the leaders'
+  targets and the log; the badlands start at Control 100 with Redfang (home clan; Fangrock its capital); Redfang Hollow and
+  Dustrider Camp keep their holder. `server/war.ts` `PRE_BADLANDS_NAMES` (frozen, the moors-era 42) joins
+  `PRE_MOORS_NAMES` in `OLD_MAPS`, so an unnamed save of either old size is remapped too (saves on the moors map are all
+  named, so this is a fallback). The old save is kept as `war-old-<ms>`.
+- Writs: the Rustwater board (act 4) offers badlands writs (it came back empty before). On a new war Redfang gets hold /
+  clear writs at home, the Wardens raid writs over the Red Pass; clans with no way in get none there until they reach it.
+- `shared/badlands.ts` (area:map): the "Talon Fort" area (and so its zone and territory) now takes 4 tiles of ground
+  round the stockade, like Redfang Hollow's: the bare 18x14 stockade had no room for a war Hold (5x5 clear ground away
+  from the standard's ring), and with no Hold no patrol, ritual circle or tunnel mouth. Borders, the golden fingerprint
+  and the sims are the same either way; `tools/map-metrics.ts`: the badlands stay 100% reachable.
+- Client: nothing new needed; the war table already draws every built land and link (a dashed box, the Red Pass's line
+  from each territory to its gate with a diamond and the name) and the world map has an Act 4 view.
+- `tests/warbrakes-room.test.ts`: the opening map no longer rallies for anyone (too even), so the Rally room tests build
+  a war where the Hide-Kin lost land to the Wardens.
+
+Sims (`npx tsx tools/balance/war.ts 200 30 [--clever=<clan>]`):
+
+| clan | before avg / most | badlands, Redfang only (final) |
+|---|---|---|
+| Wardens | 21.7% / 26.2% | 21.3% / 25.0% |
+| Redfang | 21.9% / 28.6% | 17.9% / 21.2% |
+| Ossuary Host | 21.4% / 23.8% | 19.1% / 19.2% |
+| Hide-Kin | 15.7% / 21.4% | 19.3% / 26.9% |
+| Veiled Circle | 19.4% / 21.4% | 22.4% / 25.0% |
+
+- Flips per war day 2.00 -> 3.21; domination 0.0% before and after. Night Raiders 4.5% -> 0.1% of night ticks; the Rally
+  43.5% -> 8.0% of ticks for the Hide-Kin, 5.8% -> 0.2% for the Veiled.
+- Unlike the moors, Redfang did not jump (it shrank: its Oakvale and Sunscar land went to the others at the start), so no
+  foothold capital for another clan was added. Ruses, with vs without: Redfang 18.4% vs 17.9% (pays; before 21.2 vs 21.9),
+  Host 19.2 vs 19.1 (before 22.6 vs 21.4), Hide-Kin 18.3 vs 19.3, Wardens 18.2 vs 21.3, Veiled 20.0 vs 22.4; domination
+  0.0% in every run.
+- Open: like the moors, the badlands meet the rest at one gate, so their war is quiet; Vulture's Roost and Rattlesnake
+  Gulch still have no quest.

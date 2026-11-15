@@ -90,7 +90,8 @@ Only the classes in `ACTIVE_CLASSES` can be played. Archived classes keep their 
 - **Act 4 — the Red Badlands** (`shared/badlands.ts`): the Redfang clan's homeland of red mesas, canyons
   and dry riverbeds (levels 25-40), reached through the Red Pass at Oakvale's west edge once a hero reaches level 25.
   The Rustwater Post holds out with a portal stone, a bounty board and shops; Marshal Hesk Varro's chain climbs
-  through Talon Fort and Gallows Canyon to Old Rourke in Fangrock Keep. The badlands' place in the clan war comes next.
+  through Talon Fort and Gallows Canyon to Old Rourke in Fangrock Keep. The badlands are a land of the clan war, joined to
+  Oakvale by the Red Pass, with Fangrock as the Redfang seat.
 - **Dungeons** (`shared/dungeon.ts`): the Mawdeep, the Lantern Crypt and the Undercity.
 - **Quests** (`shared/quests.ts`): zone quest arcs in both acts, quest bosses (some only at night).
 - **Bounty boards** (`shared/bounty.ts`): pick a hunt for your level, paid when the last kill lands.

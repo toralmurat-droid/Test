@@ -1,7 +1,7 @@
 /**
  * The war table (roadmap M2): a layer on the world map (M, "War table" button) that tints every war territory in its
  * holder's colours, marks capitals and flashes lands under siege. The lands (shared/war/regions.ts) get a dashed outline
- * and a name, the ways between them (the Waygate, the Barrowgate) a dashed line to the gate in each land. Cosmetic: it draws the server's "war" snapshot.
+ * and a name, the ways between them (the Waygate, the Barrowgate, the Red Pass) a dashed line to the gate in each land. Cosmetic: it draws the server's "war" snapshot.
  */
 import { CLANS, CLAN_KEYS } from "../../shared/war/clans";
 import { REGIONS } from "../../shared/war/regions";

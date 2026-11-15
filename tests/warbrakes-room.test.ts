@@ -13,6 +13,15 @@ import { _resetWar } from "../server/war";
 import { startRoom, wait } from "./helpers/room";
 
 const freshWar = (state: WarState = newWar()) => { _resetWar({ v: 1, state, minds: newMinds(), next: Date.now() + 1e9, log: [] }); return state; };
+/**
+ * A war where the Hide-Kin have lost land to the Wardens until the war rallies for them (the opening map is too even
+ * for a Rally since the badlands joined: 11/11/10/10/10).
+ */
+function rallyWar(): WarState {
+  const s = newWar();
+  for (const t of TERRITORIES) { if (rallyClan(s)) break; if (s.owner[t.id] === "hidekin" && !t.capitalOf) s.owner[t.id] = "wardens"; }
+  return s;
+}
 let seq = 0;
 /** onJoin as an account through a fake client (test rooms skip onAuth), like tests/moors.test.ts; collects what it is sent. */
 function fakeJoin(room: any, name: string) {
@@ -25,7 +34,7 @@ test("Rally (room): a hero sworn to the weakest clan hears it on login, others d
   const { login, saveHero } = await import("../server/accounts");
   const { dropLive } = await import("../server/handoff");
   const srv = await startRoom();
-  const state = freshWar(), r = rallyClan(state)!;
+  const state = freshWar(rallyWar()), r = rallyClan(state)!;
   assert.ok(r, "the opening map rallies for someone");
   const other = CLAN_KEYS.find((k) => k !== r)!;
   const name = `Rallier${process.pid % 1000}`;
@@ -52,7 +61,7 @@ test("Rally (room): a hero sworn to the weakest clan hears it on login, others d
 
 test("Rally (room): the writ view carries rally for the rallied clan's sworn at a board", async () => {
   const srv = await startRoom();
-  const state = freshWar(), r = rallyClan(state)!;
+  const state = freshWar(rallyWar()), r = rallyClan(state)!;
   try {
     const c = await srv.join({ cls: "wizard" });
     await wait(200);

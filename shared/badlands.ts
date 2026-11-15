@@ -405,7 +405,7 @@ export function buildBadlands(T: BadlandsTiles, ground: number[][], objects: num
     A("The Red Pass", G.x - G.rx, G.y - G.ry, G.rx * 2, G.ry * 2),
     A("Fangrock Keep", FK.x, FK.y, FK.w, FK.h),
     A("Fangrock", F.x, F.y, F.w, F.h),
-    A("Talon Fort", TF.x, TF.y, TF.w, TF.h),
+    A("Talon Fort", TF.x - 4, TF.y - 4, TF.w + 8, TF.h + 8), // the stockade and the ground round it (like Redfang Hollow): room for a war Hold outside the walls
     A("Vulture's Roost", V.x - V.r - 2, V.y - V.r - 2, V.r * 2 + 5, V.r * 2 + 5),
     A("The Cinnabar Pits", P.x - P.rx - 2, P.y - P.ry - 2, P.rx * 2 + 4, P.ry * 2 + 4),
     A("The Hanging Arches", HA.x - HA.rx - 2, HA.y - HA.ry - 2, HA.rx * 2 + 4, HA.ry * 2 + 4),

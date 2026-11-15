@@ -11,17 +11,18 @@ function rng(seed: number) { return () => { seed = (seed * 1103515245 + 12345) &
 
 test("war map: every capital is a territory, borders are two-way, and every territory is reachable", () => {
   for (const [n, c] of capitalsOf(builtRegions(TERRITORIES))) assert.equal(territoryByName(n)?.capitalOf, c.clan, `${c.clan} capital ${n}`);
-  // one capital per built land, but the Host (at home in the moors only: its forward capitals stepped down) and the
-  // Wardens (also the Cairnwatch garrison's Grey Ring)
-  for (const k of CLAN_KEYS) assert.deepEqual(TERRITORIES.filter((t) => t.capitalOf === k).map((t) => t.region).sort(), k === "host" ? ["moors"] : k === "wardens" ? ["moors", "oakvale", "sunscar"] : ["oakvale", "sunscar"], k);
+  // one capital per built land, but the Host and Redfang (at home in the moors / the badlands only: their forward
+  // capitals stepped down) and the Wardens (also the Cairnwatch garrison's Grey Ring)
+  const caps: Partial<Record<string, string[]>> = { host: ["moors"], redfang: ["badlands"], wardens: ["moors", "oakvale", "sunscar"] };
+  for (const k of CLAN_KEYS) assert.deepEqual(TERRITORIES.filter((t) => t.capitalOf === k).map((t) => t.region).sort(), caps[k] ?? ["oakvale", "sunscar"], k);
   for (const t of TERRITORIES) {
     assert.ok(t.near.length > 0, `${t.name} has no neighbour`);
     for (const n of t.near) assert.ok(TERRITORIES[n].near.includes(t.id), `${t.name} <-> ${TERRITORIES[n].name}`);
   }
   const seen = new Set([0]), todo = [0];
   while (todo.length) for (const n of TERRITORIES[todo.pop()!].near) if (!seen.has(n)) { seen.add(n); todo.push(n); }
-  assert.equal(seen.size, TERRITORIES.length, "all three acts form one connected war map");
-  for (const a of [1, 2, 3]) assert.ok(TERRITORIES.some((t) => t.act === a), `Act ${a} is at war`);
+  assert.equal(seen.size, TERRITORIES.length, "all four acts form one connected war map");
+  for (const a of [1, 2, 3, 4]) assert.ok(TERRITORIES.some((t) => t.act === a), `Act ${a} is at war`);
 });
 
 test("sanctuaries stay out of the war: dungeons, boss lairs and wild zones", () => {
