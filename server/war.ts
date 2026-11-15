@@ -113,11 +113,22 @@ export const PRE_MOORS_NAMES: readonly string[] = ["North Meadow", "Goldenreach 
   "Saltwind Coast", "The Glasswind Flats", "Palmshade Oasis", "Jackal Springs", "Dustrider Camp", "Kharsun, the Buried City",
   "The Humpback Mesas", "The Saffron Dunes", "Mirage Wells", "The Veiled Sanctum", "The Thornspire Heights"];
 
+/**
+ * The war map before the Red Badlands joined it (2026-11-15), with the moors, in id order: PRE_MOORS_NAMES and the 11
+ * moors territories. Saves on this map are named, so this only reads an unnamed save of its size. Frozen: never edit it.
+ */
+export const PRE_BADLANDS_NAMES: readonly string[] = [...PRE_MOORS_NAMES, "The Grey Ring", "Sorrow Mire", "Thane's Rest", "The Cairnfield",
+  "Blackwater Fen", "The Hollow Mounds", "The Drowned Hollow", "The Nine Widows", "The Weeping Stones", "Kingsbarrow", "The Host's Muster"];
+/** Older maps an unnamed save may have been written on, told apart by size (a size is never reused). */
+const OLD_MAPS = [PRE_MOORS_NAMES, PRE_BADLANDS_NAMES];
+
+/** The names an unnamed save of `n` territories was written with: today's map, else an older map of that size. */
+const unnamed = (n: number, names: readonly string[]) => (n === names.length ? names : OLD_MAPS.find((m) => m.length === n));
+
 /** The saved war read for today's map, or undefined when it cannot be (malformed, or an unnamed save of an unknown size). */
 function load(got: Saved | undefined): Saved | undefined {
   if (!wellFormed(got)) return undefined;
-  const names = namesNow(), n = got.state.owner.length;
-  const old = got.names ?? (n === names.length ? names : n === PRE_MOORS_NAMES.length ? PRE_MOORS_NAMES : undefined);
+  const names = namesNow(), old = got.names ?? unnamed(got.state.owner.length, names);
   return old && migrateWar(got, old, names);
 }
 
@@ -132,7 +143,7 @@ export async function startWar(store?: Kv) {
     if (got) await kv.set(`${KEY}-old-${Date.now()}`, got); // a war that cannot be read: kept aside, not lost
     console.log(got ? "War: the saved war cannot be read or mapped to this map, a new war begins (old one kept)" : "War: a new war begins");
   } else {
-    const old = got!.names ?? (got!.state.owner.length === PRE_MOORS_NAMES.length ? PRE_MOORS_NAMES : undefined);
+    const old = got!.names ?? unnamed(got!.state.owner.length, war.names!);
     if (old && (old.length !== war.names!.length || old.some((n, i) => n !== war.names![i]))) {
       await kv.set(`${KEY}-old-${Date.now()}`, got); // the map changed: the remapped war goes on, the old save is kept aside
       const kept = war.names!.filter((n) => old.includes(n)).length;

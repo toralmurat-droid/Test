@@ -9,6 +9,7 @@
 import { actOfTile } from "../constants";
 import { WAYGATE_DESERT, WAYGATE_OAKVALE } from "../desert";
 import { MOORSGATE_MOORS, MOORSGATE_OAKVALE } from "../moors";
+import { REDPASS_BADLANDS, REDPASS_OAKVALE } from "../badlands";
 import type { ClanKey } from "./clans";
 
 export type RegionKey = "oakvale" | "sunscar" | "moors" | "badlands" | "sinkholes" | "crown";
@@ -53,8 +54,13 @@ export const REGIONS: Region[] = [
     { clan: "host", zone: "The Host's Muster" },
     { clan: "wardens", zone: "The Grey Ring" }, // the Cairnwatch garrison holds the ring by the outpost (like Palmshade Oasis in the Sunscar)
   ] },
+  // Redfang's homeland (Act 4): its seat is Fangrock, the clan's stockade in the far west (Old Rourke's keep inside is a
+  // lair, not a territory). Built, so Redfang Hollow and Dustrider Camp step down to ordinary territories (capitalsOf).
+  // The Rustwater Post lies outside every zone: a safe hub, out of the war like Cairnwatch.
+  { key: "badlands", name: "The Red Badlands", compass: "W", home: "redfang", contains: (x, y) => actOfTile(x, y) === 4, capitals: [
+    { clan: "redfang", zone: "Fangrock" },
+  ] },
   // Planned: no map yet (a homeland's capitals come with its zones)
-  { key: "badlands", name: "The Red Badlands", compass: "W", home: "redfang", capitals: [] },
   { key: "sinkholes", name: "The Mawdeep Sinkholes", compass: "S", home: "hidekin", capitals: [] },
   { key: "crown", name: "The Crown of the Marches", compass: "C", capitals: [] },
 ];
@@ -63,6 +69,7 @@ export const REGIONS: Region[] = [
 export const REGION_LINKS: RegionLink[] = [
   { a: "oakvale", b: "sunscar", name: "The Waygate", pa: WAYGATE_OAKVALE, pb: WAYGATE_DESERT },
   { a: "oakvale", b: "moors", name: "The Barrowgate", pa: MOORSGATE_OAKVALE, pb: MOORSGATE_MOORS },
+  { a: "oakvale", b: "badlands", name: "The Red Pass", pa: REDPASS_OAKVALE, pb: REDPASS_BADLANDS },
 ];
 
 /** The land a tile lies in (built lands only). */

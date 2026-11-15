@@ -22,6 +22,15 @@ function withLand(k: ClanKey, n: number): WarState {
   return s;
 }
 const count = (s: WarState, k: ClanKey) => s.owner.filter((o) => o === k).length;
+/**
+ * A new war where the Hide-Kin have lost land to the Wardens just until the war rallies for them: the opening map is too
+ * even for a Rally since the badlands joined (11/11/10/10/10), and one more land lifts them over the line again.
+ */
+function rallyWar(): WarState {
+  const s = newWar();
+  for (const t of TERRITORIES) { if (rallyClan(s)) break; if (s.owner[t.id] === "hidekin" && !t.capitalOf) s.owner[t.id] = "wardens"; }
+  return s;
+}
 
 /** Owners only, from counts per clan in CLAN_KEYS order (the shares are what huntedClan / rallyClan read). */
 const split = (...n: number[]) => ({ owner: CLAN_KEYS.flatMap((k, i) => Array<ClanKey>(n[i]).fill(k)) });
@@ -87,10 +96,11 @@ test("rallyClan: the clan with the least land under rallyBelow x a fair share; t
 });
 
 test("Rally: the weakest clan's valor pushes harder (still capped by valorCap), others' does not change", () => {
-  const base = newWar(), r = rallyClan(base)!;
-  assert.ok(r, "the opening map rallies for someone");
+  assert.equal(rallyClan(newWar()), undefined, "the opening map is even: no Rally");
+  const base = rallyWar(), r = rallyClan(base)!;
+  assert.equal(r, "hidekin");
   const t = targetsOf(base, r).find((x) => !TERRITORIES[x].capitalOf)!;
-  const war = () => { const s = newWar(); s.army[s.owner[t]] = 0; return s; };
+  const war = () => { const s = rallyWar(); s.army[s.owner[t]] = 0; return s; };
   const push = (v: number, mult: number) => {
     const was = WAR.rallyValor; WAR.rallyValor = mult;
     try { return warTick(war(), {}, { phase: 0, valor: TERRITORIES.map((_, i) => (i === t ? { [r]: v } : {})) }).control[t]; } finally { WAR.rallyValor = was; }
@@ -100,7 +110,8 @@ test("Rally: the weakest clan's valor pushes harder (still capped by valorCap), 
 });
 
 test("writs: the rallied clan's writs pay WRIT.rallyClan more on top of the underdog bonus", () => {
-  const s = newWar(), r = rallyClan(s)!;
+  const s = rallyWar(), r = rallyClan(s)!;
+  assert.ok(r);
   const fair = N / CLAN_KEYS.length, under = 1 + WRIT.rally * Math.max(0, 1 - count(s, r) / fair);
   assert.equal(writRally(s, r), under * WRIT.rallyClan);
   for (const k of CLAN_KEYS) if (k !== r) assert.equal(writRally(s, k), 1 + WRIT.rally * Math.max(0, 1 - count(s, k) / fair));
@@ -145,7 +156,7 @@ test("live war: a night tick against a runaway clan strikes, tells the room and 
 });
 
 test("live war: the Rally is announced when it ends (or passes to another clan)", async () => {
-  const at = 8_000_000_000_000, state = newWar(), r = rallyClan(state)!;
+  const at = 8_000_000_000_000, state = rallyWar(), r = rallyClan(state)!;
   assert.ok(r && count(state, r) + 1 >= WAR.rallyBelow * (N / CLAN_KEYS.length), "one more land lifts the opening's weakest over the line");
   // a siege the weakest clan has due on a land nobody defends: it falls to them this tick
   const L = targetsOf(state, r).find((t) => !TERRITORIES[t].capitalOf && count(state, state.owner[t]) - 1 > count(state, r) + 1)!;
@@ -162,7 +173,8 @@ test("live war: the Rally is announced when it ends (or passes to another clan)"
 });
 
 test("presence: a hero sworn to the rallied clan earns rallyRenown x renown at a standard", () => {
-  const s = newWar(), r = rallyClan(s)!;
+  const s = rallyWar(), r = rallyClan(s)!;
+  assert.ok(r);
   _resetWar({ v: 1, state: s, minds: newMinds(), next: Date.now() + 1e9, log: [] });
   const std = STANDARDS.find((x) => s.owner[x.t] === r || targetsOf(s, r).includes(x.t))!;
   const other = CLAN_KEYS.find((k) => k !== r && (s.owner[std.t] === k || targetsOf(s, k).includes(std.t)));

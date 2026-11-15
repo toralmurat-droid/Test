@@ -134,7 +134,7 @@ test("badlands: the Red Pass leaves the rest of Act 1 exactly as it was", () => 
   assert.equal(h.digest("hex"), "cd632f8234d253511383dcce66d0f24010c5a0cabb197e48b8d244c9c2dd1c80");
 });
 
-test("badlands: Lv 25-40 climbing west, the Red Pass opens at Lv 25, no war there yet", () => {
+test("badlands: Lv 25-40 climbing west, the Red Pass opens at Lv 25, a war land of their own", () => {
   assert.equal(baseLevelAt(REDPASS.x, BR(REDPASS.y)), 25);
   assert.ok(baseLevelAt(FANGROCK.x + 10, BR(FANGROCK.y + 10)) >= 37, "Fangrock: the top of the band");
   assert.ok(baseLevelAt(140, BR(90)) > baseLevelAt(220, BR(90)), "higher further west");
@@ -158,10 +158,11 @@ test("badlands: Lv 25-40 climbing west, the Red Pass opens at Lv 25, no war ther
   assert.deepEqual(HOMELAND_GATES.map((h) => [h.act, h.level]), [[3, 20], [4, 25]]);
   assert.ok(actOpen(1, undefined) && actOpen(4, { level: 25 } as never) && !actOpen(4, { level: 24 } as never) && !actOpen(5, { level: 50 } as never));
   for (const act of [1, 2, 3, 4]) { const q = actSpawn(act, randomSpawn); assert.equal(actAt(q.y, q.x), act, `act ${act} spawn`); }
-  // no war in the badlands until their land is built: no region holds a badlands tile, no zone or territory there yet
-  assert.equal(regionOf(REDPASS.x, BR(REDPASS.y)), undefined);
-  assert.equal(REGIONS.find((r) => r.key === "badlands")!.contains, undefined);
-  assert.ok(!TERRITORIES.some((t) => t.act === 4));
+  // the war reaches the badlands as a land of their own (shared/war/regions.ts): every Act 4 territory is in it, none elsewhere
+  assert.equal(regionOf(REDPASS.x, BR(REDPASS.y))?.key, "badlands");
+  assert.ok(REGIONS.find((r) => r.key === "badlands")!.contains);
+  assert.ok(TERRITORIES.some((t) => t.act === 4), "the badlands are at war");
+  for (const t of TERRITORIES) assert.equal(t.region === "badlands", t.act === 4, t.name);
   assert.ok(SPAWN_ZONES.some((z) => actOfTile(z.x, z.y) === 4), "its own monster zones (tests/badlands-zones.test.ts)");
 });
 
