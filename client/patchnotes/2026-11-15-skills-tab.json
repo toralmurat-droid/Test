@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-15",
+  "title": "Skills tab without the second details box",
+  "changes": [
+    "A skill's details now show only in its hover card; the box under or beside the tree is gone, so the Skills tab fits on smaller screens without scrolling."
+  ]
+}

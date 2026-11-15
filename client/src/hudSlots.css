@@ -61,5 +61,5 @@ body #partyask { bottom: calc(170px * var(--barzoom, 1)); }
 body #musicpanel { bottom: calc(52px * var(--barzoom, 1)); }
 body #patchnotice { bottom: calc(56px * var(--barzoom, 1)); }
 /* the side panel and the centred panels stop above the (larger) bar and its level medallion; same as before at 100% */
-body.orbhud-on #sidepanel { max-height: calc(100% - 205px * var(--barzoom, 1)); }
+body.orbhud-on #sidepanel { max-height: calc(100% - 130px * var(--barzoom, 1)); } /* down to just above the mana orb (112 px + its 2 px lift + a gap) */
 body #tradepanel, body #stashpanel, body #bountypanel, body #partypanel { max-height: calc(100% - (200px * var(--barzoom, 1) - 90px)); }
