@@ -19,9 +19,9 @@ Work branch: `claude/wizardly-franklin-nedywr`. Shipped in two PRs:
 | # | Phase | Status |
 |---|---|---|
 | 1 | Coastal sound bed (surf, gulls by day, rigging, bell buoy), optional `saltmere-tune.mp3` slot | done |
-| 2 | Harbour props: moored boats, rowboats, bell buoy, lobster pots, mooring posts, breakwater; gulls | todo |
+| 2 | Harbour props: moored boats, rowboats, bell buoy, lobster pots, mooring posts, breakwater; gulls | done |
 | 3 | Layout (`shared/saltmere.ts`, `shared/map.ts`): tavern, chandlery, smokehouse, 3 cottages, Upper Lane, Harbour Street, flagstone harbour square = safe zone, jetties at Gullrock and Heronwreck | done |
-| 3b | Building art: tavern and smokehouse styles, signs, smoke, quay edge | todo |
+| 3b | Building art: tavern and smokehouse styles, signs, smoke, quay edge | done |
 | 4 | Respawn at the nearer town; second stash chest on the square (same account stash) | todo |
 | 5 | People: Bess Tanner (smokehouse), Hob Wick (chandler shop), Marta (tavern), Agna (net-mender), Pell (after the Redfang chain); fisherfolk routines; town reacts to the Redfang chain | todo |
 | 6 | Side arc "Saltmere Ways" (Lv 16-19): Smoke and Salt, The Watch-Fire | todo |
@@ -42,3 +42,14 @@ Work branch: `claude/wizardly-franklin-nedywr`. Shipped in two PRs:
   day, pier creaks and hull knocks within 6 tiles of a pier in Saltmere, a distant bell buoy). Music: optional
   `saltmere` track (`/assets/music/saltmere-tune.mp3`), `SALT_TOWNS` in `client/src/music.ts`; without the file
   Saltmere keeps the village tune. Not yet listened to in a browser: volumes untuned.
+- 2026-11-15: phases 2 and 3b done (client only, nothing in `shared/` or `server/`). Harbour props are in
+  `client/src/saltmereArt.ts` (called from `addWorldProps`): smacks at the pier heads (bobbing), rowboats on the sand, bell
+  buoy, mooring posts and lobster pots on the piers, breakwater boulders, the quay edge along the square's south side,
+  fish drying on `SALT_RACKS`. Positions come from the map (piers = BRIDGE runs from `SALT_PIERS` / `JETTY_RUNS`, boulders on
+  shore-touching water tiles, rowboats on beach sand) plus `shared/saltmere.ts`. Gulls (pooled, 8) live in
+  `client/src/ambient.ts` (`updateGulls`): perch on roof ridges and pier posts, wheel over the harbour, only near the
+  camera and by day. Buildings: `isobuild.ts` matches each house to `SALT_BUILDINGS` by footprint and picks the new
+  `HouseStyle`s `tavern` / `smokehouse` / `chandlery` (`houseLife.ts` + `houseSalt.ts`: hanging signs, lit panes, bench and
+  barrels, ropes and lanterns, soot, smoking fish, woodpile; roof louvre on the smokehouse). The small registries in
+  `client/src/saltmereReg.ts` (perches, smoke, night glow) connect the pieces without import cycles; the lamp glow and
+  the smokehouse plume are driven from `Ambient`. Screenshots: `docs/art/saltmere-*.png`.
