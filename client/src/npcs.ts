@@ -23,6 +23,7 @@ import { conceptTextures } from "./questConceptArt";
 import { TILE } from "../../shared/constants";
 import { ISO } from "./isoflag";
 import { routeVia } from "../../shared/dungeon";
+import { ferryOpen } from "../../shared/ferry";
 import { actAt, waygateById, WAYGATES } from "../../shared/act2";
 import type { MapMarker } from "./minimap";
 import { QuestLog } from "./questlog";
@@ -356,6 +357,8 @@ export class NpcLayer {
   get isOpen() { return !!this.talking || !!this.choice; }
   /** Another prompt (a loot chest) has the spot this frame. */
   hidePrompt = false;
+  /** Pell's "Take Pell's boat" button: the scene opens the ferry list (client/src/ferry.ts). */
+  onFerry?: () => void;
 
   /** E key: use the quest object you stand next to, talk to the NPC next to you, or close the dialog. */
   /** A villager speaks (server `chat` from `npc:<id>`): a speech bubble over its sprite for a few seconds. */
@@ -681,7 +684,7 @@ export class NpcLayer {
       (p.options?.length ? this.optionsHtml(p.options) : "") +
       (n.id === "captain" ? this.mentorHtml(q) : "") +
       `<div class="nd-btns">${p.accept ? `<button class="nd-accept">${p.accept}</button>` : ""}` +
-      `${n.shop ? `<button class="nd-trade">Trade</button>` : ""}<button class="nd-bye">${p.bye} <kbd>E</kbd></button></div>`;
+      `${n.shop ? `<button class="nd-trade">Trade</button>` : ""}${n.id === "pell" && ferryOpen(q) ? `<button class="nd-ferry">Take Pell's boat</button>` : ""}<button class="nd-bye">${p.bye} <kbd>E</kbd></button></div>`;
     const acc = this.dialog.querySelector<HTMLButtonElement>(".nd-accept");
     if (acc) acc.onclick = () => { this.send("quest", { chain: p.chain }); acc.disabled = true; };
     const mb = this.dialog.querySelector<HTMLButtonElement>(".nd-mbtn");
@@ -690,6 +693,8 @@ export class NpcLayer {
     if (p.options?.length) this.bindOptions(p.chain, p.options);
     const trade = this.dialog.querySelector<HTMLButtonElement>(".nd-trade");
     if (trade) trade.onclick = () => { this.trading = true; this.stage = -1; };
+    const ferry = this.dialog.querySelector<HTMLButtonElement>(".nd-ferry");
+    if (ferry) ferry.onclick = () => { this.close(); this.onFerry?.(); };
     this.dialog.querySelector<HTMLButtonElement>(".nd-bye")!.onclick = () => this.close();
   }
 

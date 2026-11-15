@@ -42,6 +42,8 @@ const TRACKS: Track[] = [
   { id: "village", name: "Village tune", url: "/assets/music/village-tune.mp3", withSounds: true },
   { id: "country", name: "Countryside tune", url: "/assets/music/countryside-tune.mp3" },
   { id: "village-sounds", name: "Village sounds", ambience: true },
+  // Act 1, Saltmere (optional: without the file Saltmere plays the village tune)
+  { id: "saltmere", name: "Saltmere tune", url: "/assets/music/saltmere-tune.mp3", optional: true },
   // Act 2, the Sunscar (optional until Murat's mp3s are added; file names in docs/music/act2-prompts.md)
   { id: "second-sun", name: "Song of the Second Sun", url: "/assets/music/song-of-the-second-sun.mp3", optional: true },
   { id: "kel-ashar", name: "Kel Ashar tune", url: "/assets/music/kel-ashar-tune.mp3", withSounds: true, desert: true, optional: true },
@@ -71,6 +73,8 @@ const BURIED = ["Kharsun, the Buried City", "The Veiled Sanctum"];
 const FURNACE = "The Sun Furnace";
 const UNDEAD = ["skeleton", "skeletonmage", "necromancer", "sanddead", "wight", "bonehound", "mistwraith", "legionary", "cairnlord", "barrowking"];
 const FIGHT = ["slime", "shooterblob", "warriorblob", "healerblob", "motherblob", "bandit", "venomblob", "frostblob", "fireblob", "stormblob", "nomad", "scorpion", "veiled", "camelfolk", "sphinx", "sunwright", "nightraider", "boghag", "outrider", "crossbowman", "firebrand", "warhound", "vulture", "rattler", "redcaptain", "rourke", "delver", "cackler", "stagkin", "quillback", "stitcher", "sinkworm", "hidechief", "mawfather"];
+/** Act 1 fishing village with its own optional tune (falls back to the village tune). */
+const SALT_TOWNS = ["Saltmere"];
 const TOWNS = ["Oakvale", "Market Square", "Chapel of the Dawn", "The Rusty Tankard", "The Smithy", "Saltmere", "Hunter's Camp"];
 
 const FADE_IN = 2.5;
@@ -330,7 +334,8 @@ export function setMusicZone(zone: string | undefined, mobs: Partial<Record<stri
   } else {
     zoneName = zone;
     zoneBattle = actOneBattle;
-    calm = !zone && (TOWNS.includes(area) || (actNowRaw === 3 && MOORS_TOWNS.includes(area)) || (actNowRaw === 4 && BADLANDS_TOWNS.includes(area)) || (actNowRaw === 5 && SINKHOLES_TOWNS.includes(area))) ? "village" : "country";
+    const saltTune = !zone && actNowRaw === 1 && SALT_TOWNS.includes(area) ? firstOf("saltmere") : null;
+    calm = saltTune ?? (!zone && (TOWNS.includes(area) || (actNowRaw === 3 && MOORS_TOWNS.includes(area)) || (actNowRaw === 4 && BADLANDS_TOWNS.includes(area)) || (actNowRaw === 5 && SINKHOLES_TOWNS.includes(area))) ? "village" : "country");
   }
   // Back to the valley while the theme plays: it fades with the calm change below
   if (actNow !== act) { act = actNow; if (arrival === "playing") arrival = "done"; }

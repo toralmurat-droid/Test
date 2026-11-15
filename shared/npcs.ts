@@ -103,6 +103,13 @@ export const NPCS: Npc[] = [
   { id: "ilka", name: "Ilka", title: "Net-mender", sprite: "ilka", ...standNear(234, 113), dir: "right", where: "outside the Redfang fence, by the west gate" },
   { id: "quartermaster", name: "Wynn", title: "Quartermaster of the Watch", sprite: "quartermaster", x: 91.1 * TILE, y: 59.4 * TILE, dir: "left", shop: "watch", where: "Oakvale, beside Captain Hale" },
   { id: "smuggler", name: "Marin", title: "Smuggler", sprite: "smuggler", x: 156.5 * TILE, y: 191.6 * TILE, dir: "left", shop: "smuggler", where: "Saltmere, on the beach east of the piers" },
+  // Saltmere's people (docs/saltmere-rework-progress.md phase 5), on the Upper Lane in front of their doors, at the net
+  // racks on the beach, and at the Harbour Street pier. Placeholder sprites: existing sheets, no new art.
+  { id: "smoker", name: "Bess Tanner", title: "Smokehouse keeper", sprite: "farmwife", x: 155.5 * TILE, y: 176.6 * TILE, dir: "left", where: "Saltmere, by the smokehouse door" },
+  { id: "chandler", name: "Hob Wick", title: "Chandler", sprite: "miller", x: 142.5 * TILE, y: 176.6 * TILE, dir: "up", shop: "chandler", where: "Saltmere, at the chandlery door" },
+  { id: "marta", name: "Marta", title: "Keeper of the Gull & Anchor", sprite: "alewife", x: 135.5 * TILE, y: 176.6 * TILE, dir: "up", where: "Saltmere, at the tavern door" },
+  { id: "agna", name: "Agna", title: "Net-mender", sprite: "goodwife", x: 153.5 * TILE, y: 190.6 * TILE, dir: "up", where: "Saltmere, at the net racks on the beach" },
+  { id: "pell", name: "Pell", title: "Garrick's grandson", sprite: "labourer", x: 148.5 * TILE, y: 197.6 * TILE, dir: "down", where: "Saltmere, at his boat by the Harbour Street pier" },
   // Tavern Rumours: Mags sells ale off her cart at the square's south-west corner, by the crates and barrels, and hears
   // everything (shared/rumours.ts, server/rumours.ts)
   { id: "alewife", name: "Mags", title: "Alewife", sprite: "alewife", x: 77.4 * TILE, y: 64.75 * TILE, dir: "down", where: "Oakvale, at her ale-cart on the square" },
@@ -181,6 +188,11 @@ export const BUSKING_LINES: Record<string, string> = {
   armourer: "My stall has been quiet all morning. Your tune has the whole square lingering.",
   captain: "Hymns and jigs, fine. Play a sour note near the gate and we will have words.",
   fisher: "You play like my mother sang. Thank you for that.",
+  // Saltmere (Pell is left out: he is only there for some heroes)
+  marta: "A tune at my door! Play on, and the first bowl is on the house.",
+  smoker: "Careful, the cod will start swaying. Play on, minstrel, the smoke likes it.",
+  chandler: "Rope and tallow, and now a song. That's a fair morning's trade.",
+  agna: "My mother sang that while she mended. My hands know the rhythm. Thank you.",
 };
 
 /**

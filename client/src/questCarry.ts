@@ -8,8 +8,8 @@ import { pixelText } from "./pixeltext";
 import { chainState, questStep } from "../../shared/quests";
 import type { MapMarker } from "./minimap";
 
-/** The lantern's quest object (shared/quests.ts LAST_LANTERN): its take-spot copy is hidden while the lantern is out. */
-export const LANTERN_OBJECT = "lantern_last";
+import { carryHiddenId } from "./carryHide";
+export { LANTERN_OBJECT } from "./carryHide";
 /** The drop key follows no layout: Z is free in both (client/src/keymode.ts). */
 export const DROP_KEY = "Z";
 /** Hotbar tooltip lead-in while the lantern is carried (cosmetic: the server blocks the skills). */
@@ -135,8 +135,8 @@ export class QuestCarry {
     this.bannerTimer = setTimeout(() => this.banner.classList.remove("show"), 3800);
   }
 
-  /** Every frame: lantern over its holder or on the ground, Odo's bar, the drop button. True while the take-spot lantern should be hidden. */
-  update(me: string, ent: (id: string) => Ent | undefined): boolean {
+  /** Every frame: lantern over its holder or on the ground, Odo's bar, the drop button. Returns the id of the take-spot object to hide while a lantern is out (undefined when none). */
+  update(me: string, ent: (id: string) => Ent | undefined): string | undefined {
     this.hero = ent(me)?.state;
     if (this.expire("carry", this.carry)) this.carry = undefined;
     if (this.expire("hold", this.hold)) this.hold = undefined;
@@ -161,7 +161,7 @@ export class QuestCarry {
       g.fillStyle(0x3a0f0a).fillRect(x - w / 2, y, w, 3);
       g.fillStyle(f > 0.35 ? 0xd8603a : 0xff3d2e).fillRect(x - w / 2, y, Math.round(w * f), 3);
     }
-    return !!c;
+    return c ? carryHiddenId(this.hero, c.chain) : undefined;
   }
 
   private checkpoints() { const u = this.unseen; return u ? questStep(this.lastQ(u.chain))?.unseen?.checkpoints ?? [] : []; }
