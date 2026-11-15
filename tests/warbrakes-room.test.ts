@@ -35,7 +35,7 @@ test("Rally (room): a hero sworn to the weakest clan hears it on login, others d
   const { dropLive } = await import("../server/handoff");
   const srv = await startRoom();
   const state = freshWar(rallyWar()), r = rallyClan(state)!;
-  assert.ok(r, "the opening map rallies for someone");
+  assert.ok(r, "rallyWar() gives a Rally");
   const other = CLAN_KEYS.find((k) => k !== r)!;
   const name = `Rallier${process.pid % 1000}`;
   try {

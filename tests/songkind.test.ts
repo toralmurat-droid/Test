@@ -7,7 +7,7 @@ import { newRuntime, playableProgs, statusOf, type Unit } from "../shared/skillE
 import { chordProgress, NOTES, PROGRESSIONS, songKind, type Degree } from "../shared/songs";
 import { isSafeZone, isSolidAt, VILLAGE } from "../shared/map";
 import { TILE } from "../shared/constants";
-import { startRoom, wait } from "./helpers/room";
+import { startRoom, until, wait } from "./helpers/room";
 
 const allRanks = () => cleanRanks("songweaver", 30, Object.fromEntries(SKILLS.songweaver.map((s) => [s.id, 1])));
 
@@ -89,14 +89,12 @@ test("room: the synced fx shows ch1, ch2 and then chlock as Amen (vi IV I) is pl
     const fx = () => String(c.state.players.get(c.sessionId).fx).split(",");
     const again = () => { p.sk.last = {}; p.attackReadyAt = 0; };
     srv.room.cast(c.sessionId, "sg_pedal"); // vi
-    await wait(200);
-    assert.ok(fx().includes("ch1"), `after vi: ${fx()}`);
+    // the client copy of fx lags a patch or two; under a loaded full run 200 ms was not always enough
+    assert.ok(await until(() => fx().includes("ch1"), 3000), `after vi: ${fx()}`);
     again(); srv.room.cast(c.sessionId, "sg_mend"); // IV
-    await wait(200);
-    assert.ok(fx().includes("ch2"), `after vi IV: ${fx()}`);
+    assert.ok(await until(() => fx().includes("ch2"), 3000), `after vi IV: ${fx()}`);
     again(); srv.room.cast(c.sessionId, "sg_ballad"); // I: Amen fires
-    await wait(200);
-    assert.ok(fx().includes("chlock"), `after the chord: ${fx()}`);
+    assert.ok(await until(() => fx().includes("chlock"), 3000), `after the chord: ${fx()}`);
     assert.ok(!fx().includes("ch2"));
   } finally { await c.leave(); await wait(50); }
 });
