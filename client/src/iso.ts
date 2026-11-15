@@ -30,7 +30,8 @@ import { hiResTexture } from "./smooth";
 import { uprightTexture, UPRIGHT_OY } from "./smoothProps";
 import { ADOBE_PAD, ADOBE_WALL_H, adobeHead, adobeTexture, adobeWallTexture, bonesTexture, CLIFF_DEPTH, cliffDistance, cliffHeight, cliffTexture, cliffVariant, deadTreeTexture, desertRockTexture, sunStoneTexture, tentTexture } from "./desertArt";
 import { D, FURNACE, SUNSTONE } from "../../shared/desert";
-import { DESERT_H, DESERT_Y0 } from "../../shared/constants";
+import { DESERT_H, DESERT_Y0, MOORS_Y0 } from "../../shared/constants";
+import { barrowTexture, birchTexture, boneHeapTexture, graniteCliffTexture, origin, standingStoneTexture } from "./moorsArt";
 
 export const isoX = (x: number, y: number) => x - y;
 export const isoY = (x: number, y: number) => (x + y) / 2;
@@ -704,10 +705,14 @@ export function isoStanding(scene: Phaser.Scene, objects: number[][]): number[][
   const at = (x: number, y: number) => (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H ? -1 : objects[y][x]);
   const cdist = cliffDistance(objects.map((r) => r.map(id)), T.CLIFF, MAP_W, DESERT_Y0, DESERT_Y0 + DESERT_H, CLIFF_DEPTH + 1);
   const cd = (x: number, y: number) => (x < 0 || x >= MAP_W || y < DESERT_Y0 || y >= DESERT_Y0 + DESERT_H ? 9 : cdist[(y - DESERT_Y0) * MAP_W + x]);
+  const M0 = MOORS_Y0 - 4; // Act 3's band (shared/moors.ts)
+  const mdist = cliffDistance(objects.map((r) => r.map(id)), T.CLIFF, MAP_W, M0, MAP_H, CLIFF_DEPTH + 1);
+  const md = (x: number, y: number) => (x < 0 || x >= MAP_W || y < M0 || y >= MAP_H ? 9 : mdist[(y - M0) * MAP_W + x]);
   for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
     const index = objects[ty][tx], t = id(index);
     if (t < 0) continue;
-    if ((ty >= WORLD_H && ty < DESERT_Y0) || ty >= DESERT_Y0 + DESERT_H) { out[ty][tx] = -1; continue; } // the Mawdeep's rock: cave walls (dungeon.ts), not rocks; then solid rock to the desert
+    if (ty >= M0 && isoMoors(scene, t, tx, ty, at, md)) { out[ty][tx] = -1; continue; }
+    if ((ty >= WORLD_H && ty < DESERT_Y0) || (ty >= DESERT_Y0 + DESERT_H && ty < M0)) { out[ty][tx] = -1; continue; } // the Mawdeep's rock: cave walls (dungeon.ts), not rocks; then solid rock to the desert
     if (ty >= DESERT_Y0 && isoDesert(scene, t, tx, ty, at, cd)) { out[ty][tx] = -1; continue; }
     const cx = (tx + 0.5) * TILE, cy = (ty + 0.5) * TILE;
     if (houses.has(ty * MAP_W + tx)) { out[ty][tx] = -1; continue; }
@@ -813,6 +818,56 @@ function isoDesert(scene: Phaser.Scene, t: number, tx: number, ty: number, at: (
   }
   if (t === T.ROCK) { staticObj(scene, scene.add.image(cx, cy, desertRockTexture(scene, v)).setOrigin(0.5, DESERT_UPRIGHT_OY).setDepth(cy).setFlipX(v >= 2)); return true; }
   if (t === T.STUMP) { staticObj(scene, scene.add.image(cx, cy, deadTreeTexture(scene, v)).setOrigin(0.5, 46 / 58).setDepth(cy).setFlipX(v >= 2)); return true; }
+  return false;
+}
+
+// ---------- Act 3: the Grey Barrow Moors (shared/moors.ts, art in moorsArt.ts) ----------
+
+/** Sizes of the mounds a run of `len` barrow tiles is cut into: 2 or 3 tiles each, so a long run is several humps. */
+function barrowChunks(len: number): number[] {
+  if (len <= 3) return [len];
+  const r = len % 3, out: number[] = [];
+  for (let i = 0; i < Math.floor((len - (r === 1 ? 4 : r === 2 ? 2 : 0)) / 3); i++) out.push(3);
+  if (r === 1) out.push(2, 2); else if (r === 2) out.push(2);
+  return out;
+}
+/**
+ * Moors objects that stand up: granite crags (the desert's terraced cliffs, recoloured), burial mounds (one long hump per
+ * run of barrow tiles, drawn once from the run's first tile), standing stones, bone heaps and dead birches (STUMP).
+ * Gorse (BUSH) is a tree-like sprite drawn by ambient.ts. Returns false for anything drawn the usual way.
+ */
+function isoMoors(scene: Phaser.Scene, t: number, tx: number, ty: number, at: (x: number, y: number) => number, cd: (x: number, y: number) => number): boolean {
+  const cx = (tx + 0.5) * TILE, cy = (ty + 0.5) * TILE, v = Math.floor(hashXY(tx, ty) * 4);
+  if (t === T.CLIFF) {
+    const d = cd(tx, ty);
+    if (d > CLIFF_DEPTH) return true; // deep inside the massif: the ground paints the rock top
+    const H = (x: number, y: number) => (id(at(x, y)) !== T.CLIFF ? 0 : cliffHeight(Math.min(cd(x, y), CLIFF_DEPTH + 1), x, y));
+    const h = H(tx, ty), deep = (x: number, y: number) => id(at(x, y)) === T.CLIFF && cd(x, y) > CLIFF_DEPTH;
+    const key = graniteCliffTexture(scene, h, (deep(tx, ty + 1) ? 0 : 1) | (deep(tx + 1, ty) ? 0 : 2), cliffVariant(tx, ty));
+    staticObj(scene, scene.add.image(cx, cy, key).setOrigin(0.5, (IH / 2 + h) / (IH + h)).setDepth(cy + d * 0.5));
+    return true;
+  }
+  if (t === T.BARROW) {
+    let x0 = tx, x1 = tx;
+    while (id(at(x0 - 1, ty)) === T.BARROW) x0--;
+    while (id(at(x1 + 1, ty)) === T.BARROW) x1++;
+    let start = x0;
+    for (const n of barrowChunks(x1 - x0 + 1)) {
+      if (tx >= start && tx < start + n) {
+        if (tx !== start) return true; // drawn with the first tile of its hump
+        const hv = hashXY(start * 3 + 1, ty * 7 + 2), mouth = hv < 0.35 ? -1 : n === 2 ? (hv < 0.67 ? 0 : 1) : 1;
+        const s = barrowTexture(scene, n, mouth, 1 + Math.floor(hashXY(start, ty) * 3)), o = origin(s);
+        staticObj(scene, scene.add.image(cx, cy, s.key).setOrigin(o.x, o.y).setDepth(cy));
+        return true;
+      }
+      start += n;
+    }
+    return true;
+  }
+  const place = (s: { key: string; ox: number; oy: number; b: { w: number; h: number } }) => { staticObj(scene, scene.add.image(cx, cy + 4, s.key).setOrigin(s.ox / s.b.w, s.oy / s.b.h).setDepth(cy)); return true; };
+  if (t === T.STANDING_STONE) { const k = hashXY(tx * 5 + 9, ty * 3 + 1); return place(standingStoneTexture(scene, k < 0.12 ? 2 : k < 0.35 ? 1 : 0, 1 + v)); }
+  if (t === T.BONE_PILE) return place(boneHeapTexture(scene, 1 + (v % 3)));
+  if (t === T.STUMP) return place(birchTexture(scene, [0, 1, 2, 0][v], 1 + v));
   return false;
 }
 
