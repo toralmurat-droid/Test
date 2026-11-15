@@ -62,9 +62,8 @@ unique monsters (`Mob.summonFor` is not synced), so every other titled monster i
 "Gloam Tide") show as plain monsters. Songweaver sound hints are in the Alt details, no longer in chat.
 
 ## To do (owner's list)
-- Chat log: a small toggle to hide it (owner, 2026-11-14).
-- War plaque (`warPlaque.ts`, and the war news notice under it, `warNotice.ts`) moves to the **top left** of the screen
-  instead of hiding under the monster plate. Check against the party frame there.
-- Tide tracker ("Tide 104/600 · Blob kills fill it", `tide.ts`) moves into the quest tracker's space in the top-right
-  column, styled like a quest entry.
+- (done, 2026-11-15) Monster plate D (`monsterBar.ts`, `plateArt.ts`).
+- (done, 2026-11-15) Chat log hide toggle (`chatToggle.ts`); war plaque + notice + party frame in `#topleft` (the Heat
+  gauge drops below that column when it reaches down to it); Tide card in `#topright` above the quest tracker.
 - Stray grey "-28" near the HP orb in town: source not found, needs a repro.
+- Named monsters: the client can't tell them from quest targets; a synced Mob flag would.
