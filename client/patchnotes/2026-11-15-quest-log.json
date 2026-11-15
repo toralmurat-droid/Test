@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-15",
+  "title": "A tidier quest log",
+  "changes": [
+    "The quest log has Active, Completed and Rumours tabs. Quests are grouped by story with how far along you are, and long titles show in full when you hover them.",
+    "Each quest shows who gave it, where, its level, every objective with its count in a bar, and its rewards.",
+    "Click the diamond beside a quest to track it on screen and on the map, and press Show on map to open the world map on its objective.",
+    "A skill's details now show only in its hover card, without a second box beside the tree."
+  ]
+}
