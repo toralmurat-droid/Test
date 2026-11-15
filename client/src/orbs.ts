@@ -58,7 +58,7 @@ function drawOrb(ctx: CanvasRenderingContext2D, frac: number, pal: Pal, t: numbe
         // A Songweaver shield (Pedal Point...): a pale glassy pane over the whole orb, a bright rim, and a glint that sweeps round it.
         // Drawn in chunky 2 px steps so it stays pixel art. Only presence is known to the client, so the pane is always full.
         const rim = r > R_IN - 4, a = Math.atan2(dy, dx), sweep = Math.cos(a - t * 1.6);
-        c = mix(c, [190, 226, 255], rim ? 0.55 + 0.3 * Math.max(0, sweep) : 0.16 + 0.05 * Math.sin(t * 2));
+        c = mix(c, [190, 226, 255], rim ? 0.55 + 0.3 * Math.max(0, sweep) : 0.12 + 0.04 * Math.sin(t * 2));
         if (rim && r > R_IN - 2 && sweep > 0.9) c = [255, 255, 255];
         if (!rim && ((x >> 1) + (y >> 1)) % 6 === 0) c = mix(c, [230, 245, 255], 0.22); // faint glass facets
       }

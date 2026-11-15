@@ -4,7 +4,7 @@
 // not production: /tp and /god exist, see devenv.cjs) with SKILL_CAPTURE=1; run `npm run build` first. Needs playwright (or playwright-core, with PLAYWRIGHT_CHROME=/path/to/chrome) and ffmpeg.
 //   OUT=/some/dir npx tsx tools/sw-gallery/capture.ts [groups, comma separated]
 // groups: main (rings, chords, skills, swells, modes), sound (waves, resonance), wren (lute, Wren, materials), other (a second
-// player's view), stills (screenshots), plus the re-shoot groups graded, modes, swells, bar. Default: main,sound,wren,other,stills.
+// player's view), stills (screenshots), plus the re-shoot groups graded, modes, swells, bar, hud (shield on the orb and nameplate, draining gauge, at 1920x1080 and 1366x768). Default: main,sound,wren,other,stills.
 // Env: FPS (clip frames per game second, 20), SLOW (fixed slow-down instead of measured), PORT (2690), ONLY=id,id (re-film just these),
 // WAVE_NTH (another wall candidate), KEEP_GRADE / default strips the colour grade, MAT_MS (time limit for the bone drop). Results land in $OUT with manifest.json (entries are merged by id).
 import { spawn, execFileSync, type ChildProcess } from "node:child_process";
@@ -792,13 +792,74 @@ async function groupBar(SLOW: number) {
   });
 }
 
+// ---- HUD effects of the rework: shield on the health orb, shield mark on another hero's nameplate bar, the draining gauge ----
+
+async function groupHud(SLOW: number) {
+  for (const [W2, H2] of [[1920, 1080], [1366, 768]]) {
+    await run(SLOW, async (r) => {
+      const tag = `${W2}`;
+      const h = await r.heroes("SwHud" + Date.now().toString(36).slice(-5), "songweaver", { w: W2, h: H2, hide: false });
+      const v = await r.heroes("SwHudV" + Date.now().toString(36).slice(-4), "vampire", { w: W2, h: H2, hide: false, zoom: 6 });
+      const s = new Singer(h);
+      for (const x of [h, v]) { await x.send("chat", "/max"); await x.send("chat", "/god"); }
+      await wait(h.real(3000));
+      await s.stage(); await wait(h.real(3000));
+      await v.send("chat", `/tp ${STAGE[0] - 1} ${STAGE[1] + 1}`);
+      await wait(h.real(3000));
+      await camHero(v);
+      const rect = (x: Hero, sel: string) => x.page.evaluate((sel: string) => { const b = document.querySelector(sel)!.getBoundingClientRect(); return { x: Math.max(0, b.left - 10), y: Math.max(0, b.top - 10), width: b.width + 20, height: b.height + 20 }; }, sel);
+      const shot = async (x: Hero, file: string, clipTo?: { x: number; y: number; width: number; height: number }) => { await x.page.screenshot({ path: path.join(OUT, file), ...(clipTo ? { clip: clipTo } : {}) }); };
+      // shield: Pedal Point (a Verse that shields her)
+      await shot(h, `hud_orb_noshield_${tag}_crop.png`, await rect(h, ".orb.hp"));
+      await s.cast("sg_pedal"); await wait(h.real(1200));
+      await still(h, { id: `hud_orb_shield_${tag}`, group: "HUD effects", title: `Health orb with a Pedal Point shield (${W2}x${H2})`, what: "Pedal Point's shield shows as a pale glassy pane and a bright rim on the health orb, and no bubble round her in the world.", source: "client/src/orbs.ts drawOrb (shield) + client/src/skillfx.ts songStatus" });
+      await shot(h, `hud_orb_shield_${tag}_crop.png`, await rect(h, ".orb.hp"));
+      await wait(h.real(300));
+      await shot(h, `hud_orb_shield_${tag}_crop2.png`, await rect(h, ".orb.hp"));
+      // the viewer sees her nameplate mark
+      await still(v, { id: `hud_nameplate_shield_${tag}`, group: "HUD effects", title: `Another hero's shield mark (${W2}x${H2})`, what: "A second player sees the Songweaver with a Pedal Point shield: no bubble, a pale rim round the health bar under her feet.", source: "client/src/skillfx.ts songStatus (shield)" });
+      const cx = { x: W2 / 2 + 95, y: H2 / 2 - 90 }; // the caster stands up and to the right of the viewer, whose camera is centred on it
+      await shot(v, `hud_nameplate_shield_${tag}_crop.png`, { x: cx.x - 110, y: cx.y - 110, width: 220, height: 170 });
+
+      // the draining gauge: fill it, take quick stills of the orb across the swell
+      await s.clean(true);
+      const box = await rect(h, ".orb.mp");
+      const order = ["sg_jig", "sg_shrill", "sg_crack", "sg_mend", "sg_chorale", "sg_anthem", "sg_call", "sg_ballad"];
+      const n0 = await evCount(h, "swell");
+      const tmp = mkdtempSync(path.join(tmpdir(), "swdrain-"));
+      // the page keeps the last 30 frames of the gold orb's canvas with their game time, and stops 900 game ms after the swell
+      await h.page.evaluate(`(() => {
+        const cv = document.querySelector(".orb.mp canvas"), w = window;
+        w.__orbFrames = []; w.__orbStop = 0; w.evs.length = 0;
+        const loop = () => {
+          if (w.evs.some((e) => e.ev === "swell") && !w.__orbStop) w.__orbStop = Date.now() + 900;
+          if (!w.__orbStop || Date.now() < w.__orbStop) { w.__orbFrames.push({ t: Date.now(), u: cv.toDataURL("image/png") }); if (w.__orbFrames.length > 30) w.__orbFrames.shift(); }
+          requestAnimationFrame(loop);
+        };
+        loop();
+      })()`);
+      const turns = ["sg_march", "sg_dirge", "sg_ballad", "sg_march", "sg_dirge"];
+      for (const sk of order) { await h.send("cast", sk); await wait(h.real(300)); }
+      for (let i = 0; i < 40 && (await evCount(h, "swell")) <= 0; i++) { if (i % 6 === 0) await h.send("cast", turns[(i / 6) | 0] ?? "sg_ballad"); else await h.send("attack"); await wait(h.real(300)); }
+      await wait(h.real(1500));
+      const frames: { t: number; u: string }[] = await h.page.evaluate(() => (window as any).__orbFrames);
+      void n0;
+      console.log(`drain frames ${frames.length}`, frames.map((f) => f.t - frames[0].t).join(" "));
+      frames.forEach((f, i) => writeFileSync(path.join(tmp, `k${String(i).padStart(2, "0")}.png`), Buffer.from(f.u.split(",")[1], "base64")));
+      execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-framerate", "1", "-i", path.join(tmp, "k%02d.png"), "-vf", "tile=10x3", "-frames:v", "1", path.join(OUT, `hud_gauge_drain_${tag}.png`)]);
+      addItem({ id: `hud_gauge_drain_${tag}`, file: `hud_gauge_drain_${tag}.png`, kind: "still", group: "HUD effects", title: `Song gauge draining after the swell (${W2}x${H2})`, what: "Consecutive stills of the gold orb across a swell: it runs down instead of vanishing.", source: "client/src/orbs.ts drainLevel" });
+      rmSync(tmp, { recursive: true, force: true });
+    });
+  }
+}
+
 (async () => {
   console.log("output:", OUT);
   // SLOW (env) fixes the slow-down; otherwise it is measured: the browser should draw ~1.3 frames for every clip frame
   const fpsSmall = !process.env.SLOW && groups.some((g) => ["main", "sound", "wren", "other"].includes(g)) ? await measureFps(W, H) : 10;
   const SLOW = process.env.SLOW ? Number(process.env.SLOW) : Math.min(1, Math.max(0.03, fpsSmall / (FPS * 1.3)));
   console.log(`game slowed to x${SLOW.toFixed(3)} (browser drew ${fpsSmall.toFixed(1)} fps at ${W}x${H})`);
-  const fn: Record<string, (s: number) => Promise<void>> = { main: groupMain, sound: groupSound, wren: groupWren, other: (s) => groupOther(s * 0.7), graded: groupGraded, bar: async () => { const f = await measureFps(1920, 1080); await groupBar(Math.max(0.05, Math.min(0.5, f / 8))); }, swells: groupSwells, modes: groupModes, stills: async () => { const f = await measureFps(1920, 1080); await groupStills(Math.max(0.05, Math.min(0.5, f / 8))); } };
+  const fn: Record<string, (s: number) => Promise<void>> = { main: groupMain, sound: groupSound, wren: groupWren, other: (s) => groupOther(s * 0.7), graded: groupGraded, hud: async () => { const f = await measureFps(1366, 768); await groupHud(Math.max(0.05, Math.min(0.5, f / 8))); }, bar: async () => { const f = await measureFps(1920, 1080); await groupBar(Math.max(0.05, Math.min(0.5, f / 8))); }, swells: groupSwells, modes: groupModes, stills: async () => { const f = await measureFps(1920, 1080); await groupStills(Math.max(0.05, Math.min(0.5, f / 8))); } };
   for (const g of groups) { try { await fn[g](SLOW); } catch (e) { console.error(`GROUP ${g} FAILED`, e); } }
   process.exit(0);
 })().catch((e) => { console.error("CAPTURE FAILED", e); process.exit(1); });

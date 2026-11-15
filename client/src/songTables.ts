@@ -36,7 +36,7 @@ export const DEGREE_COLOR: Record<string, number> = { I: 0xff5a5a, bII: 0xff9a3c
 export const degreeColor = (d: string | undefined) => DEGREE_COLOR[d ?? ""] ?? 0xffd24d;
 
 /** Does this status word mean a Songweaver absorb shield? (Drawn on the health orb / nameplate bar, no longer as a bubble in the world.) */
-export const isSongShieldWord = (w: string) => SHIELD_BUFFS.has(w) || (w.startsWith("sg_") && !!skillById(w)?.buff?.shield);
+export const isSongShieldWord = (w: string) => SHIELD_BUFFS.has(w) || !!skillById(w)?.buff?.shield;
 /** True when a status string (`Player.fx`, comma separated) carries a Songweaver shield. */
 export const hasSongShield = (fx: string | undefined) => !!fx && fx.split(",").some(isSongShieldWord);
 

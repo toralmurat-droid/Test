@@ -2674,14 +2674,19 @@ export class SkillFx {
       if (chance(2 + res * 5)) this.p(x + rnd(-6, 6), y + rnd(-1, 1), rnd(2, top), c, { vx: rnd(-8, 8), vz: rnd(4, 14), life: 320, size: 1, size1: 0 });
       if (res >= 3 && chance(3)) this.glow(x, y, top * 0.5, 12, c, 260, 0.45);
     }
-    if (shield && this.ent(this.meId()) !== e) {
-      // Songweaver shield: no bubble in the world any more. Your own shows on the health orb (orbs.ts); another hero gets a pale
-      // glass rim round their nameplate bar (the 14 x 2 bar under the feet, TownScene), with a glint running along it.
-      const bx = xs - 8, by = ys + 2, gl = Math.floor((this.t / 90) % 16);
-      g.fillStyle(0xcfeaff, 0.9).fillRect(bx, by, 16, 1).fillRect(bx, by + 3, 16, 1).fillRect(bx, by + 1, 1, 2).fillRect(bx + 15, by + 1, 1, 2);
-      g.fillStyle(0xffffff, 1).fillRect(bx + gl, by, 2, 1);
-      g.fillStyle(0x9ad1ff, 0.3).fillRect(bx + 1, by + 1, 14, 2);
-    }
+    if (shield) this.shieldMark(e, g);
+  }
+
+  /**
+   * One rule for every absorb shield of every class: no bubble in the world. Your own shows on the health orb (orbs.ts); another
+   * hero gets a pale glass rim round their nameplate bar (the 14 x 2 bar under the feet, TownScene) with a glint running along it.
+   */
+  shieldMark(e: FxEntity, g: Phaser.GameObjects.Graphics) {
+    if (this.ent(this.meId()) === e) return;
+    const bx = Math.round(e.sprite.x) - 8, by = Math.round(e.sprite.y) + 2, gl = Math.floor((this.t / 90) % 16);
+    g.fillStyle(0xcfeaff, 0.9).fillRect(bx, by, 16, 1).fillRect(bx, by + 3, 16, 1).fillRect(bx, by + 1, 1, 2).fillRect(bx + 15, by + 1, 1, 2);
+    g.fillStyle(0xffffff, 1).fillRect(bx + gl, by, 2, 1);
+    g.fillStyle(0x9ad1ff, 0.3).fillRect(bx + 1, by + 1, 14, 2);
   }
 
   // ---- statuses on heroes and monsters -------------------------------------------------------------------
@@ -2749,7 +2754,7 @@ export class SkillFx {
         g.fillStyle(0xffffff, 0.5 + 0.5 * Math.sin(this.t / 40)).fillRect(Math.round(hx) - 2, Math.round(hy - top * 0.5), 4, 1).fillRect(Math.round(hx) - 0.5, Math.round(hy - top * 0.5) - 1.5, 1, 4);
       } else {
         const s = skillById(w);
-        if (!s || s.id === "k_shield") continue; // the shield bubble is drawn by the scene
+        if (!s || s.id === "k_shield") continue; // its guard shows as the nameplate mark (shieldMark), not a bubble
         const pal = PALETTE[s.style], tier = TIER[s.row];
         if (s.type === "Enchant") {
           // Enchanted weapon: sparks of its element on the blade / arrowhead
