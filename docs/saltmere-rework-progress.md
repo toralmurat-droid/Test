@@ -24,7 +24,7 @@ Work branch: `claude/wizardly-franklin-nedywr`. Shipped in two PRs:
 | 3b | Building art: tavern and smokehouse styles, signs, smoke, quay edge | todo |
 | 4 | Respawn at the nearer town; second stash chest on the square (same account stash) | done |
 | 5 | People: Bess Tanner (smokehouse), Hob Wick (chandler shop), Marta (tavern), Agna (net-mender), Pell (after the Redfang chain); fisherfolk routines; town reacts to the Redfang chain | todo |
-| 6 | Side arc "Saltmere Ways" (Lv 16-19): Smoke and Salt, The Watch-Fire | todo |
+| 6 | Side arc "Saltmere Ways" (Lv 16-17): Smoke and Salt, The Watch-Fire | done |
 | 7 | The ferry (`shared/ferry.ts`, `server/ferry.ts`, validated and rate-limited message) | todo |
 
 ## Log
@@ -59,3 +59,17 @@ Work branch: `claude/wizardly-franklin-nedywr`. Shipped in two PRs:
   `letters` choice (law / mercy; plain line before). `idleFor` order: `whenFor`, `moodFor`, `IDLE`. All per hero from
   their own quest state, nothing broadcast. Busking lines for Marta, Bess, Hob and Agna (not Pell: busking ignores
   presence). Tests: `tests/saltmere-people.test.ts`. Not done: fisherfolk routines, Bess's quests (phase 6), the ferry.
+- 2026-11-15: phase 6 done. "Saltmere Ways" is the last of `SIDE_ARCS` (chain id and quests-map key `saltways`, save
+  names `saltwaysId/Stage/Count/Ver`; a save without them is "not begun"). Both from Bess (`smoker`), not `auto`, ending
+  with a hand-in. "Smoke and Salt" (Lv 16, `arcReward(16)`: 870 XP, 190 gold): 8 `QUEST_ITEMS.driftwood` from the shore
+  blobs (slime 40%, Mother Blob 60%, warrior/shooter/healer 25%), then the smoke-pit (`clue` object on the tile between
+  the `SALT_RACKS`), then Bess. "The Watch-Fire" (Lv 17, `arcReward(17)`: 960 XP, 205 gold): offered only once "Salt and
+  Steel" is done (the arc's `needs` holds for every offer of this chain, so it gates the second quest); a carry step (a
+  `lastlantern` storm lantern by Garrick's fire, light 60) to the cairn, a `use` on the `cairn` object at `WATCH_FIRE`,
+  then Bess. `WATCH_FIRE` moved from (160,195) to (157,193): the old spot was one tile from the Wreckers' false light
+  (coast arc, (160,196)). No map tile, no new message, no new sfx `ev` (the use burst and the lantern's existing
+  events). Bess has an `IDLE_WHEN` line between the two quests pointing to the Redfang. No Pell quest (the ferry is his,
+  phase 7). Tests: `tests/saltmere-quests.test.ts`. Client follow-ups (not done): a `q_driftwood` drop icon
+  (`client/src/textures.ts`, falls back to the gold art now); the carried-lantern take spot is hidden only for
+  `lantern_last` (`client/src/questCarry.ts` LANTERN_OBJECT), so Garrick's lantern stays drawn at its spot while carried;
+  a lit-fire look for the cairn once done (today `qobj_cairn_read`, gold marks).
