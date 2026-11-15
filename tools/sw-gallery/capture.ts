@@ -991,13 +991,53 @@ async function groupChips(SLOW: number) {
   }
 }
 
+// ---- Brann's shop (rows the class can't wear are dimmed with a reason) and the Chorus buff chips ----
+
+async function groupShopCli(SLOW: number) {
+  for (const [W2, H2] of [[1920, 1080], [1366, 768]]) {
+    for (const cls of ["songweaver", "wizard"]) {
+      await run(SLOW, async (r) => {
+        const h = await r.heroes("Shop" + Date.now().toString(36).slice(-5), cls, { w: W2, h: H2, hide: false });
+        await h.send("chat", "/max"); await h.send("chat", "/god");
+        await wait(h.real(2500));
+        await tp(h, 70, 57);
+        await wait(h.real(1500));
+        await h.page.evaluate(() => { (window as any).S.npcs.interact(); });
+        await wait(h.real(2500));
+        const info = await h.page.evaluate(() => ({ rows: document.querySelectorAll("#npcdialog .sh-row").length, cant: document.querySelectorAll("#npcdialog .sh-row.cant").length }));
+        console.log(`shop ${cls} ${W2}:`, JSON.stringify(info));
+        await h.page.screenshot({ path: path.join(OUT, `shop_brann_${cls === "songweaver" ? "sw" : cls}_${W2}.png`) });
+        if (cls === "songweaver") {
+          await h.page.evaluate(() => { (window as any).S.npcs.interact(); });
+          await wait(h.real(800));
+          for (const [id, ms] of [["sg_dirge", 30000], ["sg_ballad", 90000], ["sg_march", 30000]] as [string, number][]) {
+            await h.page.evaluate(([id, ms]: [string, number]) => {
+              const S = (window as any).S; S.room.state.players.get(S.room.sessionId).me.timers = `1|${id}:${ms}`;
+            }, [id, ms] as [string, number]);
+            await wait(h.real(700));
+            const rb = await h.page.evaluate(() => { const b = document.querySelector("#statusrow")!.getBoundingClientRect(); return { x: Math.max(0, b.left - 20), y: Math.max(0, b.top - 20), width: 300, height: 120 }; });
+            const lab = await h.page.evaluate(() => { const e = document.querySelector("#statusrow .buff") as HTMLElement | null; return e ? `${e.title} | ${e.textContent} | img=${!!e.querySelector("img")}` : "none"; });
+            console.log(`chip ${id} ${W2}:`, lab);
+            await h.page.screenshot({ path: path.join(OUT, `hud_chorus_chip_${id.slice(3)}_${W2}.png`), clip: rb });
+          }
+          // all three at once, for the combined shot
+          await h.page.evaluate(() => { const S = (window as any).S; S.room.state.players.get(S.room.sessionId).me.timers = "2|sg_dirge:30000,sg_ballad:90000,sg_march:5000"; });
+          await wait(h.real(700));
+          const rb = await h.page.evaluate(() => { const b = document.querySelector("#statusrow")!.getBoundingClientRect(); return { x: Math.max(0, b.left - 20), y: Math.max(0, b.top - 20), width: 300, height: 120 }; });
+          await h.page.screenshot({ path: path.join(OUT, `hud_chorus_chip_${W2}.png`), clip: rb });
+        }
+      });
+    }
+  }
+}
+
 (async () => {
   console.log("output:", OUT);
   // SLOW (env) fixes the slow-down; otherwise it is measured: the browser should draw ~1.3 frames for every clip frame
   const fpsSmall = !process.env.SLOW && groups.some((g) => ["main", "sound", "wren", "other"].includes(g)) ? await measureFps(W, H) : 10;
   const SLOW = process.env.SLOW ? Number(process.env.SLOW) : Math.min(1, Math.max(0.03, fpsSmall / (FPS * 1.3)));
   console.log(`game slowed to x${SLOW.toFixed(3)} (browser drew ${fpsSmall.toFixed(1)} fps at ${W}x${H})`);
-  const fn: Record<string, (s: number) => Promise<void>> = { main: groupMain, sound: groupSound, wren: groupWren, other: (s) => groupOther(s * 0.7), graded: groupGraded, chips: async () => { const f = await measureFps(1366, 768); await groupChips(Math.max(0.05, Math.min(0.5, f / 8))); }, mode: async () => { const f = await measureFps(1366, 768); await groupMode(Math.max(0.05, Math.min(0.5, f / 8))); }, lock: async () => { const f = await measureFps(1366, 768); await groupLock(Math.max(0.05, Math.min(0.5, f / 8))); }, hud: async () => { const f = await measureFps(1366, 768); await groupHud(Math.max(0.05, Math.min(0.5, f / 8))); }, bar: async () => { const f = await measureFps(1920, 1080); await groupBar(Math.max(0.05, Math.min(0.5, f / 8))); }, swells: groupSwells, modes: groupModes, stills: async () => { const f = await measureFps(1920, 1080); await groupStills(Math.max(0.05, Math.min(0.5, f / 8))); } };
+  const fn: Record<string, (s: number) => Promise<void>> = { main: groupMain, sound: groupSound, wren: groupWren, other: (s) => groupOther(s * 0.7), graded: groupGraded, chips: async () => { const f = await measureFps(1366, 768); await groupChips(Math.max(0.05, Math.min(0.5, f / 8))); }, mode: async () => { const f = await measureFps(1366, 768); await groupMode(Math.max(0.05, Math.min(0.5, f / 8))); }, lock: async () => { const f = await measureFps(1366, 768); await groupLock(Math.max(0.05, Math.min(0.5, f / 8))); }, hud: async () => { const f = await measureFps(1366, 768); await groupHud(Math.max(0.05, Math.min(0.5, f / 8))); }, bar: async () => { const f = await measureFps(1920, 1080); await groupBar(Math.max(0.05, Math.min(0.5, f / 8))); }, shopcli: async () => { const f = await measureFps(1366, 768); await groupShopCli(Math.max(0.05, Math.min(0.5, f / 8))); }, swells: groupSwells, modes: groupModes, stills: async () => { const f = await measureFps(1920, 1080); await groupStills(Math.max(0.05, Math.min(0.5, f / 8))); } };
   for (const g of groups) { try { await fn[g](SLOW); } catch (e) { console.error(`GROUP ${g} FAILED`, e); } }
   process.exit(0);
 })().catch((e) => { console.error("CAPTURE FAILED", e); process.exit(1); });
