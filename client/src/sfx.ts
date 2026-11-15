@@ -568,6 +568,12 @@ const R: Record<string, Recipe> = {
     voice(o, t + 0.25, { f: 75, f2: 45, dur: 1.6, vol: 0.55 * v, vowel: [500, 900], vowel2: [350, 700], att: 0.15, rough: 0.2 });
   },
   demonRoar: (o, t, v) => voice(o, t, { f: 85, f2: 55, dur: 1.0, vol: 0.5 * v, vowel: [550, 950], vowel2: [400, 750], att: 0.08, rough: 0.25 }),
+  // Act 4: a hound's snarl (arg = pitch), its howl (the pack is called), a vulture's screech, a clay pot bursting into flame
+  houndSnarl: (o, t, v, p = 1) => voice(o, t, { f: 150 * p, f2: 110 * p, dur: 0.25, vol: 0.16 * v, vowel: [600, 900], att: 0.02, rough: 0.6 }),
+  houndHowl: (o, t, v) => voice(o, t, { f: 260, f2: 420, dur: 1.1, vol: 0.14 * v, vowel: [500, 800], att: 0.25, rough: 0.15 }),
+  vultureScreech: (o, t, v, p = 1) => tone(o, t, { f: 1900 * p, f2: 1100 * p, dur: 0.3, vol: 0.06 * v, att: 0.02 }),
+  firepotThrow: (o, t, v) => { noise(o, t, { dur: 0.25, vol: 0.06 * v, f: 900, f2: 2500 }); },
+  firepotBurst: (o, t, v) => { noise(o, t, { dur: 0.5, vol: 0.12 * v, f: 1800, f2: 300 }); tone(o, t, { f: 140, f2: 50, dur: 0.3, vol: 0.14 * v }); },
   demonGrowl: (o, t, v) => voice(o, t, { f: 60, f2: 50, dur: 0.6, vol: 0.25 * v, vowel: [350, 700], att: 0.1, rough: 0.3 }),
   demonFire: (o, t, v) => { thud(o, t, 50, 0.8 * v, 0.6); fireRoar(o, t, 0.8, 0.6 * v); },
   boneSnap: (o, t, v) => { noise(o, t, { type: "highpass", f: 1500, dur: 0.05, vol: 0.8 * v }); noise(o, t + 0.07, { type: "highpass", f: 2200, dur: 0.04, vol: 0.6 * v }); rattle(o, t + 0.1, 6, 0.25, 0.3 * v); },
@@ -1063,6 +1069,8 @@ R.owl = (o, t, v) => {
 interface Ent { sprite: { x: number; y: number }; state: any; mob?: boolean; hero?: string; top?: number }
 
 const UNDEAD = new Set(["skeleton", "skeletonmage", "necromancer", "crawler", "sanddead", "wight", "bonehound", "mistwraith", "legionary", "cairnlord", "barrowking"]);
+/** Act 4 people (Redfang raiders) use the bandit voices; the beasts below snarl and screech. */
+const RAIDER = new Set(["outrider", "crossbowman", "firebrand", "redcaptain", "rourke"]);
 const isBlob = (k: string) => k === "slime" || k === "blobling" || k.endsWith("blob");
 const blobPitch = (st: any) => (st.kind === "motherblob" ? 0.55 : st.kind === "blobling" ? 1.5 : 1) / Math.sqrt(st.merged || 1);
 const HERO_PITCH: Record<string, number> = { ninja: 1.1, wizard: 0.95, knight: 0.85, archer: 1.15, barbarian: 0.75, vampire: 0.9, summoner: 1.0, songweaver: 1.05 };
@@ -1097,6 +1105,9 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
     if (e.mob) {
       if (isBlob(k)) P("blobLunge", id, 0.8, blobPitch(e.state), { key: "ml" + id });
       else if (UNDEAD.has(k)) P(k === "skeletonmage" || k === "necromancer" ? "shotMagic" : "skelSwing", id, 0.8);
+      else if (RAIDER.has(k)) { P("swing", id, 0.8, k === "redcaptain" || k === "rourke"); if (Math.random() < 0.3) P("grunt", id, 0.7, idPitch(id)); }
+      else if (k === "warhound") P("houndSnarl", id, 0.7, idPitch(id));
+      else if (k === "vulture") P("vultureScreech", id, 0.6, idPitch(id));
       else if (k === "bandit") { P("swing", id, 0.8, e.state.weapon === "brute"); if (Math.random() < 0.3) P("grunt", id, 0.7, idPitch(id)); }
       else if (k === "demon") P("demonGrowl", id, 0.7);
       else if (k === "veiled") P("shotMagic", id, 0.7);
@@ -1123,6 +1134,8 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
       if (isBlob(k)) P("blobHurt", id, 0.9, blobPitch(e.state), { key: "bh" + id, minGap: 120 });
       else if (k === "demon") P("demonHurt", id, 1, undefined, { key: "dh" + id, minGap: 300 });
       else if (UNDEAD.has(k)) P("skelHurt", id, 1, undefined, { key: "sh" + id, minGap: 100 });
+      else if (RAIDER.has(k) && Math.random() < 0.6) P("grunt", id, 0.8, idPitch(id, 1.1), { key: "bg" + id, minGap: 250 });
+      else if (k === "warhound") P("houndSnarl", id, 0.6, idPitch(id, 1.2), { key: "bh" + id, minGap: 250 });
       else if (k === "bandit" && Math.random() < 0.6) P("grunt", id, 0.8, idPitch(id, 1.1), { key: "bg" + id, minGap: 250 });
     } else if (!blocked) P("heroHurt", id, id === me() ? 1 : 0.7, hpitch(e.state), { key: "hh" + id, minGap: 250 });
   });
@@ -1285,6 +1298,9 @@ export function sfxFrame(meId: string, ents: Map<string, Ent>) {
         if (isBlob(k)) play("blobDie", e.sprite.x, e.sprite.y, 1, blobPitch(st));
         else if (k === "demon") { play("demonRoar", e.sprite.x, e.sprite.y, 1, undefined, { reach: 2 }); play("skelDie", e.sprite.x, e.sprite.y, 1, undefined, { delay: 0.6 }); }
         else if (UNDEAD.has(k)) play("skelDie", e.sprite.x, e.sprite.y);
+        else if (RAIDER.has(k)) play("heroDie", e.sprite.x, e.sprite.y, 0.7);
+        else if (k === "warhound") play("houndSnarl", e.sprite.x, e.sprite.y, 0.8, 0.7);
+        else if (k === "vulture") play("vultureScreech", e.sprite.x, e.sprite.y, 0.7, 0.8);
         else if (k === "bandit") play("heroDie", e.sprite.x, e.sprite.y, 0.7);
       } else if (id !== meId) play("heroDie", e.sprite.x, e.sprite.y, 0.6);
     }

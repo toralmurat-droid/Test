@@ -53,6 +53,11 @@ export const MOB_AFFINITY: Partial<Record<MobKind, Partial<Record<Element, numbe
   wight: UNDEAD, bonehound: UNDEAD, legionary: UNDEAD, cairnlord: UNDEAD, barrowking: UNDEAD,
   mistwraith: { cold: 0.3, poison: 0.3, faith: 1.6, fire: 1.3 },
   boghag: { poison: 0.4, fire: 1.3 },
+  // Act 4: the Redfang are men like their Hollow kin (the firebrands smell of lamp-oil and fear their own fire less);
+  // the rattlers carry their own venom; the warhounds and vultures are plain flesh
+  outrider: { poison: 1.15 }, crossbowman: { poison: 1.15 }, redcaptain: { poison: 1.15 }, rourke: { poison: 1.1 },
+  firebrand: { fire: 0.6, poison: 1.15, cold: 1.15 },
+  warhound: { poison: 1.1 }, vulture: { shock: 1.2, poison: 1.1 }, rattler: { poison: 0.3, cold: 1.3 },
 };
 export const mobAffinity = (kind: string, el: Element) => MOB_AFFINITY[kind as MobKind]?.[el] ?? 1;
 
@@ -60,7 +65,8 @@ export const mobAffinity = (kind: string, el: Element) => MOB_AFFINITY[kind as M
 export const MOB_SHOT_ELEMENT: Partial<Record<MobKind, Element>> = { shooterblob: "poison", skeletonmage: "cold", necromancer: "poison", hollowking: "cold", crowseer: "poison", veiled: "fire", boghag: "poison", mistwraith: "cold" };
 /** The element of a monster's melee blows and special moves (unset = Physical). */
 export const MOB_MELEE_ELEMENT: Partial<Record<MobKind, Element>> = { venomblob: "poison", frostblob: "cold", fireblob: "fire", stormblob: "shock",
-  wight: "cold", mistwraith: "cold", barrowking: "cold" }; // Act 3: the barrow-cold in a wight's grip
+  wight: "cold", mistwraith: "cold", barrowking: "cold", // Act 3: the barrow-cold in a wight's grip
+  firebrand: "fire" }; // Act 4: a torch in the off hand
 
 /** One elemental part of a hit, already in damage points. */
 export interface ElemPart { el: Element; amt: number }

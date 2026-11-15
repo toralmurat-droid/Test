@@ -253,6 +253,73 @@ export const MOB_LOOKS: Record<string, Look> = {
     sleeve: 0x34302c, arms: "plate", glove: 0x222024, weapon: "mace", bladeCol: 0x3c362e, fx: 0xa6e8ff, bladeLen: 1.15,
     back: "cape", capeCol: 0x4a3e5c, build: 1.4, mist: 0xb4d8ee,
   },
+  // ---- Act 4, the Red Badlands: the Redfang bandits' homeland (shared/badlands.ts). Red dust, rust, oxblood scarves, sun-bleached leather.
+  // The Redfang Outrider: a lean raider in a dust-red headwrap and face-cloth, a long streaming scarf, light leather, a curved sabre
+  outrider: {
+    skin: 0xc48a5e, hair: 0x2a1c16, hairStyle: "short", mask: 0x9e231a, eye: 0x1a1008,
+    head: "hood", headCol: 0x8a3a24, headTrim: 0x5a2014,
+    torso: "leather", torsoCol: 0x6a4a34, trim: 0x3a2418, sash: 0xa3231b, belt: 0x2b1d14, buckle: 0xc9a050,
+    legs: "trousers", legCol: 0x5a4636, boots: 0x2a1c14, bootStyle: "wrap",
+    sleeve: 0x7a4a30, arms: "cloth", bracer: 0x3a2418, glove: 0x2b1d14, weapon: "sword", bladeCol: 0xc8c0b0, fx: 0xff9a70,
+    scarf: { col: 0xa3231b, band: 0x5a1410 }, back: "cape", capeCol: 0x7a3420, capeShort: true, build: 0.96,
+  },
+  // The Redfang Crossbowman: a heavy sun-bleached coat under a rusty kettle helm, a bolt-quiver at the hip, a crossbow braced to the shoulder
+  crossbowman: {
+    skin: 0xcf9468, hair: 0x4a3020, hairStyle: "short", beard: 0x4a3020, beardStyle: "stubble", mask: 0x9e231a,
+    head: "kettle", headCol: 0x7a4a34, headTrim: 0x4a2a1c,
+    torso: "mail", torsoCol: 0x7a6a5a, trim: 0x3a2418, tabard: { col: 0x8e1f1a, trim: 0x3a1410, emblem: 0x3a1410 }, belt: 0x2b1d14, buckle: 0x9a8a6a,
+    legs: "trousers", legCol: 0x4a3a2c, boots: 0x231a14, bootStyle: "leather",
+    sleeve: 0x6a4a34, arms: "cloth", bracer: 0x3a2a1e, glove: 0x2b1d14, weapon: "bow", fx: 0xffd0a0, back: "quiver", capeCol: 0x4a2a1c, build: 1.1,
+  },
+  // The Firebrand: a wild fire-thrower swaddled in layers of red scarves, a soot-black face-cloth, scorched leather, a pot of fire cupped in the open hand
+  firebrand: {
+    skin: 0xb27a52, hair: 0x1a1210, hairStyle: "none", mask: 0x241410, eye: 0xffa030, eyeGlow: 0xffa030,
+    head: "hood", headCol: 0xb02a1c, headTrim: 0xe85a1a,
+    torso: "wrap", torsoCol: 0xa3231b, trim: 0xe0701c, sash: 0xe85a1a, belt: 0x2a1810, buckle: 0xc9a050,
+    legs: "wrapped", legCol: 0x5a2a1c, boots: 0x2a1a12, bootStyle: "wrap",
+    sleeve: 0x8e1f1a, arms: "wrap", glove: 0x2a1a12, bracer: 0x3a2418, weapon: "none", palmFlame: 0xff7a22, fx: 0xff7a22,
+    scarf: { col: 0xd8401c, band: 0x7a1a10 }, back: "cape", capeCol: 0x7a1a14, capeShort: true,
+  },
+  // The Redfang Captain: a brute in blackened plate under an oxblood tabard, a red-crested helm, a great war-axe, a fur-trimmed cloak
+  redcaptain: {
+    skin: 0xb98056, hair: 0x2a201a, hairStyle: "short", beard: 0x2a201a, beardStyle: "full", eye: 0x1a1008,
+    head: "helm", headCol: 0x5a4a44, headTrim: 0x8e1f1a, plume: 0xa3231b,
+    torso: "plate", torsoCol: 0x5a4a44, trim: 0x8e1f1a, tabard: { col: 0x8e1f1a, trim: 0x2a1410, emblem: 0xe0b060 }, belt: 0x2b1d14, buckle: 0xc9a050,
+    legs: "mail", legCol: 0x4a3a30, boots: 0x231a14, bootStyle: "greave",
+    sleeve: 0x5a4a44, arms: "plate", glove: 0x2b1d14, bracer: 0x3a2a1e, weapon: "axe", bladeCol: 0xb0a89a, fx: 0xff8a70,
+    back: "cape", capeCol: 0x6a1814, build: 1.3,
+  },
+  // Old Rourke, the Redfang warlord: a grey-bearded old giant of a man in dented black plate, a ragged blood-red cloak over a bear pelt, a huge notched war-axe
+  rourke: {
+    skin: 0xb07a56, hair: 0xb8b2a8, hairStyle: "long", beard: 0xc4beb0, beardStyle: "long", eye: 0xe8c060, eyeGlow: 0xff5030,
+    head: "horned", headCol: 0x3e3a38, headTrim: 0xd0c8b0,
+    torso: "plate", torsoCol: 0x46403c, trim: 0xa3231b, tabard: { col: 0x7e1814, trim: 0x2a1410, emblem: 0xd8a040 }, belt: 0x241812, buckle: 0xd0aa4e,
+    legs: "mail", legCol: 0x3a342e, boots: 0x1e1814, bootStyle: "greave",
+    sleeve: 0x4e4844, arms: "plate", glove: 0x241812, bracer: 0x8e1f1a, weapon: "axe", bladeLen: 1.35, bladeCol: 0x9a948a, notched: true, fx: 0xff5030,
+    back: "pelt", capeCol: 0x6a1410, build: 1.45,
+  },
+  // Rustwater Post: Marshal Hesk Varro (a weathered ex-watch marshal in a rust-red coat and a dented helm, a spear), Corra Flint (the armourer), Old Sal (the healer)
+  rustmarshal: {
+    skin: 0xc48c62, hair: 0x6a5a4a, hairStyle: "short", beard: 0x7a6e60, beardStyle: "stubble", eye: 0x3a2a1a,
+    head: "helm", headCol: 0x8a7a6a, headTrim: 0x5a3a28,
+    torso: "mail", torsoCol: 0x8a7a6a, trim: 0x4a3020, tabard: { col: 0x8a3a24, trim: 0xd9a93a, emblem: 0xf0c75a }, belt: 0x3a2a1c, buckle: 0xd9a93a,
+    legs: "trousers", legCol: 0x4a3828, boots: 0x2a2018, bootStyle: "leather",
+    sleeve: 0x7a6a5a, arms: "cloth", glove: 0x4a3020, weapon: "spear", fx: 0xffffff, back: "cape", capeCol: 0x6a3a28, capeShort: true, build: 1.08,
+  },
+  rustarmourer: {
+    skin: 0xa86e4a, hair: 0x2a1a14, hairStyle: "ponytail", eye: 0x2a1a10,
+    head: "bandana", headCol: 0xb02a1c, headTrim: 0x5a1a12,
+    torso: "shirt", torsoCol: 0xc8b090, apron: 0x4a2c1c, belt: 0x2a1c12, buckle: 0x9a7a3a,
+    legs: "trousers", legCol: 0x5a463a, boots: 0x2a1c14, bootStyle: "leather",
+    sleeve: 0xa86e4a, arms: "bare", bracer: 0x4a2c1c, glove: 0x2a1c12, weapon: "hammer", fx: 0xffffff, build: 1.12,
+  },
+  rusthealer: {
+    skin: 0xb88a64, hair: 0xd8d2c8, hairStyle: "long", eye: 0x3a2a1a,
+    head: "hood", headCol: 0xc8ae8a, headTrim: 0x8a5a3a,
+    torso: "robe", torsoCol: 0xa8683e, trim: 0xe0c090, vest: 0x7a3a24, apron: 0xe4d8bc, sash: 0xa3231b, belt: 0x4a3020,
+    legs: "dress", legCol: 0x6a3a28, boots: 0x3a281c, bootStyle: "shoe",
+    sleeve: 0xa8683e, arms: "cloth", glove: 0xb88a64, weapon: "none", fx: 0xffffff, back: "cape", capeCol: 0xb88a58, capeShort: true, basket: 0x8a6a3a, build: 0.92,
+  },
   // summoned by a skeleton ritual (BONES.ritual): a hulking red brute with horns, a bone harness and a cleaver
   demon: {
     skin: 0xa8241c, hairStyle: "none", eyeGlow: 0xffd23c, skull: true, head: "horned", headCol: 0x3a1410, headTrim: 0xe8dcc0,

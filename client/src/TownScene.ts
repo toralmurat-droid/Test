@@ -1997,7 +1997,7 @@ export class TownScene extends Phaser.Scene {
   /** Redfang lookouts stand up on their watchtower's platform: drawn lifted, label and HP bar above them. */
   private perch(e: Entity, p: any) {
     const look = mobLook(p.kind, p.weapon), base = look?.oy ?? 0.85, top = look?.top ?? 14;
-    const up = p.kind === "bandit" && p.weapon === "lookout";
+    const up = p.weapon === "lookout"; // a camp's lookout (shared/bandits.ts): a Hollow bandit or a badlands crossbowman
     e.sprite.setOrigin(0.5, base + (up ? PERCH_LIFT / e.sprite.frame.height : 0));
     e.top = top + (up ? PERCH_LIFT : 0);
   }

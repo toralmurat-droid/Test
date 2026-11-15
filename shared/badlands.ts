@@ -7,9 +7,9 @@ import { BADLANDS_H, BADLANDS_Y0, MAP_W } from "./constants";
  * west edge (shared/act2.ts WAYGATES) from hero Lv 25 and arrive at the band's east edge; the land climbs in level
  * westward to Fangrock, the clan's stronghold in the far west.
  *
- * This file is the land and its places. The Rustwater Post (the outpost), Fangrock and Talon Fort are reserved ground
- * for now (their buildings, the zones and the monsters come later). Tile ids are passed in (shared/map.ts T) so this
- * file does not import map.ts. Layout constants are in local badlands coordinates (0..MAP_W, 0..BADLANDS_H); `BR(y)`
+ * This file is the land and its places: the Rustwater Post (the outpost), Fangrock (the Redfang seat, with Old Rourke's
+ * keep) and Talon Fort. Monster zones are in shared/spawns.ts, the monsters in shared/constants.ts (BADLANDS_KINDS), the
+ * forts' garrisons in shared/bandits.ts (CAMPS). Tile ids are passed in (shared/map.ts T) so this file does not import map.ts. Layout constants are in local badlands coordinates (0..MAP_W, 0..BADLANDS_H); `BR(y)`
  * turns a local row into a map row.
  */
 export const BR = (y: number) => y + BADLANDS_Y0;
@@ -30,16 +30,44 @@ export const REDPASS_BADLANDS = { x: REDPASS.x, y: BR(REDPASS.y) };
 /** The arrival clearing round the Red Pass (local tiles, ellipse): always open ground, nothing stands in it. */
 export const REDPASS_CLEARING = { x: 264.5, y: 93.5, rx: 9, ry: 7 };
 /**
- * The Rustwater Post, the badlands' outpost (local tiles, reserved: bare ground until its buildings come): a palisaded
- * waystation round a spring in a canyon mouth, west of the Red Pass, the last friendly roof before Redfang country.
+ * The Rustwater Post, the badlands' outpost (local tiles): a palisaded waystation round a spring in a canyon mouth, west
+ * of the Red Pass, the last friendly roof before Redfang country. Drovers and salt-miners who refuse the Redfang hold it.
+ * Gates west (the Fang Road), east (from the Red Pass) and south (to the Hanging Arches).
  */
 export const RUSTWATER_POST = { x: 222, y: 82, w: 24, h: 18 };
 /** The Post's square (local tiles): the badlands' safe zone (shared/map.ts isSafeZone), where heroes come back after dying. */
 export const RUSTWATER_SQUARE = { x: 229, y: 87, w: 10, h: 7 };
-/** Fangrock, the Redfang clan's stronghold on its crag in the far west (local tiles, reserved). */
+/** Gate gaps in the Post's palisade (local tiles): y range on the west / east walls, x range on the south wall. */
+export const RUSTWATER_GATES = { west: [91, 93], east: [91, 93], south: [233, 235] } as const;
+/** The rust-red spring the Post is named for (local tiles: a pool against the west palisade, flagstones round it). */
+export const RUSTWATER_SPRING = { x: 223, y: 88, w: 2, h: 3 };
+/** The Post's portal stone (local tile), in the yard south-west of the square (shared/map.ts PORTAL_SPOTS). */
+export const RUSTWATER_PORTAL = { x: 226, y: 96 };
+/**
+ * Fangrock, the Redfang clan's seat on its crag in the far west (local tiles): a big stockade of sharpened logs with
+ * watchtowers, barracks and the clan's fires, and in its west end Old Rourke's keep behind a second wall. The main gate
+ * faces east (the Fang Road), a back gate south.
+ */
 export const FANGROCK = { x: 12, y: 64, w: 34, h: 30 };
-/** Talon Fort: a smaller Redfang stockade watching the north road and the Dry Ashwell's upper reach (local tiles, reserved). */
+/** Gate gaps in Fangrock's outer stockade (local tiles): y range on the east wall, x range on the south wall. */
+export const FANGROCK_GATES = { east: [77, 79], south: [27, 29] } as const;
+/** Old Rourke's keep inside Fangrock (local tiles): its own stockade, the gate on its east side (y range), the great hall in it. */
+export const FANGROCK_KEEP = { x: 15, y: 67, w: 13, h: 12, gate: [72, 74] as const };
+/** Talon Fort: a smaller Redfang stockade watching the north road and the Dry Ashwell's upper reach (local tiles); gate south. */
 export const TALON_FORT = { x: 118, y: 18, w: 18, h: 14 };
+export const TALON_GATE = [126, 128] as const;
+/** The forts' watchtowers (local tiles, a stack of crates the client draws a tower on): Redfang crossbowmen keep watch up there. */
+export const FANGROCK_TOWERS: [number, number][] = [[44, 75], [44, 81], [42, 66], [25, 91], [31, 91], [28, 70]];
+export const TALON_TOWERS: [number, number][] = [[124, 30], [130, 30], [134, 19]];
+/**
+ * Rock ledges along the roads to the forts (local tiles): a boulder on each, where Redfang ambushers crouch out of sight
+ * (shared/bandits.ts CAMPS, the badlands' answer to Redfang Hollow's tree ambushers).
+ */
+export const LEDGES: [number, number][] = [[58, 74], [62, 80], [73, 68], [75, 73], [134, 46], [147, 58], [52, 100], [44, 97]];
+/** The Saltlick Flats: white-crusted clay south-east of the Post where the salt-miners dig (local tiles, a hunting ground). */
+export const SALTLICK_FLATS = { x: 236, y: 104, w: 28, h: 22 };
+/** Drovers' Draw: the dry wash north of the Post where the drovers water their herds after rain (local tiles). */
+export const DROVERS_DRAW = { x: 226, y: 50, w: 32, h: 24 };
 /** Bloodstone Mesa: the biggest of the red table-mountains, sheer on every side (local tiles, ellipse of the rock). */
 export const BLOODSTONE_MESA = { x: 190, y: 44, rx: 15, ry: 10 };
 /** The Hanging Arches: a field of wind-cut stone arches (local tiles, ellipse; the arches are in ARCHES). */
@@ -90,6 +118,9 @@ function noise(x: number, y: number, scale: number, seed: number) {
 export interface BadlandsTiles {
   SAND: number; DIRT: number; RUBBLE: number; FLAGS: number; ROCK: number; BUSH: number; STUMP: number; CLIFF: number; BONES: number; SIGNPOST: number;
   CLAY: number; GRAVEL: number; ARCH: number; CACTUS: number;
+  // the Post and the Redfang forts: timber and thatch, palisades, the yards' props
+  COBBLE: number; WATER: number; PALISADE: number; FENCE: number; ROOF_THATCH: number; ROOF_RED: number; WALL_TIMBER: number; WINDOW_TIMBER: number;
+  DOOR: number; BARREL: number; CRATE: number; HAY: number; STALL_RED: number; STALL_BLUE: number; BONFIRE: number; CAMPFIRE: number; TENT: number; ANVIL: number;
 }
 export interface BadlandsArea { name: string; x: number; y: number; w: number; h: number; mobs?: never[] }
 
@@ -202,7 +233,7 @@ export function buildBadlands(T: BadlandsTiles, ground: number[][], objects: num
   disk(G.x, G.y, G.rx, G.ry, (x, y, d) => { setO(x, y, EMPTY); open(x, y); setG(x, y, d < 0.5 ? T.DIRT : hash(x, y, 971) < 0.6 ? T.SAND : T.CLAY); });
   disk(REDPASS.x + 0.5, REDPASS.y + 0.5, 3.6, 2.8, (x, y, d) => setG(x, y, d > 0.6 && hash(x, y, 972) < 0.5 ? T.RUBBLE : T.FLAGS));
 
-  // ---------- 7. Reserved ground: the Rustwater Post, Fangrock and Talon Fort stand empty until their buildings come ----------
+  // ---------- 7. The Rustwater Post's, Fangrock's and Talon Fort's ground: bare until they are raised (step 12b) ----------
   for (const r of [O, FANGROCK, TALON_FORT]) each(r.x, r.y, r.w, r.h, (x, y) => { setO(x, y, EMPTY); open(x, y); setG(x, y, hash(x, y, 981) < 0.75 ? T.DIRT : T.SAND); });
 
   // ---------- 8. The Cinnabar Pits: red spoil, sunken pits, heaps of broken ore ----------
@@ -246,6 +277,7 @@ export function buildBadlands(T: BadlandsTiles, ground: number[][], objects: num
   trail([[152, 84], [146, 62], [136, 44], [TALON_FORT.x + (TALON_FORT.w >> 1), TALON_FORT.y + TALON_FORT.h]]);     // north up the river to Talon Fort
   trail([[132, 76], [130, 100], [CANYONS[0].floor[4][0], CANYONS[0].floor[4][1]]]);                               // south to Rattlesnake Gulch
   trail([[CANYONS[0].floor[0][0], CANYONS[0].floor[0][1]], [66, 112], [60, 92], [68, 70]]);                         // out of the gulch's west mouth, north to the road
+  trail([[FANGROCK_GATES.south[0] + 1, FANGROCK.y + FANGROCK.h], [34, 100], [48, 99], [60, 92]]);                   // Fangrock's back gate to the gulch road
 
   // ---------- 12. Scatter: cactus, dry scrub, dead brush, boulders under the cliffs, bones ----------
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
@@ -271,8 +303,79 @@ export function buildBadlands(T: BadlandsTiles, ground: number[][], objects: num
     const x = k % W, y = ((k / W) | 0) - Y0;
     for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) { const o = getO(x + i, y + j); if (o === T.ROCK || o === T.BUSH || o === T.STUMP || o === T.BONES || o === T.CACTUS) setO(x + i, y + j, EMPTY); }
   }
-  // the reserved places stay bare
+  // the forts and the Post stand on bare ground
   for (const r of [O, FANGROCK, TALON_FORT]) each(r.x, r.y, r.w, r.h, (x, y) => setO(x, y, EMPTY));
+
+  // ---------- 12b. The Rustwater Post, Fangrock and Talon Fort ----------
+  /** A building: `roof` rows over two rows of timber wall, a door in the front wall (like the valley's houses). */
+  const house = (x: number, y: number, w: number, h: number, roof: number) => {
+    each(x, y, w, h - 2, (i, j) => setO(i, j, roof));
+    each(x, y + h - 2, w, 2, (i, j) => setO(i, j, T.WALL_TIMBER));
+    const door = x + Math.floor(w / 2);
+    setO(door, y + h - 1, T.DOOR);
+    for (const wx of [x + 1, x + w - 2]) if (wx !== door) setO(wx, y + h - 1, T.WINDOW_TIMBER);
+  };
+  /** A palisade round a rect, with gaps: `gaps(x, y)` true for a gate tile (paths through the gates stay open). */
+  const stockade = (r: { x: number; y: number; w: number; h: number }, gap: (x: number, y: number) => boolean) => {
+    const x1 = r.x + r.w - 1, y1 = r.y + r.h - 1;
+    each(r.x, r.y, r.w, r.h, (x, y) => { if ((x === r.x || x === x1 || y === r.y || y === y1) && !gap(x, y)) setO(x, y, T.PALISADE); });
+  };
+  const props = (list: readonly (readonly [number, number, number])[]) => { for (const [x, y, t] of list) setO(x, y, t); };
+  {
+    // the Post: a timber palisade round a yard of packed earth, the cobbled square in the middle with the drovers' fire
+    const Q = RUSTWATER_SQUARE, Gt = RUSTWATER_GATES, S = RUSTWATER_SPRING, x1 = O.x + O.w - 1, y1 = O.y + O.h - 1;
+    each(O.x, O.y, O.w, O.h, (x, y) => setG(x, y, hash(x, y, 1031) < 0.7 ? T.DIRT : T.SAND));
+    each(Q.x, Q.y, Q.w, Q.h, (x, y) => road(x, y, T.COBBLE));
+    for (let x = O.x; x < Q.x; x++) road(x, Gt.west[0] + 1);            // the west gate (the Fang Road)
+    for (let x = Q.x + Q.w; x <= x1; x++) road(x, Gt.east[0] + 1);      // the east gate (from the Red Pass)
+    for (let y = Q.y + Q.h; y <= y1; y++) road(Gt.south[0] + 1, y);     // the south gate
+    house(223, 83, 6, 4, T.ROOF_RED);     // the marshal's hall
+    house(230, 83, 4, 4, T.ROOF_THATCH);  // the armoury
+    house(235, 83, 4, 4, T.ROOF_THATCH);  // the healer's house
+    house(240, 83, 5, 4, T.ROOF_THATCH);  // the drovers' bunkhouse
+    stockade(O, (x, y) => (x === O.x && y >= Gt.west[0] && y <= Gt.west[1]) || (x === x1 && y >= Gt.east[0] && y <= Gt.east[1]) || (y === y1 && x >= Gt.south[0] && x <= Gt.south[1]));
+    // the spring: a rust-red pool against the west wall, flagstones round it
+    each(S.x, S.y - 1, S.w + 1, S.h + 2, (x, y) => setG(x, y, T.FLAGS));
+    each(S.x, S.y, S.w, S.h, (x, y) => { setG(x, y, T.WATER); roads.delete((y + Y0) * W + x); });
+    // the portal stone's yard, the fire on the square, the trader's stall, the salt-miners' stores, the drovers' pen
+    each(RUSTWATER_PORTAL.x - 2, RUSTWATER_PORTAL.y - 1, 5, 3, (x, y) => setG(x, y, T.FLAGS));
+    setO(Q.x + 4, Q.y + 3, T.BONFIRE);
+    setO(Q.x + Q.w - 1, Q.y, T.STALL_BLUE); // the healer's stall, beside her door
+    setO(Q.x, Q.y + 1, T.ANVIL);             // the armourer's anvil
+    props([[239, 95, T.FENCE], [240, 95, T.FENCE], [241, 95, T.FENCE], [242, 95, T.FENCE], [243, 95, T.FENCE], [240, 97, T.HAY], [241, 97, T.HAY],
+      [236, 97, T.BARREL], [237, 97, T.CRATE], [237, 98, T.CRATE], [244, 88, T.BARREL], [244, 89, T.BARREL]]);
+  }
+  {
+    // Fangrock: a stockade of sharpened logs, barracks and tents round the clan's fires, Old Rourke's keep in the west end
+    const F = FANGROCK, K = FANGROCK_KEEP, Gt = FANGROCK_GATES, x1 = F.x + F.w - 1, y1 = F.y + F.h - 1;
+    each(F.x, F.y, F.w, F.h, (x, y) => setG(x, y, noise(x, y, 4, 1041) > 0.45 ? T.DIRT : hash(x, y, 1042) < 0.5 ? T.RUBBLE : T.SAND));
+    for (let x = K.x + K.w; x <= x1; x++) road(x, Gt.east[0] + 1);                       // the main lane: the east gate to the keep
+    for (let y = K.gate[0] + 1; y <= y1; y++) road(Gt.south[0] + 1, y);                  // up to the keep's gate, down to the back gate
+    stockade(F, (x, y) => (x === x1 && y >= Gt.east[0] && y <= Gt.east[1]) || (y === y1 && x >= Gt.south[0] && x <= Gt.south[1]));
+    // the keep: flagstones, its own wall, the great hall under red tiles, the clan's loot heaped by the fire
+    const kx1 = K.x + K.w - 1;
+    each(K.x + 1, K.y + 1, K.w - 2, K.h - 2, (x, y) => setG(x, y, hash(x, y, 1043) < 0.8 ? T.FLAGS : T.RUBBLE));
+    stockade(K, (x, y) => x === kx1 && y >= K.gate[0] && y <= K.gate[1]);
+    house(K.x + 2, K.y + 1, 8, 4, T.ROOF_RED);
+    props([[K.x + 6, K.y + 8, T.BONFIRE], [K.x + 2, K.y + 9, T.STALL_RED], [K.x + 3, K.y + 9, T.STALL_RED], [K.x + 9, K.y + 9, T.BARREL], [K.x + 9, K.y + 10, T.CRATE]]);
+    // barracks along the north wall, tents and fires in the bailey, the firebrands' oil stores, a smithy
+    house(31, 66, 5, 3, T.ROOF_THATCH); house(37, 66, 5, 3, T.ROOF_THATCH); house(31, 84, 4, 3, T.ROOF_THATCH);
+    props([[36, 80, T.CAMPFIRE], [24, 86, T.CAMPFIRE], [33, 88, T.TENT], [38, 86, T.TENT], [41, 89, T.TENT], [19, 85, T.TENT], [17, 89, T.TENT],
+      [40, 71, T.BARREL], [41, 71, T.BARREL], [40, 72, T.BARREL], [34, 72, T.ANVIL], [43, 88, T.HAY], [43, 89, T.CRATE], [21, 81, T.CRATE], [22, 81, T.BARREL]]);
+    for (const [tx, ty] of FANGROCK_TOWERS) setO(tx, ty, T.CRATE); // the watchtowers stand on a stack of crates (client draws the tower)
+  }
+  {
+    // Talon Fort: a small stockade, two huts and a fire, watchtowers by the gate
+    const F = TALON_FORT, x1 = F.x + F.w - 1, y1 = F.y + F.h - 1;
+    each(F.x, F.y, F.w, F.h, (x, y) => setG(x, y, hash(x, y, 1051) < 0.75 ? T.DIRT : T.RUBBLE));
+    for (let y = F.y + 6; y <= y1; y++) road(TALON_GATE[0] + 1, y);
+    stockade(F, (x, y) => y === y1 && x >= TALON_GATE[0] && x <= TALON_GATE[1]);
+    house(120, 20, 5, 3, T.ROOF_THATCH); house(129, 20, 5, 3, T.ROOF_THATCH);
+    props([[125, 25, T.CAMPFIRE], [121, 27, T.TENT], [133, 27, T.TENT], [120, 24, T.BARREL], [121, 24, T.CRATE], [134, 24, T.HAY]]);
+    for (const [tx, ty] of TALON_TOWERS) setO(tx, ty, T.CRATE);
+  }
+  // the ambushers' ledges: a boulder on each, off the road
+  for (const [lx, ly] of LEDGES) if (!roads.has((ly + Y0) * W + lx)) setO(lx, ly, T.ROCK);
 
   // ---------- 13. Reachability: every open tile joins the Red Pass (pockets cut off by rock are filled in) ----------
   const solid = (x: number, y: number) => {
@@ -293,12 +396,14 @@ export function buildBadlands(T: BadlandsTiles, ground: number[][], objects: num
 
   // ---------- 14. Named areas (specific first) ----------
   const A = (name: string, x: number, y: number, w: number, h: number): BadlandsArea => ({ name, x: Math.floor(x), y: Math.floor(y) + Y0, w: Math.ceil(w), h: Math.ceil(h) });
-  const Q = RUSTWATER_SQUARE, F = FANGROCK, TF = TALON_FORT, M = BLOODSTONE_MESA, HA = HANGING_ARCHES, P = CINNABAR_PITS, V = VULTURES_ROOST;
+  const Q = RUSTWATER_SQUARE, F = FANGROCK, FK = FANGROCK_KEEP, TF = TALON_FORT, M = BLOODSTONE_MESA, HA = HANGING_ARCHES, P = CINNABAR_PITS, V = VULTURES_ROOST;
+  const SF = SALTLICK_FLATS, DD = DROVERS_DRAW;
   const ash = DRY_ASHWELL.reduce((b, [x, y]) => ({ x0: Math.min(b.x0, x), x1: Math.max(b.x1, x), y0: Math.min(b.y0, y), y1: Math.max(b.y1, y) }), { x0: W, x1: 0, y0: H, y1: 0 });
   const areas: BadlandsArea[] = [
     A("Rustwater Square", Q.x, Q.y, Q.w, Q.h),
     A("The Rustwater Post", O.x, O.y, O.w, O.h),
     A("The Red Pass", G.x - G.rx, G.y - G.ry, G.rx * 2, G.ry * 2),
+    A("Fangrock Keep", FK.x, FK.y, FK.w, FK.h),
     A("Fangrock", F.x, F.y, F.w, F.h),
     A("Talon Fort", TF.x, TF.y, TF.w, TF.h),
     A("Vulture's Roost", V.x - V.r - 2, V.y - V.r - 2, V.r * 2 + 5, V.r * 2 + 5),
@@ -306,6 +411,8 @@ export function buildBadlands(T: BadlandsTiles, ground: number[][], objects: num
     A("The Hanging Arches", HA.x - HA.rx - 2, HA.y - HA.ry - 2, HA.rx * 2 + 4, HA.ry * 2 + 4),
     A("Bloodstone Mesa", M.x - M.rx - 5, M.y - M.ry - 5, M.rx * 2 + 10, M.ry * 2 + 10),
     ...CANYONS.map((c) => A(c.name, c.rock.x - 4, c.rock.y - 4, c.rock.w + 8, c.rock.h + 8)),
+    A("The Saltlick Flats", SF.x, SF.y, SF.w, SF.h),
+    A("Drovers' Draw", DD.x, DD.y, DD.w, DD.h),
     A("The Dry Ashwell", ash.x0 - 6, ash.y0, ash.x1 - ash.x0 + 12, ash.y1 - ash.y0),
     A("The Red Badlands", 0, 0, W, H),
   ];

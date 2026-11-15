@@ -51,7 +51,10 @@
   "lutemaker",
   "cairncaptain",
   "moorherbalist",
-  "moorarmourer"
+  "moorarmourer",
+  "rustmarshal",
+  "rustarmourer",
+  "rusthealer"
  ],
  "image": "{name}.png",
  "frameWidth": 64,

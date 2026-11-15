@@ -87,9 +87,10 @@ Only the classes in `ACTIVE_CLASSES` can be played. Archived classes keep their 
 - **Act 3 — the Grey Barrow Moors** (`shared/moors.ts`): the Ossuary Host's barrow country (levels 20-35), reached
   through the Moorgate in the forest north of the Hollow Throne once a hero reaches level 20. The Cairn Wardens hold the outpost of Cairnwatch (portal stone, bounty board,
   shops); Warden-Captain Edra Vane's chain climbs through the barrows to the Barrow-King, who wakes at night.
-- **Act 4 — the Red Badlands** (`shared/badlands.ts`, in progress): the Redfang clan's homeland of red mesas, canyons
+- **Act 4 — the Red Badlands** (`shared/badlands.ts`): the Redfang clan's homeland of red mesas, canyons
   and dry riverbeds (levels 25-40), reached through the Red Pass at Oakvale's west edge once a hero reaches level 25.
-  The land and the gate are in; the Rustwater Post, Fangrock, the zones and the monsters come next.
+  The Rustwater Post holds out with a portal stone, a bounty board and shops; Marshal Hesk Varro's chain climbs
+  through Talon Fort and Gallows Canyon to Old Rourke in Fangrock Keep. The badlands' place in the clan war comes next.
 - **Dungeons** (`shared/dungeon.ts`): the Mawdeep, the Lantern Crypt and the Undercity.
 - **Quests** (`shared/quests.ts`): zone quest arcs in both acts, quest bosses (some only at night).
 - **Bounty boards** (`shared/bounty.ts`): pick a hunt for your level, paid when the last kill lands.

@@ -2,7 +2,7 @@ import { MAP_H as FULL_H, MAP_W, PLAYER_RADIUS, TILE, UNDER_END, WORLD_H, type M
 import { CRYPT_DOOR, FLOORS, LAIRS, SEA_END, SHORTCUTS, SINKHOLE, UNDER_SHAFT, type Floor } from "./dungeon";
 import { buildDesert, D, inDesertRow, KEL_MARKET, WAYGATE_OAKVALE } from "./desert";
 import { buildMoors, CAIRN_PORTAL, CAIRN_SQUARE, MOORSGATE_OAKVALE, MR } from "./moors";
-import { BR, buildBadlands, REDPASS_OAKVALE, RUSTWATER_SQUARE } from "./badlands";
+import { BR, buildBadlands, REDPASS_OAKVALE, RUSTWATER_PORTAL, RUSTWATER_SQUARE } from "./badlands";
 
 /** Mirror Pond, in tiles (centre and radii of its water): the Songweaver's Mirror Pond Air is played on its shore (shared/songbook.ts). */
 export const MIRROR_POND = { x: 24, y: 94, rx: 9, ry: 6 };
@@ -91,6 +91,8 @@ export const PORTAL_SPOTS = [
   { id: "gravemoor", name: "Gravemoor Cemetery", x: 210, y: 120 },
   // Act 3: in the cairn-yard of Cairnwatch, the moors' outpost (shared/moors.ts)
   { id: "cairnwatch", name: "Cairnwatch", x: CAIRN_PORTAL.x, y: MR(CAIRN_PORTAL.y) },
+  // Act 4: in the yard of the Rustwater Post, the badlands' outpost (shared/badlands.ts)
+  { id: "rustwater", name: "Rustwater Post", x: RUSTWATER_PORTAL.x, y: BR(RUSTWATER_PORTAL.y) },
 ] as const;
 export const REDFANG = { x: 240, y: 102, w: 24, h: 18 };
 export const REDFANG_TOWERS: [number, number][] = [[254, 103], [249, 118], [241, 108]];

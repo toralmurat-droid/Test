@@ -6,6 +6,7 @@ import { C2, P, blobPath, css, ellipseP, poly, fillShape, glow, limb, line, meta
 import { lastRig, pixelAlpha, pixelize, shrink } from "./body";
 import { paintRaider, RAIDER_H, RAIDER_W } from "./raiders";
 import { HOUND_H, HOUND_W, WRAITH_H, WRAITH_W, paintHound, paintWraith } from "./moors";
+import { RATTLER_H, RATTLER_W, VULTURE_H, VULTURE_W, WARHOUND_H, WARHOUND_W, paintRattler, paintVulture, paintWarhound } from "./badlands";
 import { paintWisp, WISP_H, WISP_W, type WispElement } from "./wisps";
 import { RAIDERS } from "../../../shared/raiders";
 import { AFFIX_KEYS, AFFIXES, type AffixKey } from "../../../shared/champions";
@@ -641,6 +642,15 @@ export function buildMobs(out: string, ONLY?: string[]) {
     humanoid("mob_legionary", "legionary", 32, 32, 29.5 / 32, 0.95),
     humanoid("mob_cairnlord", "cairnlord", 38, 40, 37.5 / 40, 1.15),
     humanoid("mob_barrowking", "barrowking", 46, 48, 42 / 48, 1.25, false, 0),
+    // Act 4, the Red Badlands (look.ts outrider..rourke, badlands.ts warhound / vulture / rattler)
+    humanoid("mob_outrider", "outrider", 22, 30, 27.5 / 30, 0.86),
+    humanoid("mob_crossbowman", "crossbowman", 22, 30, 27.5 / 30, 0.9),
+    humanoid("mob_firebrand", "firebrand", 24, 32, 31.2 / 32, 0.93),
+    humanoid("mob_redcaptain", "redcaptain", 30, 34, 32 / 34, 1.0),
+    humanoid("mob_rourke", "rourke", 40, 44, 40 / 44, 1.2),
+    { key: "mob_warhound", w: WARHOUND_W, h: WARHOUND_H, draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintWarhound(c, SH, dir as "down" | "up" | "right", pose, f); } },
+    { key: "mob_vulture", w: VULTURE_W, h: VULTURE_H, draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintVulture(c, SH, dir as "down" | "up" | "right", pose, f); } },
+    { key: "mob_rattler", w: RATTLER_W, h: RATTLER_H, draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintRattler(c, SH, dir as "down" | "up" | "right", pose, f); } },
     // the clan war's soldiers (warLooks.ts): 36 px wide so the fallen body fits; officers are taller
     ...WAR_SOLDIERS.map((k) => k.endsWith("_cap") || k.endsWith("_chief") || k.endsWith("_adept") ? humanoid(`mob_${k}`, k, 36, 34, 32 / 34, 0.95, false, 0, true) : humanoid(`mob_${k}`, k, 36, 32, 30 / 32, 0.9, false, 0, true)),
     // the clan war's supply carts (warCarts.ts): 14 frames, 12 = staggering, 13 = wrecked
@@ -682,7 +692,7 @@ export function buildMobs(out: string, ONLY?: string[]) {
       const c = body.getContext("2d"), sc = shadow.getContext("2d");
       c.scale(HI, HI); sc.scale(HI, HI);
       SH = sc; s.draw(c, f); SH = null;
-      const blob = !/wisp|war_|skeleton|bandit|bride|necromancer|demon|crawler|hollowking|gnawkin|tuskborn|silkwretch|duskwing|packlord|hornbrute|hidemother|crowseer|gnasher|weaver|nomad|scorpion|sanddead|veiled|camelfolk|sphinx|sunwright|wight|boghag|bonehound|mistwraith|legionary|cairnlord|barrowking|nightraider/.test(s.key);
+      const blob = !/wisp|war_|skeleton|bandit|bride|necromancer|demon|crawler|hollowking|gnawkin|tuskborn|silkwretch|duskwing|packlord|hornbrute|hidemother|crowseer|gnasher|weaver|nomad|scorpion|sanddead|veiled|camelfolk|sphinx|sunwright|wight|boghag|bonehound|mistwraith|legionary|cairnlord|barrowking|nightraider|outrider|crossbowman|firebrand|redcaptain|rourke|warhound|vulture|rattler/.test(s.key);
       const b = shrink(body, "mb", tw, th);
       if (s.key.startsWith("mob_champ_")) pixelize(b, tw, th, true); // a detail, not a body: no ground grime
       else pixelize(b, tw, th, true, blob ? { y0: Math.round(th * 0.7), y1: th, mud: 0.14, sat: 0.9 } : { y0: Math.round(th * 0.72), y1: th, mud: s.key.includes("bandit") ? 0.38 : 0.2 });

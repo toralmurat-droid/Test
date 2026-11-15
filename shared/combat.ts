@@ -94,6 +94,15 @@ export const MOB_COMBAT: Record<MobKind, { poise: number; windupMs: number; soun
   legionary: { poise: 150, windupMs: 380, sound: { tier: "dull", pitch: "L", mode: "major" } }, // behind a tower shield: hard to break
   cairnlord: { poise: 300, windupMs: 460, sound: { tier: "dull", pitch: "L", mode: "major" } },
   barrowking: { poise: 440, windupMs: 480, sound: { tier: "dull", pitch: "L", mode: "major" } },
+  // Act 4, the badlands: the Redfang in leather and mail (minor key like their Hollow kin), beasts that ring thin
+  outrider: { poise: 60, windupMs: 300, sound: { tier: "normal", pitch: "M", mode: "minor" } },
+  crossbowman: { poise: 45, windupMs: 520, sound: { tier: "normal", pitch: "M", mode: "minor" } }, // a slow crank of the windlass
+  firebrand: { poise: 45, windupMs: 450, sound: { tier: "keen", pitch: "M", mode: "minor" } },
+  warhound: { poise: 35, windupMs: 240, sound: { tier: "fragile", pitch: "H", mode: "minor" } },
+  vulture: { poise: 30, windupMs: 320, sound: { tier: "fragile", pitch: "H", mode: "minor" } },
+  rattler: { poise: 25, windupMs: 260, sound: { tier: "keen", pitch: "H", mode: "minor" } },
+  redcaptain: { poise: 300, windupMs: 440, sound: { tier: "dull", pitch: "L", mode: "minor" } },
+  rourke: { poise: 460, windupMs: 460, sound: { tier: "dull", pitch: "L", mode: "minor" } },
 };
 
 /**

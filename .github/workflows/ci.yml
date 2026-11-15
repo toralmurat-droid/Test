@@ -17,7 +17,7 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25 # the suite takes 12-14 min on the runner since the moors and badlands; 15 cut it off mid-build
     # A throwaway Postgres for the account-store tests and the smoke test on Postgres
     services:
       postgres:

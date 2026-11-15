@@ -64,6 +64,13 @@ export function bindElemFx(room: Room, h: ElemFxHost) {
       });
       // smoke curling out of its maw as it draws breath
       for (let i = 0; i < 8; i++) scene.time.delayedCall(i * ms / 8, () => { if (e) fx.p(e.sprite.x + ax * 5, e.sprite.y + ay * 3, e.top * 0.45, pick([0x4a4440, 0x3a3532, 0xa83a12]), { vz: rnd(8, 16), vx: rnd(-4, 4), life: 420, size: 2, size1: 1, alpha: 0.6 }); });
+    } else if (kind === "firepot") {
+      // the Firebrand winds up: embers at its hands, a target circle where the pot will land
+      if (e) { h.squash(id, 0.9, 1.15, ms); h.sound?.("firepotThrow", e.sprite.x, e.sprite.y); }
+      mark(scene, ms, (g, f) => {
+        g.lineStyle(1.5, 0xffa848, 0.5 + f * 0.4).strokeCircle(x, y, r); g.fillStyle(0x8a2a0c, 0.12 + f * 0.25).fillCircle(x, y, r * f);
+      });
+      for (let i = 0; i < 6; i++) scene.time.delayedCall(i * ms / 6, () => { if (e) fx.p(e.sprite.x + rnd(-5, 5), e.sprite.y, e.top * 0.5, pick(PALETTE.fire), { vz: rnd(8, 18), life: 300, size: 1, size1: 0, add: true }); });
     } else if (kind === "splurt" && e) {
       h.squash(id, 1.2, 0.8, ms);
       for (let i = 0; i < 5; i++) fx.p(e.sprite.x + rnd(-5, 5), e.sprite.y, e.top * 0.6, pick(PALETTE.poison.slice(1)), { vz: rnd(10, 25), g: 120, life: 360, size: 1, size1: 1 });
@@ -95,6 +102,42 @@ export function bindElemFx(room: Room, h: ElemFxHost) {
       } });
       scene.time.delayedCall(puddleMs, () => { ev2.remove(); g.destroy(); });
     });
+  });
+
+  // Fire pot: arcs to the marked spot, bursts in flame and leaves a burning patch that gutters out
+  room.onMessage("firepot", ({ x0, y0, x, y, ms, r, burnMs }) => {
+    const pot = scene.add.circle(x0, y0, 3, 0x7a3a1c).setStrokeStyle(1, 0x2a1208).setDepth(9500);
+    const t0 = scene.time.now, d = Math.hypot(x - x0, y - y0), H = 18 + d * 0.3;
+    const ev = scene.time.addEvent({ delay: 16, loop: true, callback: () => {
+      const f = Math.min(1, (scene.time.now - t0) / ms), z = Math.sin(f * Math.PI) * H;
+      pot.setPosition(x0 + (x - x0) * f, y0 + (y - y0) * f - z).setAngle(f * 540);
+      if (Math.random() < 0.6) fx.p(pot.x, pot.y + z, z, pick(PALETTE.fire), { vz: rnd(0, 8), life: 240, size: 1, size1: 0, add: true });
+    } });
+    scene.time.delayedCall(ms, () => {
+      ev.remove(); pot.destroy();
+      h.sound?.("firepotBurst", x, y);
+      fx.glow(x, y, 2, r * 1.6, 0xff9f1c, 360, 0.5, true);
+      for (let i = 0; i < 16; i++) { const a = Math.random() * Math.PI * 2, v = rnd(25, 65); fx.p(x, y, 2, pick(PALETTE.fire), { vx: Math.cos(a) * v, vy: Math.sin(a) * v * 0.5, vz: rnd(15, 40), g: 140, life: rnd(300, 480), size: pick([1, 2, 2, 3]), size1: 0, add: true }); }
+      const g = scene.add.graphics().setDepth(GROUND_DEPTH), p0 = scene.time.now;
+      const ev2 = scene.time.addEvent({ delay: 70, loop: true, callback: () => {
+        const f = (scene.time.now - p0) / burnMs, a = f > 0.8 ? (1 - f) * 5 : 1;
+        g.clear().fillStyle(0x1e0a06, 0.45 * a).fillEllipse(x, y, r * 2.2, r * 1.5).fillStyle(0xe0661c, (0.25 + Math.random() * 0.15) * a).fillEllipse(x, y, r * 1.5, r * 1.0);
+        if (Math.random() < 0.6) fx.p(x + rnd(-r * 0.7, r * 0.7), y + rnd(-r * 0.4, r * 0.4), 1, pick(PALETTE.fire), { vz: rnd(10, 22), life: 300, size: 1, size1: 0, add: true });
+      } });
+      scene.time.delayedCall(burnMs, () => { ev2.remove(); g.destroy(); });
+    });
+  });
+
+  // A warhound bays and its pack joins: a howl, and a pale mark rising over every hound called
+  room.onMessage("bay", ({ id, ids }: { id: string; ids?: string[] }) => {
+    const e = h.ent(id);
+    if (e) { h.sound?.("houndHowl", e.sprite.x, e.sprite.y); h.say(e.sprite.x, e.sprite.y - e.top - 6, "AWOO!", "#e0c090"); }
+    for (const pid of ids ?? []) {
+      const p = pid === id ? undefined : h.ent(pid);
+      if (!p) continue;
+      h.say(p.sprite.x, p.sprite.y - p.top - 4, "!", "#ff9a4a");
+      for (let i = 0; i < 5; i++) fx.p(p.sprite.x + rnd(-5, 5), p.sprite.y, p.top * 0.6, 0xe0c090, { vz: rnd(10, 22), life: 360, size: 1, size1: 0 });
+    }
   });
 
   // Frost Nova: a ring of ice bursts out, a frost circle stays on the ground for a moment

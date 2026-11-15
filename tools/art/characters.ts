@@ -903,6 +903,21 @@ const moorarmourer = human({
   name: "moorarmourer", skin: 0xc89a76, hair: 0x8a8a88, hairStyle: "short", beard: 0x9a9a98,
   shirt: 0x6a5a4a, apron: 0x4a3322, pants: 0x4a463c, boots: 0x2a2018, belt: 0x2a1c12, weapon: "hammer", gait: "march",
 });
+// The Rustwater Post, Act 4 (shared/npcs.ts): the marshal, the armourer, the healer
+const rustmarshal = human({
+  name: "rustmarshal", skin: 0xc48c62, hair: 0x6a5a4a, hairStyle: "short", beard: 0x7a6e60,
+  hat: { kind: "helm", col: 0x8a7a6a, trim: 0x5a3a28 }, shirt: 0x8a7a6a, pants: 0x4a3828, boots: 0x2a2018, belt: 0x3a2a1c,
+  tabard: { col: 0x8a3a24, emblem: 0xf0c75a }, weapon: "spear", gait: "march",
+});
+const rustarmourer = human({
+  name: "rustarmourer", skin: 0xa86e4a, hair: 0x2a1a14, hairStyle: "ponytail",
+  hat: { kind: "bandana", col: 0xb02a1c, trim: 0x5a1a12 }, shirt: 0xc8b090, apron: 0x4a2c1c, pants: 0x5a463a, boots: 0x2a1c14, belt: 0x2a1c12, weapon: "hammer", gait: "march",
+});
+const rusthealer = human({
+  name: "rusthealer", skin: 0xb88a64, hair: 0xd8d2c8, hairStyle: "long",
+  hat: { kind: "hood", col: 0xc8ae8a, trim: 0x8a5a3a }, shirt: 0xa8683e, vest: 0x7a3a24, apron: 0xe4d8bc, pants: 0x6a3a28, boots: 0x3a281c, belt: 0x4a3020, weapon: "none", gait: "stroll", hipHand: true,
+});
+export const BADLAND_NPCS = ["rustmarshal", "rustarmourer", "rusthealer"] as const;
 export const MOOR_NPCS = ["cairncaptain", "moorherbalist", "moorarmourer"] as const;
 export const ZONE_NPCS = ["huntsman", "miller", "forester", "beachcomber", "prospector", "caravaneer", "hermit", "dunescout", "defector", "monk", "tombrobber"] as const;
 
@@ -944,7 +959,7 @@ export const QUEST_NPCS = ["sexton", "mourner1", "mourner2", "mourner3", "ilka",
 
 export const NPCS: Hero[] = [blacksmith, merchant, villager, guard, druid, witch, watchman, ...FOLK.map((n) => folk(n)), wellkeeper, sandcaptain, spicetrader, desertsmith, armourer, saltarmourer, sandarmourer,
   huntsman, miller, forester, beachcomber, prospector, caravaneer, hermit, dunescout, defector, monk, tombrobber,
-  sexton, mourner1, mourner2, mourner3, ilka, quartermaster, smuggler, alewife, lutemaker, cairncaptain, moorherbalist, moorarmourer];
+  sexton, mourner1, mourner2, mourner3, ilka, quartermaster, smuggler, alewife, lutemaker, cairncaptain, moorherbalist, moorarmourer, rustmarshal, rustarmourer, rusthealer];
 /** Pose data for monsters painted with the character painter (paint/mobs.ts); never drawn as pixel art. */
 const mobPose = (name: string, weapon: HumanOpts["weapon"]) => human({ name, skin: 0, hair: 0, hairStyle: "bald", shirt: 0, pants: 0, boots: 0, weapon });
 export const MOB_POSES: Record<string, Hero> = {
@@ -963,6 +978,7 @@ export const MOB_POSES: Record<string, Hero> = {
   war_host: mobPose("war_host", "spear"), war_host_cap: mobPose("war_host_cap", "axe"), war_hidekin: mobPose("war_hidekin", "hammer"), war_hidekin_chief: mobPose("war_hidekin_chief", "hammer"),
   war_veiled: mobPose("war_veiled", "axe"), war_veiled_adept: mobPose("war_veiled_adept", "staff"),
   wight: mobPose("wight", "axe"), boghag: mobPose("boghag", "staff"), legionary: mobPose("legionary", "spear"), cairnlord: mobPose("cairnlord", "axe"), barrowking: mobPose("barrowking", "hammer"),
+  outrider: mobPose("outrider", "dagger"), crossbowman: mobPose("crossbowman", "bow"), firebrand: mobPose("firebrand", "none"), redcaptain: mobPose("redcaptain", "axe"), rourke: mobPose("rourke", "axe"),
   veiled: mobPose("veiled", "staff"), camelfolk: mobPose("camelfolk", "spear"), sphinx: mobPose("sphinx", "axe"), sunwright: mobPose("sunwright", "staff"),
 };
 /** Poses for the humanoid champions' sheets (paint/look.ts CHAMP_WEAPONS): the grip follows their champion weapon. */

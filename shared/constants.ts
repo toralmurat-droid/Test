@@ -105,6 +105,9 @@ export type MobKind = "slime" | "skeleton" | "motherblob" | "blobling" | "shoote
   | "nightraider"
   // Act 3, the Grey Barrow Moors (shared/moors.ts): the Ossuary Host's dead, the fen-hags who serve them, and the Barrow-King
   | "wight" | "boghag" | "bonehound" | "mistwraith" | "legionary" | "cairnlord" | "barrowking"
+  // Act 4, the Red Badlands (shared/badlands.ts): the Redfang clan's riders, bowmen, fire-throwers, dogs and captains, the
+  // badlands' vultures and rattlesnakes, and Old Rourke, the Fang-Father, in his keep at Fangrock
+  | "outrider" | "crossbowman" | "firebrand" | "warhound" | "vulture" | "rattler" | "redcaptain" | "rourke"
   // clan troops of the war (shared/war/troops.ts): the clan rides in Mob.weapon; art comes per clan (shared/war/patrols.ts TROOP_LOOK)
   | "trooper"
   // summoned by heroes (shared/summons.ts): they fight for their owner
@@ -199,12 +202,24 @@ export const MOBS: Record<MobKind, MobDef> = {
   // the elite of the barrow fields, and the Host's old king under Kingsbarrow (a boss of the dead: only about at night)
   cairnlord: { name: "Cairn-Lord", maxHp: 750, speed: 50, damage: 27, attackCooldownMs: 1300, aggroRange: 170, leash: 320, xp: 340 },
   barrowking: { name: "The Barrow-King", maxHp: 1900, speed: 52, damage: 32, attackCooldownMs: 1250, aggroRange: 240, leash: 460, xp: 1100 },
+  // Act 4, the Red Badlands (Lv 25-40): base numbers set with tools/balance/pve.ts --badlands so the badlands play like the
+  // moors and Act 1's late zones for a hero of their level (BADLANDS_KINDS below; moves in BEAST_MOVES, BADLANDS_AI)
+  outrider: { name: "Redfang Outrider", maxHp: 200, speed: 64, damage: 21, attackCooldownMs: 950, aggroRange: 140, leash: 240, xp: 36 },
+  crossbowman: { name: "Redfang Crossbowman", maxHp: 150, speed: 54, damage: 23, attackCooldownMs: 1800, aggroRange: 170, leash: 240, xp: 38 },
+  firebrand: { name: "Redfang Firebrand", maxHp: 155, speed: 52, damage: 20, attackCooldownMs: 1500, aggroRange: 150, leash: 230, xp: 40 },
+  warhound: { name: "Redfang Warhound", maxHp: 125, speed: 86, damage: 10, attackCooldownMs: 800, aggroRange: 150, leash: 260, xp: 28 },
+  vulture: { name: "Vulture", maxHp: 120, speed: 70, damage: 16, attackCooldownMs: 1100, aggroRange: 160, leash: 280, xp: 30 },
+  rattler: { name: "Rattler", maxHp: 115, speed: 58, damage: 14, attackCooldownMs: 1000, aggroRange: 100, leash: 200, xp: 30 },
+  // the clan's captains (elite) and its lord, Old Rourke, the Fang-Father, in Fangrock's keep (a living boss: about by day and night)
+  redcaptain: { name: "Redfang Captain", maxHp: 760, speed: 56, damage: 27, attackCooldownMs: 1250, aggroRange: 180, leash: 320, xp: 350 },
+  rourke: { name: "Old Rourke", maxHp: 1900, speed: 56, damage: 26, attackCooldownMs: 1200, aggroRange: 240, leash: 460, xp: 1200 },
 };
 
 /** Elite monsters: much tougher than the rest of their zone, with a bigger look and an "Elite" tag. */
-export const ELITE: Partial<Record<MobKind, true>> = { necromancer: true, demon: true, banditchief: true, hollowking: true, packlord: true, hornbrute: true, hidemother: true, gnasher: true, weaver: true, sunwright: true, cairnlord: true, barrowking: true };
+export const ELITE: Partial<Record<MobKind, true>> = { necromancer: true, demon: true, banditchief: true, hollowking: true, packlord: true, hornbrute: true, hidemother: true, gnasher: true, weaver: true, sunwright: true, cairnlord: true, barrowking: true,
+  redcaptain: true, rourke: true };
 /** Bosses: elites that lead a whole camp (tagged "Boss" instead of "Elite"). */
-export const BOSS: Partial<Record<MobKind, true>> = { banditchief: true, hollowking: true, hidemother: true, sunwright: true, barrowking: true };
+export const BOSS: Partial<Record<MobKind, true>> = { banditchief: true, hollowking: true, hidemother: true, sunwright: true, barrowking: true, rourke: true };
 
 /**
  * Skeleton casters. Distances in px.
@@ -312,6 +327,8 @@ export const FACTION: Partial<Record<MobKind, "blob" | "undead" | "outlaw">> = {
   sanddead: "undead",
   // Act 3: the Ossuary Host (the bog hags are living witches in its pay: no side)
   wight: "undead", bonehound: "undead", mistwraith: "undead", legionary: "undead", cairnlord: "undead", barrowking: "undead",
+  // Act 4: the Redfang clan and its dogs (the vultures and the rattlers take no side)
+  outrider: "outlaw", crossbowman: "outlaw", firebrand: "outlaw", warhound: "outlaw", redcaptain: "outlaw", rourke: "outlaw",
 };
 
 /**
@@ -358,7 +375,8 @@ export const ELEM_BLOB = {
   sparks: { everyMs: 800, count: 3, spread: 42, radius: 11, ms: 2400, tickMs: 450, dmgMult: 0.55, max: 9 },
 };
 /** Which move each elemental blob kind brings (a merged blob gets the moves of every elemental blob inside it). */
-export const ELEM_MOVE: Partial<Record<MobKind, "splurt" | "nova" | "breath" | "sparks">> = { venomblob: "splurt", frostblob: "nova", fireblob: "breath", stormblob: "sparks" };
+export const ELEM_MOVE: Partial<Record<MobKind, "splurt" | "nova" | "breath" | "sparks" | "firepot">> = { venomblob: "splurt", frostblob: "nova", fireblob: "breath", stormblob: "sparks",
+  firebrand: "firepot" }; // Act 4: the Redfang Firebrand's fire pots (BADLANDS_AI.firepot), thrown and landing like the Venom Blob's splurt
 
 /** Mother Blob brood: every few seconds (random) she may bud a blobling, up to `perMother` alive at once. */
 export const BROOD = { minMs: 5000, maxMs: 12000, perMother: 4, worldCap: 160 };
@@ -497,6 +515,12 @@ export const BEAST_MOVES: Partial<Record<MobKind, BeastMove[]>> = {
   legionary: ["gore"],
   cairnlord: ["brood", "stomp", "maul"],
   barrowking: ["rockfall", "brood", "roar", "maul"],
+  // Act 4: vultures drop out of the sky onto you (and drink); warhounds leap at your throat; a Redfang Captain stamps and
+  // cleaves (and cries war, BADLANDS_AI.warlords); Old Rourke leaps on you, cleaves, and roars (slows)
+  vulture: ["swoop"],
+  warhound: ["pounce"],
+  redcaptain: ["stomp", "maul"],
+  rourke: ["pounce", "roar", "maul"],
 };
 /** Damage over time after a plain blow (BEAST.plague / bleed / venom). */
 /**
@@ -548,7 +572,8 @@ export const SUNWRIGHT = {
     death: ["The night... it is so cold... I only wanted..."],
   },
 };
-export const BEAST_RIDER: Partial<Record<MobKind, "plague" | "bleed" | "venom">> = { gnawkin: "plague", packlord: "bleed", silkwretch: "venom", hidemother: "bleed", gnasher: "plague", weaver: "venom", scorpion: "venom", bonehound: "bleed", boghag: "venom" };
+export const BEAST_RIDER: Partial<Record<MobKind, "plague" | "bleed" | "venom">> = { gnawkin: "plague", packlord: "bleed", silkwretch: "venom", hidemother: "bleed", gnasher: "plague", weaver: "venom", scorpion: "venom", bonehound: "bleed", boghag: "venom",
+  warhound: "bleed", rattler: "venom" };
 /** Who answers a beast's Brood or Howl (default BEAST.brood.kinds / BEAST.howl.summon). */
 export const BEAST_BROOD: Partial<Record<MobKind, MobKind[]>> = { gnasher: ["gnawkin", "gnawkin", "gnawkin"], weaver: ["silkwretch", "silkwretch"], sunwright: ["veiled", "veiled", "veiled"],
   cairnlord: ["wight", "wight"], barrowking: ["wight", "legionary", "bonehound", "bonehound"] };
@@ -569,6 +594,29 @@ export const MOORS_AI = {
 };
 /** Act 3's monsters (the Grey Barrow Moors): levels from MOORS_LEVEL. */
 export const MOORS_KINDS: MobKind[] = ["wight", "boghag", "bonehound", "mistwraith", "legionary", "cairnlord", "barrowking"];
+/**
+ * The badlands' moves (server TownRoom, pve.ts). Distances in px, times in ms, damage as a multiple of the monster's own.
+ * - crossbow: the Crossbowman's heavy bolt, slow to reload; perched on a tower (a camp lookout, shared/bandits.ts) it sees
+ *   and shoots as far as a Redfang Hollow lookout.
+ * - firepot: the Firebrand lobs a clay pot of burning cinnabar oil where you stand (marked first); it bursts and leaves
+ *   the ground burning (a fire hazard like the Venom Blob's puddle).
+ * - pack: a Warhound that is hit (or sees its prey) bays, and every warhound within `range` without a target runs in.
+ * - warlords: war cries (the rallied hit and run like the Redfang Chief's men, shared/bandits.ts CHIEF.warCry): the
+ *   Captain rallies the Redfang round him; Old Rourke rallies them and, once badly hurt, calls outriders out of the keep.
+ */
+export const BADLANDS_AI = {
+  crossbow: { range: 150, keepAway: 65, shotSpeed: 230, shotRadius: 3, mult: 1.15 },
+  firepot: { range: 135, keepAway: 70, windupMs: 650, flightMs: 700, cooldownMs: 3600, dmgMult: 1.1, burn: { radius: 24, ms: 4500, tickMs: 500, dmgMult: 0.32 } },
+  pack: { range: 8 * 32, cooldownMs: 6000 },
+  warlords: {
+    redcaptain: { cooldownMs: 20000, range: 10 * 32, buffMs: 9000 },
+    rourke: { cooldownMs: 20000, range: 14 * 32, buffMs: 10000, reinforce: { hpFrac: 0.5, count: 3, kind: "outrider" as MobKind } },
+  } as Partial<Record<MobKind, { cooldownMs: number; range: number; buffMs: number; reinforce?: { hpFrac: number; count: number; kind: MobKind } }>>,
+};
+/** Act 4's monsters (the Red Badlands): levels from BADLANDS_LEVEL. */
+export const BADLANDS_KINDS: MobKind[] = ["outrider", "crossbowman", "firebrand", "warhound", "vulture", "rattler", "redcaptain", "rourke"];
+/** The Redfang clan's own (the badlands' men and dogs): they answer the horn and their captains' war cries. */
+export const REDFANG_KINDS: MobKind[] = ["outrider", "crossbowman", "firebrand", "warhound", "redcaptain", "rourke"];
 /** Beast-folk that fly (drawn hovering, client textures.ts). */
-export const BEAST_FLYERS: MobKind[] = ["duskwing", "crowseer"];
+export const BEAST_FLYERS: MobKind[] = ["duskwing", "crowseer", "vulture"];
 export const BEAST_KINDS: MobKind[] = ["gnawkin", "tuskborn", "silkwretch", "duskwing", "packlord", "hornbrute", "hidemother", "crowseer", "gnasher", "weaver"];

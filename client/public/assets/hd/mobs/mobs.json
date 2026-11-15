@@ -29,6 +29,30 @@
   "scale": 1.5,
   "frames": 12
  },
+ "mob_venomblob": {
+  "w": 14,
+  "h": 18,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_frostblob": {
+  "w": 16,
+  "h": 20,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_fireblob": {
+  "w": 16,
+  "h": 20,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_stormblob": {
+  "w": 14,
+  "h": 18,
+  "scale": 1.5,
+  "frames": 12
+ },
  "mob_motherblob": {
   "w": 24,
   "h": 22,
@@ -43,6 +67,78 @@
  },
  "mob_motherblob3": {
   "w": 24,
+  "h": 22,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_golem_fire": {
+  "w": 40,
+  "h": 46,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_golem_colossus_fire": {
+  "w": 40,
+  "h": 46,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_golem_cold": {
+  "w": 40,
+  "h": 46,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_golem_colossus_cold": {
+  "w": 40,
+  "h": 46,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_golem_poison": {
+  "w": 40,
+  "h": 46,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_golem_colossus_poison": {
+  "w": 40,
+  "h": 46,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_golem_shock": {
+  "w": 40,
+  "h": 46,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_golem_colossus_shock": {
+  "w": 40,
+  "h": 46,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_wisp_fire": {
+  "w": 16,
+  "h": 22,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_wisp_cold": {
+  "w": 16,
+  "h": 22,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_wisp_poison": {
+  "w": 16,
+  "h": 22,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_wisp_shock": {
+  "w": 16,
   "h": 22,
   "scale": 1.5,
   "frames": 12
@@ -104,6 +200,12 @@
  "mob_necromancer": {
   "w": 24,
   "h": 32,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_bride": {
+  "w": 20,
+  "h": 30,
   "scale": 1.5,
   "frames": 12
  },
@@ -241,11 +343,395 @@
    ]
   ]
  },
- "mob_crawler": {
+ "mob_hollowking": {
+  "w": 44,
+  "h": 48,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_gnawkin": {
+  "w": 20,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_tuskborn": {
+  "w": 26,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_silkwretch": {
+  "w": 20,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_duskwing": {
+  "w": 32,
+  "h": 38,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_gnawkin_folk": {
+  "w": 24,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_tuskborn_folk": {
+  "w": 26,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_silkwretch_folk": {
+  "w": 30,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_duskwing_folk": {
+  "w": 32,
+  "h": 38,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_crowseer": {
+  "w": 32,
+  "h": 40,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_gnasher": {
+  "w": 34,
+  "h": 38,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_weaver": {
+  "w": 42,
+  "h": 40,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_packlord": {
+  "w": 30,
+  "h": 36,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_hornbrute": {
+  "w": 40,
+  "h": 40,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_hidemother": {
+  "w": 44,
+  "h": 48,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_nomad": {
+  "w": 22,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_nomad_folk": {
+  "w": 22,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_sanddead": {
+  "w": 22,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_veiled": {
+  "w": 24,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_camelfolk": {
+  "w": 34,
+  "h": 36,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_sphinx": {
+  "w": 40,
+  "h": 40,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_sunwright": {
+  "w": 44,
+  "h": 48,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_wight": {
+  "w": 24,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_bonehound": {
+  "w": 30,
+  "h": 22,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_mistwraith": {
+  "w": 28,
+  "h": 38,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_boghag": {
+  "w": 26,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_legionary": {
+  "w": 32,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_cairnlord": {
+  "w": 38,
+  "h": 40,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_barrowking": {
+  "w": 46,
+  "h": 48,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_outrider": {
+  "w": 22,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_crossbowman": {
+  "w": 22,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_firebrand": {
+  "w": 24,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_redcaptain": {
+  "w": 30,
+  "h": 34,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_rourke": {
+  "w": 40,
+  "h": 44,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_warhound": {
+  "w": 34,
+  "h": 24,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_vulture": {
+  "w": 36,
+  "h": 34,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_rattler": {
   "w": 32,
   "h": 22,
   "scale": 1.5,
   "frames": 12
+ },
+ "mob_war_warden": {
+  "w": 36,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_warden_cap": {
+  "w": 36,
+  "h": 34,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_redfang": {
+  "w": 36,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_redfang_chief": {
+  "w": 36,
+  "h": 34,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_host": {
+  "w": 36,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_host_cap": {
+  "w": 36,
+  "h": 34,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_hidekin": {
+  "w": 36,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_hidekin_chief": {
+  "w": 36,
+  "h": 34,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_veiled": {
+  "w": 36,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_veiled_adept": {
+  "w": 36,
+  "h": 34,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_cart_wardens": {
+  "w": 72,
+  "h": 44,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_cart_redfang": {
+  "w": 72,
+  "h": 44,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_cart_host": {
+  "w": 72,
+  "h": 44,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_cart_hidekin": {
+  "w": 72,
+  "h": 44,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_cart_veiled": {
+  "w": 72,
+  "h": 44,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_ram_host": {
+  "w": 72,
+  "h": 44,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_tunnel_hidekin": {
+  "w": 80,
+  "h": 44,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_scorpion": {
+  "w": 36,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_nightraider_vharn": {
+  "w": 64,
+  "h": 62,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_nightraider_moragh": {
+  "w": 64,
+  "h": 62,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_nightraider_skarde": {
+  "w": 64,
+  "h": 62,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_nightraider_ilsevar": {
+  "w": 64,
+  "h": 62,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_nightraider_corvane": {
+  "w": 64,
+  "h": 62,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_nightraider_hesk": {
+  "w": 64,
+  "h": 62,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_nightraider_sabel": {
+  "w": 64,
+  "h": 62,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_champ_split": {
+  "w": 20,
+  "h": 20,
+  "scale": 1.5,
+  "frames": 2
+ },
+ "mob_champ_taint": {
+  "w": 20,
+  "h": 20,
+  "scale": 1.5,
+  "frames": 2
+ },
+ "mob_champ_deepvenom": {
+  "w": 20,
+  "h": 20,
+  "scale": 1.5,
+  "frames": 2
  },
  "mob_demon1": {
   "w": 28,
@@ -783,305 +1269,11 @@
    ]
   ]
  },
- "mob_hollowking": {
-  "w": 44,
-  "h": 48,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_venomblob": {
-  "w": 14,
-  "h": 18,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_frostblob": {
-  "w": 16,
-  "h": 20,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_fireblob": {
-  "w": 16,
-  "h": 20,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_stormblob": {
-  "w": 14,
-  "h": 18,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_gnawkin": {
-  "w": 20,
-  "h": 30,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_tuskborn": {
-  "w": 26,
-  "h": 32,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_silkwretch": {
-  "w": 20,
-  "h": 30,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_duskwing": {
+ "mob_crawler": {
   "w": 32,
-  "h": 38,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_packlord": {
-  "w": 30,
-  "h": 36,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_hornbrute": {
-  "w": 40,
-  "h": 40,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_hidemother": {
-  "w": 44,
-  "h": 48,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_gnawkin_folk": {
-  "w": 24,
-  "h": 30,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_tuskborn_folk": {
-  "w": 26,
-  "h": 32,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_silkwretch_folk": {
-  "w": 30,
-  "h": 30,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_duskwing_folk": {
-  "w": 32,
-  "h": 38,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_crowseer": {
-  "w": 32,
-  "h": 40,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_gnasher": {
-  "w": 34,
-  "h": 38,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_weaver": {
-  "w": 42,
-  "h": 40,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_golem_fire": {
-  "w": 40,
-  "h": 46,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_golem_colossus_fire": {
-  "w": 40,
-  "h": 46,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_golem_cold": {
-  "w": 40,
-  "h": 46,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_golem_colossus_cold": {
-  "w": 40,
-  "h": 46,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_golem_poison": {
-  "w": 40,
-  "h": 46,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_golem_colossus_poison": {
-  "w": 40,
-  "h": 46,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_golem_shock": {
-  "w": 40,
-  "h": 46,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_golem_colossus_shock": {
-  "w": 40,
-  "h": 46,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_bride": {
-  "w": 20,
-  "h": 30,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_nomad": {
-  "w": 22,
-  "h": 30,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_nomad_folk": {
-  "w": 22,
-  "h": 30,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_sanddead": {
-  "w": 22,
-  "h": 30,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_veiled": {
-  "w": 24,
-  "h": 32,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_camelfolk": {
-  "w": 34,
-  "h": 36,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_scorpion": {
-  "w": 36,
-  "h": 30,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_sunwright": {
-  "w": 44,
-  "h": 48,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_nightraider_vharn": {
-  "w": 64,
-  "h": 62,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_nightraider_moragh": {
-  "w": 64,
-  "h": 62,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_nightraider_skarde": {
-  "w": 64,
-  "h": 62,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_nightraider_ilsevar": {
-  "w": 64,
-  "h": 62,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_nightraider_corvane": {
-  "w": 64,
-  "h": 62,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_nightraider_hesk": {
-  "w": 64,
-  "h": 62,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_nightraider_sabel": {
-  "w": 64,
-  "h": 62,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_sphinx": {
-  "w": 40,
-  "h": 40,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_wisp_fire": {
-  "w": 16,
   "h": 22,
   "scale": 1.5,
   "frames": 12
- },
- "mob_wisp_cold": {
-  "w": 16,
-  "h": 22,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_wisp_poison": {
-  "w": 16,
-  "h": 22,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_wisp_shock": {
-  "w": 16,
-  "h": 22,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_champ_split": {
-  "w": 20,
-  "h": 20,
-  "scale": 1.5,
-  "frames": 2
- },
- "mob_champ_taint": {
-  "w": 20,
-  "h": 20,
-  "scale": 1.5,
-  "frames": 2
- },
- "mob_champ_deepvenom": {
-  "w": 20,
-  "h": 20,
-  "scale": 1.5,
-  "frames": 2
  },
  "mob_skeleton_champ": {
   "w": 20,
@@ -1182,150 +1374,6 @@
  "mob_sphinx_champ": {
   "w": 40,
   "h": 40,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_war_warden": {
-  "w": 36,
-  "h": 32,
-  "scale": 1.5,
-  "frames": 14
- },
- "mob_war_redfang": {
-  "w": 36,
-  "h": 32,
-  "scale": 1.5,
-  "frames": 14
- },
- "mob_war_host": {
-  "w": 36,
-  "h": 32,
-  "scale": 1.5,
-  "frames": 14
- },
- "mob_war_hidekin": {
-  "w": 36,
-  "h": 32,
-  "scale": 1.5,
-  "frames": 14
- },
- "mob_war_veiled_adept": {
-  "w": 36,
-  "h": 34,
-  "scale": 1.5,
-  "frames": 14
- },
- "mob_war_warden_cap": {
-  "w": 36,
-  "h": 34,
-  "scale": 1.5,
-  "frames": 14
- },
- "mob_war_redfang_chief": {
-  "w": 36,
-  "h": 34,
-  "scale": 1.5,
-  "frames": 14
- },
- "mob_war_host_cap": {
-  "w": 36,
-  "h": 34,
-  "scale": 1.5,
-  "frames": 14
- },
- "mob_war_hidekin_chief": {
-  "w": 36,
-  "h": 34,
-  "scale": 1.5,
-  "frames": 14
- },
- "mob_war_veiled": {
-  "w": 36,
-  "h": 32,
-  "scale": 1.5,
-  "frames": 14
- },
- "mob_war_cart_wardens": {
-  "w": 72,
-  "h": 44,
-  "scale": 1.5,
-  "frames": 14
- },
- "mob_war_cart_redfang": {
-  "w": 72,
-  "h": 44,
-  "scale": 1.5,
-  "frames": 14
- },
- "mob_war_cart_host": {
-  "w": 72,
-  "h": 44,
-  "scale": 1.5,
-  "frames": 14
- },
- "mob_war_cart_hidekin": {
-  "w": 72,
-  "h": 44,
-  "scale": 1.5,
-  "frames": 14
- },
- "mob_war_cart_veiled": {
-  "w": 72,
-  "h": 44,
-  "scale": 1.5,
-  "frames": 14
- },
- "mob_war_ram_host": {
-  "w": 72,
-  "h": 44,
-  "scale": 1.5,
-  "frames": 14
- },
- "mob_war_tunnel_hidekin": {
-  "w": 80,
-  "h": 44,
-  "scale": 1.5,
-  "frames": 14
- },
- "mob_wight": {
-  "w": 24,
-  "h": 30,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_boghag": {
-  "w": 26,
-  "h": 32,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_legionary": {
-  "w": 32,
-  "h": 32,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_cairnlord": {
-  "w": 38,
-  "h": 40,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_barrowking": {
-  "w": 46,
-  "h": 48,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_bonehound": {
-  "w": 30,
-  "h": 22,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_mistwraith": {
-  "w": 28,
-  "h": 38,
   "scale": 1.5,
   "frames": 12
  }
