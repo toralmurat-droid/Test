@@ -46,6 +46,8 @@ export type CaravanOutcome = "raided" | "delivered" | "lost";
 const outcomes = new Map<string, { kind: CaravanOutcome; until: number }>();
 export const caravanOutcome = (id: string): CaravanOutcome | undefined => outcomes.get(id)?.kind;
 /** Tests: forget every outcome. */
+/** Raided or delivered somewhere in the process: every room's copy of that trip is done. */
+const settled = (id: string) => { const k = outcomes.get(id)?.kind; return k === "raided" || k === "delivered"; };
 export function _resetCaravans() { outcomes.clear(); }
 
 /** One cart's trip as this room knows it (kept while the cart sleeps, so an escort's time and its wounds survive). */
@@ -95,7 +97,7 @@ export class WarCaravans {
       for (const p of heroes) if (troopStance(tr.line.clan, p) === "ally" && Math.hypot(p.x - l.x, p.y - l.y) <= CARAVAN.escortPx) tr.heroMs.set(p.name, (tr.heroMs.get(p.name) ?? 0) + dt);
     }
     // arrivals (seen or not), and wrecks whose escorts are done
-    for (const tr of [...this.trips.values()]) if (now >= tr.dep + tr.tripMs) { if (outcomes.has(tr.id)) this.trips.delete(tr.id); else this.arrive(tr, now); }
+    for (const tr of [...this.trips.values()]) if (now >= tr.dep + tr.tripMs) { if (settled(tr.id)) this.trips.delete(tr.id); else this.arrive(tr, now); }
     for (const l of [...this.live.values()]) {
       if (l.wreckAt && now - l.wreckAt >= CARAVAN.scatterMs) this.drop(l);
       else if (!l.wreckAt && outcomes.has(l.trip.id)) this.drop(l); // raided or delivered in another room
@@ -134,6 +136,7 @@ export class WarCaravans {
 
   private wake(line: CaravanLine, r: CaravanRoute, id: string, dep: number, at: { x: number; y: number }, now: number) {
     let tr = this.trips.get(id);
+    if (tr && tr.line.clan !== line.clan) { this.trips.delete(id); tr = undefined; } // the line changed hands mid-trip: a new cart
     const level = caravanLevel(line.b);
     if (!tr) { tr = { id, line, r, dep, tripMs: caravanTripMs(r), level, hp: caravanHp(line.clan, level), fallen: new Set(), heroMs: new Map(), lastTick: now }; this.trips.set(id, tr); }
     tr.lastTick = now;
@@ -230,6 +233,7 @@ export class WarCaravans {
     if (s.i >= 0) { l.escorts[s.i] = ""; tr.fallen.add(s.i); return undefined; }
     l.cart = ""; l.wreckAt = now; l.x = m.x; l.y = m.y; tr.hp = 0;
     const until = tr.dep + tr.tripMs + CARAVAN.everyMs;
+    if (settled(tr.id)) return "lost"; // another room's copy of this cart was raided or delivered first: no second pay
     const p = this.h.hero(killerId);
     if (!p || troopStance(clan, p) !== "enemy") { outcomes.set(tr.id, { kind: "lost", until }); return "lost"; }
     outcomes.set(tr.id, { kind: "raided", until });
@@ -258,7 +262,8 @@ export class WarCaravans {
     if (l) this.drop(l);
     const need = CARAVAN.escortShare * tr.tripMs, names = new Set([...tr.heroMs].filter(([, ms]) => ms >= need).map(([n]) => n));
     const st = warState();
-    if (!names.size || !st || st.owner[b] !== clan) { outcomes.set(tr.id, { kind: "lost", until }); return; }
+    // "lost" never blocks another room's copy of the same trip, whose escort may still deliver it
+    if (!names.size || !st || st.owner[b] !== clan) { if (!outcomes.has(tr.id)) outcomes.set(tr.id, { kind: "lost", until }); return; }
     outcomes.set(tr.id, { kind: "delivered", until });
     if (!addValor(b, clan, CARAVAN.deliverValor)) return;
     const end = tr.r.pts[tr.r.pts.length - 1];

@@ -228,5 +228,7 @@ Open points for M1:
 - Balance (`npx tsx tools/balance/pve.ts 40 --caravan`, the hero alone vs cart + 3 escorts of its level, win = cart
   felled within 120 s): Lv15 wizard 95% / vampire 90% / summoner 73% (slow) / songweaver 80%; Lv30 100/80/100/78%;
   Lv45 73/83/93/28% (the Songweaver's known trouble with three soldiers at Lv 45).
-- Not done: `escort` / `raid` writ kinds (the writ board), client drawing of carts (virtual and real), sounds.
+- Client: real carts use their own sheets (`war_cart_<clan>`, `trooperArt` in `textures.ts`; walk, idle, frame 12 hurt, 13 wreck in `TownScene.trooperFrame`), name "<Clan> supply cart"; sounds `caravan_raided`, `caravan_delivered`.
+- Several rooms: only "raided" / "delivered" settle a trip for every room (a cart felled after another room settled it pays nothing); an unescorted arrival in one room does not block a delivery in another.
+- Not done: `escort` / `raid` writ kinds (the writ board), virtual carts on the war table, building all roads at boot (first use costs 10-75 ms per road).
 - Next: escort and raid writs; caravans feeding the war's supply.
