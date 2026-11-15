@@ -36,7 +36,7 @@ export class ModeChip {
 
   constructor(parent: HTMLElement) {
     this.el = document.createElement("div");
-    this.el.className = "modechip"; this.el.hidden = true;
+    this.el.className = "modechip chip"; this.el.hidden = true;
     this.el.innerHTML = `<i class="mcsw"></i><b class="mcab"></b>`;
     this.ab = this.el.querySelector(".mcab")!;
     parent.prepend(this.el);

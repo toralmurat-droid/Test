@@ -38,17 +38,37 @@ body #online #ping, body #online #fps { display: inline-block; text-align: right
 body #online #ping { width: 92px; } /* "9999ms" */
 body #online #fps { width: 82px; } /* "120fps" */
 
-/* ---- Bottom centre, from the bar up: status row (chord widget left, buffs right), then the prompt stack
-   (interact prompt nearest the bar, level-up note above). Anchored to the plate (--slot), so it always clears the
+/* ---- Bottom centre, from the bar up: the prompt stack (interact prompt nearest the bar, level-up note above), clear of the status row. Anchored to the plate (--slot), so it always clears the
    orb plate, level medallion and XP bar. Hidden prompts take no room. */
-body #midstack { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc((var(--slot, 44px) * 0.9 + 58px) * var(--barzoom, 1));
+body #midstack { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc((var(--slot, 44px) * 0.9 + 58px + 68px) * var(--barzoom, 1));
   display: flex; flex-direction: column; align-items: center; gap: 6px; max-width: calc(100% - 32px); pointer-events: none; z-index: 8; }
 body #promptstack { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 body #promptstack > #lvlnote { order: -1; }
 body #promptstack > * { flex: none; }
-body #statusrow { display: flex; align-items: flex-end; justify-content: center; max-width: 100%; }
+/* ---- Status row (Murat 2026-11-15): one row of 48 px chips at the left end of the plate, just above the XP bar. Left to right:
+   mode chip (modeChip.ts, Songweaver), chord lockout clock (lockClock.ts), then every buff and debuff (buffbar.ts, #buffs is
+   transparent to layout so its chips are siblings). It wraps upward instead of covering anything. */
+body #statusrow { position: absolute; z-index: 8; pointer-events: none; display: flex; flex-wrap: wrap-reverse; align-items: flex-end; align-content: flex-end; gap: 6px;
+  left: calc(50% - var(--barw, 640px) / 2 * var(--barzoom, 1) + 4px); bottom: calc((var(--slot, 44px) * 0.9 + 62px) * var(--barzoom, 1));
+  width: calc((var(--barw, 640px) - 8px) * var(--barzoom, 1)); font-family: var(--pixel-font); -webkit-font-smoothing: none; }
 body #statusrow > * { flex: none; }
-body #statusrow > #chordhud:not([hidden]) + #buffs:not(:empty) { margin-left: 14px; }
+body #buffs { display: contents; }
+/* the chip frame shared by all three: dark tile, bronze bevel, black rim */
+body #statusrow .chip, body #statusrow .buff { position: relative; width: 48px; height: 48px; box-sizing: border-box; pointer-events: auto;
+  border: 3px solid #b08a4a; border-color: #e0b25a #5c3f1c #5c3f1c #e0b25a; box-shadow: 0 0 0 2px #1a120b, 0 2px 4px rgba(0,0,0,.7); background: linear-gradient(#211a14, #120e0b); }
+body #statusrow .modechip { order: 0; } body #statusrow .lockclock { order: 1; } body #statusrow .buff { order: 2; }
+body #statusrow .buff img, body #statusrow .buff i { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; object-fit: contain; }
+body #statusrow .buff i { display: grid; place-items: center; font-style: normal; color: #aaa; }
+body #statusrow .buff.bad { border-color: #e0584e #5a1218 #5a1218 #e0584e; }
+body #statusrow .buff.lasting { border-color: #b79cff #3d2a80 #3d2a80 #b79cff; } /* a golem aura: lasts while its golem lives */
+body #statusrow .buff .sweep { position: absolute; top: 0; left: 0; right: 0; height: 0; max-height: 100%; background: rgba(0,0,0,.6); }
+body #statusrow .buff span { position: absolute; left: -2px; right: -2px; bottom: -1px; text-align: center; font-size: 16px; line-height: 14px; color: #fff; z-index: 1;
+  text-shadow: 2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000; font-variant-numeric: tabular-nums; white-space: nowrap; }
+body #statusrow .buff.bad span { color: #ff8a80; }
+body #statusrow .buff.ending img { animation: buff-blink .5s steps(2) infinite; }
+body #statusrow .buff.ending span { color: #ffd166; }
+body #statusrow .buff.gone { display: none; }
+@keyframes buff-blink { 50% { opacity: .45; } }
 
 /* ---- Bottom bar: never drawn below 100% (--barzoom = barScale(k, dpr) / k, set by hudSlots.ts) ---- */
 body #orbhud, body #hudbar, body #orblevel, body #xpbar { zoom: var(--barzoom, 1); }

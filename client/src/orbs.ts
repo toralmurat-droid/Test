@@ -3,6 +3,7 @@ import "./orbs.css";
 import { orbNeedsRedraw, orbTexts } from "./hudLogic";
 import { uiScale } from "./worldscale";
 import { LockClock } from "./lockClock";
+import { hudSlot } from "./hudSlots";
 import { ModeChip } from "./modeChip";
 
 /**
@@ -212,13 +213,8 @@ export class OrbHud {
   private song = false;
   private lock?: LockClock;
   private chip?: ModeChip;
-  private side?: HTMLElement;
-
-  /** The owner's widgets above the Song orb (one row: mode chip, chord lockout clock). Made on first use. */
-  private group(): HTMLElement {
-    if (!this.side) { this.side = document.createElement("div"); this.side.className = "sgside"; this.mp.parentElement!.appendChild(this.side); }
-    return this.side;
-  }
+  /** The owner's widgets live in the status row above the XP bar (hudSlots.css #statusrow), shared with the buffs. */
+  private group(): HTMLElement { return hudSlot("statusrow"); }
 
   /** The owner's chord lockout clock (lockClock.ts): `locked` = her chlock status word. */
   setChordLock(locked: boolean) {
