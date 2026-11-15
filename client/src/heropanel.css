@@ -121,17 +121,12 @@ body #spbody #tree:not([hidden]) { display: grid; grid-template-columns: auto mi
 body #spbody #tree > * { grid-column: 1 / -1; }
 body #spbody #tree > h2 { grid-column: 1; font: 18px var(--pixel-font); letter-spacing: 0; color: #ffd98a; text-align: left; margin: 0; }
 body #spbody #tree > #treepoints { grid-column: 2; font: 18px var(--pixel-font); color: #a8977a; text-align: right; margin: 0; }
-body #spbody #tree > #treebranches { margin-top: 4px; border-top: 2px solid #45331e; padding-top: 6px; }
+body #spbody #tree > #treebranches { margin-top: 2px; border-top: 2px solid #45331e; padding-top: 2px; }
 body #treepoints .thint { color: #a8977a; }
 body #treepoints .sbbtn { margin-left: 8px; }
 body #spbody #treebranches { flex-wrap: wrap; justify-content: center; gap: 8px; }
-body #spbody #treebranches > #treeinfo { flex: 1 0 100%; }
 body .tfoot { font: 18px var(--pixel-font); letter-spacing: 0; text-transform: none; color: #7a6a52; }
 body .tfoot.has { color: #c8f59a; }
-body #spbody #treeinfo { font: 18px var(--pixel-font); line-height: 1.25; padding: 6px 10px; }
-body #spbody #treeinfo .ttype, body #spbody #treeinfo .ttype.pas { font: 18px var(--pixel-font) !important; text-transform: lowercase; letter-spacing: 0; }
-body #spbody #treeinfo .ttype::first-letter { text-transform: uppercase; }
-body #spbody #treeinfo p, body #spbody #treeinfo .idmg, body #spbody #treeinfo .iparts, body #spbody #treeinfo .inext, body #spbody #treeinfo .icost { font-size: 18px; margin: 0 0 2px; }
 body #spbody #tree > .help { margin: 4px 0 0; font-size: 18px; line-height: 1.1; }
 body #titlepick .titlepick { font: 18px var(--pixel-font); padding: 0 8px; }
 body #titlepick { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
@@ -139,10 +134,3 @@ body #titlepick span { color: #a8977a; }
 body #titlepick .titlepick { color: #e3bf6a; background: #2a1d10; border: 2px solid #6b4c22; cursor: pointer; }
 body #titlepick .titlepick:hover { background: #3a2914; color: #ffe9a8; }
 body #titlepick .titlepick.on { color: #c8f59a; border-color: #4f7a2a; background: #1a2410; }
-/* a short window (1366x768 and the like): the details sit beside the tree (not under it) and scroll on their own, so nothing is cut off and no pixel is resized */
-@media (max-height: 900px) {
-  body #spbody #treebranches { flex-wrap: nowrap; align-items: flex-start; justify-content: flex-start; }
-  body #spbody .treecol { flex: none; }
-  body #spbody #treebranches > #treeinfo { flex: 1 1 0; min-width: 0; margin-top: 0; max-height: 420px; overflow: auto; display: block; }
-  body #spbody #treeinfo .ihead { margin-bottom: 4px; }
-}

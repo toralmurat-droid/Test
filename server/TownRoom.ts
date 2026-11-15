@@ -38,7 +38,7 @@ import {
 } from "../shared/items";
 import { bountyCounts, bountyOffers, cleanBounty, nearestBoard } from "../shared/bounty";
 import { DOORS, DOOR_RANGE, doorById, doorDist, doorWorkable, isSafeZone, isSolidAt, randomSpawn, setDoorOpen, VILLAGE, type Door } from "../shared/map";
-import { isDecorSolidAt, npcById, npcNear, TALK_RANGE, type Npc } from "../shared/npcs";
+import { boxedInAt, isDecorSolidAt, npcById, npcNear, openGroundNear, TALK_RANGE, type Npc } from "../shared/npcs";
 import { beyondWall, WATCH, WATCH_POSTS, WatchPost } from "../shared/watch";
 import { inVillage, WRATH } from "../shared/wrath";
 import { afterRespec, bounceWave, busking, buskingAudience, BuskingLines, ChordSync, heroSound, LazyStash, migrateSongweaver, mobSound, refillKit, oldSongTree, relevelLute, restoreMode, SONG_POTION_TEXT, SongCollector, songSave, stowItem, stringShot, SW_KIT_VERSION } from "./songs";
@@ -61,7 +61,8 @@ import { offerFrom, Offer, settle, STASH, STASH_GOLD_MAX, STASH_RANGE, STASH_SIZ
 import { arrivalOf, cleanPortals, PORTAL_COMBAT_MS, PORTAL_RANGE, PORTAL_WAKE_RANGE, portalById, PORTALS } from "../shared/portals";
 import { rollBoon, shrineXp, SHRINE, SHRINE_COOLDOWN_MS, SHRINE_RANGE, WIND_BLESSING, WIND_BLESSING_ID } from "../shared/shrine";
 import { chestById, chestLock, CHEST_RANGE, CHEST_RESPAWN_MS, CHESTS, GUARD_CHECK_MS, GUARD_RESPAWN_MS, rollChest } from "../shared/chests";
-import { encodeTimers, timerSig, timersOf } from "../shared/buffTimers";
+import { chorusTimers, encodeTimers, timerSig, timersOf } from "../shared/buffTimers";
+import { shieldLeft } from "../shared/shields";
 import { SLOT_COUNT } from "../shared/slots";
 import { groupDmgMult, groupHpMult, PARTY, together } from "../shared/party";
 import { canExecute, executeDamage, executeRefund, heroPoise, MOB_COMBAT, mobBody, POISE, poiseLevelMult, poiseSpeed, PVP_PROTECT_LEVEL, pvpDamageMult, pvpProtected, SWING_AHEAD } from "../shared/combat";
@@ -1134,6 +1135,8 @@ export class TownRoom extends Room<TownState> {
     if (options?.newGame) dropLive(p.name, p.cls);
     const back = options?.newGame ? undefined : takeLive(p.name, p.cls);
     if (back) this.resume(p, back);
+    // Never start boxed in (between crates and a barrel, say): step out to the nearest open ground
+    if (boxedInAt(p.x, p.y)) { const o = openGroundNear(p.x, p.y); if (o) { p.x = o.x; p.y = o.y; } }
     if (options?.newGame) saveHero(p.name, p.cls, this.snapshot(p));
     else if (loaded) this.writeLoaded(p, loaded);
     // A quest that carries on by itself (QuestDef.auto) but did not start (they left right after the last one, or its
@@ -2988,6 +2991,7 @@ export class TownRoom extends Room<TownState> {
     const now = Date.now();
     this.tradeTick();
     if (now >= this.autoAt) { this.autoAt = now + 500; this.autoGolems(now); this.golemNews(now); }
+    const chorus = chorusTimers(this.state.fields, now); // each Songweaver's own Chorus, for her HUD buff row
     this.state.players.forEach((p, pid) => {
       tickUnit(this.host, pid);
       p.stunned = now < p.stunUntil;
@@ -2997,11 +3001,12 @@ export class TownRoom extends Room<TownState> {
       const fx = statusOf(p, now);
       if (p.fx !== fx) p.fx = fx;
       this.chords.tick(pid, p as unknown as Unit, now, (m) => this.clients.find((c) => c.sessionId === pid)?.send("chord", m));
-      const timers = timersOf(p, now), sig = timerSig(timers);
+      const timers = timersOf(p, now, chorus.get(pid)), sig = timerSig(timers);
       if (sig !== p.timerSig) { p.timerSig = sig; p.timers = encodeTimers(++p.timerSeq, timers, now); }
       const spd = Math.round(speedMult(p, now) * talentMult(p.cls, p.talents, "speed") * feastMult(p.feast, "speed") * 1000) / 1000;
       if (p.spd !== spd) p.spd = spd;
       tickPoise(p, heroPoiseMax(p), dt, now);
+      const sh = p.dead ? 0 : shieldLeft(p, now); if (p.me.shield !== sh) p.me.shield = sh; // owner's orb (shared/shields.ts)
       if (p.dead) { p.moving = false; p.energy = 0; p.mana = usesGauge(p.cls) ? 0 : p.maxMana; this.syncMana(p); return; }
       for (let c = 0; c < CHAINS.length; c++) this.checkQuestPlace(pid, p, c);
       this.wakePortals(pid, p);
