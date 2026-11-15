@@ -379,3 +379,59 @@ Open points for M1:
 - `npx tsx tools/balance/war.ts 200 30`: unchanged.
 - A defender-sworn hero holds the ram only while active (`STANDARD.idleMs`), like at the fronts.
 - Not done: works for other clans; a ram marker on the war table.
+
+## M2: Tunnels (2026-11-15)
+
+- Rules and numbers: `shared/war/tunnels.ts` (`TUNNEL`, pure `tunnelStrikes`, `tunnelMouth`, `tunnelPairs`, `mouthHp`);
+  server: `server/warTunnels.ts` (`WarTunnels` behind a narrow `TunnelHost`, the soldiers borrow `WarTroops.think / fight /
+  walk` like the caravan escorts). Room wiring in `TownRoom.ts`: field, 1 s tick between the sieges and the patrols,
+  trooper branch of `updateMob`, `hit`, `mobDied`, `forget` (leave and death), the join message. No schema change, no save
+  change, no rules.ts number changed.
+- Orders: `server/war.ts` keeps the last tick's orders in memory (`warOrders()`, not saved; after a restart no tunnels until
+  the next war tick). `tunnelStrikes(st, orders)` lists the attacks rules.ts feeds through a tunnel: a clan with the
+  tunnel doctrine, a legal target (`targetsOf`, after `cleanOrders`) with a share, and none of its land next to it; `from`
+  is its land two borders back with the best supply (the land rules.ts feeds the strike from). The test checks it against
+  the attack force `warTick` actually puts on each target.
+- Mouth spot: `tunnelMouth(t, from)` walks from the target's middle toward `from`'s middle to `edgeTiles` (4) short of the
+  rect's edge, then takes the nearest tile (rings out to `searchTiles` 12, then the whole land) inside the rect, on the
+  side facing `from`, with a free 3x3 (no solid tile, safe square, stockade, monster-free ground), no portal stone within
+  6 tiles, no dungeon door within 2, clear of the Hold's fort (+2 tiles) and the standards' rings (relaxed to +1 tile and
+  no ring check when nothing fits), and reachable on foot from the Hold gate (4-way flood inside the land + 2 tiles).
+  Deterministic, cached per pair; all 120 possible pairs have one (~190 ms for all, first use).
+- The mouth: a `"trooper"` with weapon `"hidekin~"` (`troopWeapon(k, false, false, false, true)`, `parseTroop` part
+  `mouth`, an object), name "Hide-Kin tunnel". HP = Hide-Kin soldier HP at the land's soldier level x `mouthHp` (3), no
+  attack, never moves or turns. All trooper gates hold: only heroes hostile to the Hide-Kin (sworn elsewhere, oath level)
+  hurt it, no XP / loot / quest credit; patrol troopers never target it.
+- Waves: a living hero above ground within `wakeTiles` (22) of a mouth opens it (`sfx` `tunnel_open {x, y}`) and
+  `perWave` (3) plain Hide-Kin soldiers come out of it; another wave every `waveMs` (40 s), at most `maxTunnelTroops` (10,
+  the mouth included) per room. Soldiers stand in a ring (`ringPx` 40) round the mouth and fight anything within
+  `leashPx` (7 tiles) of it; wild monsters only when one strikes first. A hit on the mouth or a soldier turns the idle
+  soldiers on that hero. One live tunnel per room (the one nearest a hero); it sleeps after `sleepMs` (30 s) with no hero
+  near, keeping the mouth's wounds.
+- Collapse: whoever deals the killing blow; `sfx` `tunnel_collapse {x, y}` always. A hero hostile to the Hide-Kin earns
+  `collapseValor` (6) for his clan in the land if the war lets that clan fight there (owner or `targetsOf`, as
+  `WarSieges.payClan`), and `collapseRenown` (10) himself either way, and a Herald line. The mouth stays shut until the
+  next war tick (then whole again); its soldiers fight on `scatterMs` (6 s), then go. Collapses are settled for every room
+  of the process (in memory, keyed by war tick and land, like the caravans' outcomes): another room's copy falls in at
+  once and pays nothing.
+- Holding: every `valorEveryMs` (60 s) that the mouth stands with an active (`STANDARD.idleMs`) Hide-Kin-sworn hero of oath
+  level within `holdPx` (3 tiles), the Hide-Kin earn `mouthValor` (2) in the target land (legal-gated), at most
+  `maxValorPerTick` (10) per land per room per war tick (the collapse valor goes through the same cap, per clan).
+- Budget: caravans, sieges, tunnels, patrols. The tunnel gets `WAR_TROOPS.maxTroops - caravans - sieges` (capped at
+  `maxTunnelTroops`) and drops soldiers (then the mouth) when that shrinks; the patrols' `reserved()` adds the tunnels.
+- Message: server -> client `"tunnels"` `{mouths: {t, x, y, state}[]}` (`open` / `shut` / `dormant`) for every ordered
+  tunnel, on change and on join. Nothing comes back. The war-table marker is not drawn yet.
+- Client: the mouth uses `war_tunnel_hidekin` through `warSoldierTexture` (asset `mob_war_tunnel_hidekin.webp` from the art
+  branch, 80x44, frames 0-5 idle loop, 12 hit, 13 rubble); while the art manifest does not list it, `trooperArt` falls
+  back to the Hide-Kin cart sheet (standing frame). Sounds `tunnel_open` (earth breaking, clods, a muffled cry) and
+  `tunnel_collapse` (timbers snapping, the roof coming down).
+- Balance (`npx tsx tools/balance/pve.ts 40 --tunnel`, new table: the hero alone vs the mouth and its waves, win = mouth
+  collapsed within 120 s; cell = win% / HP lost / s): Lv15 wizard 98%/7%/40s, vampire 100%/1%/22s, summoner 100%/0%/72s,
+  songweaver 88%/16%/37s; Lv30 100/100/100/100% (26 / 16 / 22 / 29 s); Lv45 100/98/100/65% (28 / 17 / 18 / 27 s; the
+  Songweaver's known trouble with three soldiers at Lv 45, as at the caravans). `mouthHp` 5 with waves every 30 s gave
+  Lv15 summoner 40% (115 s) and Lv45 songweaver 28%, so 3 and 40 s.
+- Bench (`WAR=1 SPREAD=1 npm run bench`, 5 bots, shared machine, noisy): before 6.83 ms tick avg (p95 10.3); after 4.98
+  (p95 8.5), with the new `TUNNEL=1` (Hide-Kin ordered through a tunnel, a bot at its mouth) 6.36 (p95 9.4) with 4 tunnel
+  troopers, `TUNNEL=1 SIEGE=1` 7.79 (p95 11.3), 20 siege + 4 tunnel troopers inside the 80 cap. No dropped bots.
+- `npx tsx tools/balance/war.ts 200 30`: unchanged.
+- Not done: a collapse cutting the tunnel's supply in the war rules (later); the war-table marker; tunnels for other clans.

@@ -337,6 +337,8 @@ const PAINTED_LOOK: Record<string, { top: number; bar: number; oy: number; scale
   ...Object.fromEntries(WAR_CART_CLANS.map((c) => [`war_cart_${c}`, { top: 36, bar: 30, oy: 40 / 44 }])),
   // the Host's siege ram (shared/war/works.ts): the same 72x44 frame layout as the carts
   war_ram_host: { top: 36, bar: 30, oy: 40 / 44 },
+  // the Hide-Kin tunnel mouth (tools/art/paint/warTunnel.ts): 80x44 frames, about 2.5 tiles wide, the ground line at 40/44
+  war_tunnel_hidekin: { top: 38, bar: 30, oy: 40 / 44 },
   // Act 2, the Sunscar
   nomad: { top: 24, bar: 14, oy: 27.5 / 30 }, sanddead: { top: 24, bar: 14, oy: 27.5 / 30 }, veiled: { top: 26, bar: 14, oy: 31.2 / 32 },
   camelfolk: { top: 36, bar: 18, oy: 33.5 / 36 }, sphinx: { top: 38, bar: 18, oy: 36.5 / 40 }, scorpion: { top: 20, bar: 18, oy: 27 / 30 },
@@ -369,6 +371,7 @@ export const WAR_LEGACY: Record<string, string> = {
 /** The art key ("war_redfang_chief"...) a server trooper wears: its clan and rank ride in Mob.weapon (shared/war/troops.ts). */
 export function trooperArt(weapon: string): string {
   const t = parseTroop(weapon);
+  if (t?.part === "mouth") return warMissing.has(`mob_war_tunnel_${t.clan}`) ? `war_cart_${t.clan}` : `war_tunnel_${t.clan}`; // a tunnel mouth: its own sheet, the clan's cart until that exists
   if (t?.part === "ram") return warMissing.has(`mob_war_ram_${t.clan}`) ? `war_cart_${t.clan}` : `war_ram_${t.clan}`; // a siege ram: its own sheet, the clan's cart until that exists
   if (t?.cart) return `war_cart_${t.clan}`; // a supply cart: its own sheet (not a soldier's)
   return t ? troopLook(t.clan, 0, t.officer) : "war_warden";
@@ -444,6 +447,11 @@ export function warCartTexture(scene: Phaser.Scene, clan: string): string | null
 /** The Ossuary Host's bone siege ram sheet (art key "war_ram_host"; same 72x44 / 14-frame layout as the carts). Null until loaded. Art only. */
 export function warRamTexture(scene: Phaser.Scene): string | null {
   return warSoldierTexture(scene, "war_ram_host");
+}
+
+/** The Hide-Kin tunnel mouth sheet (art key "war_tunnel_hidekin"; 80x44, the carts' 14-frame layout: 0-5 / 9-11 idle, 6-8 digging, 12 hit, 13 collapsed). Null until loaded. Art only. */
+export function warTunnelTexture(scene: Phaser.Scene): string | null {
+  return warSoldierTexture(scene, "war_tunnel_hidekin");
 }
 
 /** A champion affix's painted detail (tools/art/paint/mobs.ts champOverlay, 2 frames), or null (pixel look, not loaded). */

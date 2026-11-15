@@ -11,6 +11,7 @@
 //   WAR=1: a fresh clan war is running (server/war.ts), so clan troops march and fight near the bots (server/warTroops.ts)
 //   SIEGE=1 (with WAR=1): a siege is called on an Act 1 land and the first bot stands at its gate, so a siege battle runs (server/warSieges.ts)
 //   SIEGE=host: the same, led by the Ossuary Host, so its bone ram and crew roll too (server/warWorks.ts)
+//   TUNNEL=1 (with WAR=1): the Hide-Kin are ordered through a tunnel and the last bot stands at its mouth (server/warTunnels.ts)
 //   CAST=1 SPREAD=1: the Summoner bots cast wisps, blades, black holes and the Void Arsenal non-stop (tools/perf/bots.ts)
 //   TIDE=1: a Gloam Tide march is out the whole time, its last wave all at once (TIDE.maxAlive marchers, server/tide.ts)
 //   SONGWEAVER=1 (PARTY=1): Songweaver bots too; PARTY=1 groups them
@@ -96,6 +97,20 @@ async function main() {
       break;
     }
   }
+  let tunnelLand = -1;
+  if (process.env.TUNNEL && process.env.WAR) {
+    const { warState, _setWarOrders } = await import("../../server/war"), { targetsOf } = await import("../../shared/war/rules");
+    const { tunnelMouth, tunnelStrikes } = await import("../../shared/war/tunnels"), { TERRITORIES } = await import("../../shared/war/territories");
+    const st = warState()!;
+    for (const t of targetsOf(st, "hidekin")) {
+      const orders = { hidekin: { defend: 0.5, attack: [{ t, share: 1 }] } }, g = tunnelStrikes(st, orders)[0], at = g && tunnelMouth(g.t, g.from);
+      if (!at || TERRITORIES[t].act !== 1 || t === siegeLand) continue;
+      _setWarOrders(orders); tunnelLand = t;
+      const pl = [...room.state.players.values()].at(-1);
+      if (pl) { pl.x = at.x + 64; pl.y = at.y; }
+      break;
+    }
+  }
   await new Promise((r) => setTimeout(r, 3000));
   ticks.length = 0; patches.length = 0; bytes = 0; wire = 0; backlog = 0; for (const r of ph.values()) r.n = r.incl = r.self = 0;
   const cpu0 = process.cpuUsage(), t0 = performance.now();
@@ -114,6 +129,7 @@ async function main() {
     ...(process.env.TIDE ? { tide: true, tideMarchers: marchers } : {}),
     ...(process.env.WAR ? { war: true, troopers } : {}),
     ...(siegeLand >= 0 ? { siege: siegeLand, siegeTroopers: room.sieges.count } : {}),
+    ...(tunnelLand >= 0 ? { tunnel: tunnelLand, tunnelTroopers: room.tunnels.count } : {}),
   }));
   if (dropped) console.error(`BENCH INVALID: ${dropped} of ${BOTS} bots lost their connection during the run, so the numbers above are not a measurement`);
   if (PH) {
