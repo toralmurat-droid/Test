@@ -1,5 +1,6 @@
 {
   "date": "2026-11-15",
+  "patch": 250,
   "title": "The Ossuary Host's bone ram",
   "changes": [
     "When the Ossuary Host besieges a land, a bone ram now rolls from their camp toward the Hold gate with two bone soldiers beside it. It rolls faster at night.",
