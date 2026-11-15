@@ -113,7 +113,8 @@ export function targetsOf(s: WarState, k: ClanKey): number[] {
 /** Own territories that touch an enemy (where defenders stand). */
 export const bordersOf = (s: WarState, k: ClanKey) => TERRITORIES.filter((t) => s.owner[t.id] === k && t.near.some((n) => s.owner[n] !== k)).map((t) => t.id);
 
-const timeBonus = (k: ClanKey, p: number) => {
+/** The doctrine's time-of-day bonus of clan `k` in phase `p` (night for the Host, noon for the Veiled; rituals.ts reads it). */
+export const timeBonus = (k: ClanKey, p: number) => {
   const d = CLANS[k].doctrine;
   return (d === "siege" && p === 2) || (d === "ritual" && p === 0) ? WAR.doctrine : 1;
 };

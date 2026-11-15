@@ -36,7 +36,7 @@ let voices = 0;
 const MAX_VOICES = 28;
 const lastPlay = new Map<string, number>();
 /** Sounds that ring for seconds (kept connected longer). */
-const LONG = new Set(["lootRare", "lootLegendary", "horn", "ritual", "ritualCall", "demonRise", "demonRoar", "shrine", "portalTravel", "portalWake", "necroWind", "heroDie", "levelup", "owl", "chime", "warcry", "motherInflate", "demonFire", "skelDie", "lutePluck", "swResonate", "swShatter", "swBounce", "swSnap", "swSwell", "caravan_raided", "caravan_arrived", "siege_front", "ram_wrecked", "ram_at_gate", "tunnel_open", "tunnel_collapse"]);
+const LONG = new Set(["lootRare", "lootLegendary", "horn", "ritual", "ritualCall", "demonRise", "demonRoar", "shrine", "portalTravel", "portalWake", "necroWind", "heroDie", "levelup", "owl", "chime", "warcry", "motherInflate", "demonFire", "skelDie", "lutePluck", "swResonate", "swShatter", "swBounce", "swSnap", "swSwell", "caravan_raided", "caravan_arrived", "siege_front", "ram_wrecked", "ram_at_gate", "tunnel_open", "tunnel_collapse", "ritual_broken", "ritual_done"]);
 const AMBIENT = new Set(["crackle", "bird", "cricket", "chime", "owl", "step", "skelIdle", "blobGurgle", "crawl"]);
 
 const TOWNS = ["Oakvale", "Market Square", "Chapel of the Dawn", "The Rusty Tankard", "The Smithy", "Saltmere", "Hunter's Camp"];
@@ -686,6 +686,26 @@ const R: Record<string, Recipe> = {
     thud(o, t + 0.5, 50, 0.45 * v, 0.3);
     rattle(o, t + 0.6, 9, 0.7, 0.07 * v, 1100);
   },
+  // Veiled rituals (server broadcast("sfx", { ev: "ritual_broken" | "ritual_done", x, y }); the hum is played by client/src/warRituals.ts).
+  // Broken: a glassy crack, the chant's chord falling apart and a hollow whoosh as the light goes out
+  ritual_broken: (o, t, v) => {
+    noise(o, t, { type: "highpass", f: 3200, dur: 0.06, vol: 0.3 * v });
+    for (let i = 0; i < 4; i++) bell(o, t + 0.03 + i * 0.05, rnd(1800, 3200), 0.3, 0.05 * v);
+    [220, 277, 330].forEach((f, i) => tone(o, t + 0.05, { type: "triangle", f, f2: f * 0.55, dur: 0.9, vol: (0.09 - i * 0.02) * v, att: 0.02, vib: 4, vibHz: 6 }));
+    noise(o, t + 0.15, { type: "bandpass", f: 900, f2: 220, q: 2, dur: 0.8, vol: 0.18 * v, att: 0.1 });
+    thud(o, t + 0.1, 60, 0.3 * v, 0.25);
+  },
+  // Done: a rising chord of choir-like tones, a bright bell, and a soft swell of light
+  ritual_done: (o, t, v) => {
+    [220, 330, 440, 554].forEach((f, i) => tone(o, t + i * 0.08, { type: "sine", f, f2: f * 1.003, dur: 1.4 - i * 0.1, vol: 0.08 * v, att: 0.25, vib: 2, vibHz: 5 }));
+    bell(o, t + 0.35, 1320, 1.6, 0.12 * v); bell(o, t + 0.4, 1760, 1.4, 0.08 * v);
+    noise(o, t, { type: "bandpass", f: 2400, q: 1.5, dur: 1.0, vol: 0.06 * v, att: 0.4 });
+  },
+  // Hum: a low, soft two-voice drone with a slow beat, near a channelling circle
+  ritual_hum: (o, t, v) => {
+    tone(o, t, { type: "sine", f: 110, f2: 110, dur: 2.4, vol: 0.05 * v, att: 0.8, vib: 1.5, vibHz: 0.8 });
+    tone(o, t, { type: "sine", f: 165.8, f2: 165.8, dur: 2.4, vol: 0.03 * v, att: 0.9 });
+  },
   // Arrived: a short two-note horn over a bell, the caravan is home
   caravan_arrived: (o, t, v) => {
     [[0, 0.28, 1], [0.3, 0.55, 1.5]].forEach(([s, d, m]) => [1, 2, 3].forEach((k, i) => tone(o, t + s, { type: "sawtooth", f: 196 * m * k, f2: 198 * m * k, dur: d, vol: (0.2 / (1 + i)) * v, att: 0.04, vib: 0.8 * k, vibHz: 5 })));
@@ -1172,6 +1192,8 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
       case "ram_at_gate": pos("ram_at_gate", 1, undefined, { key: "rg" + (ev.x ?? "") + ":" + (ev.y ?? ""), minGap: 1500, reach: 2 }); break;
       case "tunnel_open": pos("tunnel_open", 1, undefined, { key: "to" + (ev.x ?? "") + ":" + (ev.y ?? ""), minGap: 1500, reach: 1.8 }); break;
       case "tunnel_collapse": pos("tunnel_collapse", 1, undefined, { key: "tc" + (ev.x ?? "") + ":" + (ev.y ?? ""), minGap: 1500, reach: 2 }); break;
+      case "ritual_broken": pos("ritual_broken", 1, undefined, { key: "rb" + (ev.x ?? "") + ":" + (ev.y ?? ""), minGap: 1500, reach: 1.8 }); break;
+      case "ritual_done": pos("ritual_done", 1, undefined, { key: "rd" + (ev.x ?? "") + ":" + (ev.y ?? ""), minGap: 1500, reach: 2 }); break;
       case "caravan_arrived": case "caravan_delivered": pos("caravan_arrived", 1, undefined, { key: "ca" + (ev.id ?? ev.clan ?? ""), minGap: 500, reach: 2 }); break;
       case "grimoire": if (ev.id === me()) pos("pageTurn", 1, ({ fire: "fire", cold: "frost", poison: "poison", shock: "lightning" } as Record<string, string>)[ev.el] ?? "arcane"); break;
     }

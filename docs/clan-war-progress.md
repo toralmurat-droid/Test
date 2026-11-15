@@ -440,3 +440,61 @@ Open points for M1:
   troopers, `TUNNEL=1 SIEGE=1` 7.79 (p95 11.3), 20 siege + 4 tunnel troopers inside the 80 cap. No dropped bots.
 - `npx tsx tools/balance/war.ts 200 30`: unchanged.
 - Not done: a collapse cutting the tunnel's supply in the war rules (later); the war-table marker; tunnels for other clans.
+
+## M2: Rituals (2026-11-15)
+
+- Rules and numbers: `shared/war/rituals.ts` (`RITUAL`, pure `ritualSite`, `ritualSpot`, `ritualClear`, `ritualTime`,
+  `ritualDay`, `ritualRate`, `channelStep`, `pauseStep`, `ritualPay`, `ritualLine`); server: `server/warRituals.ts`
+  (`WarRituals` behind a narrow `RitualHost`, the acolytes borrow `WarTroops.think / fight / walk` like the caravan
+  escorts). Room wiring in `TownRoom.ts`: field, 1 s tick between the tunnels and the patrols, trooper branch of
+  `updateMob`, `hit`, `mobDied`, `forget` (leave and death), the join message. No schema change, no save change, no
+  rules.ts number changed (`timeBonus` is now exported, unchanged).
+- When: the Veiled's doctrine phase. rules.ts gives the ritual doctrine its bonus at phase 0 (noon), and
+  `RITUAL_PHASE` reads it from `timeBonus`, so rituals run only while `warPhase(now)` is 0 (about 19 of the 30 minutes).
+  One noon is one "day phase" (`ritualDay`: from dayFrac 0.965 to the next 0.965).
+- Where: one site per day phase for every room of the process, picked from the war state the first time a room looks
+  in that phase and then kept (so a war tick in the middle of noon does not move a half-done ritual): the land the Veiled
+  besiege (attack; lowest Control, then lowest id), else their border land with the most `pressure` (defence; then the
+  lowest id). Spot (`ritualSpot`): reachable on foot from the land's Hold gate (own flood, like the tunnel's), with a
+  free 3x3 (no solid tile, safe square, stockade, monster-free ground), no dungeon door within 2 tiles, no portal stone,
+  above-ground stair or rope (`LINKS`), sinkhole, crypt door, Undercity shaft, waygate or shrine within
+  `entranceKeepTiles` (6), no NPC, NPC prop or bounty board within `npcKeepTiles` (4), and in EVERY pass the whole
+  counting ring (`ringPx` 128, wider than the drawn circle, ~68 px) off EVERY Hold's fort edge and EVERY standard's ring
+  (lands' rects overlap). Passes, nearest the land's middle: inside the rect by 2 tiles with a 5x5 free of solid tiles and
+  one more tile of room; inside by 1 tile; the rect + 2 tiles. All 31 lands have one inside their rect (~0.2 s for all,
+  first use, cached), e.g. Rimewater Hollow (241, 25), Old Ruins (140, 53), the Veiled Sanctum (241, 344). The spot
+  helpers are the ritual's own, so tunnels.ts is untouched.
+- The ritual: a living hero above ground within `wakeTiles` (22) wakes it: `acolytes` (3) plain `"veiled"` troopers
+  at the land's soldier level stand on the circle (`postPx` 40) and fight within `leashPx` (6 tiles); wild monsters only
+  when one strikes first. All trooper gates hold (only heroes hostile to the Veiled hurt them; no XP / loot). It sleeps
+  `sleepMs` (30 s) after the last hero left, keeping its progress, the acolytes' wounds and the fallen. It channels for
+  `channelMs` (240 s); each active (`STANDARD.idleMs`) Veiled-sworn hero of oath level within `ringPx` (4 tiles) adds
+  `heroSpeed` (0.5), at most `maxHelpers` (3): 2.5x, 96 s. It needs at least one acolyte standing.
+- Pause: count = rival troopers (not carts / rams / mouths) + `heroWeight` (2) x active hostile-sworn heroes in the
+  ring, less 2 x active Veiled-sworn heroes. A count >= `pauseMargin` (1) for `pauseMs` (3 s) straight pauses it; a count
+  <= 0 for `resumeMs` (5 s) straight resumes it; any break restarts the clock (`pauseStep`, like `frontStep`). Acolytes
+  do not count: they fight.
+- Completion: `ritualValor` (8) for the Veiled in the land through `addValor` if legal (owner or `targetsOf`), `sfx`
+  `ritual_done {x, y}`, a Veiled Oracle line (`RITUAL_LINES`). The acolytes stay `lingerMs` (6 s), then go.
+- Disruption: the 3 acolytes never come back in that day phase; the killer of the last one breaks it: `sfx`
+  `ritual_broken {x, y}`, a Herald line, `disruptRenown` (10) for a killer hostile to the Veiled, and `disruptValor` (6)
+  for their clan in the land if legal. A summon's kill counts for its owner.
+- One outcome (done or broken) per land per day phase for every room of the process (memory, keyed `day:t`, like the
+  caravans and tunnels): another room's copy ends the same way and pays nothing. Valor cap `maxValorPerTick` (10) per
+  land per clan per room per war tick.
+- Budget: caravans, sieges, tunnels, rituals, patrols. The ritual gets `maxTroops - caravans - sieges - tunnels` (at
+  most 3) and drops acolytes when that shrinks; the patrols' `reserved()` adds the rituals.
+- Message: server -> client `"rituals"` `{t, x, y, progress (0..1, 2 decimals), state: "channel" | "paused" | "done" |
+  "broken"}` for the room's circle while it is awake; `t: -1` when none (noon over, nobody near). On state change at once,
+  progress at most every `sendMs` (2 s), and on join. Nothing comes back.
+- Client: `client/src/warRituals.ts` draws the circle as 2 px pixel blocks on a Graphics laid flat by the iso view: a
+  dark disc in the Veiled cloth, two gold rings, eight runes turning slowly, a six-point star, a slow glow pulse (slower
+  and blue-grey progress ring when paused), the progress ring outside it, gaps / grey / cracks when broken, a 1.2 s
+  flare when done; nothing is drawn while the hero is more than 30 tiles away. `warPlaque.ts` adds "Ritual n%" (or "(paused)", "complete", "broken") in that land. Sounds in
+  `sfx.ts`: `ritual_broken` (glassy crack, the chord falling apart), `ritual_done` (rising choir chord and bell), and a
+  soft `ritual_hum` every 2.6 s within 9 tiles of a channelling circle.
+- Bench (`WAR=1 SPREAD=1 npm run bench`, 5 bots, shared machine at load ~4, noisy, random spread): before 8.42 / 5.30 ms
+  tick avg (p95 16.0 / 9.0), after 10.67 / 4.27 (p95 24.1 / 7.0); with the new `RITUAL=1` (the rituals' clock shifted to
+  noon, a bot at the circle) 8.93 (p95 17.8), 3 acolytes channelling. No dropped bots.
+- `npx tsx tools/balance/war.ts 200 30`: unchanged (only the run time line differs).
+- Not done: a war-table marker; rituals for other clans; a completed ritual changing the war rules beyond valor.

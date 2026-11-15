@@ -12,6 +12,7 @@
 //   SIEGE=1 (with WAR=1): a siege is called on an Act 1 land and the first bot stands at its gate, so a siege battle runs (server/warSieges.ts)
 //   SIEGE=host: the same, led by the Ossuary Host, so its bone ram and crew roll too (server/warWorks.ts)
 //   TUNNEL=1 (with WAR=1): the Hide-Kin are ordered through a tunnel and the last bot stands at its mouth (server/warTunnels.ts)
+//   RITUAL=1 (with WAR=1): the rituals run on a clock shifted to noon and the second bot stands at the circle (server/warRituals.ts)
 //   CAST=1 SPREAD=1: the Summoner bots cast wisps, blades, black holes and the Void Arsenal non-stop (tools/perf/bots.ts)
 //   TIDE=1: a Gloam Tide march is out the whole time, its last wave all at once (TIDE.maxAlive marchers, server/tide.ts)
 //   SONGWEAVER=1 (PARTY=1): Songweaver bots too; PARTY=1 groups them
@@ -111,6 +112,19 @@ async function main() {
       break;
     }
   }
+  let ritualLand = -1;
+  if (process.env.RITUAL && process.env.WAR) {
+    const { warState } = await import("../../server/war"), { ritualSite, ritualSpot, ritualTime } = await import("../../shared/war/rituals");
+    const site = ritualSite(warState()!), at = site && ritualSpot(site.t);
+    if (site && at) {
+      let shift = 0; while (!ritualTime(Date.now() + shift)) shift += 10_000; // noon for the whole run
+      const tick = room.rituals.tick.bind(room.rituals);
+      room.rituals.tick = (now: number = Date.now()) => tick(now + shift);
+      ritualLand = site.t;
+      const pl = [...room.state.players.values()][1];
+      if (pl) { pl.x = at.x + 48; pl.y = at.y; }
+    }
+  }
   await new Promise((r) => setTimeout(r, 3000));
   ticks.length = 0; patches.length = 0; bytes = 0; wire = 0; backlog = 0; for (const r of ph.values()) r.n = r.incl = r.self = 0;
   const cpu0 = process.cpuUsage(), t0 = performance.now();
@@ -130,6 +144,7 @@ async function main() {
     ...(process.env.WAR ? { war: true, troopers } : {}),
     ...(siegeLand >= 0 ? { siege: siegeLand, siegeTroopers: room.sieges.count } : {}),
     ...(tunnelLand >= 0 ? { tunnel: tunnelLand, tunnelTroopers: room.tunnels.count } : {}),
+    ...(ritualLand >= 0 ? { ritual: ritualLand, ritualTroopers: room.rituals.count, ritualState: room.rituals._ritual?.state } : {}),
   }));
   if (dropped) console.error(`BENCH INVALID: ${dropped} of ${BOTS} bots lost their connection during the run, so the numbers above are not a measurement`);
   if (PH) {
