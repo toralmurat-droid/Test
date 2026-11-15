@@ -1,5 +1,6 @@
 {
   "date": "2026-11-15",
+  "patch": 242,
   "title": "A tidier monster plate",
   "changes": [
     "The plate at the top of the screen is now small and calm: level, name, a thin health bar and icons for what a monster is weak to, resists and suffers from. Its frame shows how special it is, from plain bronze up to a demon-guarded boss plate.",
