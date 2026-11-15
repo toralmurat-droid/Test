@@ -1,7 +1,8 @@
-import { actMobLevel, actOfTile, actSpecialLevel, BADLANDS_LEVEL, inDeepRow, ELITE, MobKind, MOORS_LEVEL, TILE } from "./constants";
+import { actMobLevel, actOfTile, actSpecialLevel, BADLANDS_LEVEL, inDeepRow, ELITE, MobKind, MOORS_LEVEL, SINKHOLES_LEVEL, TILE } from "./constants";
 import { D, SUNSTONE } from "./desert";
 import { MOORSGATE_MOORS } from "./moors";
 import { REDPASS_BADLANDS } from "./badlands";
+import { SINKWAY_SINKHOLES } from "./sinkholes";
 import { AREAS, isSafeZone, isSolidAt, OBJECTS, T, VILLAGE } from "./map";
 import { CAMP_POSTS, campMobs } from "./bandits";
 import { AMBUSH_ROOMS, chamberAtPx, FLOORS, LAIRS, LANDING, pointInChamber } from "./dungeon";
@@ -194,6 +195,8 @@ export function zoneLevels(a: { x: number; y: number; w: number; h: number }): [
 /** Lowest monster level at a tile, from its distance to the village centre (a spot spans this level to +2). */
 export function baseLevelAt(tx: number, ty: number): number {
   const act = actOfTile(tx, ty);
+  // Act 5: from Lv 30 at the Sinkway (the band's north-west), a level every 12 tiles further on, south-east toward Hidehall
+  if (act === 5) return SINKHOLES_LEVEL.min + Math.floor(Math.max(0, Math.hypot(tx - SINKWAY_SINKHOLES.x, ty - SINKWAY_SINKHOLES.y) - 12) / SINKHOLES_LEVEL.tilesPerLevel);
   // Act 4: from Lv 25 at the Red Pass (the band's east edge), a level every 16 tiles further on, west toward Fangrock
   if (act === 4) return BADLANDS_LEVEL.min + Math.floor(Math.max(0, Math.hypot(tx - REDPASS_BADLANDS.x, ty - REDPASS_BADLANDS.y) - 12) / BADLANDS_LEVEL.tilesPerLevel);
   // Act 3: from Lv 20 at the moorgate, a level every 10 tiles further out (held under MOORS_LEVEL by levelFns)
@@ -204,7 +207,7 @@ export function baseLevelAt(tx: number, ty: number): number {
   return 1 + Math.floor(Math.max(0, Math.hypot(tx - cx, ty - cy) - 40) / 8);
 }
 
-/** The level ceilings for a zone or a tile: its act's band (shared/constants.ts ACT_LEVEL: Oakvale Lv 25/30, the desert Lv 30-47/50, the moors Lv 20-33/35, the badlands Lv 25-38/40). */
+/** The level ceilings for a zone or a tile: its act's band (shared/constants.ts ACT_LEVEL: Oakvale Lv 25/30, the desert Lv 30-47/50, the moors Lv 20-33/35, the badlands Lv 25-38/40, the sinkholes Lv 30-43/45). */
 const levelFns = (tx: number, ty: number) => {
   const act = actOfTile(tx, ty);
   return { mob: (l: number) => actMobLevel(act, l), special: (l: number) => actSpecialLevel(act, l) };
@@ -240,7 +243,8 @@ export const SPAWN_ZONES: SpawnZone[] = ZONE_MOBS.flatMap((z) => {
     if (z.wild) { const l = baseLevelAt(tx, ty); lo = Math.min(lo, l); hi = Math.max(hi, l + 2); }
   }
   const base = Math.max(1, Object.values(z.mobs).reduce((n, c) => n + (c ?? 0), 0));
-  // each act its own density (the Undercity under the desert is hand-set, a dungeon floor like the Mawdeep's)
+  // each act its own density (the Undercity under the desert is hand-set, a dungeon floor like the Mawdeep's; the
+  // sinkholes, Act 5, have no zones yet: they get their own DENSITY entries with their zones)
   const act = actOfTile(r.x, r.y), desert = act === 2 && !inDeepRow(r.y);
   const per = act === 4 ? (z.wild ? DENSITY.badlandsWildTilesPerMob : DENSITY.badlandsTilesPerMob)
     : act === 3 ? (z.wild ? DENSITY.moorsWildTilesPerMob : DENSITY.moorsTilesPerMob)

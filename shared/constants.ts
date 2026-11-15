@@ -22,25 +22,30 @@ export const MOORS_H = 176;
 /** Act 4, the Red Badlands (shared/badlands.ts): the Redfang clan's homeland, its own band under the moors' rock. */
 export const BADLANDS_Y0 = MOORS_Y0 + MOORS_H + 8;
 export const BADLANDS_H = 176;
-export const MAP_H = BADLANDS_Y0 + BADLANDS_H + 4; // tiles: overworld, underground band, rock, desert, rock, deep band, rock, moors, rock, badlands
-/** The acts (one per land): 1 Oakvale (and the Mawdeep, the Lantern Crypt), 2 the Sunscar, 3 the moors, 4 the badlands. */
-export type Act = 1 | 2 | 3 | 4;
+/** Act 5, the Mawdeep Sinkholes (shared/sinkholes.ts): the Hide-Kin's homeland, its own band under the badlands' rock. */
+export const SINKHOLES_Y0 = BADLANDS_Y0 + BADLANDS_H + 8;
+export const SINKHOLES_H = 176;
+export const MAP_H = SINKHOLES_Y0 + SINKHOLES_H + 4; // tiles: overworld, underground band, rock, desert, rock, deep band, rock, moors, rock, badlands, rock, sinkholes
+/** The acts (one per land): 1 Oakvale (and the Mawdeep, the Lantern Crypt), 2 the Sunscar, 3 the moors, 4 the badlands, 5 the sinkholes. */
+export type Act = 1 | 2 | 3 | 4 | 5;
 /** True in the deep band (tiles). */
 export const inDeepRow = (ty: number) => ty >= DEEP_Y0 && ty < DEEP_END;
 /**
- * True for a map row in the badlands band, with the rock strip round it: the 8 rows of rock between two bands split
+ * True for a map row in the sinkholes band, with the rock strip round it: the 8 rows of rock between two bands split
  * evenly, 4 to each, so a tile there is never mistaken for the band above.
  */
-export const inBadlandsBand = (ty: number) => ty >= BADLANDS_Y0 - 4;
+export const inSinkholesBand = (ty: number) => ty >= SINKHOLES_Y0 - 4;
+/** True for a map row in the badlands band, with its share of the rock strips above and below. */
+export const inBadlandsBand = (ty: number) => ty >= BADLANDS_Y0 - 4 && ty < SINKHOLES_Y0 - 4;
 /** True for a map row in the moors band, with its share of the rock strips above and below. */
 export const inMoorsBand = (ty: number) => ty >= MOORS_Y0 - 4 && ty < BADLANDS_Y0 - 4;
 /**
- * Which act a tile belongs to: the badlands band is Act 4, the moors band Act 3; the desert and the Undercity Act 2;
- * the rest (the Lantern Crypt too) Act 1. The homeland bands are tested first: every row from the desert down would
- * otherwise count as Act 2.
+ * Which act a tile belongs to: the sinkholes band is Act 5, the badlands band Act 4, the moors band Act 3; the desert
+ * and the Undercity Act 2; the rest (the Lantern Crypt too) Act 1. The homeland bands are tested first: every row from
+ * the desert down would otherwise count as Act 2.
  */
 export const actOfTile = (tx: number, ty: number): Act =>
-  inBadlandsBand(ty) ? 4 : inMoorsBand(ty) ? 3 : ty >= DESERT_Y0 && !(ty >= DEEP_Y0 - 4 && tx < DEEP_SPLIT) ? 2 : 1;
+  inSinkholesBand(ty) ? 5 : inBadlandsBand(ty) ? 4 : inMoorsBand(ty) ? 3 : ty >= DESERT_Y0 && !(ty >= DEEP_Y0 - 4 && tx < DEEP_SPLIT) ? 2 : 1;
 export const TICK_RATE = 20; // server updates per second
 export const PLAYER_SPEED = 90; // px per second (default; classes override, see classes.ts)
 export const PLAYER_RADIUS = 5; // collision half-size in px
@@ -415,11 +420,17 @@ export const moorsSpecialLevel = (l: number) => Math.min(MOORS_LEVEL.special, Ma
  */
 export const BADLANDS_LEVEL = { min: 25, mob: 38, special: 40, tilesPerLevel: 16 };
 /**
+ * Act 5, the Mawdeep Sinkholes: Lv 30-45, open from hero Lv 30 (the Sinkway, shared/act2.ts HOMELAND_GATES). Regular
+ * monsters Lv 30-43, a level every `tilesPerLevel` tiles from the Sinkway's arrival (the band's north-west) toward
+ * Hidehall, the Hide-Kin's seat in the far south-east (shared/spawns.ts baseLevelAt).
+ */
+export const SINKHOLES_LEVEL = { min: 30, mob: 43, special: 45, tilesPerLevel: 12 };
+/**
  * Every act's level band in one table (min, regular ceiling, special ceiling), so a new homeland is one row here. Act 1
  * starts at Lv 1 (regionMobLevel); the others hold their monsters inside their own band.
  */
 export const ACT_LEVEL: Record<Act, { min: number; mob: number; special: number }> = {
-  1: { min: 1, ...REGION_LEVEL }, 2: ACT2_LEVEL, 3: MOORS_LEVEL, 4: BADLANDS_LEVEL,
+  1: { min: 1, ...REGION_LEVEL }, 2: ACT2_LEVEL, 3: MOORS_LEVEL, 4: BADLANDS_LEVEL, 5: SINKHOLES_LEVEL,
 };
 const actLevels = (act: number) => ACT_LEVEL[act as Act] ?? ACT_LEVEL[1];
 /** A regular monster's level held to its act's band (act from actOfTile). */

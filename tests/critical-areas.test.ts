@@ -11,6 +11,7 @@ test("files map to their areas", () => {
   assert.deepEqual(areasOf([f("server/player.ts"), f("shared/map.ts"), f(".github/workflows/ci.yml")]), ["deploy", "map", "schema"]);
   assert.deepEqual(areasOf([f("shared/moors.ts")]), ["map"]);
   assert.deepEqual(areasOf([f("shared/badlands.ts")]), ["map"], "the Red Badlands band is deterministic map code too");
+  assert.deepEqual(areasOf([f("shared/sinkholes.ts")]), ["map"], "the Mawdeep Sinkholes band is deterministic map code too");
   assert.deepEqual(areasOf([f("shared/skills.ts"), f("client/src/TownScene.ts"), f("docs/x.md")]), []);
 });
 

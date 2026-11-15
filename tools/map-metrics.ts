@@ -2,7 +2,7 @@
  * Navigation metrics for the world map: how open it is and how direct travel feels.
  * Run: npx tsx tools/map-metrics.ts
  */
-import { DEEP_END, DEEP_Y0, DESERT_H, DESERT_Y0, BADLANDS_H, BADLANDS_Y0, MAP_H, MAP_W, MOORS_H, MOORS_Y0, TILE, UNDER_END, WORLD_H } from "../shared/constants";
+import { DEEP_END, DEEP_Y0, DESERT_H, DESERT_Y0, BADLANDS_H, BADLANDS_Y0, MAP_H, MAP_W, MOORS_H, MOORS_Y0, SINKHOLES_H, SINKHOLES_Y0, TILE, UNDER_END, WORLD_H } from "../shared/constants";
 import { DOORS, isSolidTile, randomSpawn } from "../shared/map";
 import { FLOORS, LANDING } from "../shared/dungeon";
 import { waygateArrival, waygateById } from "../shared/act2";
@@ -39,6 +39,7 @@ const bands: { name: string; y0: number; y1: number; from: [number, number][] }[
   { name: "deep band (crypt, undercity)", y0: DEEP_Y0, y1: DEEP_END, from: FLOORS.filter((f) => f.y >= DEEP_Y0).map((f) => [Math.round(f.x + f.chambers[LANDING].x), Math.round(f.y + f.chambers[LANDING].y)]) },
   { name: "Act 3 moors (moorgate)", y0: MOORS_Y0, y1: MOORS_Y0 + MOORS_H, from: [px(waygateArrival(waygateById("moors")!))] },
   { name: "Act 4 badlands (Red Pass)", y0: BADLANDS_Y0, y1: BADLANDS_Y0 + BADLANDS_H, from: [px(waygateArrival(waygateById("badlands")!))] },
+  { name: "Act 5 sinkholes (Sinkway)", y0: SINKHOLES_Y0, y1: SINKHOLES_Y0 + SINKHOLES_H, from: [px(waygateArrival(waygateById("sinkholes")!))] },
 ];
 const bandLines: string[] = [];
 let allReach = true;
