@@ -144,7 +144,7 @@ jobs:
           fi
           echo "Testing the PR on top of the default branch at $base"
           npm ci --no-audit --no-fund
-          npm test
+          npm run test:ci
           npm run build
           node tools/smoke.mjs
           DATABASE_URL="$TEST_DATABASE_URL" node tools/smoke.mjs
