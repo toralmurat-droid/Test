@@ -59,6 +59,7 @@ import { AMBUSH, BANDIT_AI, BANDIT_ROLES, CAMPS, campOfZone, CHIEF, clearWalk, f
 import { flush, flushFinal, HeroSave, loadHero, loadStash, login, markChest, openedChests, resetChests, saveHero, saveStash, type Stash } from "./accounts";
 import { offerFrom, Offer, settle, stashNear, STASH_GOLD_MAX, STASH_RANGE, STASH_SIZE, TRADE } from "../shared/trade";
 import { arrivalOf, cleanPortals, PORTAL_COMBAT_MS, PORTAL_RANGE, PORTAL_WAKE_RANGE, portalById, PORTALS } from "../shared/portals";
+import { rideFerry } from "./ferry";
 import { rollBoon, shrineXp, SHRINE, SHRINE_COOLDOWN_MS, SHRINE_RANGE, WIND_BLESSING, WIND_BLESSING_ID } from "../shared/shrine";
 import { chestById, chestLock, CHEST_RANGE, CHEST_RESPAWN_MS, CHESTS, GUARD_CHECK_MS, GUARD_RESPAWN_MS, rollChest } from "../shared/chests";
 import { encodeTimers, timerSig, timersOf } from "../shared/buffTimers";
@@ -903,6 +904,12 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("portals", (client) => this.sendPortals(client));
     this.onMessage("travel", (client, msg: { to?: string }) => this.travel(client, msg?.to));
     this.onMessage("waygate", (client) => this.useWaygate(client));
+    // Pell's ferry: {to: stop id} (checked in server/ferry.ts; refusals answer "ferryno" {why})
+    this.onMessage("ferry", (client, msg: unknown) => {
+      if (!this.allow("ask", client)) return;
+      const pid = client.sessionId, p = this.state.players.get(pid);
+      rideFerry({ send: (t, m) => client.send(t, m), broadcast: (t, m) => this.broadcast(t, m), lanternHeld: () => !!p && this.lanternHeld(pid, p) }, pid, p, msg);
+    });
     this.onMessage("bounty", (client, msg: { take?: number; drop?: boolean }) => this.bountyMsg(client, msg ?? {}));
     // War writs: {} = resend, {take: 0..2} at a bounty board when sworn, {drop: true} (checked in server/warWrits.ts)
     this.onMessage("writ", (client, msg: unknown) => { if (this.allow("ask", client)) this.writs.msg(client.sessionId, msg); });

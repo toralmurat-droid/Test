@@ -25,7 +25,7 @@ Work branch: `claude/wizardly-franklin-nedywr`. Shipped in two PRs:
 | 4 | Respawn at the nearer town; second stash chest on the square (same account stash) | done |
 | 5 | People: Bess Tanner (smokehouse), Hob Wick (chandler shop), Marta (tavern), Agna (net-mender), Pell (after the Redfang chain); fisherfolk routines; town reacts to the Redfang chain | done (racks/lanterns reacting per hero: not done) |
 | 6 | Side arc "Saltmere Ways" (Lv 16-17): Smoke and Salt, The Watch-Fire | done |
-| 7 | The ferry (`shared/ferry.ts`, `server/ferry.ts`, validated and rate-limited message) | todo |
+| 7 | The ferry (`shared/ferry.ts`, `server/ferry.ts`, validated and rate-limited message) | server done, client todo |
 
 ## Log
 - 2026-11-15: plan written (planner agent), owner accepted all recommendations. #448 (Ropewell) merged, so
@@ -88,3 +88,15 @@ Work branch: `claude/wizardly-franklin-nedywr`. Shipped in two PRs:
   unchanged, wrath on); `client/src/saltmereFolk.ts` builds Saltmere's 7 fisherfolk spots from `shared/saltmere.ts`
   (net racks, pier heads, Garrick's fire, the square, door steps), wrath off, home at dusk, idle beyond 30 tiles.
   Tests: `tests/saltmere-folk.test.ts`.
+- 2026-11-15: phase 7, server side done. `shared/ferry.ts`: `FERRY_STOPS` (saltmere, gullrock, heronwreck; `tile` = the
+  `SALT_JETTIES` head, arrival `x, y` = centre of the plank one tile north, landward, all three walkable and reachable),
+  `FERRY_FEE` 12 gold a leg, `FERRY_RANGE` 2.5 tiles from a jetty head or its arrival plank, or from Pell for the
+  Saltmere stop (server slack x1.5, as portals), `FERRY_COMBAT_MS` = `PORTAL_COMBAT_MS`, `ferryOpen` =
+  `chainDone(RED_CHAIN)` (Pell's `PRESENCE` gate), `ferryStopNear`. `server/ferry.ts` `rideFerry` runs one ride; the
+  room's `onMessage("ferry")` goes through `allow("ask")`. Message `ferry {to: stop id}`; refusals the player can act on
+  answer `ferryno {why: "closed" | "far" | "fight" | "gold"}` (bad payloads, same stop, dead: silent; a lantern carrier
+  gets the room's usual note). A ride takes the fee, moves the hero, and broadcasts `travel {id, from: "", to: "", x, y,
+  why: "ferry"}` (so clients snap, as for a quest warp) and `sfx {ev: "ferry", id, from, to, x1, y1, x, y, fee}`.
+  Tests: `tests/ferry.test.ts`. Not done (client): Pell's dialog / jetty prompt with the stop list and fee, the oars and
+  bell sound for `ev: "ferry"`, a `ferryno` float text, and the arrival look (today `why` set gives the dark-red quest
+  fade in `client/src/TownScene.ts`).
