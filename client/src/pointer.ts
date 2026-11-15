@@ -25,7 +25,7 @@ export interface PointerHost {
   me(): { x: number; y: number; sx: number; sy: number; state: any } | undefined;
   enemies(): ClickEnemy[];
   enemy(id: string): ClickEnemy | undefined;
-  /** Monsters that can be inspected but not attacked (your own and your group's summons). */
+  /** Monsters that can be inspected but not attacked (your own and your group's summons, clan troops that are allies or neutral). */
   friendlies?(): ClickEnemy[];
   spots(): ClickSpot[];
   speed(): number;

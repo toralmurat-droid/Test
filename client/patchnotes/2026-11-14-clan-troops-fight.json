@@ -1,0 +1,11 @@
+{
+  "date": "2026-11-14",
+  "patch": 241,
+  "title": "Clan troops fight",
+  "changes": [
+    "Clan troops now really fight: they hunt the monsters of their land and attack heroes sworn to rival clans.",
+    "Your own clan's soldiers are your allies: their names show green and your blows never hurt them.",
+    "Without an oath you stay out of the war: soldiers leave you alone and your blows pass them by, and they never steal your kills.",
+    "Felling enemy soldiers in their own land earns valor for your clan and renown for you."
+  ]
+}

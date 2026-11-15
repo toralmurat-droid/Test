@@ -61,4 +61,5 @@ export const LOOT: Record<MobKind, LootDef> = {
   sphinx: { gold: [22, 44], potionChance: 0.4, mats: mat("sunglass", 0.1) },
   sunwright: { gold: [600, 900], potionChance: 1, mats: mat("sunglass", 1, 3, 5) },
   nightraider: { gold: [180, 320], potionChance: 1 },
+  trooper: { gold: [0, 0], potionChance: 0 }, // clan troops drop nothing (shared/war/troops.ts)
 };

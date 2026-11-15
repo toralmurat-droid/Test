@@ -1,7 +1,8 @@
 /**
- * Clan troop patrols (cosmetic): each territory's holder sends small squads walking a loop from its Hold past its
- * standards and back. Only the client draws them; the server never imports this. Routes come from the map alone
- * (tile BFS), so every client sees the same loops.
+ * Clan troop patrols: each territory's holder sends small squads walking a loop from its Hold past its standards and
+ * back. The routes, guard posts and looks are shared: the client draws the squads (and the cosmetic siege battles), the
+ * server's real troops (server/warTroops.ts, shared/war/troops.ts) march the same loops. Routes come from the map alone
+ * (tile BFS), so server and every client get the same loops.
  */
 import { TILE } from "../constants";
 import { isSolidAt, isSolidTile } from "../map";
@@ -275,11 +276,21 @@ export function garrisonSpots(t: number, n: number): { x: number; y: number; fx:
   return spots.get(t)!.slice(0, n);
 }
 
-/** Sprite kinds (texture keys from tools/art/characters.ts) each clan's soldiers wear; the client picks per soldier. */
+/**
+ * Art keys of each clan's soldiers: a line soldier (`kinds`, picked per soldier) and the `officer` who leads the column.
+ * Painted sheets `mob_<key>` (tools/art/paint/warLooks.ts); art-only, they are not monster kinds and sit in no gameplay table.
+ * Without the painted look (`?pixel=1`) the client falls back to older monster sheets (client/src/warTroops.ts LEGACY).
+ */
 export const TROOP_LOOK: Record<ClanKey, { kinds: string[]; officer: string }> = {
-  wardens: { kinds: ["watchman"], officer: "watchman" },
-  redfang: { kinds: ["bandit", "bandit_brute"], officer: "bandit_brute" },
-  host: { kinds: ["skeleton_spear", "skeleton"], officer: "skeleton" },
-  hidekin: { kinds: ["gnawkin_folk", "tuskborn_folk"], officer: "tuskborn_folk" },
-  veiled: { kinds: ["veiled", "nomad_folk"], officer: "nomad_folk" },
+  wardens: { kinds: ["war_warden"], officer: "war_warden_cap" },
+  redfang: { kinds: ["war_redfang"], officer: "war_redfang_chief" },
+  host: { kinds: ["war_host"], officer: "war_host_cap" },
+  hidekin: { kinds: ["war_hidekin"], officer: "war_hidekin_chief" },
+  veiled: { kinds: ["war_veiled"], officer: "war_veiled_adept" },
 };
+
+/** The sprite kind soldier number `seed` of clan `clan` wears (the officer has his own): the one rule client and server share. */
+export function troopLook(clan: ClanKey, seed: number, officer = false): string {
+  const l = TROOP_LOOK[clan];
+  return officer ? l.officer : l.kinds[Math.abs(Math.floor(seed)) % l.kinds.length];
+}

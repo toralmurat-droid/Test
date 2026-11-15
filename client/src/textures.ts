@@ -3,6 +3,8 @@ import { BEAST_KINDS, DESERT_KINDS, TILE } from "../../shared/constants";
 import { RAIDERS } from "../../shared/raiders";
 import { AFFIX_KEYS, AFFIXES, CHAMP_WEAPON_SHEETS as CHAMP_SHEETS } from "../../shared/champions";
 import { TILE_COUNT } from "../../shared/map";
+import { troopLook } from "../../shared/war/patrols";
+import { parseTroop } from "../../shared/war/troops";
 import { COMMON_ROWS, ROWS, drawTileset } from "./tileset";
 import { SMOOTH } from "./isoflag";
 import { hiResTexture } from "./smooth";
@@ -326,6 +328,9 @@ const PAINTED_LOOK: Record<string, { top: number; bar: number; oy: number; scale
   gnasher: { top: 50, bar: 28, oy: 35.5 / 38, scale: 1.4 }, weaver: { top: 52, bar: 30, oy: 37.5 / 40, scale: 1.45 },
   packlord: { top: 48, bar: 28, oy: 34 / 36, scale: 1.4 }, hornbrute: { top: 56, bar: 32, oy: 37.5 / 40, scale: 1.45 },
   hidemother: { top: 66, bar: 38, oy: 44 / 48, scale: 1.6 },
+  // the clan war's soldiers (tools/art/paint/warLooks.ts): art-only keys, not MobKinds; line soldiers 36x32 frames, officers 36x34
+  ...Object.fromEntries(["war_warden", "war_redfang", "war_host", "war_hidekin", "war_veiled"].map((k) => [k, { top: 27, bar: 14, oy: 30 / 32 }])),
+  ...Object.fromEntries(["war_warden_cap", "war_redfang_chief", "war_host_cap", "war_hidekin_chief", "war_veiled_adept"].map((k) => [k, { top: 30, bar: 16, oy: 32 / 34 }])),
   // Act 2, the Sunscar
   nomad: { top: 24, bar: 14, oy: 27.5 / 30 }, sanddead: { top: 24, bar: 14, oy: 27.5 / 30 }, veiled: { top: 26, bar: 14, oy: 31.2 / 32 },
   camelfolk: { top: 36, bar: 18, oy: 33.5 / 36 }, sphinx: { top: 38, bar: 18, oy: 36.5 / 40 }, scorpion: { top: 20, bar: 18, oy: 27 / 30 },
@@ -350,7 +355,26 @@ export function preloadPaintedMobs(scene: Phaser.Scene) {
 }
 
 /** Monster sprite sheets, same 6-frame layout as personas (painted when the smooth look is on). */
+/** The old monster look each clan soldier wears in the pixel view and until its painted sheet is loaded (kind_weapon). */
+export const WAR_LEGACY: Record<string, string> = {
+  war_warden: "watchman", war_warden_cap: "watchman", war_redfang: "bandit", war_redfang_chief: "bandit_brute", war_host: "skeleton_spear", war_host_cap: "skeleton",
+  war_hidekin: "gnawkin_folk", war_hidekin_chief: "tuskborn_folk", war_veiled: "veiled", war_veiled_adept: "nomad_folk",
+};
+/** The art key ("war_redfang_chief"...) a server trooper wears: its clan and rank ride in Mob.weapon (shared/war/troops.ts). */
+export function trooperArt(weapon: string): string {
+  const t = parseTroop(weapon);
+  return t ? troopLook(t.clan, 0, t.officer) : "war_warden";
+}
+/** A monster's look entry (size, label height): a trooper's comes from its clan's soldier sheet. */
+export const mobLook = (kind: string, weapon = "") => MOB_LOOK[kind === "trooper" ? trooperArt(weapon) : kind];
+
 export function mobTexture(scene: Phaser.Scene, kind: string, level = 1, weapon = "", bones = 0, champion = false): string {
+  if (kind === "trooper") { // a clan soldier: its painted sheet once loaded, an old monster look meanwhile (the watchman is a hero sheet: a bandit stands in)
+    const art = trooperArt(weapon), painted = warSoldierTexture(scene, art);
+    if (painted) return painted;
+    const [k, w] = (WAR_LEGACY[art] ?? "bandit").replace("watchman", "bandit").split("_");
+    return mobTexture(scene, k, level, w ?? "");
+  }
   if (kind === "wisp") {
     if (SMOOTH && scene.textures.exists(`hd_mob_wisp_${WISP_ELEMENTS.includes(weapon) ? weapon : "fire"}`)) return paintedSheet(scene, `mob_wisp_${WISP_ELEMENTS.includes(weapon) ? weapon : "fire"}`) ?? mobTexture(scene, WISP_STANDIN[weapon] ?? "fireblob", level);
     return mobTexture(scene, WISP_STANDIN[weapon] ?? "fireblob", level);
@@ -371,6 +395,30 @@ export function mobTexture(scene: Phaser.Scene, kind: string, level = 1, weapon 
     if (done) return done;
   }
   return pixelMobTexture(scene, kind === "demon" || kind === "hollowking" || kind === "sunwright" ? "necromancer" : BEAST_KINDS.includes(kind as any) || DESERT_KINDS.includes(kind as any) || kind === "bride" || kind === "nightraider" ? (kind === "sanddead" ? "skeleton" : "bandit") : kind, level); // no pixel demon sheet: a necromancer stands in
+}
+
+const warAsked = new Set<string>();
+/**
+ * A clan soldier's painted sheet (art key "war_warden"...: see shared/war/patrols.ts TROOP_LOOK, not a MobKind): fetched on
+ * first ask, so only players near a war land pay for it (about 15 KB a sheet). Null until it is loaded; 14 frames
+ * (the 12 of a monster sheet, then 12 = staggering and 13 = fallen, facing right).
+ */
+export function warSoldierTexture(scene: Phaser.Scene, name: string): string | null {
+  if (!SMOOTH) return null;
+  const key = `mob_${name}`;
+  if (!scene.textures.exists(`hd_${key}`)) {
+    if (!warAsked.has(key) && scene.cache.json.exists("hd_mobs")) {
+      warAsked.add(key);
+      // a failed fetch (network blip) frees the key after a while, so the clan's soldiers are asked for again
+      const onErr = (f: Phaser.Loader.File) => { if (f.key !== `hd_${key}`) return; scene.load.off(Phaser.Loader.Events.FILE_LOAD_ERROR, onErr); setTimeout(() => warAsked.delete(key), 15_000); };
+      scene.load.on(Phaser.Loader.Events.FILE_LOAD_ERROR, onErr);
+      scene.load.once(`filecomplete-image-hd_${key}`, () => scene.load.off(Phaser.Loader.Events.FILE_LOAD_ERROR, onErr));
+      scene.load.image(`hd_${key}`, `assets/hd/mobs/${key}.webp`);
+      if (!scene.load.isLoading()) scene.load.start();
+    }
+    return null;
+  }
+  return paintedSheet(scene, key);
 }
 
 /** A champion affix's painted detail (tools/art/paint/mobs.ts champOverlay, 2 frames), or null (pixel look, not loaded). */
