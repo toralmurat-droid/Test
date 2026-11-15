@@ -9,9 +9,10 @@ import { Feast, feastMult } from "./devour";
 import { attackProfile, weaponAttackMult } from "./weapons";
 
 /**
- * The hero's character sheet: the numbers the side panel (client/src/sidepanel.ts) always shows, computed with the
+ * The hero's character sheet: the numbers of the Character tab (client/src/heroPanelView.ts), computed with the
  * same rules as the server (TownRoom.applyStats, damagePlayer, the basic hit and shared/skillInfo.ts). Pure, so the
- * panel can also preview a sheet with another item worn or another skill rank, and the bag can spot useless items.
+ * Character tab can preview a sheet with another stat point or skill rank, the item card (client/src/gearCompare.ts)
+ * can compare gear, and the bag can spot useless items.
  */
 /** feast: monsters the hero has eaten with Devour (shared/devour.ts). */
 export interface SheetHero { cls: ClassKind; level: number; pts: Stats; talents: Ranks; feast?: Feast }
