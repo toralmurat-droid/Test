@@ -99,7 +99,7 @@ test("moors: every walkable tile is reachable from the moorgate; the Act 1 gate 
   for (let i = 0; i < 40; i++) { const p = moorsSpawn(); assert.equal(actAt(p.y, p.x), 3); assert.ok(!isSolidAt(p.x, p.y), "a free spawn spot"); }
 });
 
-test("moors: levels 20-35 from the moorgate; gates; Acts 1 and 2 keep their own boards and war", () => {
+test("moors: levels 20-35 from the moorgate; gates; each act keeps its own boards; the moors are their own war land", () => {
   assert.equal(baseLevelAt(MOORGATE.x, MR(MOORGATE.y)), 20);
   assert.ok(baseLevelAt(270, MR(20)) > 30, "far from the gate: higher");
   assert.equal(actMobLevel(3, 50), MOORS_LEVEL.mob);
@@ -118,7 +118,9 @@ test("moors: levels 20-35 from the moorgate; gates; Acts 1 and 2 keep their own 
   for (const act of [1, 2, 3]) { const q = actSpawn(act, randomSpawn); assert.equal(actAt(q.y, q.x), act, `act ${act} spawn`); }
   // the moors' hunts are only on the moors' board (its act), never on Act 1's or Act 2's
   for (const z of SPAWN_ZONES) if (actOfTile(z.x, z.y) === 3) { assert.ok(!huntable(z, 1) && !huntable(z, 2)); }
-  assert.ok(TERRITORIES.every((t) => t.act === 1 || t.act === 2), "the war stays in Acts 1 and 2");
+  // the war reaches the moors as a land of its own (shared/war/regions.ts): every Act 3 territory is in it, none elsewhere
+  assert.ok(TERRITORIES.some((t) => t.act === 3), "the moors are at war");
+  for (const t of TERRITORIES) assert.equal(t.region === "moors", t.act === 3, t.name);
 });
 
 /** onJoin as an account through a fake client (test rooms skip onAuth), like tests/songweaver-kit.test.ts. */

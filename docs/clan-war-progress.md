@@ -550,3 +550,44 @@ sims are unchanged.
 - Tests: `tests/moors-quests.test.ts` (shape, and the whole chain start to finish), `tests/zone-arcs.test.ts` now reads the
   act from the giver's tile (Act 3 levels 20-36).
 - Not done: Weeping Stones, Drowned Hollow and the Host's Muster have no quest; the war land (Host territories) is still to come.
+
+## NL-3: the Grey Barrow Moors at war (2026-11-15, PR #442)
+The moors are the first homeland built after the acts: the Host fights from home.
+- `shared/war/regions.ts`: "moors" (The Grey Barrow Moors, NE, home `host`) now has `contains: actOfTile === 3` and one
+  capital, the Host's seat at **The Host's Muster** (its war camp, `HOST_CAMP`, far east). `REGION_LINKS` gains **The
+  Barrowgate** (`MOORSGATE_OAKVALE` <-> `MOORSGATE_MOORS`): Rimewater Hollow <-> Sorrow Mire.
+- With the homeland built, `capitalsOf` drops the Host's forward capitals (Greywatch Keep, Kharsun): ordinary
+  territories now. Redfang's and the Hide-Kin's forward capitals stay.
+- Sanctuaries: `isSanctuary` also counts a zone whose only spawns are bosses as a lair (the Barrow-King's Mound; no other
+  zone is boss-only, so Acts 1-2 do not move). Cairnwatch lies outside every zone; the open moor is `wild`.
+- 42 territories: Oakvale 21, Sunscar 10, moors 11 (ids 31-41; Acts 1-2 keep ids 0-30, so active writs keep their ids).
+  Golden fingerprint in `tests/warregions.test.ts` refreshed on purpose.
+- Saved war: the existing `migrateWar` does it by name: old territories keep holder, Control, forts, sieges, pressure,
+  the leaders' targets and the log; the 11 moors territories start with the Host (capital, else home clan) at Control 100;
+  the former forward capitals keep their holder (no capital override). `server/war.ts` `PRE_MOORS_NAMES` (frozen) lets an
+  **unnamed** save of the old size (31) be remapped too instead of restarting. The old save is kept as `war-old-<ms>`.
+- Writs: the Cairnwatch board (act 3) offers moors writs; carts and writ roads stay inside one land (no cart through a gate).
+- Client war table: each link is drawn from its territory to the gate in each land (one straight line would cross the
+  Sunscar band), with a diamond and the link's name at each gate. Land labels just above the canvas are pulled into it.
+  Screenshots: `clan-war/war-moors-1920.png`, `-1366.png`.
+
+Sims (`npx tsx tools/balance/war.ts 200 30 [--clever=host]`):
+
+| clan | before avg / most | after avg / most |
+|---|---|---|
+| Wardens | 23.8% / 29.0% | 21.0% / 23.8% |
+| Redfang | 24.7% / 29.0% | 19.0% / 21.4% |
+| Ossuary Host | 12.0% / 19.4% | 26.3% / 31.0% |
+| Hide-Kin | 17.8% / 22.6% | 15.6% / 26.2% |
+| Veiled Circle | 21.7% / 25.8% | 18.2% / 21.4% |
+
+- Flips per war day 7.33 -> 2.44; domination 0.0% -> 0.0%. Host ruse: 12.9% vs 12.0% before; 21.1% vs 26.3% after
+  (domination 1.0%): the ruse no longer pays.
+- The Host goes from smallest to largest but never dominates: it holds its 11 moors (no other clan has a foothold there,
+  and the moors meet the rest only at the Barrowgate) and almost nothing outside (0.1 territories on average). From a
+  migrated live start (the Host keeping its Act 1-2 land) it loses that land and settles at the same 26.6%.
+- Tried, not applied (it changes who holds a moors territory at start, a design call): a Wardens capital at The Grey
+  Ring (the Cairnwatch garrison, like Palmshade Oasis in the Sunscar): Host 21.4% (ruse 22.7%, pays again), Wardens
+  21.6, Redfang 21.9, Hide-Kin 15.7, Veiled 19.3, flips 2.04, domination 0%. Capitals for all four other clans in the
+  moors: Host back to 11.7%, ruse no gain.
+- Open: the moors' war is quiet (one gate, one owner); Weeping Stones / Drowned Hollow / Host's Muster still have no quest.
