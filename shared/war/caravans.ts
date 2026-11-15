@@ -219,6 +219,8 @@ function route(a: number, b: number, pts: { x: number; y: number }[]): CaravanRo
 }
 
 const cache = new Map<string, CaravanRoute | undefined>();
+/** Whether a's and b's road is already built (or known to be missing), so callers can warm roads a few at a time. */
+export const roadKnown = (a: number, b: number) => cache.has(`${Math.min(a, b)}-${Math.max(a, b)}`);
 /** The cart road from a's Hold gate to b's (built on first ask, then cached; b -> a is the same road reversed), or undefined. */
 export function caravanRoute(a: number, b: number): CaravanRoute | undefined {
   const key = `${a}-${b}`;

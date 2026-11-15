@@ -233,6 +233,28 @@ Open points for M1:
 - Not done: `escort` / `raid` writ kinds (the writ board), virtual carts on the war table, building all roads at boot (first use costs 10-75 ms per road).
 - Next: escort and raid writs; caravans feeding the war's supply.
 
+## M2: Caravan writs (2026-11-15)
+
+- Two more writ kinds on the same board, same 3-per-UTC-day cap and the same pay path (`writPay` at the writ's land,
+  `WRIT.escortN` / `WRIT.raidN` = 1 in the writ table): `escort` and `raid`. A writ of either kind carries an optional
+  `road: {a, b, from, to}` (the caravan line, ids and names), so saves reuse `writ` / `writDay` / `writN` with no new
+  field; `cleanWrit` checks both ends' names, `t` one of the ends and one act, and drops a broken road. Old saves load
+  unchanged; land writs never carry a road.
+- Offers: `writLines(s, k, kind)` from `caravanLines(owner)`. Escort: the clan's own lines, `t` = the destination
+  (valor goes there). Raid: another clan's lines with an end the clan holds or can target (the raid valor's legal rule,
+  on `targetsOf`), `t` = that end (destination first). The level and act filter is on `t`, like the other kinds; one
+  land and one line per offer; a line with no road is skipped at the pick (only the two best candidates have their road
+  built). Same seed (war tick + finished today), so offers stay deterministic. No line: no writ of that kind.
+- Completion: `CaravanHost.writ?(hero, kind, line)` (TownRoom forwards it to `WarWrits.caravan`). Escort: fired in
+  `arrive()`'s delivered loop for each hero who earned the escort renown (sworn to the cart's clan, in the room, in
+  `names`). Raid: fired in `killed()` for the killer only, once the outcome is "raided" (the killing blow), whatever the
+  land's valor did. Raid matches the **line** (both ends and its clan), not any cart of the clan, so a writ reads as one
+  target like the land writs.
+- Withdrawn (no pay, not counted) when the writ's land changes hands (`holder` = the line's clan) or, on a war tick or
+  join, when its line no longer runs in `caravanLines`.
+- Text: three leader lines per clan per kind (`{from}`, `{to}`); the board and tracker show the road "A to B"
+  (`writWhere`).
+
 ## Tuning: troops vs classes (2026-11-15)
 
 - `TROOP_VETERAN.dmg` 0.05 -> 0.025 (Lv45 soldier damage x2.85 -> x1.93 over `mobScale`), `CARAVAN.hpMult` 5 -> 4.

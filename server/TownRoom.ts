@@ -643,6 +643,7 @@ export class TownRoom extends Room<TownState> {
     dropGold: (x, y, n) => this.dropItem("gold", x, y, n), broadcast: (type, msg) => this.broadcast(type, msg),
     tell: (pid, text) => this.clients.getById(pid)?.send("chat", { id: "", name: "Herald", text }),
     ranked: (pid, rank) => { const c = this.clients.getById(pid), p = this.state.players.get(pid); if (c && p) { c.send("clan", clanView(p)); c.send("chat", { id: "", name: "Herald", text: `Your renown grows: you are now ${rank}.` }); } },
+    writ: (pid, kind, line) => this.writs.caravan(pid, kind, line), // escort and raid writs (server/warWrits.ts)
   }, this.warTroops);
 
   /** War writs (server/warWrits.ts): clan work from the bounty boards, apart from the hunts. */

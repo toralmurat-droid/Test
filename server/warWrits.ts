@@ -1,19 +1,20 @@
 /**
  * War writs (shared/war/writs.ts has the rules and numbers): clan work taken at a bounty board, one writ at a time per
  * hero, apart from the bounty. Progress comes from the room's events (a rival trooper killed, a full minute at a
- * standard, a wild monster killed); the last one pays gold, renown and valor on the spot. A writ is withdrawn, unpaid
- * and not counted for the day, when its land changes hands or the hero swears another clan. State is the hero's plain
+ * standard, a wild monster killed, a caravan delivered or raided: server/warCaravans.ts CaravanHost.writ); the last one pays gold, renown and valor on the spot. A writ is withdrawn, unpaid
+ * and not counted for the day, when its land changes hands, its caravan line stops running or the hero swears another clan. State is the hero's plain
  * Player.writ / writDay / writN, saved; TownRoom calls in through the small WritHost below.
  */
 import { DESERT_Y0, TILE } from "../shared/constants";
+import { caravanLines, type CaravanLine } from "../shared/war/caravans";
 import { nearestBoard } from "../shared/bounty";
 import { CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import { RENOWN_RANKS, rankOf } from "../shared/war/renown";
 import type { WarState } from "../shared/war/rules";
 import { STANDARD } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
-import type { WarView } from "../shared/war/view";
-import { writDay, writOffers, writPay, WRIT, type Writ, type WritState } from "../shared/war/writs";
+import { clanOfIndex, type WarView } from "../shared/war/view";
+import { writDay, writNamesLine, writOffers, writPay, writWhere, WRIT, type Writ, type WritState } from "../shared/war/writs";
 
 /** The parts of a hero this module reads and writes (TownRoom's Player). */
 export interface WritHero { name: string; clan?: ClanKey; level: number; x: number; y: number; dead: boolean; renown: number; writ?: WritState; writDay: number; writN: number }
@@ -38,6 +39,9 @@ export interface WritHost {
 export interface WritMsg { board?: string; offers?: Writ[]; active?: WritState | null; left?: number; note?: string; done?: Writ & { valor: number }; err?: string }
 
 export const SWEAR_FIRST = "Swear to a clan at a standard to take war writs.";
+
+/** Does the writ's caravan line still run (the clans' supply trees change with the war)? */
+const runs = (w: Writ, lines: CaravanLine[]) => lines.some((l) => writNamesLine(w, l));
 
 /** Is tile point (px) inside territory t? */
 const inLand = (t: number, x: number, y: number) => {
@@ -91,6 +95,7 @@ export class WarWrits {
   join(id: string) {
     const p = this.h.hero(id), war = this.h.war();
     if (p?.writ && war && war.owner[p.writ.t] !== p.writ.holder) this.withdraw(id, p, "the land changed hands while you were away");
+    else if (p?.writ?.road && war && !runs(p.writ, caravanLines(war.owner))) this.withdraw(id, p, "that caravan road no longer runs");
     this.h.send(id, "writ", this.view(id));
   }
 
@@ -114,11 +119,25 @@ export class WarWrits {
     this.advance(id, p, w);
   }
 
-  /** After every war tick: writs whose land changed hands are withdrawn. */
+  /**
+   * A caravan of `line` was delivered with this hero among its escorts (server/warCaravans.ts arrive) or its cart fell
+   * to this hero's blow (killed): an escort writ for that line, or a raid writ for that rival line, counts.
+   */
+  caravan(id: string, kind: "escort" | "raid", line: CaravanLine) {
+    const p = this.h.hero(id), w = p?.writ;
+    if (!p || !w || w.kind !== kind || p.clan !== w.clan || !writNamesLine(w, line)) return;
+    if (kind === "escort" ? line.clan !== w.clan : line.clan === w.clan) return;
+    this.advance(id, p, w);
+  }
+
+  /** After every war tick: writs whose land changed hands, or whose caravan line stopped running, are withdrawn. */
   onWar(v: WarView) {
+    let lines: CaravanLine[] | undefined;
     for (const [id, p] of this.h.heroes()) {
       const w = p.writ;
-      if (w && CLAN_KEYS[v.owner[w.t]] !== w.holder) this.withdraw(id, p, `${w.land} changed hands`);
+      if (!w) continue;
+      if (CLAN_KEYS[v.owner[w.t]] !== w.holder) this.withdraw(id, p, `${w.land} changed hands`);
+      else if (w.road && !runs(w, (lines ??= caravanLines(v.owner.map(clanOfIndex))))) this.withdraw(id, p, "that caravan road no longer runs");
     }
   }
 
@@ -131,7 +150,7 @@ export class WarWrits {
   private withdraw(id: string, p: WritHero, why: string) {
     const w = p.writ!;
     p.writ = undefined;
-    this.h.chat(id, "Herald", `Your war writ for ${w.land} is withdrawn: ${why}. No pay, and it does not count for today.`);
+    this.h.chat(id, "Herald", `Your war writ for ${writWhere(w)} is withdrawn: ${why}. No pay, and it does not count for today.`);
     this.h.send(id, "writ", { active: null, left: Math.max(0, WRIT.perDay - this.doneToday(p, Date.now())) });
     this.h.save(id);
   }
