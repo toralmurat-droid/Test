@@ -425,11 +425,16 @@ export function gearSpeedMult(eq: Equipped): number {
 }
 
 
-/** Display name; old class weapons take the hero's weapon type ("Frost Katana"), typed weapons keep their own name. */
+/**
+ * Display name; old class weapons take the hero's weapon type ("Frost Katana"), typed weapons keep their own name.
+ * A generic weapon is never a "Lute" (only her kit lute is): its item icon is drawn as a sword (tools/art/gear.ts), so a
+ * Songweaver sees "Bronze Sword". Naming only: weaponType still answers "lute" for the combat code.
+ */
 export function gearName(id: string, cls?: string): string {
   const d = gearDef(id);
   if (!d) return id;
-  const name = d.slot === "weapon" && !d.wtype ? `${d.name} ${cls ? WEAPON_TYPE_NAMES[weaponType(cls, id)] : "Weapon"}` : d.name;
+  const wt = cls ? weaponType(cls, id) : undefined, shown = wt === "lute" && !d.cls ? "sword" : wt;
+  const name = d.slot === "weapon" && !d.wtype ? `${d.name} ${shown ? WEAPON_TYPE_NAMES[shown] : "Weapon"}` : d.name;
   const aff = itemAffixes(id);
   if (!aff.length) return name;
   // Strongest bonus gives the first word, the next one the "of ..." ending
