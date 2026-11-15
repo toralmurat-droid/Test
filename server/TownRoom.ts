@@ -111,6 +111,7 @@ import { HoldWalls } from "./holdWalls";
 import { routeFrame } from "../shared/war/holdRoutes";
 import { clanView, cleanOath, Presence, swear } from "./warHeroes";
 import { WarTroops } from "./warTroops";
+import { planAll, sendPlan } from "./warIntel";
 import { WarCaravans } from "./warCaravans";
 import { WarSieges } from "./warSieges";
 import { WarTunnels } from "./warTunnels";
@@ -746,6 +747,7 @@ export class TownRoom extends Room<TownState> {
     const offNews = attachWar(this), offTroops = onWar((v, _e, news) => {
       this.holdWalls.sync(warState()?.owner); // a land that changed hands raises its new holder's fort at once
       this.sieges.tick(Date.now()); this.warTroops.onWar(v); this.writs.onWar(v);
+      planAll(this.state.players.entries(), (id) => this.clients.getById(id)); // each clan's new plan to its sworn only (server/warIntel.ts)
       const r = news.rally?.clan; // the Rally came to a clan: its sworn heroes here hear what it means for them
       if (r) for (const [id, p] of this.state.players.entries()) if (p.clan === r) this.clients.getById(id)?.send("chat", { id: "", name: "Herald", text: rallyTell(r) });
     }); // the clan war (server/war.ts) runs on its own; the room passes on the news
@@ -826,7 +828,7 @@ export class TownRoom extends Room<TownState> {
       if (!p || !this.allow("ask", client)) return;
       const err = msg && msg.swear !== undefined ? swear(p, msg.swear) : "";
       client.send("clan", { ...clanView(p), err });
-      if (!err) { this.writs.oathChanged(client.sessionId); this.oaths.sync(); } // a writ for the old clan is withdrawn; tabards update
+      if (!err) { this.writs.oathChanged(client.sessionId); this.oaths.sync(); sendPlan(client, p, true); } // a writ for the old clan is withdrawn; tabards update; the new clan's plan
     });
     this.setState(new TownState());
     copyPatches(this); // each socket gets its own copy of a patch (deflate compresses later; server/patchCopy.ts)
@@ -1170,6 +1172,7 @@ export class TownRoom extends Room<TownState> {
     client.send("tunnels", this.tunnels.view()); // Hide-Kin tunnel mouths (server/warTunnels.ts)
     client.send("rituals", this.rituals.view()); // the Veiled noon ritual circle (server/warRituals.ts)
     client.send("clan", clanView(p));
+    sendPlan(client, p); // the clan's marches, sworn heroes only (server/warIntel.ts)
     { const ws = warState(); if (p.clan && ws && rallyClan(ws) === p.clan) client.send("chat", { id: "", name: "Herald", text: rallyTell(p.clan) }); } // Rally for the weakest
     this.oaths.sync(); client.send("oaths", this.oaths.full()); // tabards: others learn this hero's oath, this client gets everyone's
     this.writs.join(client.sessionId); // a war writ in progress (or withdrawn while away)

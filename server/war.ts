@@ -7,11 +7,12 @@
  */
 import { CLANS, CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import { newMinds, scriptedOrders, type Mind } from "../shared/war/doctrine";
-import { newWar, nightRaid, rallyClan, WAR, warTick, type Orders, type WarState } from "../shared/war/rules";
+import { cleanOrders, newWar, nightRaid, rallyClan, supplyMap, targetsOf, WAR, warTick, type Orders, type WarState } from "../shared/war/rules";
 import { TERRITORIES, type Territory } from "../shared/war/territories";
 import { regionByKey } from "../shared/war/regions";
 import { tunnelStrikes, type TunnelStrike } from "../shared/war/tunnels";
 import { warPhase, warView, type WarView } from "../shared/war/view";
+import type { WarPlan } from "../shared/war/intel";
 import { eventVoice, leaderLine } from "../shared/war/heralds";
 import { openKv, type Kv } from "./store";
 
@@ -37,6 +38,8 @@ let valor: Partial<Record<ClanKey, number>>[] = TERRITORIES.map(() => ({}));
 let lastOrders: Partial<Record<ClanKey, Orders>> | undefined;
 /** The tunnel strikes of those orders, read on the state before the tick (as rules.ts warTick saw it). */
 let lastStrikes: TunnelStrike[] = [];
+/** Each clan's plan of the last tick (warPlan), read on the state before the tick like lastStrikes. Memory only. */
+let lastPlans: Partial<Record<ClanKey, WarPlan>> = {};
 /** The lands the Night Raiders struck in the last tick (memory only, like lastOrders: shown on the war table and plaque). */
 let lastRaided: number[] = [];
 const listeners = new Set<(v: WarView, events: WarEvent[], news: WarNews) => void>();
@@ -189,6 +192,7 @@ function tickOnce(at: number, news: WarNews): WarEvent[] {
   const s = saved!.state, before = { owner: [...s.owner], siege: s.siege.map((x) => x && { ...x }) };
   const orders = scriptedOrders(s, saved!.minds, rng(s.tick * 2654435761 + 1)), phase = warPhase(at);
   lastStrikes = tunnelStrikes(s, orders); // (before warTick moves the owners: the strikes the rules fed)
+  lastPlans = plansOf(s, orders, lastStrikes, s.tick + 1); // (likewise; the view after this tick carries tick + 1)
   const raid = nightRaid(s, phase); // (likewise: the lands warTick strikes)
   lastRaided = raid?.ts ?? [];
   if (raid?.ts.length) news.raid = { clan: raid.clan, ts: [...raid.ts] };
@@ -220,6 +224,39 @@ export const warState = (): WarState | undefined => saved?.state;
 export const warOrders = (): Partial<Record<ClanKey, Orders>> | undefined => lastOrders;
 /** The tunnel strikes of the last war tick (server/warTunnels.ts), computed on the state that tick started from. Empty before the first tick. */
 export const warStrikes = (): readonly TunnelStrike[] => lastStrikes;
+/** Most attacks one plan lists (cleanOrders keeps 8 anyway). */
+const PLAN_MAX = 8;
+
+/**
+ * Every clan's plan from its orders, on the state the orders were given for: each legal attack once, fed from the
+ * adjacent own land with the best supply (as warTick feeds it; first in near order on a tie), or, for a Hide-Kin strike
+ * with no own land next to it, from the tunnel's start (`tunnel` 1). `tick`: the WarView.tick the plan goes out with.
+ */
+export function plansOf(s: WarState, orders: Partial<Record<ClanKey, Orders>> | undefined, strikes: readonly TunnelStrike[], tick: number): Partial<Record<ClanKey, WarPlan>> {
+  const out: Partial<Record<ClanKey, WarPlan>> = {};
+  if (!orders) return out;
+  let supply: number[] | undefined;
+  for (const k of CLAN_KEYS) {
+    if (!orders[k]) continue;
+    const o = cleanOrders(orders[k]), legal = new Set(targetsOf(s, k)), march: WarPlan["march"] = [];
+    for (const a of o.attack) {
+      if (march.length >= PLAN_MAX || !legal.has(a.t) || !(a.share > 0) || march.some((m) => m[1] === a.t)) continue;
+      supply ??= supplyMap(s);
+      let from = -1;
+      for (const n of TERRITORIES[a.t].near) if (s.owner[n] === k && (from < 0 || supply[n] > supply[from])) from = n;
+      if (from >= 0) { march.push([from, a.t, 0]); continue; }
+      const st = strikes.find((x) => x.clan === k && x.t === a.t);
+      if (st) march.push([st.from, a.t, 1]);
+    }
+    out[k] = { tick, march };
+  }
+  return out;
+}
+/**
+ * Clan `k`'s attacks of the last war tick, for its sworn heroes only (server/warIntel.ts): orders are secret from the
+ * other clans. Undefined before the first tick of this process or when the clan gave no orders.
+ */
+export const warPlan = (k: ClanKey): WarPlan | undefined => lastPlans[k];
 /** Called after every war tick with the new view and what happened. Returns an unsubscribe function. */
 export function onWar(f: (v: WarView, events: WarEvent[], news: WarNews) => void) { listeners.add(f); return () => { listeners.delete(f); }; }
 
@@ -227,9 +264,9 @@ export function onWar(f: (v: WarView, events: WarEvent[], news: WarNews) => void
 export function flushWar() { if (saved && kv?.setSync) try { kv.setSync(KEY, saved); } catch (e) { console.error("War: could not save:", e); } }
 
 /** Tests: start from a given state without a store or a clock. */
-export function _resetWar(s?: Saved, store?: Kv) { stopWar(); saved = s ?? fresh(Date.now()); saved.names ??= namesNow(); kv = store; valor = TERRITORIES.map(() => ({})); lastOrders = undefined; lastStrikes = []; lastRaided = []; }
+export function _resetWar(s?: Saved, store?: Kv) { stopWar(); saved = s ?? fresh(Date.now()); saved.names ??= namesNow(); kv = store; valor = TERRITORIES.map(() => ({})); lastOrders = undefined; lastStrikes = []; lastPlans = {}; lastRaided = []; }
 /** Tests: set the last tick's orders. */
-export function _setWarOrders(o: Partial<Record<ClanKey, Orders>> | undefined) { lastOrders = o; lastStrikes = saved ? tunnelStrikes(saved.state, o) : []; }
+export function _setWarOrders(o: Partial<Record<ClanKey, Orders>> | undefined) { lastOrders = o; lastStrikes = saved ? tunnelStrikes(saved.state, o) : []; lastPlans = saved ? plansOf(saved.state, o, lastStrikes, saved.state.tick) : {}; }
 /** Tests: valor clan `k` has gathered in territory `t` so far this war tick. */
 export const _valorOf = (t: number, k: ClanKey): number => valor[t]?.[k] ?? 0;
 export type { Saved as SavedWar };

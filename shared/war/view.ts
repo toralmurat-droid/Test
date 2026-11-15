@@ -23,6 +23,8 @@ export interface WarView {
   raided?: number[];
   /** The clan the war rallies for (rules.ts rallyClan), as a CLAN_KEYS index; absent when none. */
   rally?: number;
+  /** Territories that were attacked in the last war tick (pressure above 0), so the map can hatch where fighting is; absent when none. */
+  hot?: number[];
 }
 
 /** `raided`: the lands the Night Raiders struck in the last tick (server/war.ts keeps them; not part of the state). */
@@ -34,6 +36,8 @@ export function warView(s: WarState, next: number, raided: readonly number[] = [
   if (hunt) v.hunt = CLAN_KEYS.indexOf(hunt);
   if (hit.length) v.raided = [...hit];
   if (rally) v.rally = CLAN_KEYS.indexOf(rally);
+  const hot = s.pressure.flatMap((p, t) => (p > 0 ? [t] : []));
+  if (hot.length) v.hot = hot;
   return v;
 }
 
