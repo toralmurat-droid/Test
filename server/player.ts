@@ -57,6 +57,9 @@ export class PlayerPrivate extends Schema {
   // Choices made in quests, 2 bits each (shared/questSteps.ts CHOICES; saved as HeroSave.flags). Only the hero's own
   // dialogs, steps and NPCs depend on them, so they stay owner-only. 0 = none made (a number: never undefined)
   @type("number") flags = 0;
+  // Absorb shields left (shared/shields.ts shieldLeft over the buff pools): the owner's health orb draws it; other
+  // clients only see the shield buff ids in Player.fx. 0 = none (a number: never undefined)
+  @type("number") shield = 0;
 }
 
 /**

@@ -8,6 +8,7 @@ import { CR, crownGateTile, CROWNWAYS, TOLLCROSS_SQUARE } from "./crown";
 import { SALT_SQUARE } from "./saltmere";
 import { underground } from "./dungeon";
 import { isSolidAt, randomSpawn, SAFE_ZONE } from "./map";
+import { roomyTile } from "./npcs";
 
 /**
  * Act 2 (Murat 2026-11-08): the old waygate south of Oakvale and its twin in the desert's Sunstone Circle
@@ -112,10 +113,18 @@ export function actOpen(act: number, p: (Quester & { level: number }) | undefine
 
 /** Which act a point (px) is in (the Lantern Crypt, deep under the desert's west, is Act 1's). */
 export const actAt = (py: number, px: number): Act => actOfTile(Math.floor(px / TILE), Math.floor(py / TILE));
-/** Kel Ashar's market: where heroes in the desert come back after dying, and where they log in if they left from Act 2. */
+/**
+ * Kel Ashar's market: where heroes in the desert come back after dying, and where they log in if they left from Act 2.
+ * Only open ground with free tiles all round (Murat 2026-11-15: a reload put him between a crate and a barrel by the
+ * south stalls); the desert waygate's arrival spot if none is found.
+ */
 export function desertSpawn(): { x: number; y: number } {
   const M = KEL_MARKET;
-  return { x: (M.x + 2 + Math.random() * (M.w - 4)) * TILE, y: (D(M.y + M.h - 2) + Math.random()) * TILE };
+  for (let i = 0; i < 80; i++) {
+    const tx = M.x + 1 + Math.floor(Math.random() * (M.w - 2)), ty = D(M.y + 1) + Math.floor(Math.random() * (M.h - 2));
+    if (roomyTile(tx, ty)) return { x: (tx + 0.2 + Math.random() * 0.6) * TILE, y: (ty + 0.2 + Math.random() * 0.6) * TILE };
+  }
+  return waygateArrival(waygateById("desert")!);
 }
 /**
  * Cairnwatch's square (shared/moors.ts): where heroes in the moors come back after dying, and where they log in if

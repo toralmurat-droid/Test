@@ -118,6 +118,8 @@ export class Minimap {
    */
   private cam?: { cx: number; cy: number; s: number };
   private follow = false;
+  /** A tile spot the next frame centres the opened map on (showAt) */
+  private focus?: { x: number; y: number };
   private held = new Set<string>(); // map keys held down
   private lastBig = 0;
   private ptrs = new Map<number, { x: number; y: number }>(); // pointers down on the world map (canvas px)
@@ -348,6 +350,18 @@ export class Minimap {
     this.clampCam();
   }
 
+  /** Is this world point (px) in the area the map shows (the hero's)? Elsewhere the map can't centre on it. */
+  canShow(px: number, py: number) {
+    const b = this.bounds(), tx = px / TILE, ty = py / TILE;
+    return tx >= b.x0 && tx < b.x1 && ty >= b.y0 && ty < b.y1;
+  }
+
+  /** Opens the world map centred on a world point (px), zoomed in a little: the quest log's "Show on map". */
+  showAt(px: number, py: number) {
+    this.toggle(true);
+    this.focus = { x: px / TILE, y: py / TILE };
+  }
+
   get isOpen() { return this.overlay.classList.contains("open"); }
 
   /** True while the turned (iso) world map draws its markers: their glyphs turn back upright. */
@@ -356,7 +370,7 @@ export class Minimap {
   toggle(open = !this.isOpen) {
     if (open && !this.isOpen) { this.cam = undefined; this.follow = false; } // opens on the explored area, as before
     this.overlay.classList.toggle("open", open);
-    if (!open) { this.held.clear(); this.ptrs.clear(); }
+    if (!open) { this.held.clear(); this.ptrs.clear(); this.focus = undefined; } // a Show-on-map not drawn yet ends with the map
     this.last = 0;
   }
 
@@ -535,6 +549,11 @@ export class Minimap {
     if (this.big.width !== cw || this.big.height !== ch) {
       this.big.width = cw; this.big.height = ch;
       this.big.style.width = `${cw}px`; this.big.style.height = `${ch}px`;
+    }
+    if (this.focus) {
+      const c = this.camera();
+      c.cx = this.focus.x; c.cy = this.focus.y; c.s = Math.max(c.s, 3);
+      this.follow = false; this.focus = undefined;
     }
     // Held keys: I/J/K/L pan (screen directions), + / - zoom around the centre
     if (this.held.size) {

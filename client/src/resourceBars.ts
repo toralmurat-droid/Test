@@ -161,10 +161,10 @@ export class ResourceBars {
   }
   toggleNumbers() { this.setNumbers(this.root.classList.contains("rb-nonums")); }
 
-  update(s: { song?: boolean; shield?: boolean; chordLock?: boolean; mode?: string; rank?: (id: string) => number; level: number; hp: number; maxHp: number; mp: number; maxMp: number; xpFrac: number; xp?: number; xpNeed?: number }) {
+  update(s: { song?: boolean; shield?: boolean; shieldAmt?: number; chordLock?: boolean; mode?: string; rank?: (id: string) => number; level: number; hp: number; maxHp: number; mp: number; maxMp: number; xpFrac: number; xp?: number; xpNeed?: number }) {
     this.hp.update(Math.ceil(s.hp), Math.round(s.maxHp));
     this.mp.update(Math.floor(s.mp), s.maxMp);
-    this.orbs.update(s.hp, s.maxHp, s.mp, s.maxMp, !!s.song, !!s.shield);
+    this.orbs.update(s.hp, s.maxHp, s.mp, s.maxMp, !!s.song, !!s.shield, s.shieldAmt ?? 0);
     this.orbs.setChordLock(!!s.chordLock);
     this.orbs.setMode(s.mode, s.rank ?? (() => 0));
     this.orbs.setLevel(s.level);
