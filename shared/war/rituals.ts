@@ -69,7 +69,6 @@ export const NOON_FROM = 0.965;
 export const ritualDay = (now: number) => Math.floor(now / DAY_CYCLE_MS + (1 - NOON_FROM));
 
 /** The ring search keeps from every standard: their ring plus ours, so the two never overlap (strict pass). */
-const STD_KEEP = STANDARD.range + RITUAL.ringPx;
 
 let doorTiles: Set<number> | undefined;
 /** Tiles (centres, in tiles) of things a circle keeps away from: overworld entrances and portal stones, NPCs and their props. */
