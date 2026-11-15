@@ -62,6 +62,7 @@ import { arrivalOf, cleanPortals, PORTAL_COMBAT_MS, PORTAL_RANGE, PORTAL_WAKE_RA
 import { rollBoon, shrineXp, SHRINE, SHRINE_COOLDOWN_MS, SHRINE_RANGE, WIND_BLESSING, WIND_BLESSING_ID } from "../shared/shrine";
 import { chestById, chestLock, CHEST_RANGE, CHEST_RESPAWN_MS, CHESTS, GUARD_CHECK_MS, GUARD_RESPAWN_MS, rollChest } from "../shared/chests";
 import { encodeTimers, timerSig, timersOf } from "../shared/buffTimers";
+import { shieldLeft } from "../shared/shields";
 import { SLOT_COUNT } from "../shared/slots";
 import { groupDmgMult, groupHpMult, PARTY, together } from "../shared/party";
 import { canExecute, executeDamage, executeRefund, heroPoise, MOB_COMBAT, mobBody, POISE, poiseLevelMult, poiseSpeed, PVP_PROTECT_LEVEL, pvpDamageMult, pvpProtected, SWING_AHEAD } from "../shared/combat";
@@ -3002,6 +3003,7 @@ export class TownRoom extends Room<TownState> {
       const spd = Math.round(speedMult(p, now) * talentMult(p.cls, p.talents, "speed") * feastMult(p.feast, "speed") * 1000) / 1000;
       if (p.spd !== spd) p.spd = spd;
       tickPoise(p, heroPoiseMax(p), dt, now);
+      const sh = p.dead ? 0 : shieldLeft(p, now); if (p.me.shield !== sh) p.me.shield = sh; // owner's orb (shared/shields.ts)
       if (p.dead) { p.moving = false; p.energy = 0; p.mana = usesGauge(p.cls) ? 0 : p.maxMana; this.syncMana(p); return; }
       for (let c = 0; c < CHAINS.length; c++) this.checkQuestPlace(pid, p, c);
       this.wakePortals(pid, p);
