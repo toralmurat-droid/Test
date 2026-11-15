@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-15",
+  "patch": 270,
+  "title": "Chorus timers and clearer shops",
+  "changes": [
+    "The Songweaver's active Chorus now shows in the buff row with its real time left, Dirge included.",
+    "Shops dim the items your class can't wear and say why.",
+    "Plain weapons no longer read as lutes for a Songweaver: a Bronze Sword is called a Bronze Sword."
+  ]
+}

@@ -688,6 +688,7 @@ export class TownScene extends Phaser.Scene {
     document.getElementById("hud")!.hidden = false;
     this.minimap = new Minimap(document.getElementById("minimap") as HTMLCanvasElement, this.opts.name);
     this.npcs = new NpcLayer(this, (type, msg) => this.room.send(type, msg));
+    this.npcs.log.map = { show: (x, y) => this.minimap?.showAt(x, y), can: (x, y) => !!this.minimap?.canShow(x, y) }; // quest log: Show on map
     // A shop opens the bag beside it (Murat 2026-11-08): hovering a piece for sale shows its item card with what it would change
     let bagByShop = false;
     this.npcs.onShopOpen = (open) => {
@@ -3580,7 +3581,7 @@ export class TownScene extends Phaser.Scene {
       // Top-left bars (resourceBars.ts): red HP, blue Mana (spells, shared/mana.ts), green XP
       const ow = own(mine), mn = unpackMana(ow.mp); // owner-only numbers, in `me` (server/player.ts)
       (this.resBars ??= new ResourceBars(document.getElementById("hud")!)).update({
-        song: cls === "songweaver", chordLock: !mine.dead && String(mine.fx ?? "").split(",").includes("chlock"), mode: /(?:^|,)mode:(\w+)/.exec(mine.fx ?? "")?.[1], rank: (id: string) => ow.talents.get(id) ?? 0, shield: !mine.dead && (!!mine.guarding || hasSongShield(mine.fx)), level: mine.level, hp: mine.hp, maxHp: mine.maxHp, mp: mn.mana, maxMp: mn.maxMana, // the gauge lives in mana / maxMana (shared/mana.ts usesGauge)
+        song: cls === "songweaver", chordLock: !mine.dead && String(mine.fx ?? "").split(",").includes("chlock"), mode: /(?:^|,)mode:(\w+)/.exec(mine.fx ?? "")?.[1], rank: (id: string) => ow.talents.get(id) ?? 0, shield: !mine.dead && (!!mine.guarding || hasSongShield(mine.fx)), shieldAmt: mine.dead ? 0 : Math.max(0, Number(ow.shield) || 0), level: mine.level, hp: mine.hp, maxHp: mine.maxHp, mp: mn.mana, maxMp: mn.maxMana, // the gauge lives in mana / maxMana (shared/mana.ts usesGauge)
         xpFrac: mine.level >= MAX_LEVEL ? 1 : Math.max(0, Math.min(1, (ow.xp - cur) / Math.max(1, next - cur))),
         xp: Math.max(0, ow.xp - cur), xpNeed: mine.level >= MAX_LEVEL ? undefined : next - cur,
       });

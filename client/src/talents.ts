@@ -31,7 +31,6 @@ export class TalentMenu {
   private el = document.getElementById("tree")!;
   private sig = "";
   private hover = "";
-  private shown = "";
   private cls?: ClassKind;
   private state: any;
   /** Hover card beside the tile under the mouse (Murat 2026-11-08): the skill's full details. */
@@ -44,14 +43,13 @@ export class TalentMenu {
       const t = (ev.target as HTMLElement).closest("[data-talent]") as HTMLElement | null;
       const was = this.hover;
       this.hover = t?.dataset.talent ?? "";
-      if (this.hover && this.hover !== this.shown) this.details(this.hover);
       if (this.hover) { if (this.hover !== was || this.tip?.style.display !== "block") this.showTip(); } else this.hideTip();
     });
     this.el.addEventListener("mouseleave", () => { this.hover = ""; this.hideTip(); });
     this.el.addEventListener("click", (ev) => {
       const t = (ev.target as HTMLElement).closest("[data-talent]") as HTMLElement | null;
       if (t && t.classList.contains("can")) this.send("learn", t.dataset.talent);
-      if (t) { this.details(t.dataset.talent!); this.showTip(); }
+      if (t) this.showTip();
       if ((ev.target as HTMLElement).id === "treereset") this.send("respec");
     });
     // Buttons never keep keyboard focus, so Space in a fight can't click a node by accident
@@ -122,11 +120,8 @@ export class TalentMenu {
     html += `<div class="tfoot${free > 0 ? " has" : ""}">${free > 0 ? `${free} point${free > 1 ? "s" : ""} to spend` : "No points to spend"}</div>`;
     html += `</div>`;
     const box = document.getElementById("treebranches")!;
-    box.innerHTML = `<div class="treecol"><div class="treewrap theme-${cls}" style="width:${W}px;height:${H}px">${html}</div></div><div id="treeinfo"></div>`;
+    box.innerHTML = `<div class="treecol"><div class="treewrap theme-${cls}" style="width:${W}px;height:${H}px">${html}</div></div>`; // a skill's details are in its hover card (#skilltip)
     this.paint(box.querySelector("canvas.treeart") as HTMLCanvasElement, cls, layout, ranks, colors, cols.slice(1).map((c) => c.x0));
-    this.shown = "";
-    const pick = this.hover || nodes.find((n) => lockReason(cls, state.level, ranks, n.id) === "")?.id || nodes[0].id;
-    this.details(pick);
     if (this.hover) this.showTip(); // the tiles were rebuilt: follow the new one and show fresh numbers
   }
 
@@ -228,15 +223,6 @@ export class TalentMenu {
       if (lit) { g.save(); g.shadowColor = col; g.shadowBlur = 8; shaft(0.6, 0.6, col, 2); g.restore(); }
     }
     void cls;
-  }
-
-  /** Bar under the tree: the skill last hovered or clicked. */
-  private details(id: string) {
-    const info = document.getElementById("treeinfo");
-    const html = this.detailHtml(id);
-    if (!info || !html) return;
-    this.shown = id;
-    info.innerHTML = html;
   }
 
   /** Everything about one skill: what it does, damage now and next rank, cost, cooldown, level, path, status. */
