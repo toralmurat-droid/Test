@@ -30,7 +30,7 @@ import { hiResTexture } from "./smooth";
 import { uprightTexture, UPRIGHT_OY } from "./smoothProps";
 import { ADOBE_PAD, ADOBE_WALL_H, adobeHead, adobeTexture, adobeWallTexture, bonesTexture, CLIFF_DEPTH, cliffDistance, cliffHeight, cliffTexture, cliffVariant, deadTreeTexture, desertRockTexture, sunStoneTexture, tentTexture } from "./desertArt";
 import { D, FURNACE, SUNSTONE } from "../../shared/desert";
-import { DESERT_H, DESERT_Y0, MOORS_Y0 } from "../../shared/constants";
+import { DESERT_H, DESERT_Y0, MOORS_H, MOORS_Y0 } from "../../shared/constants";
 import { barrowTexture, birchTexture, boneHeapTexture, graniteCliffTexture, origin, standingStoneTexture } from "./moorsArt";
 
 export const isoX = (x: number, y: number) => x - y;
@@ -711,9 +711,10 @@ export function isoStanding(scene: Phaser.Scene, objects: number[][]): number[][
   for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
     const index = objects[ty][tx], t = id(index);
     if (t < 0) continue;
+    if (ty >= M0 && (ty < MOORS_Y0 || ty >= MOORS_Y0 + MOORS_H)) { out[ty][tx] = -1; continue; } // the solid rock strips round the moors: ground paints them
     if (ty >= M0 && isoMoors(scene, t, tx, ty, at, md)) { out[ty][tx] = -1; continue; }
     if ((ty >= WORLD_H && ty < DESERT_Y0) || (ty >= DESERT_Y0 + DESERT_H && ty < M0)) { out[ty][tx] = -1; continue; } // the Mawdeep's rock: cave walls (dungeon.ts), not rocks; then solid rock to the desert
-    if (ty >= DESERT_Y0 && isoDesert(scene, t, tx, ty, at, cd)) { out[ty][tx] = -1; continue; }
+    if (ty >= DESERT_Y0 && ty < M0 && isoDesert(scene, t, tx, ty, at, cd)) { out[ty][tx] = -1; continue; }
     const cx = (tx + 0.5) * TILE, cy = (ty + 0.5) * TILE;
     if (houses.has(ty * MAP_W + tx)) { out[ty][tx] = -1; continue; }
     if (t === T.CAMPFIRE) { out[ty][tx] = -1; continue; } // an upright fire sprite (ambient.ts)
