@@ -1,5 +1,6 @@
 {
   "date": "2026-11-15",
+  "patch": 248,
   "title": "Siege battles",
   "changes": [
     "When a land is under siege and you come near, both clans now send real soldiers to fight at its standards and at the Hold gate.",
