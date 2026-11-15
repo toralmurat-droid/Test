@@ -78,7 +78,7 @@ function pageFor(id: string, q: QuestState): DialogPage | undefined {
 const GATE_HINT: Record<1 | 2 | 3, string> = {
   1: "Step through the waygate, just outside Oakvale's south gate",
   2: "Step through the waygate in the Sunstone Circle, south-west of Kel Ashar",
-  3: "Step through the moorgate at the moors' south-west edge, or head back to Oakvale",
+  3: "Touch the Cairnwatch portal stone, or step back through the Moorgate by the stone ring",
 };
 /** Act 1's way to the moors: the Moorgate is not Oakvale's south waygate. */
 const MOORGATE_HINT = "Step through the Moorgate in the forest north of the Hollow Throne";
