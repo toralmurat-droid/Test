@@ -38,7 +38,7 @@ import {
 } from "../shared/items";
 import { bountyCounts, bountyOffers, cleanBounty, nearestBoard } from "../shared/bounty";
 import { DOORS, DOOR_RANGE, doorById, doorDist, doorWorkable, isSafeZone, isSolidAt, randomSpawn, setDoorOpen, VILLAGE, type Door } from "../shared/map";
-import { isDecorSolidAt, npcById, npcNear, TALK_RANGE, type Npc } from "../shared/npcs";
+import { boxedInAt, isDecorSolidAt, npcById, npcNear, openGroundNear, TALK_RANGE, type Npc } from "../shared/npcs";
 import { beyondWall, WATCH, WATCH_POSTS, WatchPost } from "../shared/watch";
 import { inVillage, WRATH } from "../shared/wrath";
 import { afterRespec, bounceWave, busking, buskingAudience, BuskingLines, ChordSync, heroSound, LazyStash, migrateSongweaver, mobSound, refillKit, oldSongTree, relevelLute, restoreMode, SONG_POTION_TEXT, SongCollector, songSave, stowItem, stringShot, SW_KIT_VERSION } from "./songs";
@@ -1142,6 +1142,8 @@ export class TownRoom extends Room<TownState> {
     if (options?.newGame) dropLive(p.name, p.cls);
     const back = options?.newGame ? undefined : takeLive(p.name, p.cls);
     if (back) this.resume(p, back);
+    // Never start boxed in (between crates and a barrel, say): step out to the nearest open ground
+    if (boxedInAt(p.x, p.y)) { const o = openGroundNear(p.x, p.y); if (o) { p.x = o.x; p.y = o.y; } }
     if (options?.newGame) saveHero(p.name, p.cls, this.snapshot(p));
     else if (loaded) this.writeLoaded(p, loaded);
     // A quest that carries on by itself (QuestDef.auto) but did not start (they left right after the last one, or its

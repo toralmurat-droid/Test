@@ -9,8 +9,8 @@ import { icon as pxIcon } from "./pixelicons";
  * - Opening: "Hearth of Oakvale" starts as soon as the game opens (or on the first click / key if the browser
  *   waits for one) and loops through the start menus and the loading screen. In the world it plays on ONCE
  *   to its end, then the normal rules take over; leaving the village fades it out. Never again this page.
- * - Calm: the Village tune with soft village sounds under it in Oakvale, Saltmere and the Hunter's Camp,
- *   the Countryside tune everywhere else (both loop).
+ * - Calm: the Village tune with soft village sounds under it in Oakvale and the Hunter's Camp, "Tides of
+ *   Saltmere" (Murat's sea shanty) in Saltmere, the Countryside tune everywhere else (all loop).
  * - Battle: when the fighting around the hero heats up (hits near the hero, hits taken), the zone's battle
  *   song comes in: The Pale Marshal's March where skeletons live, Blob Slayer for blobs and bandits.
  *   It starts quiet and swells as the battle intensifies (unless the player turned the swell off),
@@ -40,10 +40,9 @@ const TRACKS: Track[] = [
   { id: "blob-slayer", name: "Blob Slayer", url: "/assets/music/blob-slayer.mp3" },
   { id: "pale-marshals", name: "The Pale Marshal's March", url: "/assets/music/pale-marshals-march.mp3" },
   { id: "village", name: "Village tune", url: "/assets/music/village-tune.mp3", withSounds: true },
+  { id: "saltmere", name: "Tides of Saltmere", url: "/assets/music/tides-of-saltmere.mp3", optional: true },
   { id: "country", name: "Countryside tune", url: "/assets/music/countryside-tune.mp3" },
   { id: "village-sounds", name: "Village sounds", ambience: true },
-  // Act 1, Saltmere (optional: without the file Saltmere plays the village tune)
-  { id: "saltmere", name: "Saltmere tune", url: "/assets/music/saltmere-tune.mp3", optional: true },
   // Act 2, the Sunscar (optional until Murat's mp3s are added; file names in docs/music/act2-prompts.md)
   { id: "second-sun", name: "Song of the Second Sun", url: "/assets/music/song-of-the-second-sun.mp3", optional: true },
   { id: "kel-ashar", name: "Kel Ashar tune", url: "/assets/music/kel-ashar-tune.mp3", withSounds: true, desert: true, optional: true },
@@ -68,13 +67,13 @@ const MOORS_TOWNS = ["Cairnwatch"];
 const BADLANDS_TOWNS = ["The Rustwater Post", "Rustwater Post"];
 /** Act 5 calm area that plays the village tune (Ropewell) until the sinkholes have their own music. */
 const SINKHOLES_TOWNS = ["Ropewell"];
+/** Act 1 areas with their own calm song (Saltmere's sea shanty), else the village tune. */
+const SALTMERE = ["Saltmere"];
 const OASES = ["Palmshade Oasis", "Mirage Wells", "Jackal Springs"];
 const BURIED = ["Kharsun, the Buried City", "The Veiled Sanctum"];
 const FURNACE = "The Sun Furnace";
 const UNDEAD = ["skeleton", "skeletonmage", "necromancer", "sanddead", "wight", "bonehound", "mistwraith", "legionary", "cairnlord", "barrowking"];
 const FIGHT = ["slime", "shooterblob", "warriorblob", "healerblob", "motherblob", "bandit", "venomblob", "frostblob", "fireblob", "stormblob", "nomad", "scorpion", "veiled", "camelfolk", "sphinx", "sunwright", "nightraider", "boghag", "outrider", "crossbowman", "firebrand", "warhound", "vulture", "rattler", "redcaptain", "rourke", "delver", "cackler", "stagkin", "quillback", "stitcher", "sinkworm", "hidechief", "mawfather"];
-/** Act 1 fishing village with its own optional tune (falls back to the village tune). */
-const SALT_TOWNS = ["Saltmere"];
 const TOWNS = ["Oakvale", "Market Square", "Chapel of the Dawn", "The Rusty Tankard", "The Smithy", "Saltmere", "Hunter's Camp"];
 
 const FADE_IN = 2.5;
@@ -334,8 +333,8 @@ export function setMusicZone(zone: string | undefined, mobs: Partial<Record<stri
   } else {
     zoneName = zone;
     zoneBattle = actOneBattle;
-    const saltTune = !zone && actNowRaw === 1 && SALT_TOWNS.includes(area) ? firstOf("saltmere") : null;
-    calm = saltTune ?? (!zone && (TOWNS.includes(area) || (actNowRaw === 3 && MOORS_TOWNS.includes(area)) || (actNowRaw === 4 && BADLANDS_TOWNS.includes(area)) || (actNowRaw === 5 && SINKHOLES_TOWNS.includes(area))) ? "village" : "country");
+    calm = !zone && (TOWNS.includes(area) || (actNowRaw === 3 && MOORS_TOWNS.includes(area)) || (actNowRaw === 4 && BADLANDS_TOWNS.includes(area)) || (actNowRaw === 5 && SINKHOLES_TOWNS.includes(area))) ? "village" : "country";
+    if (calm === "village" && actNowRaw === 1 && SALTMERE.includes(area)) calm = firstOf("saltmere") ?? "village";
   }
   // Back to the valley while the theme plays: it fades with the calm change below
   if (actNow !== act) { act = actNow; if (arrival === "playing") arrival = "done"; }

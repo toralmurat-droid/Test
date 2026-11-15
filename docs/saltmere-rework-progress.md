@@ -16,7 +16,7 @@ Work branch: `claude/wizardly-franklin-nedywr`. All phases shipped in one PR, #4
 ## Plan
 | # | Phase | Status |
 |---|---|---|
-| 1 | Coastal sound bed (surf, gulls by day, rigging, bell buoy), optional `saltmere-tune.mp3` slot | done |
+| 1 | Coastal sound bed (surf, gulls by day, rigging, bell buoy), Saltmere music slot (now "Tides of Saltmere", #456) | done |
 | 2 | Harbour props: moored boats, rowboats, bell buoy, lobster pots, mooring posts, breakwater; gulls | done |
 | 3 | Layout (`shared/saltmere.ts`, `shared/map.ts`): tavern, chandlery, smokehouse, 3 cottages, Upper Lane, Harbour Street, cobbled harbour square = safe zone, jetties at Gullrock and Heronwreck | done |
 | 3b | Building art: tavern and smokehouse styles, signs, smoke (the quay edge became shore boulders) | done |
@@ -108,5 +108,6 @@ Work branch: `claude/wizardly-franklin-nedywr`. All phases shipped in one PR, #4
   beach, five tiles from the water): boulders follow the shore between the piers instead. `shared/saltmere.ts` is
   `area:map` (`tools/ci/critical-areas.mjs`, CLAUDE.md). Review: OK TO MERGE.
 - Open for later: the per-hero town reactions to the Redfang chain (cod on the racks, lanterns lit; Marta's and
-  Agna's lines already follow it); new character art for the five NPCs (placeholder sheets now); a real
-  `saltmere-tune.mp3`; tuning the coast sound volumes by ear; a real fishing mechanic (decision 3).
+  Agna's lines already follow it); new character art for the five NPCs (placeholder sheets now); tuning the coast sound volumes by ear; a real fishing mechanic (decision 3).
+- 2026-11-15: #456 brought Murat's "Tides of Saltmere" (`tides-of-saltmere.mp3`, slot `saltmere`); merging it, this
+  branch's placeholder slot (`saltmere-tune.mp3`, `SALT_TOWNS`, its README section) was dropped for it.
