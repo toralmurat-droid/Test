@@ -24,6 +24,7 @@ import { TERRITORIES } from "../shared/war/territories";
 import { parseTroop, troopLevel, troopStance, troopStats, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
 import { addValor, warNow, warState } from "./war";
 import { newFighter, type FightGround, type Fighter, type TroopHero, type TroopMob, type WarTroops } from "./warTroops";
+import { WarWorks } from "./warWorks";
 
 /** A hero as the sieges read it: a trooper's view plus the last time they moved, attacked or cast (STANDARD.idleMs). */
 export interface SiegeHero extends TroopHero { lastAct: number }
@@ -39,6 +40,8 @@ export interface SiegeHost {
   broadcast(type: string, msg: unknown): void;
   /** Troopers the sieges may field now: WAR_TROOPS.maxTroops less what the caravans hold (they come first). */
   budget(): number;
+  /** A hero reached a new renown rank (a wrecked siege ram, server/warWorks.ts). */
+  ranked?(heroId: string, rank: string): void;
 }
 /** The soldier's moves the siege troopers borrow from the troops. */
 export type Soldiers = Pick<WarTroops, "think" | "fight" | "walk" | "speedOf" | "seen">;
@@ -60,23 +63,31 @@ export class WarSieges {
   /** Front valor paid per land and clan in the current war tick (SIEGE_BATTLE.battleValorPerTick). */
   private paid = new Map<string, { tick: number; n: number }>();
   private seq = 0;
+  /** Siege works (the Host's bone ram and its crew), inside each siege's share. */
+  private works: WarWorks;
 
-  constructor(private h: SiegeHost, private soldiers: Soldiers) {}
+  constructor(private h: SiegeHost, private soldiers: Soldiers) {
+    this.works = new WarWorks(h, soldiers, (t, clan, v, tick) => this.payClan(t, clan, v, tick));
+  }
 
-  /** Siege troopers alive now (they count against WAR_TROOPS.maxTroops). */
-  get count(): number { return this.troops.size; }
-  owns(id: string): boolean { return this.troops.has(id); }
+  /** Siege troopers alive now, works included (they count against WAR_TROOPS.maxTroops). */
+  get count(): number { return this.troops.size + this.works.count; }
+  owns(id: string): boolean { return this.troops.has(id) || this.works.owns(id); }
 
   /** The live siege for the clients ("siege" message): t -1 when none. */
   view(): SiegeView {
-    for (const s of this.sieges.values()) if (s.live)
-      return { t: s.t, fronts: s.fronts.map((f) => ({ x: Math.round(f.x), y: Math.round(f.y), gate: f.gate, holder: sideClan(s, f.holder) })) };
+    for (const s of this.sieges.values()) if (s.live) {
+      const out: SiegeView = { t: s.t, fronts: s.fronts.map((f) => ({ x: Math.round(f.x), y: Math.round(f.y), gate: f.gate, holder: sideClan(s, f.holder) })) }, ram = this.works.view(s.t);
+      if (ram) out.ram = ram;
+      return out;
+    }
     return { t: -1, fronts: [] };
   }
 
   /** Once a second (after the caravans, before the patrols): follow the war's sieges, wake the nearest, field its troops, count its fronts, pay. */
   tick(now = Date.now()) {
     for (const [id, tr] of this.troops) { const m = this.h.mob(id); if (!m || m.dead) { this.troops.delete(id); tr.slot.id = ""; } }
+    this.works.sweep();
     const v = SIEGE_BATTLE.live && WAR_TROOPS.live ? warNow() : undefined;
     const want = new Map<number, [ClanKey, ClanKey]>();
     if (v) for (const [t, by] of v.sieges) { const atk = CLAN_KEYS[by], def = CLAN_KEYS[v.owner[t]]; if (atk && def && atk !== def) want.set(t, [atk, def]); }
@@ -105,14 +116,15 @@ export class WarSieges {
       near.lastHero = now;
       if (!near.live) { near.live = true; near.nextWave = 0; near.nextScore = now + SIEGE_BATTLE.scoreMs; near.nextPay = now + SIEGE_BATTLE.valorEveryMs; this.h.broadcast("siege", this.view()); }
     }
-    for (const s of this.sieges.values()) if (s.live) this.field(s, v.control[s.t] ?? 100, now);
+    for (const s of this.sieges.values()) if (s.live) this.field(s, v.control[s.t] ?? 100, now, v.tick);
     if (near && now >= near.nextScore) { near.nextScore = now + SIEGE_BATTLE.scoreMs; this.score(near, now); }
     if (near && now >= near.nextPay) { near.nextPay = now + SIEGE_BATTLE.valorEveryMs; this.pay(near, v.tick); }
   }
 
   /** The live siege's force: places by the budget, extra men go, the empty places fill in a wave every reinforceMs. */
-  private field(s: Siege, control: number, now: number) {
-    const fresh = s.nextWave === 0, f = siegeForce(s.fronts.length, control, Math.min(SIEGE_BATTLE.maxSiegeTroops, this.h.budget()));
+  private field(s: Siege, control: number, now: number, tick: number) {
+    const room = Math.min(SIEGE_BATTLE.maxSiegeTroops, this.h.budget()), fresh = s.nextWave === 0, f = siegeForce(s.fronts.length, control, room, this.works.reserve(s));
+    if (this.works.field(s, tick, room)) this.h.broadcast("siege", this.view()); // the ram (and its crew) take their reserved places first
     const keep = new Set<string>();
     s.fronts.forEach((_, fi) => {
       for (const [side, n] of [["atk", f.atk], ["def", f.def]] as [Side, number][]) for (let i = 0; i < n; i++) {
@@ -150,6 +162,7 @@ export class WarSieges {
   private sleep(s: Siege) {
     for (const sl of s.slots.values()) this.drop(sl);
     s.slots.clear(); s.live = false;
+    this.works.sleep(s.t);
     for (const f of s.fronts) { f.lead = undefined; f.seen.clear(); }
     this.h.broadcast("siege", this.view());
   }
@@ -159,6 +172,7 @@ export class WarSieges {
     const was = s.live;
     s.live = false;
     for (const sl of s.slots.values()) this.drop(sl);
+    this.works.end(s.t);
     this.sieges.delete(s.t);
     if (was) this.h.broadcast("siege", this.view());
   }
@@ -182,9 +196,10 @@ export class WarSieges {
       for (const [, o] of this.h.mobsInBox(f.x, f.y, R)) {
         if (o.dead || o.kind !== "trooper" || Math.hypot(o.x - f.x, o.y - f.y) > R) continue;
         const k = parseTroop(o.weapon);
-        if (!k || k.cart) continue;
+        if (!k || k.object) continue; // (a cart or a ram is no fighter: the ram weighs through extraWeight)
         if (k.clan === s.atk) atk++; else if (k.clan === s.def) def++;
       }
+      atk += this.works.extraWeight(s.t, f, "atk"); def += this.works.extraWeight(s.t, f, "def");
       for (const [, p] of this.h.heroes()) {
         if (p.dead || !p.clan || p.level < STANDARD.minLevel || now - p.lastAct > STANDARD.idleMs || Math.hypot(p.x - f.x, p.y - f.y) > R) continue;
         if (p.clan === s.atk) { atk += S.heroWeight; f.seen.add(p.clan); } else if (p.clan === s.def) { def += S.heroWeight; f.seen.add(p.clan); }
@@ -207,19 +222,34 @@ export class WarSieges {
    * fight (it holds the land, or may attack it): the war's own rules decide what the valor does.
    */
   private pay(s: Siege, tick: number) {
-    const st = warState();
-    for (const [k, c] of this.paid) if (c.tick !== tick) this.paid.delete(k);
     for (const f of s.fronts) {
-      const clan = sideClan(s, f.holder), key = `${s.t}:${clan}`, c = this.paid.get(key), used = c ? c.n : 0;
-      const v = frontPay(f.gate, f.seen.has(clan), used);
+      const clan = sideClan(s, f.holder), v = frontPay(f.gate, f.seen.has(clan), this.used(s.t, clan, tick));
       f.seen.clear();
-      if (!v || !st || !(st.owner[s.t] === clan || targetsOf(st, clan).includes(s.t))) continue;
-      if (addValor(s.t, clan, v)) this.paid.set(key, { tick, n: used + v });
+      if (v) this.payClan(s.t, clan, v, tick);
     }
+  }
+
+  /** Siege valor `clan` already earned in land t this war tick. */
+  private used(t: number, clan: ClanKey, tick: number): number {
+    for (const [k, c] of this.paid) if (c.tick !== tick) this.paid.delete(k);
+    return this.paid.get(`${t}:${clan}`)?.n ?? 0;
+  }
+
+  /**
+   * Valor for `clan` in land t from the siege (fronts, a wrecked ram): up to battleValorPerTick per clan and land in a
+   * war tick, and only where the war lets that clan fight (it holds the land, or may attack it). Returns what it paid.
+   */
+  private payClan(t: number, clan: ClanKey, v: number, tick: number): number {
+    const st = warState(), used = this.used(t, clan, tick), n = Math.min(v, SIEGE_BATTLE.battleValorPerTick - used);
+    if (n <= 0 || !st || !(st.owner[t] === clan || targetsOf(st, clan).includes(t))) return 0;
+    if (!addValor(t, clan, n)) return 0;
+    this.paid.set(`${t}:${clan}`, { tick, n: used + n });
+    return n;
   }
 
   /** A siege trooper's turn (TownRoom.updateMob, trooper branch): fight within its leash, else march to its front and hold it. */
   step(m: TroopMob, id: string, dt: number, now: number) {
+    if (this.works.owns(id)) return this.works.step(m, id, dt, now);
     const tr = this.troops.get(id);
     if (!tr) { this.h.remove(id); return; }
     const p = patrolOf(tr.s.t);
@@ -258,6 +288,7 @@ export class WarSieges {
 
   /** An enemy hero's blow on a siege trooper: its idle mates at the same front turn on them. */
   hit(heroId: string, id: string) {
+    if (this.works.owns(id)) return this.works.hit(heroId, id);
     const tr = this.troops.get(id), p = this.h.hero(heroId);
     if (!tr || !p || troopStance(tr.clan, p) !== "enemy") return;
     for (const [oid, o] of this.troops) {
@@ -267,8 +298,9 @@ export class WarSieges {
     }
   }
 
-  /** A siege trooper died (by any hand): its place waits for the next wave. No valor and no loot for it. */
-  killed(id: string): boolean {
+  /** A siege trooper died (by any hand): its place waits for the next wave. No valor and no loot for it (a wrecked ram: server/warWorks.ts). */
+  killed(id: string, killerId = "", m?: TroopMob): boolean {
+    if (m && this.works.owns(id)) { if (this.works.killed(m, id, killerId)) this.h.broadcast("siege", this.view()); return true; }
     const tr = this.troops.get(id);
     if (!tr) return false;
     this.troops.delete(id);
@@ -279,8 +311,11 @@ export class WarSieges {
   /** A hero left or died: no siege trooper keeps chasing them. */
   forget(heroId: string) {
     for (const id of this.troops.keys()) { const m = this.h.mob(id); if (m && m.target === heroId) m.target = ""; }
+    this.works.forget(heroId);
   }
 
+  /** Tests: the siege works (the ram), read-only use. */
+  get _works() { return this.works; }
   /** Tests: a siege's state, read-only. */
   _siege(t: number) { return this.sieges.get(t); }
   /** Tests: the ids of a siege's troopers by side. */

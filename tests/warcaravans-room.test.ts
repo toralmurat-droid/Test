@@ -67,7 +67,7 @@ test("caravans (room): a cart wakes near a hero with its escorts; only rival-swo
     wild();
     const cid = lv.cart, cart = room.state.mobs.get(cid), level = caravanLevel(LINE.b);
     assert.equal(cart.kind, "trooper");
-    assert.deepEqual(parseTroop(cart.weapon), { clan: LINE.clan, officer: false, cart: true });
+    assert.deepEqual(parseTroop(cart.weapon), { clan: LINE.clan, part: "cart", officer: false, cart: true, object: true });
     assert.equal(cart.maxHp, caravanHp(LINE.clan, level));
     const escorts = lv.escorts.map((e: string) => room.state.mobs.get(e));
     assert.equal(escorts.length, CARAVAN.escorts);

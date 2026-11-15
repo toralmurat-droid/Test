@@ -314,3 +314,47 @@ Open points for M1:
 - `npx tsx tools/balance/war.ts 200 30`: unchanged (no player valor in the sim).
 - Not done: kill valor and rout-writ credit for siege kills; virtual sieges in other rooms do not share front holders
   (each room keeps its own, in memory); siege works for the Host (roadmap "later").
+
+## M2: Siege works (2026-11-15)
+
+- Rules and numbers: `shared/war/works.ts` (`SIEGE_WORKS`, pure `ramStep`, `ramPos`, `ramBlocked`, `ramSpeed`, `ramHp`);
+  server: `server/warWorks.ts` (`WarWorks` behind a narrow `WorksHost`, owned by `WarSieges`, the crew borrow
+  `WarTroops.think / fight / walk` like the caravan escorts). Room wiring: `sieges.killed(id, killer, m)` and a `ranked`
+  hook on the siege host; nothing else in `TownRoom.ts`. No schema change, no save change.
+- Parts: `parseTroop` now returns `part` (`soldier` / `officer` / `cart` / `ram`) and `object` (cart or ram), keeping the
+  `officer` / `cart` booleans. The ram's weapon is `"<clan>#"` (`troopWeapon(k, false, false, true)`), name "Ossuary Host
+  bone ram". Every "not a fighter" check reads `object`: siege scoring, the patrols' `pick`, the client's art and frames.
+- The ram: only while the live siege's attacker is `SIEGE_WORKS.clan` (the Host). HP = Host soldier HP at the land's
+  soldier level x `ramHp` (4), no attack. It appears at `siegeApproach` and rolls along the patrol loop (the shorter
+  way) to the gate front at `daySpeed` 14 / `nightSpeed` 24 px/s (`warPhase` 2). It stands still while a living
+  defender trooper or an alive defender-sworn hero (above ground) is within `blockPx` (64; checked every `pickMs`). Stun
+  and knockback don't move it off its loop. `sfx` `ram_at_gate {x, y}` once when it arrives. Two crew (plain `"host"`
+  soldiers) walk behind it on either side and fight within `leashPx` of it; fallen crew are not replaced while that ram
+  lives; after a wreck they stay round the wreck until the next ram or the siege's sleep.
+- Gate weight: at the gate front it adds `ramWeight` (3) to the attacker's count in `score()` (`extraWeight`); that is
+  more than `holdMargin`, so an undefended gate falls to the ram alone after `captureMs`. It pays only through the
+  existing `frontStep` / `frontPay` (so a Host hero must still be in the ring for valor).
+- Wrecking: the trooper gates hold (only rival-sworn heroes hurt it; unsworn and Host-sworn heroes deal 0, no XP / loot /
+  quest credit). Any wreck sends `sfx` `ram_wrecked {x, y}` and the new `"siege"` view. Felled by a defender-sworn hero
+  (oath level): `wreckValor` (6) for the defender in that land through `WarSieges.payClan` (legal-gated like the front
+  pay, inside the same `battleValorPerTick` cap), `wreckRenown` (10) for the killer (renown even when the cap ate the
+  valor), and a Herald line. A third clan's wreck pays nothing. One ram per siege per war tick: after a wreck no new one
+  until the war tick changes; then a fresh, whole ram at the approach.
+- Sleep keeps the ram's place along the loop, wounds and arrival; the siege's end forgets it.
+- Budget: the ram and its crew are reserved inside `maxSiegeTroops` (`siegeForce(fronts, control, budget, reserve)`,
+  reserve 3 for a Host siege, also after a wreck so the force does not jump), so totals stay within `maxTroops`.
+- Message: the `"siege"` view gains an optional `ram: {x, y, hp, maxHp, state}` (`rolling` / `held` / `gate`), sent on
+  spawn, wreck, and when the state or the HP quarter changes (checked once a second). Server -> client only.
+- Client: the ram uses `war_ram_<clan>` through `warSoldierTexture` (asset `mob_war_ram_host.webp`, the carts' 14-frame
+  layout, still to come from the art branch); while the art manifest does not list it, `trooperArt` falls back to the
+  clan's cart sheet. Cart idle / stagger frames apply to the ram. Sounds `ram_wrecked` (bone crack and timber crash) and
+  `ram_at_gate` (a hollow boom on the gate). The plaque's fronts line adds "· Ram rolling / held / at the gate n%".
+- Balance (`npx tsx tools/balance/pve.ts 40 --siege`, new ram table: the hero alone vs the ram + 2 crew of its level,
+  win = ram wrecked within 120 s; cell = win% / HP lost / s): Lv15 wizard 100%/0%/57s, vampire 100%/1%/32s, summoner
+  95%/0%/80s, songweaver 100%/0%/45s; Lv30 100/100/100/100% (38 / 24 / 44 / 44 s); Lv45 100/100/100/100% (45 / 25 / 36 /
+  55 s). `ramHp` 6 took 33-100 s solo (summoner Lv15 70%), so 4. The siege-front table is unchanged by this work.
+- Bench (`WAR=1 SPREAD=1 SIEGE=1 npm run bench`; the bench's siege land, Stonecrag Quarry, is besieged by the Host, so the
+  ram rolls): before 7.68 ms tick avg (p95 12.3), 18 siege troopers; after 6.56 (p95 10.0), 23 incl. ram and crew;
+  `SIEGE=host` (new: forces a Host-led siege) 8.55 (p95 14.6). Shared machine, noisy. No dropped bots.
+- `npx tsx tools/balance/war.ts 200 30`: unchanged.
+- Not done: ram art (`mob_war_ram_host.webp`, another branch); works for other clans; a ram marker on the war table.

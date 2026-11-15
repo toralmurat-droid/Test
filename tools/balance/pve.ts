@@ -1,7 +1,8 @@
 /**
  * PvE balance simulator: bot heroes play the first zone (Lv 1-30) against its monsters and bosses.
  * Run: npx tsx tools/balance/pve.ts [runsPerCase] [--bosses] [--zones] [--act2] [--champions] [--troops] [--caravan] [--siege] [--class=vampire] [--build=0|1|2] [--boss=king] [--no-execute] [--songweaver]
- * --siege: a siege front (shared/war/siege.ts): the hero and SIEGE_BATTLE.perFront allied soldiers vs as many attackers, Lv 15 / 30 / 45 (and the soldiers alone).
+ * --siege: a siege front (shared/war/siege.ts): the hero and SIEGE_BATTLE.perFront allied soldiers vs as many attackers, Lv 15 / 30 / 45 (and the soldiers alone);
+ *   then the Host's siege ram (shared/war/works.ts): the hero alone vs the ram and its crew.
  * --caravan: the hero alone raids a supply cart (shared/war/caravans.ts) with its 3 escorts at Lv 15 / 30 / 45: win = the cart falls.
  * --troops: the hero alone against a clan soldier, a captain and 3 soldiers of its level (shared/war/troops.ts), at Lv 8 / 20 / 45 (--clans: each clan at Lv 20).
  * --champions: one fight against each champion (shared/champions.ts, a 1D version of its affixes) beside the same plain monster.
@@ -34,6 +35,7 @@ import { CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
 import { TROOP_OFFICER, troopStats, WAR_TROOPS } from "../../shared/war/troops";
 import { CARAVAN, caravanHp } from "../../shared/war/caravans";
 import { SIEGE_BATTLE } from "../../shared/war/siege";
+import { ramHp, SIEGE_WORKS } from "../../shared/war/works";
 
 type Build = 0 | 1 | 2;
 
@@ -560,6 +562,22 @@ function siegeRun(cls: ClassKind, level: number, build: Build, seed: number, sol
   return { won: w === h, kills: foes.filter((m) => m.dead).length, hpLostPerKill: solo ? 0 : Math.max(0, hp0 - h.hp) / h.maxHp, secPerKill: d.now / 1000, heals: pack.healUsed, manas: pack.manaUsed, alliesLost: allies.filter((a) => a.dead).length };
 }
 
+/** Siege works (shared/war/works.ts): the hero alone wrecks the Host's bone ram (no attack) with its SIEGE_WORKS.crew soldiers, all of its level. */
+function ramRun(cls: ClassKind, level: number, build: Build, potions = 5): RunResult {
+  const h = make("h", cls, level, build), clan = SIEGE_WORKS.clan;
+  const pack: Pack = { heal: potions, mana: potions, healUsed: 0, manaUsed: 0, size: potionSize(level), lastDrink: -1e9 };
+  const crew = Array.from({ length: SIEGE_WORKS.crew }, (_, k) => soldierF(clan, level, "c" + k));
+  const rs = mobSpec("trooper", level);
+  Object.assign(rs, { hp: ramHp(clan, level), dmg: 0, speed: 0, cd: 1e12, label: "ram" });
+  rs.poise *= SIEGE_WORKS.ramHp;
+  const ram = new MobF(rs, "ram");
+  const d = new CaravanDuel(h, [...crew, ram], pack, ram), hp0 = h.hp;
+  ram.x = Math.max(0, Math.min(480, crew[0].x + Math.sign(crew[0].x - h.x) * 30)); // behind its crew
+  let w: F | null | undefined;
+  while (d.now < 120000 && (w = d.step()) === undefined) { /* fight */ }
+  return { won: w === h, kills: ram.dead ? 1 : 0, hpLostPerKill: Math.max(0, hp0 - h.hp) / h.maxHp, secPerKill: d.now / 1000, heals: pack.healUsed, manas: pack.manaUsed };
+}
+
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 /** Try other numbers without editing the game: --hp=0.4 --dmg=0.15 (MOB_LEVEL per-level growth). */
 for (const a of process.argv) {
@@ -597,6 +615,17 @@ if (process.argv[1]?.includes("pve")) {
         let won = 0, hp = 0, sec = 0, lost = 0;
         for (let i = 0; i < n; i++) { const r = siegeRun(c === "solo" ? "wizard" : c, L, buildOf(i), i, c === "solo"); won += r.won ? 1 : 0; hp += r.hpLostPerKill; sec += r.secPerKill; lost += r.alliesLost; }
         line += `${pct(won / n)}/${c === "solo" ? "-" : pct(hp / n)}/${(sec / n).toFixed(1)}s/${(lost / n).toFixed(1)}`.padEnd(22);
+      }
+      console.log(line);
+    }
+    console.log(`Siege ram: the hero alone vs the Host's bone ram (x${SIEGE_WORKS.ramHp} soldier HP, no attack) and ${SIEGE_WORKS.crew} crew soldiers of its level, 5 heal + 5 mana potions. Cell = win% (ram wrecked) / HP lost / fight s`);
+    console.log("".padEnd(10) + CLASSES.map((c) => c.padEnd(20)).join(""));
+    for (const L of [15, 30, 45]) {
+      let line = `Lv${L}`.padEnd(10);
+      for (const c of CLASSES) {
+        let won = 0, hp = 0, sec = 0;
+        for (let i = 0; i < n; i++) { const r = ramRun(c, L, buildOf(i)); won += r.won ? 1 : 0; hp += r.hpLostPerKill; sec += r.secPerKill; }
+        line += `${pct(won / n)}/${pct(hp / n)}/${(sec / n).toFixed(1)}s`.padEnd(20);
       }
       console.log(line);
     }

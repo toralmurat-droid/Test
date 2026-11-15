@@ -652,6 +652,7 @@ export class TownRoom extends Room<TownState> {
     remove: (id) => { this.state.mobs.delete(id); }, mob: (id) => this.state.mobs.get(id), mobsInBox: (x, y, r) => this.state.mobs.inBox(x, y, r),
     heroes: () => this.state.players.entries(), hero: (id) => this.state.players.get(id),
     broadcast: (type, msg) => this.broadcast(type, msg), budget: () => WAR_TROOPS.maxTroops - this.caravans.count,
+    ranked: (pid, rank) => { const c = this.clients.getById(pid), p = this.state.players.get(pid); if (c && p) { c.send("clan", clanView(p)); c.send("chat", { id: "", name: "Herald", text: `Your renown grows: you are now ${rank}.` }); } },
   }, this.warTroops);
 
   /** War writs (server/warWrits.ts): clan work from the bounty boards, apart from the hunts. */
@@ -5491,7 +5492,7 @@ export class TownRoom extends Room<TownState> {
     if (m.kind === "nightraider") this.raiderGone(m, targetId, true, killerName);
     if (m.kind === "trooper") { // its slot refills at the Hold; valor for a sworn killer, and a rout writ counts it
       this.caravans.killed(m, targetId, attackerId); // a caravan's cart or escort (server/warCaravans.ts)
-      this.sieges.killed(targetId); // a siege trooper: its place waits for the next wave (server/warSieges.ts)
+      this.sieges.killed(targetId, attackerId, m); // a siege trooper: its place waits for the next wave; a wrecked ram pays (server/warSieges.ts, warWorks.ts)
       const k = this.warTroops.killed(m, targetId, attackerId);
       if (k) this.writs.trooperKilled(attackerId, k.t, k.clan);
     }

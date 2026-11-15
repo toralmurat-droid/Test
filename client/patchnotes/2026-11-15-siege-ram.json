@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-15",
+  "title": "The Ossuary Host's bone ram",
+  "changes": [
+    "When the Ossuary Host besieges a land, a bone ram now rolls from their camp toward the Hold gate with two bone soldiers beside it. It rolls faster at night.",
+    "Defending soldiers and heroes sworn to the defenders stop the ram while they stand in its way. At the gate it counts as three fighters for the Host.",
+    "Heroes sworn against the Host can wreck it. Defenders who wreck it earn valor for their clan and renown. A wrecked ram does not come back until the war's next turn."
+  ]
+}

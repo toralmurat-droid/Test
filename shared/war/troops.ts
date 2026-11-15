@@ -83,14 +83,26 @@ export function troopStats(k: ClanKey, level: number, officer = false): { hp: nu
     speed: d.speed * c.speed, cd: d.attackCooldownMs * c.cd };
 }
 
-/** The Mob.weapon value of a trooper of clan `k`: "<clan>", "<clan>*" for an officer, "<clan>^" for a supply cart (shared/war/caravans.ts). */
-export const troopWeapon = (k: ClanKey, officer = false, cart = false) => (cart ? `${k}^` : officer ? `${k}*` : k);
+/** What a trooper is: a fighting soldier or officer, or an object heroes wreck (a supply cart, a siege ram: shared/war/works.ts). */
+export type TroopPart = "soldier" | "officer" | "cart" | "ram";
+/** The suffix each part carries on its clan key in Mob.weapon. */
+const PART_MARK: Record<TroopPart, string> = { soldier: "", officer: "*", cart: "^", ram: "#" };
 
-/** A trooper's clan and rank from its Mob.weapon (a cart is a trooper too, so every trooper gate applies), or undefined for anything else. */
-export function parseTroop(w: unknown): { clan: ClanKey; officer: boolean; cart: boolean } | undefined {
+/**
+ * The Mob.weapon value of a trooper of clan `k`: "<clan>", "<clan>*" for an officer, "<clan>^" for a supply cart
+ * (shared/war/caravans.ts), "<clan>#" for a siege ram (shared/war/works.ts, `ram`).
+ */
+export const troopWeapon = (k: ClanKey, officer = false, cart = false, ram = false) => k + PART_MARK[ram ? "ram" : cart ? "cart" : officer ? "officer" : "soldier"];
+
+/** A parsed trooper weapon. `object` (a cart or a ram) never fights and is never fought by troopers; `officer`/`cart` are kept for older callers. */
+export interface TroopInfo { clan: ClanKey; part: TroopPart; officer: boolean; cart: boolean; object: boolean }
+
+/** A trooper's clan and part from its Mob.weapon (carts and rams are troopers too, so every trooper gate applies), or undefined for anything else. */
+export function parseTroop(w: unknown): TroopInfo | undefined {
   if (typeof w !== "string") return undefined;
-  const officer = w.endsWith("*"), cart = !officer && w.endsWith("^"), k = officer || cart ? w.slice(0, -1) : w;
-  return isClan(k) ? { clan: k, officer, cart } : undefined;
+  const last = w.slice(-1), part: TroopPart = last === "*" ? "officer" : last === "^" ? "cart" : last === "#" ? "ram" : "soldier";
+  const k = part === "soldier" ? w : w.slice(0, -1);
+  return isClan(k) ? { clan: k, part, officer: part === "officer", cart: part === "cart", object: part === "cart" || part === "ram" } : undefined;
 }
 
 /** A trooper's level in territory `t`: soldiers at the middle of its monster band, officers at the top. */
@@ -112,8 +124,9 @@ export function troopStance(troop: ClanKey, hero: { clan?: ClanKey; level: numbe
   return hero.clan ? "enemy" : "neutral";
 }
 
-/** A short name for a trooper (name label, death messages): "Redfang soldier", "Redfang captain", "Redfang supply cart". */
-export function troopName(k: ClanKey, officer = false, cart = false): string {
+/** A short name for a trooper (name label, death messages): "Redfang soldier", "Redfang captain", "Redfang supply cart", "Ossuary Host bone ram". */
+export function troopName(k: ClanKey, officer = false, cart = false, ram = false): string {
+  if (ram) return `${k === "host" ? "Ossuary Host" : TROOP_SHORT[k]} bone ram`;
   return `${TROOP_SHORT[k]} ${cart ? "supply cart" : officer ? "captain" : "soldier"}`;
 }
 /** The word a clan's soldiers go by (name tags): "The Hearthbound Wardens" -> "Warden". */
