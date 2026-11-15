@@ -61,9 +61,9 @@ export const NPCS: Npc[] = [
   // ---- Cairnwatch, the Cairn Wardens' hill-fort in the Grey Barrow Moors (Act 3, shared/moors.ts): round its square
   // (sprites: existing sheets until tools/art paints cairncaptain / moorarmourer / moorherbalist)
   // the wardens' captain stands before their hall: the moors' quest chain starts with her
-  { id: "cairncaptain", name: "Warden-Captain Edra Vane", title: "Captain of the Cairn Wardens", sprite: "guard", x: 68.5 * TILE, y: MR(106.75) * TILE, dir: "down", where: "Cairnwatch (Act 3 moors), before the Wardens' Hall" },
-  { id: "moorherbalist", name: "Mother Ysolde", title: "Herbwife", sprite: "witch", x: 77.5 * TILE, y: MR(106.75) * TILE, dir: "down", shop: "moorherbalist", where: "Cairnwatch (Act 3 moors), at her stall on the square" },
-  { id: "moorarmourer", name: "Gorm", title: "Armour merchant", sprite: "saltarmourer", x: 84.5 * TILE, y: MR(111.6) * TILE, dir: "left", shop: "moorarmourer", where: "Cairnwatch (Act 3 moors), by the armoury" },
+  { id: "cairncaptain", name: "Warden-Captain Edra Vane", title: "Captain of the Cairn Wardens", sprite: "cairncaptain", x: 68.5 * TILE, y: MR(106.75) * TILE, dir: "down", where: "Cairnwatch (Act 3 moors), before the Wardens' Hall" },
+  { id: "moorherbalist", name: "Mother Ysolde", title: "Herbwife", sprite: "moorherbalist", x: 77.5 * TILE, y: MR(106.75) * TILE, dir: "down", shop: "moorherbalist", where: "Cairnwatch (Act 3 moors), at her stall on the square" },
+  { id: "moorarmourer", name: "Gorm", title: "Armour merchant", sprite: "moorarmourer", x: 84.5 * TILE, y: MR(111.6) * TILE, dir: "left", shop: "moorarmourer", where: "Cairnwatch (Act 3 moors), by the armoury" },
   // ---- Zone quest givers (Murat 2026-11-10: "more zone quests, real exploration arcs"): each lives out in their zone and
   // starts a short arc there that moves on through it and ends out in the field (shared/quests.ts ZONE_ARCS)
   { id: "huntsman", name: "Huntmaster Bryn", title: "Hunter", sprite: "huntsman", ...standNear(28, 18), dir: "left", where: "the Hunter's Camp, north-west of Oakvale" },

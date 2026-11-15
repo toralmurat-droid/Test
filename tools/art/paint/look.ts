@@ -1,8 +1,8 @@
 /** How each painted character looks: materials, colours and kit. Poses and animation timing come from characters.ts. */
-export type HeadGear = "crown" | "greathelm" | "ninjahood" | "wizardhat" | "hood" | "horned" | "cap" | "helm" | "kettle" | "bandana" | "wide" | "witch" | "none";
+export type HeadGear = "crown" | "greathelm" | "ninjahood" | "wizardhat" | "hood" | "horned" | "cap" | "helm" | "kettle" | "bandana" | "wide" | "witch" | "stonecrown" | "none";
 export type TorsoKind = "plate" | "wrap" | "robe" | "jerkin" | "bare" | "shirt" | "mail" | "leather" | "tailcoat";
 export type LegKind = "trousers" | "mail" | "wrapped" | "robe" | "fur" | "dress" | "bare";
-export type WeaponKind = "katana" | "sword" | "staff" | "wand" | "bow" | "axe" | "hammer" | "pick" | "spear" | "dagger" | "druidstaff" | "witchstaff" | "boneblade" | "spade" | "lute" | "none";
+export type WeaponKind = "katana" | "sword" | "staff" | "wand" | "bow" | "axe" | "hammer" | "pick" | "spear" | "dagger" | "druidstaff" | "witchstaff" | "boneblade" | "spade" | "lute" | "mace" | "none";
 
 export interface Look {
   skin: number;
@@ -16,7 +16,7 @@ export interface Look {
   legs: LegKind; legCol: number; boots: number; bootStyle?: "greave" | "leather" | "wrap" | "shoe" | "bare";
   sleeve: number; arms: "plate" | "cloth" | "bare" | "wrap"; glove?: number; bracer?: number;
   weapon: WeaponKind;
-  shield?: { col: number; trim: number; emblem: number; style: "kite" | "round" | "book"; /** style "book": the id in paint/books.ts BOOKS */ book?: string };
+  shield?: { col: number; trim: number; emblem: number; style: "kite" | "round" | "book" | "tower"; /** style "book": the id in paint/books.ts BOOKS */ book?: string };
   back?: "cape" | "quiver" | "pelt"; capeCol?: number; capeShort?: boolean;
   orb?: number;   // glowing staff stone
   lips?: number;    // painted lips (front view)
@@ -37,6 +37,8 @@ export interface Look {
   weaponKind?: WeaponKind; // what found weapons look like in this hero's hands (heroes start with weapon "none")
   /** Bone Demon (DEMON.harvest): skeleton pieces it wears, painted onto the body: 1 pauldrons, 2 rib cuirass, 3 bone blade, 4 skull crown. */
   boneArmour?: number;
+  /** Act 3 (Grey Barrow Moors): a bronze neck-ring, a permanent stoop (px the body sinks), a hanging lantern on the staff (its light), cold mist round the feet, a notched blade, blade metal colour, a gold funeral mask. */
+  torc?: number; stoop?: number; lantern?: number; mist?: number; notched?: boolean; bladeCol?: number; faceMask?: number; reeds?: number; /** A woven basket of herbs in the near hand (colour of the weave). */ basket?: number;
   /** Sword length/width multiplier (the Hollow King's greatsword). */
   bladeLen?: number;
   /** Beast-folk of the Mawdeep (shared/dungeon.ts): the animal head whose hide this man or woman was sewn into. */
@@ -209,6 +211,47 @@ export const MOB_LOOKS: Record<string, Look> = {
     sleeve: 0xc8923a, arms: "bare", bracer: 0xe0b040, weapon: "sword", bladeLen: 1.1, fx: 0xffe8a0,
     shield: { col: 0x24418a, trim: 0xe0b040, emblem: 0xf0c850, style: "round" },
     wings: { col: 0xead08a, kind: "feather", rest: true, tip: 0x2a4a9a }, tail: 0xb8843a, build: 1.3,
+  },
+  // ---- Act 3, the Grey Barrow Moors: the Ossuary Host's homeland (shared/moors.ts). Cold blue-white light, tarnished bronze, bog green.
+  // The Barrow-Wight: a gaunt grey-blue corpse in rotted grave-wrappings, a tarnished bronze torc, pale cold eyes, a notched bronze sword
+  wight: {
+    skin: 0x8aa0ae, hair: 0x5a636c, hairStyle: "long", eyeGlow: 0xa6e8ff, head: "none",
+    torso: "wrap", torsoCol: 0x6e6652, trim: 0x4a4434, belt: 0x30281c, buckle: 0x9a7a3c, torc: 0xa07a3a,
+    legs: "wrapped", legCol: 0x5c5644, boots: 0x4a4436, bootStyle: "wrap",
+    sleeve: 0x6e6652, arms: "wrap", rags: 0x9a9680, bracer: 0x8a6a34, glove: 0x62705c, weapon: "sword", bladeCol: 0xa08240, notched: true, fx: 0xa6e8ff,
+    back: "cape", capeCol: 0x3e4a4c, capeShort: true, build: 0.96,
+  },
+  // The Bog Hag: stooped in a dripping moss-and-peat shawl, reeds and sundew in her hair, a crooked bog-oak staff with a swinging lantern
+  boghag: {
+    skin: 0x8c9a6a, hair: 0x424230, hairStyle: "long", eye: 0xc8ff6a, eyeGlow: 0x9dff5a, head: "none", reeds: 0xdccb80,
+    torso: "robe", torsoCol: 0x3a3424, trim: 0x5a6a34, vest: 0x58742e, sash: 0x4a3e2a, belt: 0x2a2418,
+    legs: "robe", legCol: 0x2e2a1e, boots: 0x2a2418, bootStyle: "wrap",
+    sleeve: 0x3a3424, arms: "cloth", glove: 0x6e7e4c, bracer: 0x4a5a2c, weapon: "witchstaff", orb: 0x9dff5a, lantern: 0xc8ff7a, fx: 0x9dff5a,
+    back: "pelt", capeCol: 0x62803a, stoop: 1.7,
+  },
+  // The Host Legionary: a skeleton soldier in rusted bronze scale under a crested helm, a tall tower shield with the Host's bone sigil
+  legionary: {
+    skin: 0xd6ceb4, skull: true, bones: true, eyeGlow: 0x8fe8c8, head: "helm", headCol: 0x7a5c30, headTrim: 0x4f7d6a, plume: 0x2a3a34, rags: 0x1f2422,
+    torso: "mail", torsoCol: 0x806238, trim: 0x4f7d6a, tabard: { col: 0x1f2422, trim: 0x4f7d6a, emblem: 0xd8cfb2 }, belt: 0x2a2418, buckle: 0x9a7a3c,
+    legs: "trousers", legCol: 0xd6ceb4, boots: 0x2a3a34, bootStyle: "wrap",
+    sleeve: 0xd6ceb4, arms: "bare", bracer: 0x806238, weapon: "spear", bladeCol: 0x8a6a34, fx: 0x8fe8c8, build: 1.18,
+    shield: { col: 0x1f2422, trim: 0x7a5c30, emblem: 0xd8cfb2, style: "tower" },
+  },
+  // The Cairn-Lord: a tall armoured barrow-noble in corroded bronze plate, a mantle of cairn-stone, a crown of standing-stone shards, a great bronze blade
+  cairnlord: {
+    skin: 0xcfc8b0, skull: true, eyeGlow: 0x8fe8ff, head: "stonecrown", headCol: 0x8c8c84, headTrim: 0x8a6a30,
+    torso: "plate", torsoCol: 0x6c7452, trim: 0x8a6a30, belt: 0x2a2418, buckle: 0xa07a3a,
+    legs: "mail", legCol: 0x5a5c44, boots: 0x4a5044, bootStyle: "greave",
+    sleeve: 0x6c7452, arms: "plate", glove: 0x3a3e34, weapon: "sword", bladeLen: 1.6, bladeCol: 0x8a8048, notched: true, fx: 0x8fe8ff,
+    back: "pelt", capeCol: 0x74766e, build: 1.38,
+  },
+  // The Barrow-King: a gold-leaf funeral mask on blackened bronze plate, a long torn purple-grey burial cloak, a barrow-key mace, cold mist pouring off him
+  barrowking: {
+    skin: 0x62727e, hairStyle: "none", faceMask: 0xdcb458, eyeGlow: 0xa6e8ff, head: "hood", headCol: 0x2c2824, headTrim: 0xdcb458,
+    torso: "plate", torsoCol: 0x4a4440, trim: 0xdcb458, tabard: { col: 0x3e2c4e, trim: 0x8a7a50, emblem: 0xdcb458 }, belt: 0x201c18, buckle: 0xdcb458,
+    legs: "mail", legCol: 0x2c2a28, boots: 0x2a2826, bootStyle: "greave",
+    sleeve: 0x34302c, arms: "plate", glove: 0x222024, weapon: "mace", bladeCol: 0x3c362e, fx: 0xa6e8ff, bladeLen: 1.15,
+    back: "cape", capeCol: 0x4a3e5c, build: 1.4, mist: 0xb4d8ee,
   },
   // summoned by a skeleton ritual (BONES.ritual): a hulking red brute with horns, a bone harness and a cleaver
   demon: {
@@ -704,6 +747,29 @@ export const LOOKS: Record<string, Look> = {
     legs: "trousers", legCol: 0xe2d6bc, boots: 0x4a2e1a, bootStyle: "wrap",
     sleeve: 0xece2c8, arms: "cloth", bracer: 0xc89c44, weapon: "none", fx: 0xffffff,
     shield: { col: 0x9a722c, trim: 0xead07a, emblem: 0xf2ecdc, style: "round" },
+  },
+  // Warden-Captain Edra Vane of Cairnwatch: weathered, grey wool under a bronze-studded leather coat, the grey-green cairn-warden cloak, a spear
+  cairncaptain: {
+    skin: 0xd4a888, hair: 0x6a5a4a, hairStyle: "ponytail", eye: 0x3a4a3a, head: "none",
+    torso: "leather", torsoCol: 0x4e3e2c, trim: 0xa8843a, belt: 0x2a2018, buckle: 0xa8843a,
+    legs: "trousers", legCol: 0x5a5c58, boots: 0x2e2a24, bootStyle: "leather",
+    sleeve: 0x7a7e7c, arms: "cloth", glove: 0x3a2e22, bracer: 0x8a6a34, weapon: "spear", bladeCol: 0x9aa4a8, fx: 0xffffff,
+    back: "cape", capeCol: 0x56685c, build: 1.05,
+  },
+  // Mother Ysolde the herbwife: old and small, a heather-dyed shawl over a plum dress, grey hair under a hood, a basket of herbs
+  moorherbalist: {
+    skin: 0xd8b090, hair: 0xcfcfd0, hairStyle: "long", eye: 0x3a3a4a,
+    head: "hood", headCol: 0x7a5a8a, headTrim: 0x5a3e6a,
+    torso: "robe", torsoCol: 0x6e4e7e, trim: 0xb89ac8, vest: 0x8a6aa0, apron: 0xcbbf9a, sash: 0x4a3a2a, belt: 0x4a3a2a,
+    legs: "dress", legCol: 0x4a3a52, boots: 0x3a2a22, bootStyle: "shoe",
+    sleeve: 0x6e4e7e, arms: "cloth", glove: 0xd8b090, weapon: "none", fx: 0xffffff, back: "cape", capeCol: 0x84609a, capeShort: true, basket: 0x8a6a3a, build: 0.92,
+  },
+  // Gorm the armourer: a big grey-bearded moor-man, bare forearms, a scorched leather apron, a smith's hammer
+  moorarmourer: {
+    skin: 0xc89a76, hair: 0x8a8a88, hairStyle: "short", beard: 0x9a9a98, beardStyle: "full",
+    head: "none", torso: "shirt", torsoCol: 0x6a5a4a, apron: 0x4a3322, belt: 0x2a1c12, buckle: 0x9a7a3a, belly: true,
+    legs: "trousers", legCol: 0x4a463c, boots: 0x2a2018, bootStyle: "leather",
+    sleeve: 0xc89a76, arms: "bare", bracer: 0x4a3424, glove: 0x2a1c12, weapon: "hammer", fx: 0xffffff, build: 1.3,
   },
   // Morwen: a young witch in a red dress, black corset bodice, bare arms and a tall black hat with a red band
   witch: {
