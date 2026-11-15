@@ -764,3 +764,13 @@ Sims (`npx tsx tools/balance/war.ts 200 30 [--clever=<clan>]`):
   when a fort change needs a look the atlas lacks: re-run the bake). `client/src/holdAssets.ts` (`HoldDraw`) loads the
   clan's atlas lazily and builds a Hold in one call, one image per cell sorted by foot depth; `warStandards.ts` shows flat
   cell blocks while an atlas loads and swaps the art in the same frame when a Hold's owner changes. Preview: `npx tsx tools/art/preview/holds-sheet.ts out.png`.
+
+## War table as a continent (2026-11-15, PR #458)
+Murat: the in-game war table "looks like a long rectangle, not like the design". It painted the territories over the
+real world map, whose acts are bands stacked down a 288-wide map. Now the War table toggle shows a schematic continent
+(`client/src/warTableLayout.ts` + `warTable.ts`) laid out by compass like `riven-marches-map.png`: one polygon slot per
+land in `SLOTS`, territories placed from their real positions inside their land's slot, cells tinted by holder, front
+lines, banners, plates, legend with Homelands, hover tooltip. Pan/zoom/Centre are off while it is up.
+- **A new land needs a `SLOTS` entry** in `client/src/warTableLayout.ts` (`tests/warTableLayout.test.ts` fails
+  otherwise). The older notes above that say the war table needs nothing new for a land describe the old overlay.
+- Open: land plates can hide a marker under them (hover still finds it); legend has no height check.
