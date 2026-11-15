@@ -378,7 +378,7 @@ export class NpcLayer {
 
   /** The scene opens the bag beside a shop (stats to compare) and shows what a piece for sale would change. */
   onShopOpen?: (open: boolean) => void;
-  onPreview?: (id?: string) => void;
+  onPreview?: (id?: string, row?: HTMLElement) => void;
   private shopOpen = false;
   /** Masterwork level picked in the shop (undefined: the best the hero can wear). */
   private masterLv?: number;
@@ -586,11 +586,11 @@ export class NpcLayer {
     const talk = this.dialog.querySelector<HTMLButtonElement>(".nd-talk");
     if (talk) talk.onclick = () => { this.trading = false; this.stage = -1; };
     for (const b of this.dialog.querySelectorAll<HTMLButtonElement>(".sh-lvpick button")) b.onclick = () => { this.masterLv = Number(b.dataset.lv); this.stage = -1; };
-    // hovering a piece for sale shows what wearing it would change in the stats beside (the bag opens with the shop)
+    // hovering a piece for sale shows the item card (what wearing it would change) beside the bag, which opens with the shop
     for (const r of this.dialog.querySelectorAll<HTMLElement>(".sh-row")) {
       const id = r.querySelector<HTMLElement>(".sh-icon")?.dataset.icon;
       if (!id || !gearDef(id) || !r.querySelector(".sh-buy")) continue;
-      r.onmouseenter = () => this.onPreview?.(id);
+      r.onmouseenter = () => this.onPreview?.(id, r);
       r.onmouseleave = () => this.onPreview?.();
     }
     if (!this.shopOpen) { this.shopOpen = true; this.onShopOpen?.(true); }

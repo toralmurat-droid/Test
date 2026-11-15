@@ -62,7 +62,7 @@ export function heroPanelParts(d: HeroPanelData) {
     row("Critical hits", "crit", `${nx.crit}%`, "double damage", k("crit", true)));
   const defense = sec("def", "shield", "Defense",
     row("Health", "hp", `${nx.hp}`, `${d.hpRegenRest.toFixed(1)}/s resting`, k("hp"), `Regen ${d.hpRegenRest.toFixed(1)} HP/s resting, ${d.hpRegenFight.toFixed(1)} HP/s in a fight`) +
-    (d.gauge ? row("Song gauge", "mana", `${d.maxMana}`, "no regen", k("mana"))
+    (d.gauge ? row("Song gauge", "mana", `${d.maxMana}`, "no regen")
       : row("Mana", "mana", `${nx.mana}`, `${d.manaRegen.toFixed(1)}/s`, k("mana"), `Regen ${d.manaRegen.toFixed(1)}/s, ×${d.manaRestMult} when resting`)) +
     row("Damage blocked", "def", `${nx.def}%`, "", k("def", true)) +
     row("Move speed", "speed", `${nx.speed}`, "", k("speed")) +

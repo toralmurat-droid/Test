@@ -8,7 +8,6 @@ import { Stats } from "../../shared/powers";
 import { statsOf } from "./gear";
 import { iconImg } from "./skillIcons";
 import { Node, slabWidth, treeLayout } from "./treeLayout";
-import { SheetPreview, talentsOf } from "./sidepanel";
 import { own } from "./own";
 import { skillHint } from "./heroText";
 import {
@@ -39,25 +38,16 @@ export class TalentMenu {
   private tip?: HTMLDivElement;
   private tipTimer = 0;
 
-  constructor(private send: (type: string, msg?: unknown) => void, private preview: (p?: SheetPreview) => void = () => {}) {
+  constructor(private send: (type: string, msg?: unknown) => void) {
     this.el.addEventListener("click", (ev) => { if ((ev.target as HTMLElement).closest(".chhelp, .sbbtn")) toggleChordLegend(); });
     this.el.addEventListener("mouseover", (ev) => {
       const t = (ev.target as HTMLElement).closest("[data-talent]") as HTMLElement | null;
       const was = this.hover;
       this.hover = t?.dataset.talent ?? "";
-      // the side panel's stats block shows what one more rank would change (passives: health, damage, defense...)
-      if (this.hover !== was) {
-        const def = this.cls && this.hover ? SKILLS[this.cls].find((n) => n.id === this.hover) : undefined;
-        if (def && t!.classList.contains("can")) {
-          const ranks = talentsOf(this.state);
-          ranks[def.id] = (ranks[def.id] ?? 0) + 1;
-          this.preview({ label: `learn ${def.name}${ranks[def.id] > 1 ? ` rank ${ranks[def.id]}` : ""}`, talents: ranks });
-        } else this.preview();
-      }
       if (this.hover && this.hover !== this.shown) this.details(this.hover);
       if (this.hover) { if (this.hover !== was || this.tip?.style.display !== "block") this.showTip(); } else this.hideTip();
     });
-    this.el.addEventListener("mouseleave", () => { this.hover = ""; this.preview(); this.hideTip(); });
+    this.el.addEventListener("mouseleave", () => { this.hover = ""; this.hideTip(); });
     this.el.addEventListener("click", (ev) => {
       const t = (ev.target as HTMLElement).closest("[data-talent]") as HTMLElement | null;
       if (t && t.classList.contains("can")) this.send("learn", t.dataset.talent);

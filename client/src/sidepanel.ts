@@ -6,6 +6,7 @@ import { plateArt } from "./plateArt";
 import { ELEMENT_NAMES, REACTIONS, REACTION_IDS, REACTION_MARK_MS, REACTION_SELF_FACTOR } from "../../shared/elements";
 import type { Feast } from "../../shared/devour";
 import { own } from "./own";
+import { hideCard } from "./gearCard";
 
 /** What my hero has eaten with Devour (the server sends it as "feast"). */
 let myFeast: Feast = {};
@@ -66,6 +67,7 @@ export class SidePanel {
   /** Shows the panel on a tab (the tab's own screen fills itself in). */
   show(tab: SideTab) {
     this.tab = tab;
+    hideCard();
     this.el.hidden = false;
     for (const t of SIDE_TABS) document.getElementById(t)!.hidden = t !== tab;
     for (const b of this.el.querySelectorAll<HTMLElement>("#sptabs [data-tab]")) b.classList.toggle("on", b.dataset.tab === tab);
@@ -73,6 +75,7 @@ export class SidePanel {
   }
 
   close() {
+    hideCard();
     this.el.hidden = true;
     for (const t of SIDE_TABS) document.getElementById(t)!.hidden = true;
     this.preview = undefined;

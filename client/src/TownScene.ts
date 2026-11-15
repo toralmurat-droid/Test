@@ -78,7 +78,8 @@ import type { WarView } from "../../shared/war/view";
 import { ART_K, CHAR_GROW, CHAR_SCALE, CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, ensureCharSheet, HD_CHARS, playCharAnim, preloadArt } from "./artAssets";
 import { Ambient } from "./ambient";
 import { Details } from "./details";
-import { activeOf, GearLayer, reqInfoOf, statsOf, GearMenu, iconCanvas, itemColor, preloadGear, RARITY_HEX } from "./gear";
+import { activeOf, GearLayer, reqInfoOf, statsOf, GearMenu, iconCanvas, itemColor, preloadGear, RARITY_HEX, showItemCard } from "./gear";
+import { hideCard } from "./gearCard";
 /** pickSlot value while the slot list is choosing the left-click action. */
 const LEFT_PICK = -2;
 /** pickSlot value while the slot list is choosing the right-click (and Space) action. */
@@ -88,7 +89,7 @@ type ClickSide = "left" | "right";
 const costWords = (s: { cost?: number; mana?: number; blood?: number }) => [s.mana ? `${s.mana} mana` : "", s.cost ? `${s.cost} heat` : "", s.blood ? `${s.blood}% HP` : ""].filter(Boolean).join(" · ") || "free";
 import { GearFx } from "./gearfx";
 import { Element, ELEMENT_COLORS } from "../../shared/elements";
-import { baseId, canWear, gearName, gearDef, reqProblem, gearReachMult, gearSpeedMult, gearStats, itemRarity, WEAPON_TYPE_NAMES } from "../../shared/gear";
+import { baseId, canWear, GEAR_SLOTS, gearName, gearDef, reqProblem, gearReachMult, gearSpeedMult, gearStats, itemRarity, WEAPON_TYPE_NAMES } from "../../shared/gear";
 import { attackProfile, ATTACK_WORDS, isWeaponType, poseSheet, profileOf, weaponAttackMult, weaponOk } from "../../shared/weapons";
 import { talentMult, talentPoints, spentPoints } from "../../shared/talents";
 import { activeSkills, skillLearned } from "../../shared/slots";
@@ -578,7 +579,7 @@ export class TownScene extends Phaser.Scene {
       else if (b?.id === "statreset") this.room?.send("resetstats");
       else if (b?.dataset.title !== undefined) this.room?.send("title", { i: Number(b.dataset.title) }); // the server answers "title"; the label follows Player.cosm
     });
-    // Hovering a + shows in the side panel's stats block what that point would change
+    // Hovering a + shows on the Character tab what that point would change
     heroEl.addEventListener("mouseover", (ev) => {
       const k = ((ev.target as HTMLElement).closest("button") as HTMLElement | null)?.dataset.stat as StatKind | undefined;
       const mine = this.entities.get(this.me)?.state;
@@ -588,9 +589,9 @@ export class TownScene extends Phaser.Scene {
       this.side?.setPreview({ label: `add a point to ${STAT_NAMES[k]}`, pts });
     });
     heroEl.addEventListener("mouseleave", () => this.side?.setPreview());
-    // Character / Inventory / Skills share one side panel with tabs and a live stats block (sidepanel.ts)
+    // Character / Inventory / Skills share one side panel with tabs (sidepanel.ts)
     this.side = new SidePanel((tab) => this.openSide(tab, false), () => this.side?.close());
-    this.gearMenu = new GearMenu(this, (type, msg) => this.room?.send(type, msg), (p) => this.side?.setPreview(p));
+    this.gearMenu = new GearMenu(this, (type, msg) => this.room?.send(type, msg));
     const toggleGear = () => this.openSide("gear");
     this.bagKey = toggleGear;
     // Always reachable with the mouse too (even while typing in chat, in combat or while dead)
@@ -616,7 +617,7 @@ export class TownScene extends Phaser.Scene {
       this.closeMenus();
       if (!escHadOpen && !typing) this.gameMenu?.show();
     });
-    this.talentMenu = new TalentMenu((type, msg) => this.room?.send(type, msg), (p) => this.side?.setPreview(p));
+    this.talentMenu = new TalentMenu((type, msg) => this.room?.send(type, msg));
     this.ideaBoard = new IdeaBoard((type, msg) => this.room?.send(type, msg));
     const toggleIdeas = () => { if (!this.ideaBoard!.open) this.closeMenus(); this.ideaBoard!.toggle(); };
     this.input.keyboard!.on("keydown-I", () => { if (!this.chatting()) toggleIdeas(); });
@@ -686,7 +687,7 @@ export class TownScene extends Phaser.Scene {
     document.getElementById("hud")!.hidden = false;
     this.minimap = new Minimap(document.getElementById("minimap") as HTMLCanvasElement, this.opts.name);
     this.npcs = new NpcLayer(this, (type, msg) => this.room.send(type, msg));
-    // A shop opens the bag beside it (Murat 2026-11-08): the stats block shows what a piece for sale would change
+    // A shop opens the bag beside it (Murat 2026-11-08): hovering a piece for sale shows its item card with what it would change
     let bagByShop = false;
     this.npcs.onShopOpen = (open) => {
       const side = this.side;
@@ -696,12 +697,10 @@ export class TownScene extends Phaser.Scene {
       else if (!open && bagByShop) { side.close(); bagByShop = false; }
       document.body.classList.toggle("shopping", open);
     };
-    this.npcs.onPreview = (id) => {
+    this.npcs.onPreview = (id, row) => {
       const st = this.entities.get(this.me)?.state;
-      if (!id || !st) return this.side?.setPreview();
-      const cls = st.cls as string;
-      const why = reqProblem(id, reqInfoOf(st));
-      this.side?.setPreview(canWear(cls, id) ? { label: `wear ${gearName(id, cls)}${why ? ` (${why})` : ""}`, eq: wearing(wornOf(st), id), ignoreReq: true } : undefined);
+      if (!id || !st || !row) return hideCard();
+      showItemCard(st, id, row, "For sale"); // the compare card, level with the row in the shop dialog
     };
     this.npcs.objects.setLight((x, y, lift) => this.details?.addLight(x, y, 0x7ff3ff, 1.5, 0.55, 0.06, lift)); // lit spirit lanterns shine at night
     // Morwen's camp and Brann's forge after dusk: coal glow under her brew, lantern light in the tent doorway
@@ -2562,7 +2561,9 @@ export class TownScene extends Phaser.Scene {
     const free = statPoints(lvl) - (o.ptSta + o.ptStr + o.ptMag + o.ptDex);
     // Rebuild only when something shown changed (called every frame while open); the right column also follows the hover preview
     const sig = [this.titlesOwned.join(), unpackCosmetics(metaOf(mine, META.cosm)).title, lvl, o.xp, st.sta, st.str, st.mag, st.dex, free, from, mine.name].join("|");
-    const sigR = [sig, Math.ceil(mine.hp), mine.maxHp, o.mp, o.kills, o.gold, activeOf(mine).weapon, this.side?.previewSig ?? "", feastLines(feastOf()).join()].join("|");
+    // the right column shows the sheet (defense, resistances, derived numbers) and the gauge size: key it on what the sheet is made of
+    // (all six worn slots, talents, points), not on current hp/mana, so it neither rebuilds every regen tick nor goes stale after a gear change
+    const sigR = [sig, mine.maxHp, unpackMana(o.mp).maxMana, o.kills, o.gold, GEAR_SLOTS.map((g) => mine[g]).join(","), JSON.stringify(Array.from(o.talents.entries())), o.ptSta, o.ptStr, o.ptMag, o.ptDex, this.side?.previewSig ?? "", feastLines(feastOf()).join()].join("|");
     const el = document.getElementById("hero")!;
     if (!el.hidden && sigR === this.heroSig) return;
     const leftSame = !el.hidden && sig === this.heroSigL;

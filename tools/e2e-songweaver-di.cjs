@@ -227,7 +227,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     result.bookTip = await hoverCell("/^bk_march/.test(b)");
     check("bookTip", /Rally/.test(result.bookTip) && /Full gauge/.test(result.bookTip), result.bookTip);
     await shot("11-bag-books");
-    result.songbookRow = await page.evaluate(() => document.querySelector("#gearslots .slot-shield")?.innerText || "");
+    result.songbookRow = await page.evaluate(() => { const e = document.querySelector("#gearslots .slot-shield"); return e ? `${e.getAttribute("aria-label") || ""} ${e.innerText}` : ""; });
     check("songbookSlot", /Songbook/.test(result.songbookRow) && /Read/.test(result.songbookRow), result.songbookRow);
     // equip the gifted Hymnal by clicking it
     const hIdx = (await P()).bag.findIndex((b) => b.startsWith("bk_hymnal"));
@@ -235,7 +235,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     if (hIdx >= 0 && cells[hIdx]) await cells[hIdx].click();
     await page.waitForTimeout(700);
     check("hymnalWorn", (await P()).shield.startsWith("bk_hymnal"), (await P()).shield);
-    const lute = await page.evaluate(() => document.querySelector("#gearslots .slot-weapon")?.innerText || "");
+    const lute = await page.evaluate(() => { const e = document.querySelector("#gearslots .slot-weapon"); return e ? `${e.getAttribute("aria-label") || ""} ${e.innerText}` : ""; });
     result.luteRow = lute;
     check("luteRow", /Lute/.test(lute), lute);
     await shot("12-gear-hymnal");

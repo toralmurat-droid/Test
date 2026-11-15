@@ -12,14 +12,14 @@ import { STAT_NAMES, StatKind } from "../../shared/powers";
 import { potionAmount, potionName, potionStacks, POTION_STACK, unpackPotions } from "../../shared/potions";
 import { ART_K, CHAR_FRAME, HD_CHARS } from "./artAssets";
 import { itemTexture, potionTex } from "./textures";
-import { uselessItem, wearing } from "../../shared/heroSheet";
-import { SheetPreview, sheetHero, wornOf } from "./sidepanel";
+import { uselessItem } from "../../shared/heroSheet";
+import { sheetHero, wornOf } from "./sidepanel";
 import { bagPref, lootFilter, setBagPref, setLootFilter } from "./lootfilter";
 import { itemRunes, socketsOf, socketProblem } from "../../shared/gear";
 import { parseRune, Rune, RUNE_KIND_NAMES, RUNES, runeName, runeText } from "../../shared/runes";
 import { runeCanvas, runeCss, runeStone } from "./runeArt";
 import { own } from "./own";
-import { compareItem } from "./gearCompare";
+import { compareItem, compareTakeOff } from "./gearCompare";
 import { compareHtml, hideCard, showCard } from "./gearCard";
 
 /** Faint pixel icon of an empty paper-doll slot (pixelicons.ts). */
@@ -231,6 +231,24 @@ export function iconCanvas(scene: Phaser.Scene, id: string, size = 32): HTMLCanv
   return c;
 }
 
+/**
+ * The item card (gearCard.ts) for `id`: name, type, bonuses, why it can't be worn, and what wearing it (bag, shop) or
+ * taking it off (`slot`, a worn piece) would change. `tip` is the dim last line (what a click does).
+ */
+export function showItemCard(state: any, id: string, anchor: HTMLElement, tip = "", slot?: GearSlot) {
+  const d = gearDef(id);
+  if (!d) return;
+  const cls = state.cls as string, hero = reqInfoOf(state), sh = sheetHero(state), worn = wornOf(state);
+  const why = wearProblem(cls, id) || reqProblem(id, hero); // the server decides too
+  const aff = affixHtml(id), song = songItemHtml(id, cls), runes = runeHtml(id), nm = gearName(id, cls);
+  let cmp = "";
+  if (slot) { const lines = compareTakeOff(sh, worn, slot); cmp = lines.length ? compareHtml({ current: id, slot, lines }, cls, "If you take it off:") : ""; }
+  else if (canWear(cls, id)) { const c = compareItem(sh, worn, id); if (c && worn[c.slot] !== id) cmp = compareHtml(c, cls); }
+  showCard(`<b class="ic-name" style="color:${itemColor(id)}">${nm}</b><div class="ic-type">${TIER_NAMES[d.tier]} ${slotName(d.slot, cls, id)} · level ${itemLevel(id)} · ${RARITY_NAMES[itemRarity(id)]}</div>` +
+    `<div>${itemText(id) || "No bonus"}</div>${song ? `<div>${song}</div>` : ""}${aff ? `<div>${aff}</div>` : ""}${runes ? `<div>${runes}</div>` : ""}<div class="${why ? "gbad" : "gok"}">${why || reqText(id, cls, hero)}</div>` +
+    cmp + (tip ? `<div class="ic-foot">${tip}</div>` : ""), anchor);
+}
+
 /** The equipment screen. */
 export class GearMenu {
   private el = document.getElementById("gear")!;
@@ -243,7 +261,7 @@ export class GearMenu {
   /** Bag index of the rune picked up to set into an item (shared/runes.ts), or -1. */
   private pickRune = -1;
 
-  constructor(private scene: Phaser.Scene, private send: (type: string, msg: unknown) => void, private preview: (p?: SheetPreview) => void = () => {}) {
+  constructor(private scene: Phaser.Scene, private send: (type: string, msg: unknown) => void) {
     // Buttons never keep keyboard focus, so Space/Enter in a fight can't click a bag item by accident
     this.el.addEventListener("mousedown", (ev) => { if ((ev.target as HTMLElement).closest("button")) ev.preventDefault(); });
     const btn = (id: string, fn: () => void) => { const b = document.getElementById(id)!; b.tabIndex = -1; b.onclick = () => { fn(); this.sig = ""; }; };
@@ -289,29 +307,17 @@ export class GearMenu {
     const cls = state.cls as string;
     const hero = reqInfoOf(state);
     const info = document.getElementById("gearinfo");
-    if (info) info.hidden = true; // retired: the compare card (gearCard.ts) shows item details beside the panel
+    if (info) info.hidden = true; // the compare card (gearCard.ts) shows item details beside the panel
     hideCard();
-    /** Item details shown under the bag on hover (pixel font, unlike a browser tooltip). */
     const sh = sheetHero(state), worn = wornOf(state);
     const fits = (id: string) => canWear(cls, id);
     const hover = (el: HTMLElement, id: string, extra: string, slot?: GearSlot) => {
       el.onmouseenter = () => {
-        // the sheet block on top of the side panel shows what wearing (or taking off) this item changes
-        if (slot) { const eq = { ...worn }; delete eq[slot]; this.preview({ label: `take off ${gearName(id, cls)}`, eq }); }
-        else if (canWear(cls, id)) this.preview({ label: `wear ${gearName(id, cls)}${reqProblem(id, hero) ? " (once you meet its needs)" : ""}`, eq: wearing(worn, id) });
-        const d = gearDef(id); if (!d) return;
-        const cant = wearProblem(cls, id), why = cant || reqProblem(id, hero); // the server decides too
-        const aff = affixHtml(id), song = songItemHtml(id, cls);
-        const nm = gearName(id, cls);
-        const runes = runeHtml(id);
         const pr = this.pickRune >= 0 ? parseRune(bagItems[this.pickRune]) : undefined, sockWhy = pr ? socketProblem(id, pr) : "";
         const tip = pr ? (sockWhy ? `<span class="gbad">${sockWhy}</span>` : `Click to set the ${runeName(pr)} in this item`) : extra;
-        const cmp = !slot && fits(id) ? compareItem(sh, worn, id) : null;
-        showCard(`<b class="ic-name" style="color:${itemColor(id)}">${nm}</b><div class="ic-type">${TIER_NAMES[d.tier]} ${slotName(d.slot, cls, id)} · level ${itemLevel(id)} · ${RARITY_NAMES[itemRarity(id)]}</div>` +
-          `<div>${itemText(id) || "No bonus"}</div>${song ? `<div>${song}</div>` : ""}${aff ? `<div>${aff}</div>` : ""}${runes ? `<div>${runes}</div>` : ""}<div class="${why ? "gbad" : "gok"}">${why || reqText(id, cls, hero)}</div>` +
-          (cmp && worn[cmp.slot] !== id ? compareHtml(cmp, cls) : "") + (tip ? `<div class="ic-foot">${tip}</div>` : ""), el);
+        showItemCard(state, id, el, tip, slot);
       };
-      el.onmouseleave = () => { this.preview(); hideCard(); };
+      el.onmouseleave = hideCard;
     };
 
     // Hero preview with everything worn
@@ -332,6 +338,7 @@ export class GearMenu {
       if (id && itemRarity(id) > 0) { row.style.setProperty("--rc", itemColor(id)); row.classList.add(`rar-${itemRarity(id)}`); } // frame and glow in the rarity colour
       const icon = id ? iconCanvas(this.scene, id) : Object.assign(document.createElement("span"), { className: "gicon", innerHTML: pxIcon(EMPTY_SLOT_ICON[slot] ?? "bag") }); // an empty slot: a faint icon, its name in the tooltip
       if (!id) row.setAttribute("data-tip", slotName(slot, cls));
+      if (id) row.setAttribute("aria-label", gearName(id, cls)); // the name, for assistive tech and the e2e scripts (the slot shows only the icon)
       row.appendChild(icon);
       const txt = document.createElement("span");
       const why = id ? wearProblem(cls, id) || reqProblem(id, hero) : "";
@@ -345,7 +352,7 @@ export class GearMenu {
       if (id && isSongbook(id)) { // the equipped Songbook opens its reader (songs, materials, chord legend)
         const rd = Object.assign(document.createElement("span"), { className: "sbbtn", textContent: "Read", title: "Open the Songbook" });
         rd.onclick = (ev) => { ev.stopPropagation(); openSongbook(); };
-        txt.appendChild(rd);
+        row.appendChild(rd); // on the slot itself: the name/stats span next to it is hidden in the icon-only panel
       }
       const pr = this.pickRune >= 0 ? parseRune(bagItems[this.pickRune]) : undefined;
       if (id && pr && !socketProblem(id, pr)) row.classList.add("gfit");
@@ -401,6 +408,10 @@ export class GearMenu {
     const f = lootFilter();
     tog("gfrar", f.minRarity > 0, `Pick up: ${["All gear", "Magic+", "Rare+", "Legendary"][f.minRarity]}`);
     tog("gfcls", f.ownClass, f.ownClass ? "My class only" : "Any class");
+    // the filter popover is closed most of the time: the cog shows (dot + tooltip) that a filter is on
+    const fOn = f.minRarity > 0 || f.ownClass, cog = document.getElementById("gfopen")!;
+    cog.classList.toggle("filtered", fOn);
+    cog.setAttribute("data-tip", fOn ? `Loot filter: ${[f.minRarity > 0 ? ["", "Magic+", "Rare+", "Legendary"][f.minRarity] : "", f.ownClass ? "my class only" : ""].filter(Boolean).join(", ")}` : "Loot filter: what you pick up");
     for (let n = 0; n < BAG_SIZE; n++) {
       const i = n < order.length ? order[n] : n;
       const id: string | undefined = bagItems[i];

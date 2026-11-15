@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cardPlace, cardWidth, compareItem, signed } from "../client/src/gearCompare";
+import { cardPlace, cardWidth, compareItem, compareTakeOff, signed } from "../client/src/gearCompare";
 import { heroSheet, wearing } from "../shared/heroSheet";
 import type { SheetHero } from "../shared/heroSheet";
 import type { Equipped } from "../shared/gear";
@@ -69,4 +69,26 @@ test("cardWidth: shrinks to the room left of the panel, never below the minimum"
   assert.equal(cardWidth(600), 320);
   assert.equal(cardWidth(294), 282);
   assert.equal(cardWidth(100), 240);
+});
+
+test("compare: swapping out the piece that enables the weapon switches the weapon off (requirement chain)", () => {
+  const h: SheetHero = { cls: "wizard", level: 40, pts: { sta: 0, str: 0, mag: 0, dex: 0 }, talents: {} };
+  const w = { weapon: "w_dragon@20", hat: "h_cap@20" } as Equipped;
+  const now = heroSheet(h, w);
+  assert.ok(now.atk > 0);
+  const c = compareItem(h, w, "h_helm@1")!;
+  const real = heroSheet(h, wearing(w, "h_helm@1"));
+  assert.ok(real.atk < now.atk, "the server would switch the weapon off");
+  const atk = c.lines.find((l) => l.label === "Attack")!;
+  assert.equal(atk.text, String(real.atk - now.atk));
+  assert.ok(!atk.good);
+});
+
+test("compare: Mana and Damage per second lines; take-off lists what you'd lose", () => {
+  const h = hero();
+  const c = compareItem(h, { weapon: "wizard_weapon" } as Equipped, "a_royal@20")!;
+  assert.ok(c.lines.some((l) => l.label === "Mana" && l.text.startsWith("+")));
+  assert.ok(c.lines.some((l) => l.label === "Damage per second" && l.good));
+  const off = compareTakeOff(h, { ...worn, armour: "a_royal@20" } as Equipped, "armour");
+  assert.ok(off.length > 0 && off.some((l) => !l.good));
 });

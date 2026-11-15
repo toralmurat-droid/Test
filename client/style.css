@@ -3,7 +3,7 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 18
 #game { position: fixed; inset: 0; }
 #game canvas { image-rendering: pixelated; transform: scale(var(--worldscale, 1)); transform-origin: 0 0; } /* world size (worldscale.ts) */
 /* Screen size (worldscale.ts): menus, bars and overlays zoom with the world */
-#hud, #tip, #skilltip, #worldmap, #wrath { zoom: var(--uiscale, 1); }
+#hud, #tip, #skilltip, #itemcard, #worldmap, #wrath { zoom: var(--uiscale, 1); }
 /* Hero picker: equal cards, each with the hero animated on a patch of grass */
 #classinfo { min-height: 2.8em; margin: 4px 0; }
 #ultfill { position: absolute; inset: 0 auto 0 0; width: 100%; background: #f77f00; }

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { attrEffect, pointsRule, skillHint, toneOf } from "../client/src/heroText";
+import { attrEffect, strSkillBonus, pointsRule, skillHint, toneOf } from "../client/src/heroText";
 import { HP_PER_STA, HP_PER_STR, DMG_PER_POINT, STATS } from "../shared/powers";
 import { CLASSES } from "../shared/classes";
 
@@ -31,4 +31,14 @@ test("hint texts", () => {
   assert.match(pointsRule(), /3 at levels 3, 5, 8 and 10/);
   assert.equal(skillHint(1), "1 point · 1 per level · a skill needs the one above it");
   assert.equal(skillHint(0), "0 points · 1 per level · a skill needs the one above it");
+});
+
+test("attrEffect: only true things per class (Songweaver has no mana pool, Strength adds spell damage off the wizard)", () => {
+  assert.doesNotMatch(attrEffect("mag", "songweaver"), /mana/);
+  assert.match(attrEffect("mag", "wizard"), /mana/);
+  assert.equal(strSkillBonus("wizard"), 0);
+  assert.equal(strSkillBonus("vampire"), 0.03);
+  assert.doesNotMatch(attrEffect("str", "wizard"), /spell damage/);
+  assert.match(attrEffect("str", "vampire"), /\+3% spell damage/);
+  assert.match(attrEffect("str", "songweaver"), /health and \+3% spell damage per point/);
 });

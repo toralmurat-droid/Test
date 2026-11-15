@@ -1,10 +1,10 @@
 {
   "date": "2026-11-15",
-  "title": "A tidier hero panel",
+  "title": "A tidier hero panel and item cards",
   "changes": [
-    "The Character, Inventory and Skills panel is narrower and has a bronze frame. Your stats now show once, on the Character tab, with colours: health red, mana blue, spell damage violet.",
-    "Each attribute says in one plain line what a point gives you. Points left to spend show as a red badge on the tab.",
-    "Inventory: empty equipment slots show a faint icon instead of a word, and the loot filter hides behind the cog button.",
+    "The Character, Inventory and Skills panel is narrower and has a bronze frame. Your stats show once, on the Character tab, with colours, and each attribute says in one line what a point gives you.",
+    "Inventory: worn gear shows icons only (a red frame means the piece does nothing for you), empty slots show a faint icon, and the loot filter hides behind the cog button.",
+    "Pointing at an item, in your bag, on your hero or in a shop, shows a card beside the panel with its details and what it would change: green for better, red for worse.",
     "Skills: one short hint line instead of three, and the skill details fit the panel on small screens."
   ]
 }

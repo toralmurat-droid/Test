@@ -1,5 +1,5 @@
-import { CDR_PER_MAG, CRIT_PER_DEX, DMG_PER_POINT, HP_PER_STA, HP_PER_STR, MAJOR_LEVELS, StatKind, STATS } from "../../shared/powers";
-import { MANA } from "../../shared/mana";
+import { CDR_PER_MAG, CRIT_PER_DEX, DMG_PER_POINT, HP_PER_STA, HP_PER_STR, magicMult, MAJOR_LEVELS, StatKind, STATS } from "../../shared/powers";
+import { MANA, usesGauge } from "../../shared/mana";
 import type { ClassKind } from "../../shared/classes";
 
 /**
@@ -9,13 +9,22 @@ import type { ClassKind } from "../../shared/classes";
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 
+/** Spell damage one Strength point adds (0 for the wizard), read off the rule itself. */
+export function strSkillBonus(cls: ClassKind): number {
+  const b = STATS[cls].base;
+  return Math.round((magicMult(cls, { ...b, str: b.str + 1 }) - magicMult(cls, b)) * 1000) / 1000;
+}
+
 /** One plain sentence: what one more point of an attribute gives this class. */
 export function attrEffect(k: StatKind, cls: ClassKind): string {
   const main = STATS[cls].attackStat;
   switch (k) {
     case "sta": return `+${HP_PER_STA} health and faster regen per point`;
-    case "str": return `+${HP_PER_STR} health${main === "str" ? ` and +${pct(DMG_PER_POINT)} attack` : ""} per point`;
-    case "mag": return `+${pct(DMG_PER_POINT)} spell damage${main === "mag" ? " and attack" : ""}, ${pct(CDR_PER_MAG)} shorter cooldowns, +${MANA.perMag} mana` +
+    case "str": {
+      const sk = strSkillBonus(cls); // classes other than the wizard also add spell damage per Strength (shared magicMult)
+      return `+${HP_PER_STR} health${main === "str" ? ` and +${pct(DMG_PER_POINT)} attack` : ""}${sk ? `${main === "str" ? "," : " and"} +${pct(sk)} spell damage` : ""} per point`;
+    }
+    case "mag": return `+${pct(DMG_PER_POINT)} spell damage${main === "mag" ? " and attack" : ""}, ${pct(CDR_PER_MAG)} shorter cooldowns${usesGauge(cls) ? "" : `, +${MANA.perMag} mana`}` +
       `${main === "mag" ? `, +${HP_PER_STR} health` : ""} per point`;
     case "dex": return `+${pct(CRIT_PER_DEX)} critical chance per point`;
   }
