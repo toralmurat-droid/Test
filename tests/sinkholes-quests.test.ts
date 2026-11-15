@@ -13,7 +13,7 @@ const named = new Set([...SPAWN_ZONES.map((z) => z.name), ...AREAS.map((a) => a.
 
 test("sinkholes chain: a side arc (no chain index moves), eight quests from Lodge-Warden Tull climbing to the Maw-Father", () => {
   assert.ok(ci >= ZONE_ARCS.length && arc.quests.length >= 6 && arc.quests.length <= 8);
-  assert.equal(SIDE_ARCS[SIDE_ARCS.length - 1], arc, "last of SIDE_ARCS");
+  assert.ok(SIDE_ARCS.includes(arc), "a side arc");
   assert.ok(NPCS.some((n) => n.id === "ropewarden"));
   assert.ok(arc.quests.every((d) => d.giver === "ropewarden"), "one giver");
   arc.quests.forEach((d, i) => {

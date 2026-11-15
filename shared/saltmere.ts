@@ -47,7 +47,7 @@ export const saltDoorStep = (b: SaltBuilding) => ({ x: b.x + Math.floor(b.w / 2)
 /** Fish racks drying beside the smokehouse (tiles, solid like fences). */
 export const SALT_RACKS: [number, number][] = [[157, 172], [158, 172], [157, 174], [158, 174]];
 
-// ---------- reserved for later phases (nothing uses these yet) ----------
+// ---------- places later phases hang things on ----------
 /** Where the square's stash chest will stand (phase 4: same account stash as Oakvale's). */
 export const SALT_STASH = { x: 137, y: 189 };
 /**
@@ -74,5 +74,8 @@ export const SALT_BOXES = [
   { x0: 187, x1: 191, y0: 189, y1: 196 },
   { x0: 35, x1: 39, y0: 195, y1: 203 },
 ] as const;
-/** The watch-fire cairn (phase 6) on the village's eastern point, on the sand beyond the square: kept open all round. */
-export const WATCH_FIRE = { x: 160, y: 195 };
+/**
+ * The old watch-fire cairn on the village's eastern beach, beyond the square (a quest object of "The Watch-Fire",
+ * shared/quests.ts; no map tile): open all round, and a few tiles clear of the Wreckers' false light at (160,196).
+ */
+export const WATCH_FIRE = { x: 157, y: 193 };
