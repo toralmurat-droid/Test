@@ -3,7 +3,7 @@ import { slotName } from "./songTables";
 import Phaser from "phaser";
 import "./trade.css";
 import { BAG_SIZE, canWear, keepsBoundOf, gearDef, gearName, itemLevel, itemRarity, itemText, RARITY_NAMES, reqProblem, SLOT_NAMES, TIER_NAMES } from "../../shared/gear";
-import { STASH, STASH_RANGE, STASH_SIZE, TRADE } from "../../shared/trade";
+import { STASH_RANGE, STASH_SIZE, STASHES, TRADE } from "../../shared/trade";
 import { affixHtml, iconCanvas, itemColor, looseRuneHtml, reqInfoOf, runeHtml } from "./gear";
 import { parseRune } from "../../shared/runes";
 import { runeCanvas, runeCss } from "./runeArt";
@@ -17,8 +17,9 @@ import { own } from "./own";
  * Player trading and the account stash (shared/trade.ts; the server checks everything).
  *  - TradeUI: a trade request card (Accept / Decline), then a trade window: click bag items to offer them,
  *    add gold with the coin buttons, press Ready. Any change takes back both Ready marks.
- *  - StashUI: the iron-bound chest on the village square. E opens it; click a bag item to store it,
- *    a stash item to take it. Shared by every hero of the account.
+ *  - StashUI: the iron-bound chests on Oakvale's square and Saltmere's harbour square (shared/trade.ts STASHES).
+ *    E opens the one next to you; click a bag item to store it, a stash item to take it. Every chest opens the
+ *    same stash, shared by every hero of the account.
  * All text uses the game's pixel font.
  */
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]!));
@@ -217,7 +218,9 @@ export class TradeUI {
 export class StashUI {
   private el = panel("stashpanel");
   private prompt = document.createElement("div");
-  private img: Phaser.GameObjects.Image;
+  private imgs: Phaser.GameObjects.Image[];
+  /** The chest the hero stands at (index into STASHES), the one drawn open while the window is up. */
+  private at = 0;
   private items: string[] = [];
   private gold = 0;
   private note = "";
@@ -225,11 +228,13 @@ export class StashUI {
   near = false;
 
   constructor(private scene: Phaser.Scene, private send: Send, private mine: () => any) {
-    this.img = chestImage(scene, STASH.x, STASH.y, 2);
-    const label = scene.add.text(STASH.x, STASH.y - 18, "Stash", {
-      fontFamily: TEXT_FONT, fontSize: `${TEXT_PX}px`, color: "#e9c35a", stroke: "#000", strokeThickness: 2,
-    }).setOrigin(0.5, 1).setScale(WT).setResolution(1).setDepth(STASH.y + 1);
-    isoAnchor(label, { x: STASH.x, y: STASH.y });
+    this.imgs = STASHES.map((c) => {
+      const label = scene.add.text(c.x, c.y - 18, "Stash", {
+        fontFamily: TEXT_FONT, fontSize: `${TEXT_PX}px`, color: "#e9c35a", stroke: "#000", strokeThickness: 2,
+      }).setOrigin(0.5, 1).setScale(WT).setResolution(1).setDepth(c.y + 1);
+      isoAnchor(label, { x: c.x, y: c.y });
+      return chestImage(scene, c.x, c.y, 2);
+    });
     this.prompt.id = "stashprompt";
     this.prompt.innerHTML = `<kbd>E</kbd> Open your stash`;
     this.prompt.onclick = () => this.interact();
@@ -237,7 +242,7 @@ export class StashUI {
   }
 
   get open() { return !this.el.hidden; }
-  close() { this.el.hidden = true; setChestOpen(this.img, 2, false); }
+  close() { this.el.hidden = true; setChestOpen(this.imgs[this.at], 2, false); }
 
   /** E key / click: open the stash when standing next to it. */
   interact(): boolean {
@@ -253,12 +258,16 @@ export class StashUI {
     this.gold = v.gold ?? 0;
     this.note = v.text ?? "";
     this.el.hidden = false;
-    setChestOpen(this.img, 2, true);
+    setChestOpen(this.imgs[this.at], 2, true);
     this.sig = "";
   }
 
   update(me: { x: number; y: number } | undefined, blocked: boolean) {
-    const d = me ? Math.hypot(me.x - STASH.x, me.y - STASH.y) : Infinity;
+    if (me && !this.open) { // the nearest chest; kept while the window is up, so the one drawn open is the one closed
+      let bd = Infinity;
+      STASHES.forEach((c, i) => { const d = Math.hypot(me.x - c.x, me.y - c.y); if (d < bd) { bd = d; this.at = i; } });
+    }
+    const c = STASHES[this.at], d = me ? Math.hypot(me.x - c.x, me.y - c.y) : Infinity;
     this.near = !blocked && d <= STASH_RANGE;
     this.prompt.classList.toggle("open", this.near && !this.open);
     if (this.open && d > STASH_RANGE * 1.6) this.close();

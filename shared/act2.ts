@@ -4,7 +4,9 @@ import { KEL_MARKET, D, WAYGATE_DESERT, WAYGATE_OAKVALE } from "./desert";
 import { CAIRN_SQUARE, MOORSGATE_MOORS, MOORSGATE_OAKVALE, MR } from "./moors";
 import { REDPASS_BADLANDS, REDPASS_OAKVALE, BR, RUSTWATER_SQUARE } from "./badlands";
 import { ROPEWELL_SQUARE, SINKWAY_OAKVALE, SINKWAY_SINKHOLES, SR } from "./sinkholes";
-import { isSolidAt } from "./map";
+import { SALT_SQUARE } from "./saltmere";
+import { underground } from "./dungeon";
+import { isSolidAt, randomSpawn, SAFE_ZONE } from "./map";
 
 /**
  * Act 2 (Murat 2026-11-08): the old waygate south of Oakvale and its twin in the desert's Sunstone Circle
@@ -133,6 +135,31 @@ export function sinkholesSpawn(): { x: number; y: number } {
     if (![[-r, -r], [r, -r], [-r, r], [r, r]].some(([dx, dy]) => isSolidAt(x + dx, y + dy))) return { x, y };
   }
   return waygateArrival(waygateById("sinkholes")!);
+}
+/**
+ * Saltmere's harbour square (shared/saltmere.ts), Act 1's second safe town: free ground only, the square's centre if
+ * none is found. Only a respawn lands here (act1Home); Act 1 logins still start in Oakvale.
+ */
+export function saltmereSpawn(): { x: number; y: number } {
+  const Q = SALT_SQUARE, r = PLAYER_RADIUS;
+  for (let i = 0; i < 60; i++) {
+    const x = (Q.x + 1 + Math.random() * (Q.w - 2)) * TILE, y = (Q.y + 1 + Math.random() * (Q.h - 2)) * TILE;
+    if (![[-r, -r], [r, -r], [-r, r], [r, r]].some(([dx, dy]) => isSolidAt(x + dx, y + dy))) return { x, y };
+  }
+  return { x: (Q.x + Q.w / 2) * TILE, y: (Q.y + Q.h / 2) * TILE };
+}
+/**
+ * Where an Act 1 hero who died at (x, y) px comes back (owner 2026-11-15, docs/saltmere-rework-progress.md): once
+ * they have woken Saltmere's waystone, at whichever of Oakvale and Saltmere is nearer in a straight line, so a death
+ * on the coast doesn't mean the long walk back from Oakvale. Deaths underground (the Mawdeep, the Lantern Crypt), and
+ * heroes who never reached Saltmere, wake in Oakvale. No save field: the woken waystones are saved already.
+ */
+export function act1Home(x: number, y: number, woke: (id: string) => boolean): { x: number; y: number } {
+  if (!woke("saltmere") || underground(y) || actAt(y, x) !== 1) return randomSpawn();
+  const O = SAFE_ZONE, S = SALT_SQUARE;
+  const dO = Math.hypot(x - (O.x + O.w / 2) * TILE, y - (O.y + O.h / 2) * TILE);
+  const dS = Math.hypot(x - (S.x + S.w / 2) * TILE, y - (S.y + S.h / 2) * TILE);
+  return dS < dO ? saltmereSpawn() : randomSpawn();
 }
 /** The town (or camp) of an act, for a login or a respawn there; anything else is Oakvale's square (`home`). */
 export function actSpawn(act: number, home: () => { x: number; y: number }): { x: number; y: number } {

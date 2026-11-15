@@ -22,7 +22,7 @@ Work branch: `claude/wizardly-franklin-nedywr`. Shipped in two PRs:
 | 2 | Harbour props: moored boats, rowboats, bell buoy, lobster pots, mooring posts, breakwater; gulls | todo |
 | 3 | Layout (`shared/saltmere.ts`, `shared/map.ts`): tavern, chandlery, smokehouse, 3 cottages, Upper Lane, Harbour Street, flagstone harbour square = safe zone, jetties at Gullrock and Heronwreck | done |
 | 3b | Building art: tavern and smokehouse styles, signs, smoke, quay edge | todo |
-| 4 | Respawn at the nearer town; second stash chest on the square (same account stash) | todo |
+| 4 | Respawn at the nearer town; second stash chest on the square (same account stash) | done |
 | 5 | People: Bess Tanner (smokehouse), Hob Wick (chandler shop), Marta (tavern), Agna (net-mender), Pell (after the Redfang chain); fisherfolk routines; town reacts to the Redfang chain | todo |
 | 6 | Side arc "Saltmere Ways" (Lv 16-19): Smoke and Salt, The Watch-Fire | todo |
 | 7 | The ferry (`shared/ferry.ts`, `server/ferry.ts`, validated and rate-limited message) | todo |
@@ -42,3 +42,11 @@ Work branch: `claude/wizardly-franklin-nedywr`. Shipped in two PRs:
   day, pier creaks and hull knocks within 6 tiles of a pier in Saltmere, a distant bell buoy). Music: optional
   `saltmere` track (`/assets/music/saltmere-tune.mp3`), `SALT_TOWNS` in `client/src/music.ts`; without the file
   Saltmere keeps the village tune. Not yet listened to in a browser: volumes untuned.
+- 2026-11-15: phase 4 done. Respawn: `act1Home(x, y, woke)` in `shared/act2.ts` (with `saltmereSpawn()`, free ground
+  on `SALT_SQUARE`) is the `home` the room passes to `actSpawn` on a death, so only Act 1 deaths change: with the
+  `saltmere` waystone in `p.portals`, an overworld death nearer Saltmere's square centre than Oakvale's `SAFE_ZONE`
+  centre wakes in Saltmere; underground (Mawdeep, Lantern Crypt; `underground()`) and without the waystone, Oakvale.
+  Logins are unchanged (still `actSpawn(save.act, randomSpawn)`); there is no other respawn path (recall, party,
+  siege and war code never place a hero in a town). Stash: `STASHES` (Oakvale's `STASH` first, then `SALT_STASH`) and
+  `stashNear` in `shared/trade.ts`; the room's `nearStash` accepts any chest, and the client draws one chest per entry.
+  The chest is not a map tile (like Oakvale's), so the map is unchanged. Tests: `tests/saltmere-home.test.ts`.
