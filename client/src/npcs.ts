@@ -27,7 +27,7 @@ import { actAt, waygateById, WAYGATES } from "../../shared/act2";
 import type { MapMarker } from "./minimap";
 import { QuestLog } from "./questlog";
 import { MASTER_LEVELS, SHOPS, sellPrice, shopBuys, shopFuses } from "../../shared/shops";
-import { GEAR_SLOTS, GearSlot, keepsBoundOf, gearDef, gearName, itemLevel, itemRarity, itemText, reqProblem, TIER_NAMES } from "../../shared/gear";
+import { GEAR_SLOTS, GearSlot, keepsBoundOf, gearDef, gearName, itemLevel, itemRarity, itemText, reqProblem, TIER_NAMES, wearProblem } from "../../shared/gear";
 import { CHAR_GROW, CHAR_SCALE, CHAR_ORIGIN, CharacterName, ensureCharSheet, playCharAnim, SHEET_RANGE } from "./artAssets";
 import { iconCanvas, itemColor, rarityLabel, reqInfoOf } from "./gear";
 import { fuseCost, fuseProblem, looseRuneCounts, parseRune, RUNE_FUSE_COUNT, RUNE_KIND_NAMES, RUNES, runeName, runeText } from "../../shared/runes";
@@ -547,9 +547,11 @@ export class NpcLayer {
         head = `<h5 class="sh-lv">Masterwork · Legendary, forged by Brann</h5><div class="sh-lvpick">` +
           MASTER_LEVELS.map((l) => `<button data-lv="${l}"${l === master ? ' class="on"' : ""}>Lv ${l}</button>`).join("") + `</div>`;
       }
-      const why = q ? reqProblem(e.item, reqInfoOf(q)) : "";
-      return head + row(e.item, gearName(e.item, cls), itemColor(e.item), `${rarityLabel(e.item)}${TIER_NAMES[d.tier]} · Lv ${itemLevel(e.item)} · ${itemText(e.item)}${why ? ` · <span class="sh-need">${why}</span>` : ""}`,
-        `${e.price.toLocaleString("en-US")}${pxIcon("coin")}`, "sh-buy", i, gold < e.price);
+      const cant = q ? wearProblem(cls ?? "", e.item) : ""; // a class that can never wear it (buying stays allowed: it can be sold on)
+      const why = q && !cant ? reqProblem(e.item, reqInfoOf(q)) : "";
+      const html = row(e.item, gearName(e.item, cls), itemColor(e.item), `${rarityLabel(e.item)}${TIER_NAMES[d.tier]} · Lv ${itemLevel(e.item)} · ${itemText(e.item)}${why ? ` · <span class="sh-need">${why}</span>` : ""}` +
+        (cant ? `<span class="sh-cant" title="${cant}">${cant.split(". ")[0].replace(/\.$/, "")}</span>` : ""), `${e.price.toLocaleString("en-US")}${pxIcon("coin")}`, "sh-buy", i, gold < e.price);
+      return head + (cant ? html.replace('class="sh-row"', 'class="sh-row cant"') : html);
     }).join("");
     const sellable = shop.buys ? bag.map((id, i) => [id, i] as const).filter(([id]) => shopBuys(shop, id, true) && !keepsBoundOf(q?.cls ?? "", [q?.weapon, q?.shield], bag)(id)) : [];
     const sellRow = (id: string, i: number) => {
