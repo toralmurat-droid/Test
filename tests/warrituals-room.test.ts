@@ -226,3 +226,22 @@ test("rituals (room): caravans, a siege, a tunnel and the ritual stay within max
     assert.ok(warState());
   } finally { restore(); await srv.stop(); }
 });
+
+test("rituals (room): a summon's kill of the last acolyte counts for its hero", async () => {
+  const srv = await startRoom();
+  try {
+    ritualWar();
+    const { room, id, p, at, r, tick, acolytes, kill } = await setup(srv, FOE);
+    at({ x: SPOT.x + 10 * TILE, y: SPOT.y });
+    tick(NOON);
+    const a = acolytes();
+    kill(a[0]); kill(a[1]);
+    const [sid, sm] = [...room.state.mobs.entries()].find(([mid, m]: any) => !m.dead && !room.rituals.owns(mid) && m.kind !== "trooper")!;
+    sm.owner = id;
+    const lastId = r().slots.find((s: any) => s.id).id;
+    room.rituals.killed(a[2], lastId, sid);
+    assert.equal(r().state, "broken");
+    assert.equal(p.renown, RITUAL.disruptRenown, "renown for the summoner");
+    assert.equal(_valorOf(LAND.id, FOE), RITUAL.disruptValor, "valor for the summoner's clan");
+  } finally { restore(); await srv.stop(); }
+});

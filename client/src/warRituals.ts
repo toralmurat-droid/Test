@@ -11,6 +11,8 @@ import { play } from "./sfx";
 const P = 2; // world px per art pixel (all world art is drawn at 2x)
 const R = 56; // circle radius (world px)
 const V = CLANS.veiled, CLOTH = V.cloth, TRIM = V.trim, SIGIL = V.sigil;
+/** Past this from the hero (px) the circle is neither drawn nor redrawn. */
+const FAR_PX = 30 * 32;
 const GREY = 0x8a7fa8, DARK = 0x0e0c16, PAUSED = 0x9aa0c8;
 /** A rune: 3x4 art pixels as rows of bits (msb left). Eight of them sit between the two rings. */
 const RUNES = [[0b010, 0b111, 0b010, 0b010], [0b101, 0b010, 0b101, 0b010], [0b110, 0b011, 0b110, 0b100], [0b111, 0b101, 0b001, 0b011],
@@ -48,8 +50,9 @@ export class WarRituals {
   /** Every frame: redraw about ten times a second (the pulse), hum near a channelling circle. */
   update(hero: { x: number; y: number } | undefined, now = performance.now()) {
     const v = this.v;
-    if (!v) { if (this.g.visible) this.g.clear().setVisible(false); return; }
-    if (hero && v.state === "channel" && Date.now() >= this.nextHum && Math.hypot(hero.x - v.x, hero.y - v.y) < 9 * 32) {
+    // nothing to draw with no circle, or with the hero far from it (no redrawing ~2500 pixels ten times a second for nobody)
+    if (!v || !hero || Math.hypot(hero.x - v.x, hero.y - v.y) > FAR_PX) { if (this.g.visible) { this.g.clear().setVisible(false); this.drawn = 0; } return; }
+    if (v.state === "channel" && Date.now() >= this.nextHum && Math.hypot(hero.x - v.x, hero.y - v.y) < 9 * 32) {
       this.nextHum = Date.now() + 2600;
       play("ritual_hum", v.x, v.y, 0.7, undefined, { key: "ritualhum", minGap: 2000 });
     }

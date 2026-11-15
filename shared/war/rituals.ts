@@ -8,7 +8,8 @@
  */
 import { MAP_W, TILE } from "../constants";
 import { DAY_CYCLE_MS } from "../daynight";
-import { CRYPT_DOOR, SINKHOLE, UNDER_SHAFT } from "../dungeon";
+import { CRYPT_DOOR, LINKS, SINKHOLE, UNDER_SHAFT, underground } from "../dungeon";
+import { BOARDS } from "../bounty";
 import { WAYGATE_DESERT, WAYGATE_OAKVALE } from "../desert";
 import { DOORS, isSolidAt, PORTAL_SPOTS, SHRINE_SPOT } from "../map";
 import { NPC_DECOR, NPCS } from "../npcs";
@@ -72,20 +73,23 @@ const STD_KEEP = STANDARD.range + RITUAL.ringPx;
 
 let doorTiles: Set<number> | undefined;
 /** Tiles (centres, in tiles) of things a circle keeps away from: overworld entrances and portal stones, NPCs and their props. */
-const ENTRANCES = [SINKHOLE, CRYPT_DOOR, UNDER_SHAFT, WAYGATE_OAKVALE, WAYGATE_DESERT, SHRINE_SPOT];
-const NPC_TILES = [...NPCS.map((n) => ({ x: n.x / TILE, y: n.y / TILE })), ...NPC_DECOR.map((d) => ({ x: d.x, y: d.y }))];
+const px = (p: { x: number; y: number }) => ({ x: p.x / TILE, y: p.y / TILE }), mid = (p: { x: number; y: number }) => ({ x: p.x + 0.5, y: p.y + 0.5 });
+/** Tile centres a circle keeps entranceKeepTiles from: portal stones, every above-ground stair or rope, the sinkhole, crypt door, well-shaft, both waygates, the shrine. */
+export const RITUAL_ENTRANCES = [...[...PORTAL_SPOTS, SINKHOLE, CRYPT_DOOR, UNDER_SHAFT, WAYGATE_OAKVALE, WAYGATE_DESERT, SHRINE_SPOT].map(mid), ...LINKS.filter((l) => !underground(l.y)).map(px)];
+/** Tile spots a circle keeps npcKeepTiles from: NPCs, their props, the bounty boards. */
+export const RITUAL_MARKS = [...NPCS.map(px), ...NPC_DECOR.map((d) => ({ x: d.x, y: d.y })), ...BOARDS.map(px)];
 
 /**
  * Tile (tx, ty) can carry a circle: its 3x3 free of solid tiles and off-limits ground (safe squares, stockade,
- * monster-free ground), no dungeon door within 2 tiles, no portal stone or overworld entrance within entranceKeepTiles,
- * no NPC or NPC prop within npcKeepTiles. (Own checks, not the tunnel mouth's, so the two can be tuned apart.)
+ * monster-free ground), no dungeon door within 2 tiles, no portal stone or overworld entrance (above-ground stairs and
+ * ropes included) within entranceKeepTiles, no NPC, NPC prop or bounty board within npcKeepTiles. (Own checks, not the tunnel mouth's, so the two can be tuned apart.)
  */
 export function ritualClear(tx: number, ty: number): boolean {
   if (!doorTiles) { doorTiles = new Set(); for (const d of DOORS) for (const k of d.tiles) doorTiles.add(k); }
   for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (doorTiles.has((ty + dy) * MAP_W + tx + dx)) return false;
   const cx = tx + 0.5, cy = ty + 0.5;
-  if ([...PORTAL_SPOTS, ...ENTRANCES].some((p) => Math.hypot(p.x + 0.5 - cx, p.y + 0.5 - cy) < RITUAL.entranceKeepTiles)) return false;
-  if (NPC_TILES.some((n) => Math.hypot(n.x - cx, n.y - cy) < RITUAL.npcKeepTiles)) return false;
+  if (RITUAL_ENTRANCES.some((p) => Math.hypot(p.x - cx, p.y - cy) < RITUAL.entranceKeepTiles)) return false;
+  if (RITUAL_MARKS.some((n) => Math.hypot(n.x - cx, n.y - cy) < RITUAL.npcKeepTiles)) return false;
   for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
     const x = (tx + dx + 0.5) * TILE, y = (ty + dy + 0.5) * TILE;
     if (isSolidAt(x, y) || caravanOffLimits(x, y)) return false;
@@ -119,35 +123,39 @@ function reachOf(t: number): Set<number> | undefined {
   return out;
 }
 
+/** Distance (px) from (x, y) to the edge of a Hold's fort (a square HOLD_FORT_PX from its centre); 0 inside. */
+export const fortGap = (h: { x: number; y: number }, x: number, y: number) => Math.hypot(Math.max(0, Math.abs(h.x - x) - HOLD_FORT_PX), Math.max(0, Math.abs(h.y - y) - HOLD_FORT_PX));
+/** Distance (px) from (x, y) to the edge of a standard's ring; negative inside. */
+export const ringGap = (s: { x: number; y: number }, x: number, y: number) => Math.hypot(s.x - x, s.y - y) - STANDARD.range;
+
 const spotCache = new Map<number, { x: number; y: number } | undefined>();
 /**
- * Where land t's ritual circle lies (px, a tile centre): the tile nearest the land's middle inside its rect that passes
- * ritualClear and is reachable on foot from the Hold gate; in a first pass also with a 5x5 free of solid tiles, clear of
- * EVERY Hold's fort by 2 tiles and EVERY standard's ring (no overlap with ours: lands' rects overlap, so a neighbour's
- * standard may stand inside); when nothing fits, the forts +1 tile and the standards' rings +1 tile. Deterministic (the
- * map alone), cached; undefined when none fits.
+ * Where land t's ritual circle lies (px, a tile centre). In every pass the whole counting ring (ringPx, wider than the
+ * drawn circle) stays off EVERY Hold's fort and EVERY standard's ring (lands' rects overlap), the tile passes ritualClear
+ * and is reachable on foot from the land's Hold gate. Passes, the first that finds one wins, nearest the land's middle:
+ * (1) inside the rect by 2 tiles, a 5x5 free of solid tiles, one more tile of room from forts and rings; (2) inside the
+ * rect by 1 tile; (3) the rect + 2 tiles (the reachable margin). Deterministic (the map alone), cached.
  */
 export function ritualSpot(t: number): { x: number; y: number } | undefined {
   if (spotCache.has(t)) return spotCache.get(t);
   const T = TERRITORIES[t], reach = T ? reachOf(t) : undefined;
   let best: { x: number; y: number } | undefined;
   if (T && reach) {
-    const ok = (tx: number, ty: number, strict: boolean) => {
-      if (tx < T.x + 1 || ty < T.y + 1 || tx >= T.x + T.w - 1 || ty >= T.y + T.h - 1 || !reach.has(ty * MAP_W + tx)) return false;
-      const x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE;
-      if (HOLDS.some((h) => Math.max(Math.abs(h.x - x), Math.abs(h.y - y)) < HOLD_FORT_PX + (strict ? 2 : 1) * TILE)) return false;
-      if (STANDARDS.some((s) => Math.hypot(s.x - x, s.y - y) < (strict ? STD_KEEP : STANDARD.range + TILE))) return false;
+    const ok = (tx: number, ty: number, pass: number) => {
+      const m = pass === 0 ? 2 : pass === 1 ? 1 : -2;
+      if (tx < T.x + m || ty < T.y + m || tx >= T.x + T.w - m || ty >= T.y + T.h - m || !reach.has(ty * MAP_W + tx)) return false;
+      const x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE, keep = RITUAL.ringPx + (pass === 0 ? TILE : 0);
+      if (HOLDS.some((h) => fortGap(h, x, y) < keep) || STANDARDS.some((s) => ringGap(s, x, y) < keep)) return false;
       if (!ritualClear(tx, ty)) return false;
-      if (strict) for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (isSolidAt((tx + dx + 0.5) * TILE, (ty + dy + 0.5) * TILE)) return false;
+      if (pass === 0) for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (isSolidAt((tx + dx + 0.5) * TILE, (ty + dy + 0.5) * TILE)) return false;
       return true;
     };
-    for (const strict of [true, false]) {
+    for (let pass = 0; pass < 3 && !best; pass++) {
       let bd = Infinity;
-      for (let ty = T.y; ty < T.y + T.h; ty++) for (let tx = T.x; tx < T.x + T.w; tx++) {
+      for (let ty = T.y - 2; ty < T.y + T.h + 2; ty++) for (let tx = T.x - 2; tx < T.x + T.w + 2; tx++) {
         const d = Math.hypot(tx + 0.5 - T.cx, ty + 0.5 - T.cy);
-        if (d < bd && ok(tx, ty, strict)) { bd = d; best = { x: (tx + 0.5) * TILE, y: (ty + 0.5) * TILE }; }
+        if (d < bd && ok(tx, ty, pass)) { bd = d; best = { x: (tx + 0.5) * TILE, y: (ty + 0.5) * TILE }; }
       }
-      if (best) break;
     }
   }
   spotCache.set(t, best);

@@ -262,7 +262,8 @@ export class WarRituals {
   /**
    * An acolyte died (TownRoom.mobDied): it stays dead for this day phase. When the last of the three falls the ritual
    * breaks (once per land and day phase, in every room): `sfx` ritual_broken, and a killer hostile to the Veiled earns
-   * disruptRenown and disruptValor for their clan in the land (legal and capped), with a Herald line. True when it was an acolyte.
+   * disruptRenown and disruptValor for their clan in the land (legal and capped), with a Herald line (a summon's kill counts
+ * for its owner). True when it was an acolyte.
    */
   killed(m: TroopMob, id: string, killerId: string, now = Date.now()): boolean {
     const a = this.mobs.get(id);
@@ -276,6 +277,7 @@ export class WarRituals {
     r.state = "broken";
     this.h.broadcast("sfx", { ev: "ritual_broken", x: Math.round(r.x), y: Math.round(r.y) });
     this.tell(now, true);
+    if (!this.h.hero(killerId)) killerId = this.h.mob(killerId)?.owner || killerId; // a summon's kill counts for its hero
     const p = this.h.hero(killerId);
     if (!p || troopStance(RITUAL.clan, p) !== "enemy") return true;
     this.payClan(r.t, p.clan!, RITUAL.disruptValor, warNow()?.tick ?? -1);

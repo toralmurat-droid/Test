@@ -2,16 +2,25 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { TILE } from "../shared/constants";
 import { DAY_CYCLE_MS } from "../shared/daynight";
-import { CRYPT_DOOR, SINKHOLE, UNDER_SHAFT } from "../shared/dungeon";
+import { CRYPT_DOOR, LINKS, SINKHOLE, UNDER_SHAFT, underground } from "../shared/dungeon";
+import { BOARDS } from "../shared/bounty";
 import { WAYGATE_DESERT, WAYGATE_OAKVALE } from "../shared/desert";
 import { isSafeZone, isSolidAt, PORTAL_SPOTS, SHRINE_SPOT } from "../shared/map";
 import { NPC_DECOR, NPCS } from "../shared/npcs";
 import { noMobsAt } from "../shared/spawns";
-import { channelStep, pauseStep, RITUAL, RITUAL_PHASE, ritualDay, ritualPay, ritualRate, ritualSite, ritualSpot, ritualTime, type RitualHold } from "../shared/war/rituals";
+import { channelStep, pauseStep, RITUAL, RITUAL_ENTRANCES, RITUAL_MARKS, ritualClear, RITUAL_PHASE, ritualDay, ritualPay, ritualRate, ritualSite, ritualSpot, ritualTime, type RitualHold } from "../shared/war/rituals";
 import { bordersOf, newWar, timeBonus, WAR } from "../shared/war/rules";
 import { HOLD_FORT_PX, HOLDS, STANDARD, STANDARDS } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
 import { warPhase } from "../shared/war/view";
+
+test("rituals: the keep lists hold the above-ground stairs and ropes and the bounty boards", () => {
+  const above = LINKS.filter((l) => !underground(l.y));
+  assert.ok(above.length > 0 && BOARDS.length > 0);
+  for (const l of above) assert.ok(RITUAL_ENTRANCES.some((p) => Math.abs(p.x - l.x / TILE) < 1e-9 && Math.abs(p.y - l.y / TILE) < 1e-9), `stair ${l.id} listed`);
+  for (const b of BOARDS) assert.ok(RITUAL_MARKS.some((p) => Math.abs(p.x - b.x / TILE) < 1e-9 && Math.abs(p.y - b.y / TILE) < 1e-9), `board ${b.id} listed`);
+  for (const l of above) { const tx = Math.floor(l.x / TILE), ty = Math.floor(l.y / TILE); assert.equal(ritualClear(tx, ty), false, `no circle on stair ${l.id}`); }
+});
 
 test("rituals: every land has a deterministic, walkable, legal circle spot", () => {
   for (const T of TERRITORIES) {
@@ -24,11 +33,23 @@ test("rituals: every land has a deterministic, walkable, legal circle spot", () 
       const x = s.x + dx * TILE, y = s.y + dy * TILE;
       assert.ok(!isSolidAt(x, y) && !isSafeZone(x, y) && !noMobsAt(x, y), `${T.name}: free 3x3`);
     }
-    for (const h of HOLDS) assert.ok(Math.max(Math.abs(h.x - s.x), Math.abs(h.y - s.y)) >= HOLD_FORT_PX + TILE, `${T.name}: clear of every Hold's fort`);
-    for (const st of STANDARDS) assert.ok(Math.hypot(st.x - s.x, st.y - s.y) >= STANDARD.range + TILE, `${T.name}: clear of every standard's ring`);
-    for (const n of [...NPCS.map((n) => ({ x: n.x / TILE, y: n.y / TILE })), ...NPC_DECOR]) assert.ok(Math.hypot(n.x - s.x / TILE, n.y - s.y / TILE) >= RITUAL.npcKeepTiles, `${T.name}: clear of NPCs`);
+    // the whole counting ring (wider than the drawn circle) stays off every fort and every standard's ring, any land's
+    assert.ok(RITUAL.ringPx >= 68, "the counting ring covers the drawn circle");
+    for (const h of HOLDS) {
+      const gap = Math.hypot(Math.max(0, Math.abs(h.x - s.x) - HOLD_FORT_PX), Math.max(0, Math.abs(h.y - s.y) - HOLD_FORT_PX));
+      assert.ok(gap >= RITUAL.ringPx, `${T.name}: ${gap.toFixed(0)} px from the fort of land ${h.t}`);
+    }
+    for (const st of STANDARDS) {
+      const gap = Math.hypot(st.x - s.x, st.y - s.y) - STANDARD.range;
+      assert.ok(gap >= RITUAL.ringPx, `${T.name}: ${gap.toFixed(0)} px from standard ${st.id}'s ring`);
+    }
+    const tile = { x: s.x / TILE, y: s.y / TILE }, far = (p: { x: number; y: number }, d: number) => Math.hypot(p.x - tile.x, p.y - tile.y) >= d;
+    for (const n of [...NPCS.map((n) => ({ x: n.x / TILE, y: n.y / TILE })), ...NPC_DECOR, ...BOARDS.map((b) => ({ x: b.x / TILE, y: b.y / TILE }))])
+      assert.ok(far(n, RITUAL.npcKeepTiles), `${T.name}: clear of NPCs, props and bounty boards`);
     for (const p of [...PORTAL_SPOTS, SINKHOLE, CRYPT_DOOR, UNDER_SHAFT, WAYGATE_OAKVALE, WAYGATE_DESERT, SHRINE_SPOT])
-      assert.ok(Math.hypot(p.x + 0.5 - s.x / TILE, p.y + 0.5 - s.y / TILE) >= RITUAL.entranceKeepTiles, `${T.name}: clear of portal stones and entrances`);
+      assert.ok(far({ x: p.x + 0.5, y: p.y + 0.5 }, RITUAL.entranceKeepTiles), `${T.name}: clear of portal stones and entrances`);
+    for (const l of LINKS.filter((l) => !underground(l.y)))
+      assert.ok(far({ x: l.x / TILE, y: l.y / TILE }, RITUAL.entranceKeepTiles), `${T.name}: clear of the stair or rope ${l.id}`);
   }
 });
 

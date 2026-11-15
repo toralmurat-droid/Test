@@ -455,13 +455,15 @@ Open points for M1:
 - Where: one site per day phase for every room of the process, picked from the war state the first time a room looks
   in that phase and then kept (so a war tick in the middle of noon does not move a half-done ritual): the land the Veiled
   besiege (attack; lowest Control, then lowest id), else their border land with the most `pressure` (defence; then the
-  lowest id). Spot (`ritualSpot`): the tile nearest the land's middle, inside its rect, reachable on foot from its Hold
-  gate (own flood, like the tunnel's), with a free 3x3 (no solid tile, safe square, stockade, monster-free ground), no
-  dungeon door within 2 tiles, no portal stone or overworld entrance (sinkhole, crypt door, Undercity shaft, both
-  waygates, shrine) within `entranceKeepTiles` (6), no NPC or NPC prop within `npcKeepTiles` (4), clear of EVERY Hold's
-  fort (+2 tiles) and EVERY standard's ring by `STANDARD.range + ringPx` (lands' rects overlap); a second pass relaxes
-  forts and rings to +1 tile and drops the 5x5 check. All 31 lands have one (~0.2 s for all, first use, cached). The spot
-  helpers are the ritual's own (not exported from tunnels.ts), so the tunnels branch is untouched.
+  lowest id). Spot (`ritualSpot`): reachable on foot from the land's Hold gate (own flood, like the tunnel's), with a
+  free 3x3 (no solid tile, safe square, stockade, monster-free ground), no dungeon door within 2 tiles, no portal stone,
+  above-ground stair or rope (`LINKS`), sinkhole, crypt door, Undercity shaft, waygate or shrine within
+  `entranceKeepTiles` (6), no NPC, NPC prop or bounty board within `npcKeepTiles` (4), and in EVERY pass the whole
+  counting ring (`ringPx` 128, wider than the drawn circle, ~68 px) off EVERY Hold's fort edge and EVERY standard's ring
+  (lands' rects overlap). Passes, nearest the land's middle: inside the rect by 2 tiles with a 5x5 free of solid tiles and
+  one more tile of room; inside by 1 tile; the rect + 2 tiles. All 31 lands have one inside their rect (~0.2 s for all,
+  first use, cached), e.g. Rimewater Hollow (241, 25), Old Ruins (140, 53), the Veiled Sanctum (241, 344). The spot
+  helpers are the ritual's own, so tunnels.ts is untouched.
 - The ritual: a living hero above ground within `wakeTiles` (22) wakes it: `acolytes` (3) plain `"veiled"` troopers
   at the land's soldier level stand on the circle (`postPx` 40) and fight within `leashPx` (6 tiles); wild monsters only
   when one strikes first. All trooper gates hold (only heroes hostile to the Veiled hurt them; no XP / loot). It sleeps
@@ -476,7 +478,7 @@ Open points for M1:
   `ritual_done {x, y}`, a Veiled Oracle line (`RITUAL_LINES`). The acolytes stay `lingerMs` (6 s), then go.
 - Disruption: the 3 acolytes never come back in that day phase; the killer of the last one breaks it: `sfx`
   `ritual_broken {x, y}`, a Herald line, `disruptRenown` (10) for a killer hostile to the Veiled, and `disruptValor` (6)
-  for their clan in the land if legal.
+  for their clan in the land if legal. A summon's kill counts for its owner.
 - One outcome (done or broken) per land per day phase for every room of the process (memory, keyed `day:t`, like the
   caravans and tunnels): another room's copy ends the same way and pays nothing. Valor cap `maxValorPerTick` (10) per
   land per clan per room per war tick.
@@ -488,7 +490,7 @@ Open points for M1:
 - Client: `client/src/warRituals.ts` draws the circle as 2 px pixel blocks on a Graphics laid flat by the iso view: a
   dark disc in the Veiled cloth, two gold rings, eight runes turning slowly, a six-point star, a slow glow pulse (slower
   and blue-grey progress ring when paused), the progress ring outside it, gaps / grey / cracks when broken, a 1.2 s
-  flare when done. `warPlaque.ts` adds "Ritual n%" (or "(paused)", "complete", "broken") in that land. Sounds in
+  flare when done; nothing is drawn while the hero is more than 30 tiles away. `warPlaque.ts` adds "Ritual n%" (or "(paused)", "complete", "broken") in that land. Sounds in
   `sfx.ts`: `ritual_broken` (glassy crack, the chord falling apart), `ritual_done` (rising choir chord and bell), and a
   soft `ritual_hum` every 2.6 s within 9 tiles of a channelling circle.
 - Bench (`WAR=1 SPREAD=1 npm run bench`, 5 bots, shared machine at load ~4, noisy, random spread): before 8.42 / 5.30 ms
