@@ -51,6 +51,10 @@ export class WarPlaque {
   /** The server's live siege battle ("siege" message): a "Fronts n/m <clan>" line while the hero is in that land. */
   setSiege(m: SiegeView) { this.siege = m; this.shown = ""; }
 
+  private ritual?: { line(t: number): string };
+  /** The Veiled ritual circle (client/src/warRituals.ts): a "Ritual n%" line while the hero is in its land. */
+  setRitual(r: { line(t: number): string }) { this.ritual = r; }
+
   /** "Fronts n/m <clan>" for land t: the clan holding the most fronts (the holder on a tie), plus the ram's state if one rolls, or "". */
   private frontsLine(t: number, own: ClanKey): string {
     const m = this.siege;
@@ -72,7 +76,8 @@ export class WarPlaque {
     const own = CLAN_KEYS[v.owner[t.id]], ctl = v.control[t.id], sg = v.sieges.find((s) => s[0] === t.id);
     const line = sg ? `siege:${sg[1]}:${mins(sg[2] - now)}` : `tick:${mins(v.next - now)}`;
     const fronts = sg ? this.frontsLine(t.id, own) : "";
-    const key = `${t.id}|${own}|${ctl}|${line}|${standing}|${fronts}`;
+    const rite = this.ritual?.line(t.id) ?? "";
+    const key = `${t.id}|${own}|${ctl}|${line}|${standing}|${fronts}|${rite}`;
     if (key === this.shown) return;
     this.shown = key;
     const cl = CLANS[own];
@@ -87,6 +92,7 @@ export class WarPlaque {
     else foot.textContent = t.capitalOf ? "A capital never falls" : `Fronts move in ${mins(v.next - now)} min`;
     const text = document.createElement("div"); text.className = "wp-text"; text.append(name, held, bar, foot);
     if (fronts) { const fl = document.createElement("div"); fl.className = "wp-foot siege"; fl.textContent = fronts; text.append(fl); }
+    if (rite) { const rl = document.createElement("div"); rl.className = "wp-foot"; rl.textContent = rite; text.append(rl); }
     if (standing) { const me = document.createElement("div"); me.className = "wp-me" + (standing.startsWith("You hold") ? "" : " no"); me.textContent = standing; text.append(me); }
     this.el.replaceChildren(pennant(own), text);
     this.el.hidden = false;

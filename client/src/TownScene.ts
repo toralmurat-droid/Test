@@ -69,6 +69,7 @@ import { hasTrait, TITLES, unpackCosmetics } from "../../shared/cosmetics";
 import { META, metaOf } from "../../shared/questSteps";
 import { updateHidebound } from "./questConceptArt";
 import { WarPlaque } from "./warPlaque";
+import { WarRituals } from "./warRituals";
 import { WarTroops } from "./warTroops";
 import { WarStandards } from "./warStandards";
 import { WarTabards } from "./warTabards";
@@ -420,6 +421,7 @@ export class TownScene extends Phaser.Scene {
   private warStd?: WarStandards;
   private tabards?: WarTabards; // clan pennants and Renown titles on heroes' name tags ("oaths")
   private warTroops?: WarTroops;
+  private warRituals?: WarRituals; // the Veiled noon ritual circle ("rituals", server/warRituals.ts)
   /** How a server clan trooper sees this hero (shared/war/troops.ts troopStance), from the oath the "clan" message brought. */
   private troopStanceOf(weapon: string): TroopStance {
     const t = parseTroop(weapon), me = (this.room?.state as any)?.players?.get(this.me);
@@ -1580,6 +1582,7 @@ export class TownScene extends Phaser.Scene {
       if (!m || typeof m.t !== "number" || !Array.isArray(m.fronts)) return;
       this.warTroops?.setSiege(m.fronts.length ? m.t : -1); this.warStd?.setSiege(m); (this.warPlaque ??= new WarPlaque(document.getElementById("hud")!)).setSiege(m);
     });
+    this.room.onMessage("rituals", (m) => { (this.warRituals ??= new WarRituals(this)).set(m); (this.warPlaque ??= new WarPlaque(document.getElementById("hud")!)).setRitual(this.warRituals); });
     const warNotice = new WarNotice(document.getElementById("hud")!);
     this.room.onMessage("warev", (e) => warNotice.show(e, this.entities.get(this.me)?.sprite));
     this.room.onMessage("mv", alive);
@@ -3569,6 +3572,7 @@ export class TownScene extends Phaser.Scene {
       setMusicZone(zdef?.name, zdef?.mobs, this.areaName, actOfTile(tx, ty));
       this.warStd?.update(meEnt.state.dead ? undefined : meEnt.sprite, !!this.npcs?.isOpen || !!this.npcs?.busy || !!this.chests?.near || !!this.stash?.near || !!this.bounty?.near || !!this.portals?.near || !!this.shrine?.near || !!this.waygates?.near || !!this.dungeon?.nearDoor, now);
       this.warTroops?.update(meEnt.state.dead ? undefined : meEnt.sprite, now);
+      this.warRituals?.update(meEnt.state.dead ? undefined : meEnt.sprite); // the Veiled ritual circle (warRituals.ts)
       this.warPlaque?.update(tx, ty, this.warStd?.standing(meEnt.sprite)); // the clan war front plaque (warPlaque.ts)
       sfxFrame(this.me, this.entities as any);
       const cls = mine.cls as ClassKind;
