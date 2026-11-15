@@ -19,6 +19,8 @@ import { itemRunes, socketsOf, socketProblem } from "../../shared/gear";
 import { parseRune, Rune, RUNE_KIND_NAMES, RUNES, runeName, runeText } from "../../shared/runes";
 import { runeCanvas, runeCss, runeStone } from "./runeArt";
 import { own } from "./own";
+import { compareItem } from "./gearCompare";
+import { compareHtml, hideCard, showCard } from "./gearCard";
 
 /** Faint pixel icon of an empty paper-doll slot (pixelicons.ts). */
 const EMPTY_SLOT_ICON: Record<string, string> = { weapon: "sword", shield: "shield", armour: "robe", ranged: "bow", shoes: "boots", hat: "hat" };
@@ -287,26 +289,29 @@ export class GearMenu {
     const cls = state.cls as string;
     const hero = reqInfoOf(state);
     const info = document.getElementById("gearinfo");
-    if (info) info.textContent = "";
+    if (info) info.hidden = true; // retired: the compare card (gearCard.ts) shows item details beside the panel
+    hideCard();
     /** Item details shown under the bag on hover (pixel font, unlike a browser tooltip). */
     const sh = sheetHero(state), worn = wornOf(state);
+    const fits = (id: string) => canWear(cls, id);
     const hover = (el: HTMLElement, id: string, extra: string, slot?: GearSlot) => {
       el.onmouseenter = () => {
         // the sheet block on top of the side panel shows what wearing (or taking off) this item changes
         if (slot) { const eq = { ...worn }; delete eq[slot]; this.preview({ label: `take off ${gearName(id, cls)}`, eq }); }
         else if (canWear(cls, id)) this.preview({ label: `wear ${gearName(id, cls)}${reqProblem(id, hero) ? " (once you meet its needs)" : ""}`, eq: wearing(worn, id) });
-        if (!info) return;
         const d = gearDef(id); if (!d) return;
         const cant = wearProblem(cls, id), why = cant || reqProblem(id, hero); // the server decides too
         const aff = affixHtml(id), song = songItemHtml(id, cls);
         const nm = gearName(id, cls);
         const runes = runeHtml(id);
         const pr = this.pickRune >= 0 ? parseRune(bagItems[this.pickRune]) : undefined, sockWhy = pr ? socketProblem(id, pr) : "";
-        const tip = pr ? (sockWhy ? `<span class="gbad">${sockWhy}</span>` : `Click: set the ${runeName(pr)} in this item`) : extra;
-        info.innerHTML = `<b style="color:${itemColor(id)}">${nm}</b> <span class="glvl">Lv ${itemLevel(id)}</span> · ${rarityLabel(id)}${TIER_NAMES[d.tier]} ${slotName(d.slot, cls, id)}<br>` +
-          `${itemText(id) || "No bonus"}<br>${song ? `${song}<br>` : ""}${aff ? `${aff}<br>` : ""}${runes ? `${runes}<br>` : ""}<span class="${why ? "gbad" : "gok"}">${why || reqText(id, cls, hero)}</span>${tip ? `<br><small>${tip}</small>` : ""}`;
+        const tip = pr ? (sockWhy ? `<span class="gbad">${sockWhy}</span>` : `Click to set the ${runeName(pr)} in this item`) : extra;
+        const cmp = !slot && fits(id) ? compareItem(sh, worn, id) : null;
+        showCard(`<b class="ic-name" style="color:${itemColor(id)}">${nm}</b><div class="ic-type">${TIER_NAMES[d.tier]} ${slotName(d.slot, cls, id)} · level ${itemLevel(id)} · ${RARITY_NAMES[itemRarity(id)]}</div>` +
+          `<div>${itemText(id) || "No bonus"}</div>${song ? `<div>${song}</div>` : ""}${aff ? `<div>${aff}</div>` : ""}${runes ? `<div>${runes}</div>` : ""}<div class="${why ? "gbad" : "gok"}">${why || reqText(id, cls, hero)}</div>` +
+          (cmp && worn[cmp.slot] !== id ? compareHtml(cmp, cls) : "") + (tip ? `<div class="ic-foot">${tip}</div>` : ""), el);
       };
-      el.onmouseleave = () => { this.preview(); if (info) info.textContent = ""; };
+      el.onmouseleave = () => { this.preview(); hideCard(); };
     };
 
     // Hero preview with everything worn
@@ -414,10 +419,10 @@ export class GearMenu {
         cell.appendChild(Object.assign(document.createElement("span"), { className: "gcelllvl", textContent: String(n) }));
         cell.style.borderColor = kind === "mpotion" ? "#3d5a9a" : "#7a4a4a";
         cell.onmouseenter = () => {
-          if (info) info.innerHTML = `<b style="color:${kind === "mpotion" ? "#8ab4ff" : "#ff8a8a"}">${potionName(kind, size)}</b> ×${n}<br>` +
-            `${kind === "mpotion" ? `+${potionAmount(kind, size)} mana` : `Heals ${potionAmount(kind, size)} HP`}<br><small>Click or ${actionKey(kind === "mpotion" ? "mana" : "potion")}: drink (the smallest size goes first) · Right-click: drop ${n} · ${POTION_STACK} per slot</small>`;
+          showCard(`<b class="ic-name" style="color:${kind === "mpotion" ? "#8ab4ff" : "#ff8a8a"}">${potionName(kind, size)} ×${n}</b>` +
+            `<div>${kind === "mpotion" ? `+${potionAmount(kind, size)} mana` : `Heals ${potionAmount(kind, size)} HP`}</div><div class="ic-foot">Click or ${actionKey(kind === "mpotion" ? "mana" : "potion")} to drink (the smallest size goes first) · Right-click to drop ${n} · ${POTION_STACK} per slot</div>`, cell);
         };
-        cell.onmouseleave = () => { if (info) info.textContent = ""; };
+        cell.onmouseleave = hideCard;
         cell.onclick = () => this.send(kind === "mpotion" ? "manapotion" : "potion", {});
         cell.oncontextmenu = (ev) => { ev.preventDefault(); this.send("droppotion", { kind, size, n }); };
       } else if (id && parseRune(id)) {
@@ -428,9 +433,9 @@ export class GearMenu {
         cell.appendChild(Object.assign(document.createElement("span"), { className: "gcelllvl", textContent: ["", "I", "II", "III"][r.rank] }));
         if (this.pickRune === i) cell.classList.add("gpicked");
         cell.onmouseenter = () => {
-          if (info) info.innerHTML = looseRuneHtml(r) + `<br><small>${this.pickRune === i ? "Now click a worn item or a bag item to set it in · Click again: put it back" : "Click: pick it up to set in an item · Right-click: drop"}</small>`;
+          showCard(`<div>${looseRuneHtml(r)}</div><div class="ic-foot">${this.pickRune === i ? "Now click a worn item or a bag item to set it in · Click again to put it back" : "Click to pick it up and set it in an item · Right-click to drop"}</div>`, cell);
         };
-        cell.onmouseleave = () => { if (info) info.textContent = ""; };
+        cell.onmouseleave = hideCard;
         cell.onclick = () => { this.pickRune = this.pickRune === i ? -1 : i; this.sig = ""; this.refresh(state); };
         cell.oncontextmenu = (ev) => { ev.preventDefault(); this.pickRune = -1; this.act("dropgear", i); };
       } else if (id && gearDef(id)) {
@@ -440,7 +445,7 @@ export class GearMenu {
         if (itemRarity(id) >= 2) cell.style.boxShadow = `inset 0 0 6px ${itemColor(id)}`;
         const cant = wearProblem(cls, id), fits = canWear(cls, id), why = fits ? reqProblem(id, hero) : "";
         if (itemLevel(id) > 1) cell.appendChild(Object.assign(document.createElement("span"), { className: "gcelllvl" + (why ? " gbad" : ""), textContent: String(itemLevel(id)) }));
-        hover(cell, id, (junk.has(i) ? "Useless: raises no stat · " : "") + (itemRunes(id).length ? "Click a rune stone to take the rune out · " : "") + (kept(id) ? `${BOUND_LINE} Click: equip` : "") + (kept(id) ? "" : fits ? (why ? "Too strong for you yet · Right-click: drop" : "Click: equip · Right-click: drop") : cant ? `${cant} · Right-click: drop` : `Only a ${d.cls} can wear this · Right-click: drop`));
+        hover(cell, id, (junk.has(i) ? "Useless: raises no stat · " : "") + (itemRunes(id).length ? "Click a rune stone to take the rune out · " : "") + (kept(id) ? `${BOUND_LINE} Click to wear` : "") + (kept(id) ? "" : fits ? (why ? "Too strong for you yet · Right-click to drop" : "Click to wear · Right-click to drop") : cant ? `${cant} · Right-click to drop` : `Only a ${d.cls} can wear this · Right-click to drop`));
         if (this.marks && junk.has(i)) cell.classList.add("gjunk");
         if (!fits) cell.style.opacity = "0.5";
         else if (why) cell.classList.add("glocked");
@@ -450,10 +455,10 @@ export class GearMenu {
         if (pr && !socketProblem(id, pr)) cell.classList.add("gfit");
         cell.onclick = () => {
           if (this.pickRune >= 0) { this.act("socket", { rune: this.pickRune, item: i }); this.pickRune = -1; this.sig = ""; return; }
-          if (cant) { if (info) info.innerHTML = `<span class="gbad">${cant}</span>`; return; } // the server refuses too
+          if (cant) { showCard(`<span class="gbad">${cant}</span>`, cell); return; } // the server refuses too
           this.act("equip", i);
         };
-        cell.oncontextmenu = (ev) => { ev.preventDefault(); if (kept(id)) { if (info) info.innerHTML = `<span class="glvl">${BOUND_LINE}</span>`; return; } this.act("dropgear", i); };
+        cell.oncontextmenu = (ev) => { ev.preventDefault(); if (kept(id)) { showCard(`<span class="glvl">${BOUND_LINE}</span>`, cell); return; } this.act("dropgear", i); };
       } else cell.disabled = true;
       bag.appendChild(cell);
     }

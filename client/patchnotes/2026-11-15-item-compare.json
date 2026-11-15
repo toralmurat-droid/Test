@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-15",
+  "title": "Item compare card",
+  "changes": [
+    "Pointing at an item now shows a card beside the inventory with its details, instead of a box inside the Inventory tab.",
+    "For gear you can wear, the card lists what would change on your hero if you swapped it in: green for better, red for worse (spell damage, attack, health, resistances, attack speed and more)."
+  ]
+}
