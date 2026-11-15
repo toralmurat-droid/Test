@@ -52,6 +52,8 @@ import { SignPanel } from "./signpanel";
 import { NpcLayer } from "./npcs";
 import { ANVIL_TOP, FORGE_FIRE } from "./smithy";
 import { Villagers } from "./villagers";
+import { keepOff, SALT_AREA, SALT_FOLK, saltmereSpots } from "./saltmereFolk";
+import { SALT_TOWN } from "../../shared/saltmere";
 import { WatchLayer } from "./watch";
 import { WrathBanner } from "./wrath";
 import { inVillage } from "../../shared/wrath";
@@ -77,7 +79,7 @@ import { WarNotice } from "./warNotice";
 import type { WarView } from "../../shared/war/view";
 import { ART_K, CHAR_GROW, CHAR_SCALE, CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, ensureCharSheet, HD_CHARS, playCharAnim, preloadArt } from "./artAssets";
 import { Ambient } from "./ambient";
-import { Details } from "./details";
+import { Details, dayPhase, dayTime } from "./details";
 import { activeOf, GearLayer, reqInfoOf, statsOf, GearMenu, iconCanvas, itemColor, preloadGear, RARITY_HEX } from "./gear";
 /** pickSlot value while the slot list is choosing the left-click action. */
 const LEFT_PICK = -2;
@@ -358,6 +360,7 @@ export class TownScene extends Phaser.Scene {
   private clickPick: Partial<Record<ClickSide, { hero: string; skill: string }>> = {};
   private npcs?: NpcLayer;
   private villagers?: Villagers;
+  private saltFolk?: Villagers;
   private watch?: WatchLayer;
   private wrathBanner?: WrathBanner;
   private torches?: GateTorches;
@@ -712,6 +715,11 @@ export class TownScene extends Phaser.Scene {
       if (d.prop === "sm_anvil") this.details?.addLight(d.x * TILE, d.y * TILE, 0xff6a2a, 0.35, 0.3, 0.1, ANVIL_TOP, 2);
     }
     this.villagers = new Villagers(this); // townsfolk idling on the square
+    // Saltmere's fisherfolk: cosmetic like Oakvale's, no outlaw rule here, idle unless the hero is within 30 tiles
+    this.saltFolk = new Villagers(this, {
+      area: SALT_AREA, folk: SALT_FOLK, wrath: false, spots: saltmereSpots(), keepOff, dark: () => dayPhase(dayTime(Date.now())).dark,
+      active: { x: (SALT_TOWN.x + SALT_TOWN.w / 2) * TILE, y: (SALT_TOWN.y + SALT_TOWN.h / 2) * TILE, r: 30 * TILE },
+    });
     // Colyseus 0.16: change callbacks go through the state callback proxy (the state itself only holds data)
     const $ = getStateCallbacks(this.room) as (v: any) => any;
     this.watch = new WatchLayer(this, $(this.room.state).watch); // watchmen at the gates
@@ -3252,6 +3260,7 @@ export class TownScene extends Phaser.Scene {
     if (!this.room) return;
     const meSprite0 = this.entities.get(this.me)?.sprite;
     this.villagers?.update(dtMs, this.outlawSpots(), meSprite0);
+    this.saltFolk?.update(dtMs, [], meSprite0);
     this.party?.update();
     this.trade?.update();
     this.watch?.update(dtMs, meSprite0);
