@@ -99,25 +99,30 @@ export class WarTroops {
     if (tr && this.stance(tr.clan, heroId) === "enemy") m.target = heroId;
   }
 
-  /** A trooper died (by any hand). A hero sworn to another clan standing in its land earns valor for their clan (capped per war tick). */
-  killed(m: TroopMob, id: string, killerId: string, now = Date.now()) {
+  /**
+   * A trooper died (by any hand). A hero sworn to another clan standing in its land earns valor for their clan (capped
+   * per war tick). Returns the land and the trooper's clan when the killer was such a hero (war writs count it, cap or not).
+   */
+  killed(m: TroopMob, id: string, killerId: string, now = Date.now()): { t: number; clan: ClanKey } | undefined {
     const tr = this.troops.get(id);
-    if (!tr) return;
+    if (!tr) return undefined;
     this.troops.delete(id);
     tr.slot.id = ""; tr.slot.fellAt = now;
     const p = this.h.hero(killerId), t = TERRITORIES[tr.t], v = warNow();
-    if (!p || !p.clan || p.clan === tr.clan || !t || !v) return;
+    if (!p || !p.clan || p.clan === tr.clan || !t || !v) return undefined;
     const tx = p.x / TILE, ty = p.y / TILE;
-    if (tx < t.x || ty < t.y || tx >= t.x + t.w || ty >= t.y + t.h) return;
+    if (tx < t.x || ty < t.y || tx >= t.x + t.w || ty >= t.y + t.h) return undefined;
+    const out = { t: tr.t, clan: tr.clan };
     for (const [k, c] of this.valor) if (c.tick !== v.tick) this.valor.delete(k); // counts of past war ticks are done with
     const c = this.valor.get(p.name), used = c && c.tick === v.tick ? c.n : 0;
     const add = Math.min(WAR_TROOPS.killValor, WAR_TROOPS.killValorPerTick - used);
-    if (add <= 0) return;
+    if (add <= 0) return out;
     this.valor.set(p.name, { tick: v.tick, n: used + add });
     const was = rankOf(p.renown);
     if (addValor(tr.t, p.clan, add)) p.renown += add; // effort the war counted earns renown, as at the standards (server/warHeroes.ts)
     const rank = rankOf(p.renown);
     if (rank > was) this.h.ranked(killerId, RENOWN_RANKS[rank].name);
+    return out;
   }
 
   /** A hero left or died: no trooper keeps chasing them. */

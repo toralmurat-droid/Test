@@ -5,6 +5,9 @@ import { isoAnchor } from "./iso";
 import type { MapMarker } from "./minimap";
 import { TEXT_FONT, TEXT_PX, WT } from "./pixelfont";
 import { hudSlot } from "./hudSlots";
+import { CLANS } from "../../shared/war/clans";
+import { WRIT, writProgress, writTitle, type Writ, type WritState } from "../../shared/war/writs";
+import { writFlavour } from "../../shared/war/writText";
 
 /**
  * Bounty boards (shared/bounty.ts): the board sprites with a gold "!" while you have no hunt, an "E Read the
@@ -14,6 +17,11 @@ import { hudSlot } from "./hudSlots";
 const SCALE = 0.72;
 
 interface View { board?: string; offers?: Bounty[]; active?: BountyState | null; done?: Bounty }
+/** Server "writ" (server/warWrits.ts WritMsg). */
+export interface WritView { board?: string; offers?: Writ[]; active?: WritState | null; left?: number; note?: string; done?: Writ & { valor: number }; err?: string }
+
+const hex = (c: number) => `#${c.toString(16).padStart(6, "0")}`;
+const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
 export class BountyUI {
   private prompt = document.createElement("div");
@@ -21,6 +29,11 @@ export class BountyUI {
   private marks: Phaser.GameObjects.Text[] = [];
   private active: BountyState | null = null;
   private offers: Bounty[] = [];
+  private writ: WritState | null = null;
+  private writOffers: Writ[] = [];
+  private writNote = "";
+  private writErr = "";
+  private writLeft = 0;
   near?: (typeof BOARDS)[number];
   open = false;
 
@@ -42,6 +55,18 @@ export class BountyUI {
     hudSlot("promptstack").append(this.prompt);
     document.getElementById("hud")!.append(this.el);
     send("bounty"); // my hunt in progress, if any
+    send("writ"); // my war writ in progress, if any
+  }
+
+  /** The server's "writ": offers (at a board), my writ, the day's count, a finished one to celebrate. */
+  showWrit(v: WritView, floatText: (text: string, color: string) => void) {
+    if (v.active !== undefined) this.writ = v.active;
+    if (v.offers) this.writOffers = v.offers;
+    if (v.left !== undefined) this.writLeft = v.left;
+    if (v.note !== undefined || v.offers) this.writNote = v.note ?? "";
+    this.writErr = v.err ?? "";
+    if (v.done) floatText(`War writ done! +${v.done.gold} gold +${v.done.renown} renown`, "#ffd166");
+    if (this.open) this.render();
   }
 
   /** The server's answer: offers (at a board), my hunt, and a finished one to celebrate. */
@@ -57,8 +82,11 @@ export class BountyUI {
     this.open = true;
     this.el.hidden = false;
     this.offers = [];
+    this.writOffers = [];
+    this.writErr = "";
     this.render();
     this.send("bounty");
+    this.send("writ");
     return true;
   }
 
@@ -74,9 +102,30 @@ export class BountyUI {
       body = `<p class="bt-help">Pick one hunt. Monsters of the level shown or higher count, anywhere.</p>` +
         this.offers.map((o, i) => this.row(o, `<button data-take="${i}">Take</button>`)).join("");
     } else body = `<p class="bt-help">No bounties for a hero of your level here. Come back later.</p>`;
-    this.el.innerHTML = `<h2>${this.near?.name ?? "Bounty Board"}</h2>${body}<p class="help">E or Esc to close</p>`;
+    this.el.innerHTML = `<h2>${this.near?.name ?? "Bounty Board"}</h2>${body}${this.writSection()}<p class="help">E or Esc to close</p>`;
     this.el.querySelectorAll<HTMLButtonElement>("[data-take]").forEach((b) => b.onclick = () => this.send("bounty", { take: Number(b.dataset.take) }));
     this.el.querySelector<HTMLButtonElement>("[data-drop]")?.addEventListener("click", () => this.send("bounty", { drop: true }));
+    this.el.querySelectorAll<HTMLButtonElement>("[data-wtake]").forEach((b) => b.onclick = () => this.send("writ", { take: Number(b.dataset.wtake) }));
+    this.el.querySelector<HTMLButtonElement>("[data-wdrop]")?.addEventListener("click", () => this.send("writ", { drop: true }));
+  }
+
+  /** The "War Writs" part of the board, under the hunts. */
+  private writSection(): string {
+    const w = this.writ, err = this.writErr ? `<p class="wr-err">${esc(this.writErr)}</p>` : "";
+    let body: string;
+    if (w) body = `<p class="bt-help">Your writ</p>${this.writRow(w, `${w.n} / ${w.goal}`)}<div class="bt-btns"><button data-wdrop>Tear up this writ</button></div>`;
+    else if (this.writNote) body = `<p class="bt-help">${esc(this.writNote)}</p>`;
+    else if (this.writOffers.length) body = `<p class="bt-help">Clan work: one writ at a time, ${this.writLeft} left today. Pays gold, renown and valor.</p>` +
+      this.writOffers.map((o, i) => this.writRow(o, `<button data-wtake="${i}">Take</button>`)).join("");
+    else body = `<p class="bt-help">No war writs for a hero of your level here.</p>`;
+    return `<h3 class="wr-head">War Writs</h3>${err}${body}`;
+  }
+
+  private writRow(w: Writ, right: string) {
+    const c = CLANS[w.holder], col = c ? hex(c.sigil) : "#e3bf6a", say = writFlavour(w.clan, w.kind, w.land, w.t);
+    return `<div class="bt-row wr-row" style="border-left:4px solid ${c ? hex(c.trim === 0x1a1414 ? c.cloth : c.trim) : "#6b5a3a"}"><div><div class="bt-title">${esc(writTitle(w))}</div>` +
+      `<div class="bt-sub"><span style="color:${col}">${esc(w.land)}</span> · <span class="bt-gold">${w.gold} gold</span> · <span class="wr-renown">${w.renown} renown</span> · <span class="wr-valor">${WRIT.valor} valor</span></div>` +
+      (say.text ? `<div class="wr-say">${esc(say.name)}: "${esc(say.text)}"</div>` : "") + `</div><div class="bt-right">${right}</div></div>`;
   }
 
   private row(b: Bounty, right: string) {
@@ -89,6 +138,14 @@ export class BountyUI {
     if (!a) return "";
     return `<div class="qt-block"><div class="qt-title">Bounty</div><div class="qt-obj">• ${bountyTitle(a)}: ${a.n} / ${a.goal}</div>` +
       `<div class="qt-bar"><div style="width:${(a.n / a.goal) * 100}%"></div></div><div class="qt-dir">${a.zone} · Lv ${a.minLevel}+</div></div>`;
+  }
+
+  /** Tracker block for the war writ in progress ("" when none). */
+  writBlock(): string {
+    const w = this.writ;
+    if (!w) return "";
+    return `<div class="qt-block"><div class="qt-title">War Writ</div><div class="qt-obj">• ${esc(writProgress(w))}</div>` +
+      `<div class="qt-bar"><div style="width:${(w.n / w.goal) * 100}%"></div></div><div class="qt-dir">${esc(w.land)}</div></div>`;
   }
 
   /** The boards on the minimap and world map. */

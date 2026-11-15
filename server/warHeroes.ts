@@ -31,8 +31,11 @@ export function swear(p: WarHero, want: unknown, now = Date.now()): string {
 export class Presence {
   private secs = new Map<string, { std: number; n: number }>();
 
-  /** Call once a second with every hero in the room. Returns the heroes who reached a new renown rank (id, rank name). */
-  tick(heroes: Iterable<[string, WarHero]>, now = Date.now()): [string, string][] {
+  /**
+   * Call once a second with every hero in the room. Returns the heroes who reached a new renown rank (id, rank name).
+   * `onMinute` hears of every full minute a hero stood at a standard of territory t (war writs count them).
+   */
+  tick(heroes: Iterable<[string, WarHero]>, now = Date.now(), onMinute?: (id: string, t: number) => void): [string, string][] {
     const ranked: [string, string][] = [];
     const seen = new Set<string>();
     for (const [id, p] of heroes) {
@@ -47,6 +50,7 @@ export class Presence {
         const rank = rankOf(p.renown);
         if (rank > was) ranked.push([id, RENOWN_RANKS[rank].name]);
         this.secs.set(id, { std: s.id, n: 0 });
+        onMinute?.(id, s.t);
       }
       else this.secs.set(id, { std: s.id, n });
     }

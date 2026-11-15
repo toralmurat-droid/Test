@@ -44,6 +44,7 @@
 
 /* Bounty boards (client/src/bounty.ts) */
 #bountypanel , #warpanel { width: min(440px, calc(100% - 32px)); }
+#bountypanel { width: min(560px, calc(100% - 32px)); }
 #bountypanel .bt-help , #warpanel .bt-help { color: #a8977a; font-size: 18px; font-family: var(--pixel-font); margin: 4px 0 6px; }
 #bountypanel .bt-row , #warpanel .bt-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 4px; border-top: 1px solid #45331e; }
 #bountypanel .bt-title , #warpanel .bt-title { color: #eadfc8; font-size: 18px; font-family: var(--pixel-font); }
@@ -52,3 +53,10 @@
 #bountypanel .bt-gold , #warpanel .bt-gold { color: #f2c14e; }
 #bountypanel .bt-right , #warpanel .bt-right { color: #e3bf6a; white-space: nowrap; }
 #bountypanel .bt-btns , #warpanel .bt-btns { text-align: center; margin: 6px 0; }
+/* War writs on the bounty board (client/src/bounty.ts) */
+#bountypanel .wr-head { margin-top: 12px; padding-top: 6px; border-top: 2px solid #6b5a3a; }
+#bountypanel .wr-row { padding-left: 8px; }
+#bountypanel .wr-renown { color: #e9c35a; }
+#bountypanel .wr-valor { color: #c9a0ff; }
+#bountypanel .wr-say { color: #c9b89a; font-size: 18px; font-family: var(--pixel-font); margin-top: 2px; }
+#bountypanel .wr-err { color: #ff8a6a; font-size: 18px; font-family: var(--pixel-font); margin: 4px 0; }

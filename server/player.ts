@@ -6,6 +6,7 @@ import type { Dir, InputState } from "../shared/constants";
 import type { Feast } from "../shared/devour";
 import type { MentorState } from "../shared/quests";
 import type { RumourState } from "../shared/rumours";
+import type { WritState } from "../shared/war/writs";
 import { noPotions, type Potions } from "../shared/potions";
 import { newRuntime } from "../shared/skillEngine";
 import { SLOT_COUNT } from "../shared/slots";
@@ -145,6 +146,9 @@ export class Player extends Schema {
   clan?: ClanKey; // clan war oath (shared/war/standards.ts; saved, sent by message)
   clanAt = 0;
   renown = 0; // clan war renown (shared/war/renown.ts; saved, sent with the "clan" message)
+  writ?: WritState; // war writ in progress (server/warWrits.ts; saved, sent by message)
+  writDay = 0; // UTC day of the last finished war writ, and how many were finished that day (the daily limit)
+  writN = 0;
   lastAct = 0; // last move, attack or cast (ms): heroes away from the keys add no valor
   lastSpecial = -Infinity;
   // Hidden initiative / poise (shared/combat.ts)

@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-15",
+  "pr": 428,
+  "title": "War Writs",
+  "changes": [
+    "Bounty boards now post War Writs from your clan's leader: rout rival soldiers, hold a standard on the front, or clear the wild beasts from your clan's land.",
+    "A writ pays gold, renown and valor for your clan, more when your clan is losing. You can carry one writ next to your bounty.",
+    "Up to three writs a day. A writ is withdrawn without pay if its land changes hands or you swear to another clan."
+  ]
+}
