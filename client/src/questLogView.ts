@@ -1,4 +1,4 @@
-import { DESERT_Y0, inBadlandsBand, inDeepRow, inMoorsBand, TILE, UNDER_END, WORLD_H } from "../../shared/constants";
+import { DESERT_Y0, inBadlandsBand, inDeepRow, inMoorsBand, inSinkholesBand, TILE, UNDER_END, WORLD_H } from "../../shared/constants";
 import { floorAt } from "../../shared/dungeon";
 import { AREAS } from "../../shared/map";
 import { SPAWN_ZONES } from "../../shared/spawns";
@@ -89,6 +89,7 @@ export function mapAreaOf(px: number, py: number): MapArea {
   const f = floorAt(tx, ty);
   if (f) return { key: `floor${f.id}`, name: f.name };
   if (ty >= WORLD_H && ty < UNDER_END) return { key: "under", name: "the Mawdeep Warrens" };
+  if (inSinkholesBand(ty)) return { key: "sinkholes", name: "the Mawdeep Sinkholes" }; // Act 5 (the minimap's order)
   if (inBadlandsBand(ty)) return { key: "badlands", name: "the Red Badlands" };
   if (inMoorsBand(ty)) return { key: "moors", name: "the Grey Barrow Moors" };
   if (inDeepRow(ty)) return { key: "deep", name: "the deep dungeons" };

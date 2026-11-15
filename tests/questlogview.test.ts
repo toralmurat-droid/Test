@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { CHAINS, chainState, packQuest } from "../shared/quests";
 import { withChoice } from "../shared/questSteps";
 import { SPAWN_ZONES } from "../shared/spawns";
-import { DESERT_Y0, TILE, WORLD_H } from "../shared/constants";
+import { DESERT_Y0, SINKHOLES_Y0, TILE, WORLD_H } from "../shared/constants";
 import { chainProgress, groupByChain, logEntries, mapAreaOf, mapFocus, objectiveRows } from "../client/src/questLogView";
 
 const hero = (quests: Record<string, number>) => ({ level: 10, quests, cls: "wizard" });
@@ -71,5 +71,6 @@ test("mapFocus falls back to the zone when the giver is unknown; mapAreaOf names
   assert.equal(mapFocus({ ...d, zone: "Nowhere" }, undefined, true), undefined);
   assert.equal(mapAreaOf(100 * TILE, 100 * TILE).name, "Oakvale's lands");
   assert.equal(mapAreaOf(100 * TILE, (DESERT_Y0 + 20) * TILE).name, "the Sunscar desert");
+  assert.equal(mapAreaOf(100 * TILE, (SINKHOLES_Y0 + 50) * TILE).name, "the Mawdeep Sinkholes");
   assert.notEqual(mapAreaOf(100 * TILE, (WORLD_H + 2) * TILE).key, "world");
 });
