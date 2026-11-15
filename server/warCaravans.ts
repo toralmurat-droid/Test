@@ -34,6 +34,8 @@ export interface CaravanHost {
   /** A Herald line to one hero. */
   tell(heroId: string, text: string): void;
   ranked(heroId: string, rank: string): void;
+  /** War writs (server/warWrits.ts caravan): a delivery this hero escorted, or a cart this hero felled in a raid. */
+  writ?(heroId: string, kind: "escort" | "raid", line: CaravanLine): void;
 }
 /** The soldier's moves the escorts borrow from the troops. */
 export type Soldiers = Pick<WarTroops, "think" | "fight" | "walk" | "speedOf" | "seen">;
@@ -237,6 +239,7 @@ export class WarCaravans {
     const p = this.h.hero(killerId);
     if (!p || troopStance(clan, p) !== "enemy") { outcomes.set(tr.id, { kind: "lost", until }); return "lost"; }
     outcomes.set(tr.id, { kind: "raided", until });
+    this.h.writ?.(killerId, "raid", tr.line); // the killing blow counts for a raid writ, wherever the valor goes
     const raider = p.clan!, st = warState(), land = caravanLand(tr.line, m.x, m.y);
     this.h.dropGold(m.x, m.y, caravanGold(tr.level));
     const legal = !!st && (st.owner[land.id] === raider || targetsOf(st, raider).includes(land.id));
@@ -270,6 +273,7 @@ export class WarCaravans {
     for (const [hid, p] of this.h.heroes()) {
       if (!names.has(p.name) || p.clan !== clan) continue;
       this.renown(hid, p, CARAVAN.escortRenown);
+      this.h.writ?.(hid, "escort", tr.line);
       this.h.tell(hid, `The caravan reached ${TERRITORIES[b].name}: the ${CLANS[clan].name} thank you.`);
     }
     this.h.broadcast("sfx", { ev: "caravan_delivered", x: Math.round(end.x), y: Math.round(end.y), clan, t: b });
