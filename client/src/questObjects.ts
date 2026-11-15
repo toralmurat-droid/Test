@@ -196,6 +196,13 @@ const CAIRN = [
   ".KKKKKKKKKKKKKK.",
 ];
 
+/** Three frames of a small fire (7x9): lights the watch-fire cairn once the hero has used it. */
+const FLAME = [
+  ["...R...", "..ROR..", "..ROR..", ".RROOR.", ".ROYYOR", ".ROYWYR", ".ROYWYR", "..ROYR.", "...RR.."],
+  ["....R..", "...RO..", "..RORR.", ".RROOR.", ".ROYYOR", "RROYWYR", ".ROYWYR", "..ROYR.", "...RR.."],
+  ["..R....", "..OR...", ".RROR..", ".ROOR..", "RROYYOR", ".ROYWYR", ".ROYWYR", "..ROYR.", "...RR.."],
+];
+
 // The deep dungeons (shared/dungeon.ts): a bell of bone hung in a frame of femurs, and a sealed canopic urn of the Water-Kings
 const BELL = [
   "..KK..........KK..",
@@ -244,6 +251,7 @@ function textures(scene: Phaser.Scene) {
   rowsTexture(scene, "qobj_nest_burnt", NEST, { K, E: 0x2a2624, L: 0xff8c42, S: 0x3a3230, T: 0x2a2018 });
   rowsTexture(scene, "qobj_cairn", CAIRN, { K, S: 0x8a8f96, L: 0xb9bec4, D: 0x5a5f66, G: 0x7ae0ff });
   rowsTexture(scene, "qobj_cairn_read", CAIRN, { K, S: 0x8a8f96, L: 0xb9bec4, D: 0x5a5f66, G: 0xffd166 });
+  FLAME.forEach((rows, i) => rowsTexture(scene, `qobj_flame_${i}`, rows, { R: 0xd8461e, O: 0xff8c2a, Y: 0xffd25a, W: 0xfff2b0 }));
   const sand = { K, S: 0xc8a06a, L: 0xe8cc94, D: 0x8a6a42 };
   rowsTexture(scene, "qobj_sigil", SIGIL, { ...sand, G: 0xd8661e, W: 0xffb040, Y: 0xfff0b0 });
   rowsTexture(scene, "qobj_sigil_broken", SIGIL.map((r, i) => (i < 6 ? r.replace(/[KGWY]/g, ".") : r.replace(/[WY]/g, "G"))), { ...sand, G: 0x5a4a3e });
@@ -297,7 +305,11 @@ const GLOW_WHEN_DONE = new Set(["seal", "wardlamp", "postern"]);
 /** Crown Seals (Ostrevar's crown) are `seal` objects whose id contains "crown". */
 const variant = (o: QuestObject, key: string) => ((o.kind as string) === "seal" && o.id.includes("crown") ? key.replace("qobj_seal", "qobj_seal_crown") : key);
 
-interface Drawn { o: QuestObject; img: Phaser.GameObjects.Image; glow?: Phaser.GameObjects.Arc; light?: Phaser.GameObjects.Image; done?: boolean; anim?: Phaser.GameObjects.Sprite }
+/** The watch-fire cairn burns once used; the smoke-pit smokes; Garrick's lantern keeps its look. Flames and smoke only animate this close to the hero. */
+const BEACON_ID = "salt_watchfire", SMOKE_ID = "salt_smokepit", KEEP_LOOK = new Set(["salt_firelantern"]);
+const EFFECT_RANGE = 520;
+
+interface Drawn { o: QuestObject; img: Phaser.GameObjects.Image; flame?: Phaser.GameObjects.Image; flameGlow?: Phaser.GameObjects.Arc; nextPuff?: number; glow?: Phaser.GameObjects.Arc; light?: Phaser.GameObjects.Image; done?: boolean; anim?: Phaser.GameObjects.Sprite }
 
 export class QuestObjects {
   private drawn: Drawn[] = [];
@@ -348,8 +360,11 @@ export class QuestObjects {
    * Night light of the lit spirit lanterns (Details.addLight: shines through the dark at night), in the glass.
    * Hidden on lanterns this player has not lit yet.
    */
-  setLight(light: (x: number, y: number, lift: number) => Phaser.GameObjects.Image | undefined) {
-    for (const d of this.drawn) if (d.o.kind === "lantern" && !d.light) d.light = light(d.o.x, d.o.y, LANTERN_LIFT)?.setVisible(!!d.done);
+  setLight(light: (x: number, y: number, lift: number, color?: number, scale?: number) => Phaser.GameObjects.Image | undefined) {
+    for (const d of this.drawn) {
+      if (d.o.kind === "lantern" && !d.light) d.light = light(d.o.x, d.o.y, LANTERN_LIFT)?.setVisible(!!d.done);
+      else if (d.o.id === BEACON_ID && !d.light) d.light = light(d.o.x, d.o.y, 26, 0xff9a3c, 2.6)?.setVisible(!!d.done);
+    }
   }
 
   /**
@@ -399,12 +414,52 @@ export class QuestObjects {
     return usableObjects(q).map(({ o }) => o).find((o) => Math.hypot(o.x - me.x, o.y - me.y) <= USE_RANGE);
   }
 
+  /** The watch-fire cairn burns for the hero who lit it: flames on top, a warm glow (and a night light, see setLight). */
+  private lightBeacon(d: Drawn, on: boolean) {
+    if (on && !d.flame) {
+      const top = d.img.displayHeight * 0.86;
+      d.flame = this.scene.add.image(d.o.x, d.o.y - top, "qobj_flame_0").setOrigin(0.5, 1).setScale(2).setDepth(d.o.y + 2).setVisible(false);
+      d.flameGlow = isoAnchor(this.scene.add.circle(d.o.x, d.o.y - top - 8, 18, 0xff9a3c, 0.28).setDepth(d.o.y + 1).setBlendMode(Phaser.BlendModes.ADD).setVisible(false), d.o) as Phaser.GameObjects.Arc;
+      this.scene.tweens.add({ targets: d.flameGlow, scale: 1.35, alpha: 0.14, duration: 420, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+    }
+    d.light?.setVisible(on);
+  }
+
   /** Hide or show one object's drawing (the lantern's take spot while the lantern is out); done/undone looks stay as they are. */
   setHidden(id: string, hidden: boolean) {
     for (const d of this.drawn) if (d.o.id === id) d.img.setVisible(!hidden);
   }
 
+  private carried?: string;
+  /** Hide the take-spot drawing of the carry step's object while it is out (undefined = nothing carried); shows it again after. */
+  hideCarried(id: string | undefined) {
+    if (id === this.carried) return;
+    if (this.carried) this.setHidden(this.carried, false);
+    this.carried = id;
+    if (id) this.setHidden(id, true);
+  }
+
+  /** Flames on the lit watch-fire and smoke over the used smoke-pit, only near the hero. */
+  private effects(me?: { x: number; y: number }) {
+    const now = this.scene.time.now;
+    for (const d of this.drawn) {
+      const beacon = d.o.id === BEACON_ID, smoke = d.o.id === SMOKE_ID;
+      if (!beacon && !smoke) continue;
+      const near = !!d.done && !!me && Math.hypot(d.o.x - me.x, d.o.y - me.y) < EFFECT_RANGE;
+      if (beacon) {
+        d.flame?.setVisible(near); d.flameGlow?.setVisible(near);
+        if (near && d.flame) d.flame.setTexture(`qobj_flame_${Math.floor(now / 110 + d.o.x) % 3}`);
+      } else if (near && now >= (d.nextPuff ?? 0)) {
+        d.nextPuff = now + 380 + Math.random() * 200;
+        const x = d.o.x + (Math.random() - 0.5) * 6, y = d.o.y - 12;
+        const p = isoAnchor(this.scene.add.circle(x, y, 2 + Math.random() * 1.5, 0xb8bcc0, 0.45).setDepth(d.o.y + 60), { x: d.o.x, y: d.o.y }) as Phaser.GameObjects.Arc;
+        this.scene.tweens.add({ targets: p, x: x + 4 + Math.random() * 8, y: y - 26 - Math.random() * 12, scale: 2.6, alpha: 0, duration: 1600 + Math.random() * 600, onComplete: () => p.destroy() });
+      }
+    }
+  }
+
   update(q: QuestState | undefined, me?: { x: number; y: number }) {
+    this.effects(me);
     const there = cocoonPresent(q);
     if (this.tobin && this.tobinAt && this.tobinState === "far" && me && Math.hypot(this.tobinAt.x - me.x, this.tobinAt.y - me.y) < SHEET_RANGE) {
       this.tobinState = "asked";
@@ -437,7 +492,10 @@ export class QuestObjects {
         d.img.setVisible(done);
         if (done) this.scene.tweens.add({ targets: d.img, scaleY: 2.8, scaleX: 2.2, duration: 260, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
         else this.scene.tweens.killTweensOf(d.img);
+      } else if (KEEP_LOOK.has(d.o.id)) {
+        // Garrick's storm lantern hangs by his fire for good: it never turns into the burnt-out lamp
       } else if (DONE[d.o.kind]) {
+        if (d.o.id === BEACON_ID) this.lightBeacon(d, done);
         d.img.setTexture(variant(d.o, done ? DONE[d.o.kind] : START[d.o.kind]));
         d.glow?.setVisible(GLOW_WHEN_DONE.has(d.o.kind) ? done : !done);
       } else if (d.o.kind === "heart") {

@@ -15,6 +15,9 @@ import { SMOOTH } from "./isoflag";
 import { smoothTrees } from "./smoothArt";
 import { hiResTexture } from "./smooth";
 import { paintBonfire, smokeTexture } from "./bonfireArt";
+import { SALT_TOWN } from "../../shared/saltmere";
+import { SALT_PERCHES, SALT_SMOKE, type SaltPoint } from "./saltmereReg";
+import { saltmereNight } from "./saltmereArt";
 
 /**
  * Living-world layer for Oakvale. Purely cosmetic and client-side (collision still comes from shared/map.ts):
@@ -169,6 +172,17 @@ function makeTextures(scene: Phaser.Scene) {
     if (f === 0) { px(0, 0, 0x2a2a30); px(1, 1, 0x2a2a30); px(2, 1, 0x2a2a30); px(4, 1, 0x2a2a30); px(5, 1, 0x2a2a30); px(6, 0, 0x2a2a30); }
     else { px(1, 2, 0x2a2a30); px(2, 2, 0x2a2a30); px(4, 2, 0x2a2a30); px(5, 2, 0x2a2a30); px(0, 3, 0x2a2a30); px(6, 3, 0x2a2a30); }
   }, K);
+  // Gull (Saltmere's coast): 10x7, frame 0 perched, 1 wings up, 2 gliding, 3 wings down. Feet on the bottom row, facing right.
+  const GULL: Record<string, number> = { W: 0xf2f2ec, G: 0x9aa4ac, K: 0x2a2a30, Y: 0xe8b030, E: 0x1a1a1e };
+  const GULL_FRAMES = [
+    ["......WW..", ".....WWEYY", "..GGWWWW..", ".GGGGWWWW.", "KGGGGWWW..", "..GGGWW...", "....Y.Y..."],
+    ["G........G", "GG......GG", ".GGG..GGG.", "...GWWWG..", "....WWWWY.", ".....WW...", ".........."],
+    [".........." , "..........", "KGGGWWGGGK", ".GGGWWWGG.", "....WWWWY.", "..........", ".........."],
+    ["..........", "..........", "....WWWWY.", ".GGGWWWGG.", "GG.GGWGG.G", "G........G", ".........."],
+  ];
+  canvasTex(scene, "gull", 10, 7, 4, (px, f) => {
+    GULL_FRAMES[f].forEach((row, y) => [...row].forEach((c, x) => { if (c !== ".") px(x, y, GULL[c]); }));
+  }, K);
   canvasTex(scene, "cloud", 96, 56, 1, (px) => {
     const r = rng(11);
     const blobs = Array.from({ length: 7 }, () => [16 + r() * 64, 18 + r() * 20, 14 + r() * 14, 10 + r() * 8]);
@@ -183,6 +197,12 @@ function makeTextures(scene: Phaser.Scene) {
 // ---------- the ambient layer ----------
 
 interface Flier { s: Phaser.GameObjects.Image; ax: number; ay: number; ph: number; sp: number; r: number }
+/** One of Saltmere's gulls: perched on a SALT_PERCHES spot, taking off, wheeling round (cx, cy, R, h, w) or coming in to land. */
+interface Gull {
+  s: Phaser.GameObjects.Sprite; anchor: { x: number; y: number }; mode: "perch" | "fly" | "land";
+  until: number; t0: number; perch: number; cx: number; cy: number; R: number; h: number; w: number; ph: number; seed: number;
+  last: SaltPoint; from: SaltPoint; flip?: boolean; turn?: number;
+}
 
 export class Ambient {
   private frame = 0;
@@ -270,7 +290,89 @@ export class Ambient {
   }
 
   /** 0 by day, 1 at night (fireflies glow brighter in the dark). */
-  setDarkness(d: number) { this.dark = d; for (const o of this.fireLit) o.setAlpha(d * 0.6); }
+  setDarkness(d: number) { this.dark = d; for (const o of this.fireLit) o.setAlpha(d * 0.6); saltmereNight(this.scene, d); }
+
+  /**
+   * Saltmere's gulls (cosmetic): a small pool of sprites, only moved while the camera is near the village and it is day.
+   * Each perches (roof ridges, pier posts: SALT_PERCHES), takes off, wheels over the harbour, lands again.
+   */
+  private gulls: Gull[] = [];
+  private saltReady = false;
+  private initSalt() {
+    this.saltReady = true;
+    for (const s of SALT_SMOKE) { // the smokehouse's roof vent
+      const sm = isoAnchor(this.smoke(s.x, s.y - s.z, s.scale), { x: s.x, y: s.y });
+      (sm as unknown as Phaser.GameObjects.Particles.ParticleEmitter).fastForward(SMOOTH ? 6500 : 3800, 100); // made when the village comes near: start with a plume, not from nothing
+      staticObj(this.scene, sm, { box: plumeBox(s.x, s.y - s.z, s.x, s.y) });
+    }
+    if (!ISO) return;
+    const r = rng(2026);
+    for (let i = 0; i < 8; i++) {
+      const s = this.scene.add.sprite(0, 0, "gull", 0).setDepth(26000).setVisible(false);
+      const anchor = { x: 0, y: 0 };
+      isoAnchor(s, anchor);
+      this.gulls.push({ s, anchor, mode: "perch", until: 0, t0: 0, perch: -1, cx: (SALT_TOWN.x + SALT_TOWN.w * (0.15 + r() * 0.7)) * TILE, cy: (SALT_TOWN.y + SALT_TOWN.h - 3 + r() * 7) * TILE,
+        R: (3.5 + r() * 5) * TILE, h: 38 + r() * 30, w: (0.22 + r() * 0.2) * (r() < 0.5 ? -1 : 1), ph: r() * 6.28, last: { x: 0, y: 0, z: 0 }, from: { x: 0, y: 0, z: 0 }, seed: r() });
+    }
+  }
+  private gullPerchFree(i: number) { return !this.gulls.some((g) => g.perch === i && g.mode !== "fly"); }
+  private pickPerch(): number {
+    const n = SALT_PERCHES.length;
+    for (let k = 0; k < 8 && n; k++) { const i = Math.floor(Math.random() * n); if (this.gullPerchFree(i)) return i; }
+    return -1;
+  }
+  private orbit(g: Gull, t: number): SaltPoint {
+    const a = g.ph + g.w * t;
+    return { x: g.cx + Math.cos(a) * g.R, y: g.cy + Math.sin(a) * g.R * 0.8, z: g.h + Math.sin(t * 1.3 + g.ph) * 5 };
+  }
+  private updateGulls(now: number) {
+    if (!ISO) return;
+    const cam = this.scene.cameras.main.worldView, M = 320;
+    const X0 = SALT_TOWN.x * TILE, Y0 = SALT_TOWN.y * TILE, X1 = X0 + SALT_TOWN.w * TILE, Y1 = Y0 + (SALT_TOWN.h + 8) * TILE;
+    const near = cam.right > X0 - M && cam.x < X1 + M && cam.bottom > Y0 - M && cam.y < Y1 + M, on = near && this.dark < 0.6;
+    if (!this.saltReady) { if (!near) return; this.initSalt(); }
+    const t = now / 1000, k = Math.max(0, 1 - this.dark * 1.7);
+    for (const g of this.gulls) {
+      if (!on) { if (g.s.visible) g.s.setVisible(false); continue; }
+      if (!g.until) { // first time: some start on a perch, some in the air
+        const p = SALT_PERCHES.length && g.seed < 0.5 ? this.pickPerch() : -1;
+        g.perch = p; g.mode = p >= 0 ? "perch" : "fly"; g.until = now + 2000 + g.seed * 12000; g.t0 = now;
+      }
+      const since = (now - g.t0) / 1000;
+      if (g.mode === "perch" && now > g.until) { // take off from the perch
+        const p = SALT_PERCHES[g.perch];
+        g.from = p ? { x: p.x, y: p.y, z: p.z } : { ...g.last }; g.mode = "fly"; g.t0 = now; g.until = now + 14000 + Math.random() * 18000;
+      } else if (g.mode === "fly" && now > g.until && since > 2) { // come in to land, if there is somewhere
+        const p = this.pickPerch();
+        if (p >= 0) { g.perch = p; g.mode = "land"; g.t0 = now; g.from = { ...g.last }; }
+        else g.until = now + 8000;
+      }
+      let pos: SaltPoint, frame = 2;
+      if (g.mode === "perch") {
+        const p = SALT_PERCHES[g.perch];
+        if (!p) { g.until = now; continue; }
+        pos = p;
+        const turn = Math.floor(t / 5 + g.seed * 13); // now and then it turns its head the other way
+        if (turn !== g.turn) { g.turn = turn; if (Math.random() < 0.4) g.flip = !g.flip; }
+        g.s.setFlipX(!!g.flip);
+        frame = 0;
+      } else {
+        const a = g.ph + g.w * t, orb = this.orbit(g, t);
+        const landing = g.mode === "land", taking = !landing && since < 1.4;
+        const to = landing ? SALT_PERCHES[g.perch] ?? orb : orb;
+        const e = landing ? Math.min(1, since / 1.8) : taking ? since / 1.4 : 1, f = e * e * (3 - 2 * e);
+        pos = e < 1 ? { x: g.from.x + (to.x - g.from.x) * f, y: g.from.y + (to.y - g.from.y) * f, z: g.from.z + (to.z - g.from.z) * f } : orb;
+        if (landing && e >= 1) { g.mode = "perch"; g.until = now + 9000 + Math.random() * 16000; g.t0 = now; g.flip = Math.random() < 0.5; }
+        else g.last = { x: pos.x, y: pos.y, z: pos.z };
+        // wings: a few beats, then gliding; beating all the way while taking off or landing
+        frame = e < 1 || (t * 0.45 + g.ph) % 1 < 0.22 ? [1, 2, 3, 2][Math.floor(t * 8 + g.ph * 5) % 4] : 2;
+        const dir = e < 1 ? (to.x - to.y) - (g.from.x - g.from.y) : g.w * (-Math.sin(a) * g.R - Math.cos(a) * 0.8 * g.R); // screen-x heading
+        g.s.setFlipX(dir < 0);
+      }
+      g.anchor.x = pos.x; g.anchor.y = pos.y;
+      g.s.setPosition(pos.x, pos.y - pos.z).setFrame(frame).setAlpha(k).setVisible(k > 0.02);
+    }
+  }
   /** Additive copies of the fires above the night tint, so flames keep their colour in the dark. */
   private fireLit: Phaser.GameObjects.Image[] = [];
   private litCopy(s: Phaser.GameObjects.Sprite) {
@@ -636,6 +738,7 @@ export class Ambient {
 
     this.updateMist(dtMs, t);
     this.updateSpores(t);
+    this.updateGulls(now);
     if (now > this.nextRipple) { this.ripple(); this.nextRipple = now + 350 + Math.random() * 500; }
     if (now > this.nextFlock) this.spawnFlock(now);
   }

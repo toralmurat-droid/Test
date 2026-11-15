@@ -11,6 +11,7 @@ import { ELEMENT_LANDS } from "../../shared/map";
 import { COW_FOOT_U, COW_FOOT_V, COW_H, COW_W, cow } from "./farmArt";
 import { MILL_FOOT_U, MILL_FOOT_V, MILL_H, MILL_W, millWheel } from "./millArt";
 import { BLACKR, dummy, lanternPole, netRack, REDR, skullPike, spearRack, warPennant, watchtower as watchtowerArt } from "./isoProps";
+import { addSaltmereProps } from "./saltmereArt";
 import { emberVent, iceSpikes, ICE_H, ICE_W, stormStone, STORM_H, STORM_W, venomCaps, VENOM_H, VENOM_W, VENT_H, VENT_W } from "./elementArt";
 
 /**
@@ -453,4 +454,5 @@ export function addWorldProps(scene: Phaser.Scene, light?: (x: number, y: number
     // the glow sits in the lantern: it hangs at texel x 22 of 32 (6 right of the sprite's centre), its middle ~71 texels above the foot
     if (s.kind === "wp_lantern_pole") light?.(s.x, s.y, LANTERN_LIFT, LANTERN_DX);
   }
+  addSaltmereProps(scene, light); // Saltmere's harbour: smacks, rowboats, buoy, posts, breakwater (saltmereArt.ts)
 }

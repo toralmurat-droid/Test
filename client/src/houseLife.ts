@@ -1,5 +1,6 @@
 import { canvasPen, hsh, IsoPaint, mat, ramp, type Mat, type V3 } from "./isoPaint";
 import { BLACKR, BONER, BRASSR, IRONR, REDR, ROPER, STRAWR, WOODR, wood } from "./isoProps";
+import { dressSalt, type WinRect } from "./houseSalt";
 
 /**
  * Life in and around the taller houses (Murat 2026-11-13: "as if the characters had to go inside"): an open door
@@ -9,7 +10,9 @@ import { BLACKR, BONER, BRASSR, IRONR, REDR, ROPER, STRAWR, WOODR, wood } from "
  * Painted straight onto a house canvas (isobuild.ts house()) in world px: an IsoPaint whose origin is the canvas
  * offset, so (u, v, z) here are the world (x, y, z) of the house.
  */
-export type HouseStyle = "fisher" | "mill" | "barracks";
+export type HouseStyle = "fisher" | "mill" | "barracks" | "tavern" | "smokehouse" | "chandlery";
+/** The base look a style builds on (Saltmere's tavern, smokehouse and chandlery are fisher houses with their own trade). */
+const baseOf = (style: HouseStyle): "fisher" | "mill" | "barracks" => (style === "mill" || style === "barracks" ? style : "fisher");
 
 const SKIN = [0x3a2418, 0x5a3a28, 0x7e5640, 0xa07458, 0xbe9070];
 const BLUE = [0x0e141e, 0x1a2434, 0x28384e, 0x3a5068, 0x506a84];
@@ -23,14 +26,16 @@ function painter(ctx: CanvasRenderingContext2D, left: number, topY: number) {
 }
 
 /** Someone standing in a doorway, facing out (+v). `dark` dims them: they stand in the shade of the house. */
-function person(q: IsoPaint, u: number, v: number, style: HouseStyle, seed: number, dark = -0.12) {
+function person(q: IsoPaint, u: number, v: number, full: HouseStyle, seed: number, dark = -0.12) {
+  const style = baseOf(full);
   const top = style === "fisher" ? BLUE : style === "mill" ? FLOUR : REDR;
   const legs = style === "barracks" ? BLACKR : WOODR;
   const m = (pal: number[], b = 0): Mat => mat(pal, b + dark);
   for (const s of [-1, 1]) q.rod([u + s * 1.4, v, 0], [u + s * 1.3, v, 8.5], 1.15, m(legs, 0.1));
   q.blob([u, v, 12.8], 3.3, 2.1, 5, m(top));
   if (style === "mill") q.quad([u - 2.8, v + 2.1, 5], [5.6, 0, 0], [0, 0, 8.5], m(FLOUR, 0.25)); // floury apron
-  if (style === "fisher" && hsh(seed, 1) < 0.5) q.quad([u - 3, v + 2.2, 4], [6, 0, 0], [0, 0, 11], m(OILSKIN, 0.05));
+  if (full === "tavern") q.quad([u - 3, v + 2.2, 3], [6, 0, 0], [0, 0, 10], m(FLOUR, 0.3)); // the landlady's white apron
+  else if (style === "fisher" && hsh(seed, 1) < 0.5) q.quad([u - 3, v + 2.2, 4], [6, 0, 0], [0, 0, 11], m(OILSKIN, 0.05));
   // arms: a bandit rests a hand on his blade, the others hang loose or hold a pipe
   q.rod([u - 3.4, v, 16], [u - 3.9, v + 1, 9.5], 1, m(top, -0.05));
   q.rod([u + 3.4, v, 16], [u + 3.6, v + 1.6, 10], 1, m(top, -0.05));
@@ -53,19 +58,20 @@ function person(q: IsoPaint, u: number, v: number, style: HouseStyle, seed: numb
  */
 export function openDoor(ctx: CanvasRenderingContext2D, left: number, topY: number, S: (x: number, y: number, z?: number) => { x: number; y: number },
   xa: number, Y1: number, style: HouseStyle, seed: number) {
-  const a = xa + 9, b = xa + 23, H = 23;
+  const a = xa + 9, b = xa + 23, H = 23, base = baseOf(style);
   const poly = (pts: { x: number; y: number }[], fill: string) => { ctx.fillStyle = fill; ctx.beginPath(); pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); ctx.closePath(); ctx.fill(); };
   const hole = [S(a, Y1, 0), S(b, Y1, 0), S(b, Y1, H), S(a, Y1, H)];
   ctx.save();
   ctx.beginPath(); hole.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); ctx.closePath(); ctx.clip();
   poly(hole, "#120c08");
   poly([S(a, Y1, 0), S(b, Y1, 0), S(b, Y1 - 16, 0), S(a, Y1 - 16, 0)], "#2a1e14"); // floorboards
-  poly([S(a + 2, Y1 - 15, 4), S(b - 1, Y1 - 15, 4), S(b - 1, Y1 - 15, 18), S(a + 2, Y1 - 15, 18)], "rgba(255,160,70,0.16)"); // lamp glow
+  poly([S(a + 2, Y1 - 15, 4), S(b - 1, Y1 - 15, 4), S(b - 1, Y1 - 15, 18), S(a + 2, Y1 - 15, 18)], style === "tavern" ? "rgba(255,170,80,0.34)" : style === "smokehouse" ? "rgba(255,96,30,0.36)" : "rgba(255,160,70,0.16)"); // lamp glow (the tavern's hearth, the smokehouse's fire)
   const q = painter(ctx, left, topY);
   // the trade inside, half seen in the dark
-  if (style === "fisher") q.quad([a + 1, Y1 - 14, 6], [12, 0, 0], [0, 0, 14], (l, s, t, x, y) => ((x + y) & 3) && ((x - y) & 3) ? undefined : ramp(NET, l - 0.25, x, y));
-  if (style === "mill") for (const [du, dz] of [[3, 0], [8, 0], [5.5, 4]]) q.blob([a + du, Y1 - 12, 2.3 + dz], 2.6, 2, 2.4, mat(STRAWR, -0.35));
-  if (style === "barracks") for (let k = 0; k < 4; k++) q.rod([a + 2 + k * 3, Y1 - 14, 0], [a + 2.5 + k * 3, Y1 - 14.5, 20], 0.5, mat(k % 2 ? IRONR : WOODR, -0.3));
+  if (style === "tavern") for (const du of [2.5, 6.5, 10.5]) q.blob([a + du, Y1 - 12, 3.6], 1.5, 1.5, 1.6, mat(BRASSR, -0.3)); // tankards on a shelf, glinting
+  if (base === "fisher" && style !== "tavern") q.quad([a + 1, Y1 - 14, 6], [12, 0, 0], [0, 0, 14], (l, s, t, x, y) => ((x + y) & 3) && ((x - y) & 3) ? undefined : ramp(NET, l - 0.25, x, y));
+  if (base === "mill") for (const [du, dz] of [[3, 0], [8, 0], [5.5, 4]]) q.blob([a + du, Y1 - 12, 2.3 + dz], 2.6, 2, 2.4, mat(STRAWR, -0.35));
+  if (base === "barracks") for (let k = 0; k < 4; k++) q.rod([a + 2 + k * 3, Y1 - 14, 0], [a + 2.5 + k * 3, Y1 - 14.5, 20], 0.5, mat(k % 2 ? IRONR : WOODR, -0.3));
   person(q, (a + b) / 2 + (hsh(seed, 3) - 0.5) * 3, Y1 - 3.5, style, seed);
   ctx.restore();
   // the inner side of the left jamb, and the door swung out on its left-hand hinges, clear of the opening
@@ -94,10 +100,12 @@ export function storeyBeam(ctx: CanvasRenderingContext2D, S: (x: number, y: numb
  * `di`: the door's tile index along the front, so nothing is hung across it.
  */
 export function dressHouse(ctx: CanvasRenderingContext2D, left: number, topY: number, style: HouseStyle,
-  b: { X0: number; X1: number; Y0: number; Y1: number; wallH: number; door?: number }, seed: number) {
+  b: { X0: number; X1: number; Y0: number; Y1: number; wallH: number; door?: number; wins?: WinRect[] }, seed: number) {
+  // (tavern, smokehouse and chandlery: houseSalt.ts)
   const q = painter(ctx, left, topY), { X0, X1, Y0, Y1, wallH } = b, R = (k: number) => hsh(seed, k, 77);
   const doorX = b.door === undefined ? -1e9 : X0 + b.door * 32;
   const clear = (x0: number, x1: number) => x1 < doorX - 2 || x0 > doorX + 34;
+  if (style === "tavern" || style === "smokehouse" || style === "chandlery") return dressSalt(ctx, q, left, topY, style, b, R, doorX, clear);
   if (style === "fisher") {
     // a net hung to dry along the side wall, sagging between pegs, corks along its top line
     const nz = wallH * 0.92, len = Math.min(Y1 - Y0 - 12, 70), y0 = Y0 + 6 + R(1) * (Y1 - Y0 - 12 - len);

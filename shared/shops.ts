@@ -228,6 +228,12 @@ export const SHOPS: Record<string, Shop> = {
     stock: [...potionStock("potion", [0, 1]), ...potionStock("mpotion", [0, 1]), ...weapons(["r_sling", "r_knives", "r_crossbow"])],
     buys: ["weapon", "ranged"],
   },
+  // Saltmere's chandler (docs/saltmere-rework-progress.md phase 5): Minor and Medium flasks like Morwen's, and he buys and fuses loose runes
+  chandler: {
+    greeting: "Hob Wick, chandler. Tallow, tar and rope, and what the sea leaves out of the rope: red flasks for blood, blue for wind. Carved stones? I'll buy them, or fuse four alike.",
+    stock: [...potionStock("potion", [0, 1]), ...potionStock("mpotion", [0, 1])],
+    buys: ["rune"],
+  },
   // Wren the lute-maker (DI-5, shared/lutemaker.ts): the books, and she buys weapons and shields (breaking them is hers too)
   lutemaker: {
     greeting: "Books on the left, spare strings on the right. Anything you can't use, I'll buy or break.",

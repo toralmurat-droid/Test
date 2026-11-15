@@ -7,6 +7,7 @@ import { D, FURNACE, KEL_ASHAR } from "./desert";
 import { BARROW_FIELDS, CAIRN_SQUARE, KINGS_MOUND, MR } from "./moors";
 import { BR, FANGROCK_KEEP, RUSTWATER_SQUARE } from "./badlands";
 import { GREAT_MAW, ROPEWELL_SQUARE, SR } from "./sinkholes";
+import { SALT_RACKS, WATCH_FIRE } from "./saltmere";
 import { xpStep } from "./classes";
 import { type BargainSpec, type CarrySpec, type ChoiceId, type ChoiceSpec, choiceOf, type HoldSpec, nextStage, type PickSpec, sayFor, stepObjects, type SyncSpec, type UnseenSpec } from "./questSteps";
 
@@ -135,6 +136,8 @@ export const QUEST_ITEMS: Record<string, QuestItemDef> = {
   // Act 3, the Grey Barrow Moors (MOOR_QUESTS)
   candle: { name: "Corpse-Candle", plural: "Corpse-Candles" },
   barrowkey: { name: "Barrow-Key", plural: "Barrow-Keys" },
+  // Saltmere Ways (SIDE_ARCS): sea-wood the shore slimes swallowed, for Bess Tanner's smokehouse
+  driftwood: { name: "Driftwood", plural: "Driftwood" },
 };
 
 // ---- Map objects you use with E ----
@@ -2727,7 +2730,69 @@ const SINK_QUESTS: QuestDef[] = [
   },
 ];
 
-/** Side arcs (QuestChain.local, after ZONE_ARCS in CHAINS): `needs` gates the first offer. */
+// ---- Saltmere Ways (Lv 16-17; docs/saltmere-rework-progress.md phase 6): Bess Tanner of the smokehouse ----
+/** The smoke-pit in the gap between the fish racks (shared/saltmere.ts SALT_RACKS), reached from the path beside the smokehouse. */
+const SMOKE_PIT = objAt("salt_smokepit", "clue", "Cold smoke-pit under the fish racks", "Light", SALT_RACKS[0][0], SALT_RACKS[0][1] + 1);
+/** A storm lantern by Old Garrick's beach fire, west of the square; the watch-fire was always lit from his fire. */
+const GARRICK_LANTERN = near("salt_firelantern", "lastlantern", "Storm lantern at Garrick's fire", "Take up", 129, 190);
+const WATCH_CAIRN = near("salt_watchfire", "cairn", "The old watch-fire cairn", "Light", WATCH_FIRE.x, WATCH_FIRE.y);
+/** Smoke and Salt first; The Watch-Fire waits for "Salt and Steel" (Rask dead, the boats out again). */
+const SALT_WAYS: QuestDef[] = [
+  {
+    id: "smokesalt", title: "Smoke and Salt", giver: "smoker", zone: "Saltwind Coast", minLevel: 16,
+    description: "Bess Tanner's smokehouse has gone cold: nobody goes up the woods for alder with the Redfang about. Driftwood will do, if you can cut it out of the shore slimes that swallow it.",
+    offer: [
+      "Smell that? No, nor can I. A smokehouse that doesn't smoke is just a shed full of fish.",
+      "Alder's best, but nobody goes up the woods for it, not with the Redfang on the Smugglers' Path. So it's driftwood, and the tide brings plenty.",
+      "Trouble is, the slimes on the shore swallow it. Sea-wood, nails, a boot now and then. Cut me eight good pieces out of them, along the Saltwind Coast or down on Heronwreck Strand.",
+    ],
+    acceptText: "I'll fetch driftwood",
+    steps: [
+      { type: "collect", zone: "Saltwind Coast", kinds: ["slime", "motherblob", "warriorblob", "shooterblob", "healerblob"], item: "driftwood", goal: 8,
+        chance: { slime: 0.4, motherblob: 0.6, warriorblob: 0.25, shooterblob: 0.25, healerblob: 0.25 },
+        text: "Cut 8 pieces of driftwood out of the shore slimes", banner: ["New quest", "Smoke and Salt"], obj: "Driftwood: {n} / {goal}",
+        nag: "{n} of {goal}. The shore slimes have it, east and west along the coast. Dry bits, if they've got any." },
+      { type: "use", zone: SALT.name, objects: [SMOKE_PIT], chest: false, text: "Light the smoke-pit under the fish racks", banner: ["That's a fair armful", "Light the smoke-pit by the racks"],
+        obj: "Light the smoke-pit under the fish racks (beside the smokehouse)", nag: "Between the racks, past my door. Driftwood in, flint to it, and stand back." },
+      back("smoker", "Bess Tanner", "the smokehouse door", [
+        "There she goes. Hear it crackle? The salt in the wood turns the flames blue.",
+        "Smoke by sundown, herring by morning, and the whole lane smelling like a proper fishing town again.",
+        "Here. It's not much, but it's honest, and so's the fish.",
+      ], "Claim reward"),
+    ],
+    reward: arcReward(16),
+    after: "Racks full, smoke rising. If you see Garrick, tell him the herring tastes like his mother's. He'll pretend he doesn't care.",
+  },
+  {
+    id: "watchfire", title: "The Watch-Fire", giver: "smoker", zone: SALT.name, minLevel: 17,
+    description: "With Rask dead and the cod home, Saltmere's boats will fish the night tide again. Bess wants the old watch-fire cairn on the eastern beach lit to steer them in, the old way: with a flame carried from Old Garrick's fire.",
+    offer: [
+      "Cod in my smokehouse again. I'd kiss you if I hadn't been gutting herring all morning.",
+      "With the raiders gone from the cove, the boats will fish the night tide. They'll want the watch-fire to steer home by.",
+      "It's the old cairn on the beach, east past the square. Dark since my mother's day. And it's lit the old way: a flame from Garrick's fire, carried by hand. His fire hasn't gone out in eighty winters.",
+      "Take the storm lantern by his fire and don't let it die on the way. Wet sand eats the flame, and so does setting it down.",
+    ],
+    acceptText: "I'll carry the flame",
+    steps: [
+      { type: "carry", zone: SALT.name, text: "Carry a flame from Garrick's fire to the old watch-fire cairn", banner: ["New quest", "The Watch-Fire"],
+        obj: "Carry the storm lantern to the watch-fire cairn", nag: "His lantern hangs by the beach fire. Keep off the wet sand and keep walking.",
+        hint: "Press E to take it up. The flame burns down faster near water, at night and on the ground. Your skills are locked while you carry it, but plain attacks still work: press Z to set it down. Portals will not take it.",
+        carry: { take: GARRICK_LANTERN, to: at(WATCH_FIRE.x, WATCH_FIRE.y, 2, "The old watch-fire cairn"), light: 60, drain: 0.5, waterMult: 2, darkMult: 1.5, groundMult: 2, lure: 1.25 } },
+      { type: "use", zone: SALT.name, objects: [WATCH_CAIRN], chest: false, text: "Light the watch-fire", banner: ["The cairn at last", "Light the watch-fire"],
+        obj: "Light the watch-fire on the cairn", nag: "The cairn's right there. Go on, before the wind has it." },
+      back("smoker", "Bess Tanner", "the smokehouse door", [
+        "I saw it go up from my door. First time since I was a girl.",
+        "Tonight the boats come home by it, and the Redfang up the path can see it too. Let them. It says Saltmere is awake.",
+        "Garrick wept, mind. He'll tell you it was the smoke.",
+      ], "Claim reward"),
+    ],
+    reward: arcReward(17),
+    after: "Watch-fire's burning and the boats are in. Now, don't lean on the racks.",
+  },
+];
+const WATCH_QUEST = SALT_WAYS.findIndex((d) => d.id === "watchfire");
+
+/** Side arcs (QuestChain.local, after ZONE_ARCS in CHAINS): `needs` gates the first offer (Saltmere Ways: every offer). */
 export const SIDE_ARCS: { id: string; name: string; quests: QuestDef[]; needs?: (p: Quester | undefined) => boolean }[] = [
   { id: "letters", name: "Two Letters", quests: LETTER_QUESTS, needs: (p) => chainDone(p, RED_CHAIN) },
   { id: "penance", name: "Penance", quests: PENANCE_QUESTS, needs: (p) => choiceOf(p, "bargain") === 1 && chainDone(p, BEAST_CHAIN) },
@@ -2735,6 +2800,8 @@ export const SIDE_ARCS: { id: string; name: string; quests: QuestDef[]; needs?: 
   { id: "badlands", name: "The Redfang Road", quests: BAD_QUESTS },
   // Act 5: the Mawdeep Sinkholes, from Ropewell (a side arc, last, so no chain index moves)
   { id: "sinkholes", name: "The Rope and the Maw", quests: SINK_QUESTS },
+  // Saltmere's own (phase 6 of the rework): The Watch-Fire is offered once Salt and Steel is done
+  { id: "saltways", name: "Saltmere Ways", quests: SALT_WAYS, needs: (p) => (chainState(p, chainIx("saltways"))?.questId ?? 0) < WATCH_QUEST || questFinished(p, "cod") },
 ];
 const ARC_OBJECTS: QuestObject[] = [...ZONE_ARCS, ...SIDE_ARCS].flatMap((a) => a.quests.flatMap((d) => d.steps.flatMap(stepObjects)));
 
@@ -2955,6 +3022,7 @@ const PRESENCE: Record<string, (p: Quester | undefined) => boolean> = {
   ilka: (p) => chainDone(p, RED_CHAIN) && !chainDone(p, chainIx("letters")), // gone once her letter is delivered either way
   quartermaster: (p) => chainDone(p, chainIx("letters")) && choiceOf(p, "letters") === 1,
   smuggler: (p) => chainDone(p, chainIx("letters")) && choiceOf(p, "letters") === 2,
+  pell: (p) => chainDone(p, RED_CHAIN), // Garrick's grandson is back at his boat once the Redfang chief is down
 };
 /** Is this NPC standing there for this player? */
 export function npcPresent(id: string, p: Quester | undefined): boolean {
@@ -3006,6 +3074,10 @@ const IDLE: Record<string, string> = {
   rustmarshal: "Water's free, the roof's free, and nobody here pays the Redfang a copper. That's the Post's whole law. Fangrock doesn't like it, and now that you've been out there, neither do you.",
   ropewarden: "Hold the rope and watch your footing. The ground round here gives way when it likes, and the Hide-Kin are no steadier. Every trapper at Ropewell has lost somebody to the Mawdeep, and none of us has stopped looking.",
   cairncaptain: "Keep to the corpse roads, and if a barrow calls your name, don't answer. Four hundred years the Wardens have held these cairns shut. I mean to be the captain who doesn't lose them.",
+  smoker: "Cod on the left, herring on the right, and don't lean on the racks. Alder smoke gets into everything, your coat included. You'll smell like Saltmere for a week. Folk say it suits you.",
+  agna: "Mind the nets. I mend them, but I can't mend the sea. My Ilka used to hold the other end for me.",
+  pell: "She's taken on more water than a gull's belly, but she'll float. Gullrock or the Heronwreck, twelve gold a leg, and I row the whole way. Mind your feet getting in. The planks have their own mind.",
+  marta: "The stores are near empty. I water the broth and tell the boys it's the cold. Garrick says there is hope. I hope he's right.",
   alewife: "Ale's cold, the gossip's warm. Pull up a barrel, love. Whatever happens in this valley, it comes past my cart sooner or later.",
 };
 /**
@@ -3014,9 +3086,29 @@ const IDLE: Record<string, string> = {
  */
 const IDLE_BY: Record<string, { flag: ChoiceId; lines: Record<number, string> }> = {
   captain: { flag: "bargain", lines: { 1: "Quiet on the walls. The men keep upwind of you. I don't stop them." } },
+  // Ilka's mother, after the Two Letters (CHOICES.letters: 1 law, 2 mercy); before the choice she says her plain IDLE line
+  agna: { flag: "letters", lines: {
+    1: "The watch took my girl. I know why. I mend nets and hold my tongue, and I don't look up when the road gets loud. Thank you for not coming to tell me yourself.",
+    2: "A boat came for her in the night, and I never saw it. No word since, and I don't ask. If you ever meet her, tell her the net is still on its peg.",
+  } },
 };
+/**
+ * Idle lines by how far the hero is in a chain (first entry whose `when` holds wins; no match = the plain IDLE line).
+ * Worked out from the hero's own quest state wherever idleFor runs, never sent to other heroes.
+ */
+const IDLE_WHEN: Record<string, { when: (p: Quester | undefined) => boolean; line: string }[]> = {
+  marta: [
+    { when: (p) => chainDone(p, RED_CHAIN), line: "There's the Redfang's bane! First round is mine, and I'll hear no argument. Garrick has told it all week and he grows bigger with every telling. Sit, and tell it right." },
+    { when: (p) => (chainState(p, RED_CHAIN)?.questId ?? 0) >= 2, line: "Cod on the racks again, and a barrel of it in my cellar. I could weep. Whatever you did at the cove, the Anchor owes you a bed and a bowl." },
+  ],
+  // between Smoke and Salt and Salt and Steel (Saltmere Ways waits for the cove): Bess points the hero to Garrick
+  smoker: [
+    { when: (p) => questFinished(p, "smokesalt") && !questFinished(p, "cod"), line: "Herring on the racks and smoke in the chimney, thanks to you. The cod's another matter: our whole winter's worth sits with the Redfang at Gullrock. Old Garrick's sent to Captain Hale's watch for help with that. Ask either of them, love." },
+  ],
+};
+const whenFor = (id: string, p: Quester | undefined) => IDLE_WHEN[id]?.find((e) => e.when(p))?.line;
 const moodFor = (id: string, p: Quester | undefined) => { const b = IDLE_BY[id]; return b && b.lines[choiceOf(p, b.flag)]; };
-const idleFor = (id: string, p: Quester | undefined) => moodFor(id, p) || IDLE[id];
+const idleFor = (id: string, p: Quester | undefined) => whenFor(id, p) || moodFor(id, p) || IDLE[id];
 /** A finished quest's `after` line for this hero (QuestDef.afterBy; then, at the end of its chain, the giver's mood). */
 const afterFor = (d: QuestDef, p: Quester | undefined, id?: string) => (d.afterBy && d.afterBy.lines[choiceOf(p, d.afterBy.flag)]) || (id && moodFor(id, p)) || d.after;
 

@@ -10,6 +10,7 @@ import {
 } from "../shared/badlands";
 import { MOORSGATE_MOORS } from "../shared/moors";
 import { SINKWAY_BOX } from "../shared/sinkholes";
+import { SALT_BOXES } from "../shared/saltmere";
 import { KEL_MARKET, D } from "../shared/desert";
 import {
   actAt, actOpen, actSpawn, badlandsOpen, badlandsSpawn, gateColdNote, gateOpen, HOMELAND_GATES, isBadlandsGate, isMoorsGate, waygateArrival, waygateById,
@@ -128,13 +129,14 @@ test("badlands: sealed in rock, every walkable tile reachable from the Red Pass,
 
 test("badlands: the Red Pass (and the Sinkway) leave the rest of Act 1 exactly as it was", () => {
   // the overworld's tiles outside the gates' carve boxes (the Red Pass: x <= 14, rows 113-123; the Sinkway, Act 5:
-  // shared/sinkholes.ts SINKWAY_BOX), hashed before either band was added. A deliberate change to the overworld map
-  // must update this hash.
+  // shared/sinkholes.ts SINKWAY_BOX; the Saltmere rework: shared/saltmere.ts SALT_BOXES), hashed before any of them was
+  // added (the same hash before and after the Saltmere rework). A deliberate change to the overworld map must update this hash.
   const S = SINKWAY_BOX;
-  const box = (x: number, y: number) => (x <= 14 && y >= 113 && y <= 123) || (x >= S.x0 && x <= S.x1 && y >= S.y0 && y <= S.y1);
+  const box = (x: number, y: number) => (x <= 14 && y >= 113 && y <= 123) || (x >= S.x0 && x <= S.x1 && y >= S.y0 && y <= S.y1)
+    || SALT_BOXES.some((b) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1);
   const h = createHash("sha256");
   for (let y = 0; y < WORLD_H; y++) h.update(GROUND[y].map((g, x) => (box(x, y) ? -9 : g)).join(",") + "|" + OBJECTS[y].map((o, x) => (box(x, y) ? -9 : o)).join(",") + "\n");
-  assert.equal(h.digest("hex"), "95619df710b7c29eaadcaa08c27b7843157091bf3f87d3cf7e7f0d88fdd9993f");
+  assert.equal(h.digest("hex"), "2d59eeca2df830dda1f5053018c4346b34d12afbbc4cbef88e0783976aaf0109");
 });
 
 test("badlands: Lv 25-40 climbing west, the Red Pass opens at Lv 25, a war land of their own", () => {

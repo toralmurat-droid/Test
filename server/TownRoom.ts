@@ -57,8 +57,9 @@ import { SLOTS_BY_ZONE, WORK_SLOTS } from "../shared/siege";
 import { DAY_CYCLE_MS, dayFrac, isUndeadNight, NIGHT_BOSSES, UNDEAD_NIGHT } from "../shared/daynight";
 import { AMBUSH, BANDIT_AI, BANDIT_ROLES, CAMPS, campOfZone, CHIEF, clearWalk, findPath, POSTS, postKind, postPos, roleOf } from "../shared/bandits";
 import { flush, flushFinal, HeroSave, loadHero, loadStash, login, markChest, openedChests, resetChests, saveHero, saveStash, type Stash } from "./accounts";
-import { offerFrom, Offer, settle, STASH, STASH_GOLD_MAX, STASH_RANGE, STASH_SIZE, TRADE } from "../shared/trade";
+import { offerFrom, Offer, settle, stashNear, STASH_GOLD_MAX, STASH_RANGE, STASH_SIZE, TRADE } from "../shared/trade";
 import { arrivalOf, cleanPortals, PORTAL_COMBAT_MS, PORTAL_RANGE, PORTAL_WAKE_RANGE, portalById, PORTALS } from "../shared/portals";
+import { rideFerry } from "./ferry";
 import { rollBoon, shrineXp, SHRINE, SHRINE_COOLDOWN_MS, SHRINE_RANGE, WIND_BLESSING, WIND_BLESSING_ID } from "../shared/shrine";
 import { chestById, chestLock, CHEST_RANGE, CHEST_RESPAWN_MS, CHESTS, GUARD_CHECK_MS, GUARD_RESPAWN_MS, rollChest } from "../shared/chests";
 import { chorusTimers, encodeTimers, timerSig, timersOf } from "../shared/buffTimers";
@@ -83,7 +84,7 @@ import { hashAddr, ideaLog, saveIdeas } from "./ideaStore";
 import { dropLive, LiveState, rememberLive, takeLive } from "./handoff";
 import { MobView } from "./mobView";
 import { copyPatches } from "./patchCopy";
-import { actAt, actOpen, actSpawn, gateColdNote, gateOpen, WAYGATE_RANGE, waygateArrival, waygateById, WAYGATES } from "../shared/act2";
+import { act1Home, actAt, actOpen, actSpawn, gateColdNote, gateOpen, WAYGATE_RANGE, waygateArrival, waygateById, WAYGATES } from "../shared/act2";
 import { respecCost } from "../shared/upkeep";
 import { ARSENAL, ATTUNE_ORDER, attuneOf, bondShare, DEFAULT_GRIMOIRE, SUMMONER_TREE, ESSENCE, GOLEM, GOLEM_OF, golemSlots, isElement, isSummonKind, parseGrimoire, PORTAL, SUMMON, summonElement, summonScaleLevel, WISP, wispEls, type AttuneElement, type SummonKind } from "../shared/summons";
 import { cleanFeast, familyOf, type Feast, feastMult, THRALL, thrallMax } from "../shared/devour";
@@ -904,6 +905,12 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("portals", (client) => this.sendPortals(client));
     this.onMessage("travel", (client, msg: { to?: string }) => this.travel(client, msg?.to));
     this.onMessage("waygate", (client) => this.useWaygate(client));
+    // Pell's ferry: {to: stop id} (checked in server/ferry.ts; refusals answer "ferryno" {why})
+    this.onMessage("ferry", (client, msg: unknown) => {
+      if (!this.allow("ask", client)) return;
+      const pid = client.sessionId, p = this.state.players.get(pid);
+      rideFerry({ send: (t, m) => client.send(t, m), broadcast: (t, m) => this.broadcast(t, m), lanternHeld: () => !!p && this.lanternHeld(pid, p) }, pid, p, msg);
+    });
     this.onMessage("bounty", (client, msg: { take?: number; drop?: boolean }) => this.bountyMsg(client, msg ?? {}));
     // War writs: {} = resend, {take: 0..2} at a bounty board when sworn, {drop: true} (checked in server/warWrits.ts)
     this.onMessage("writ", (client, msg: unknown) => { if (this.allow("ask", client)) this.writs.msg(client.sessionId, msg); });
@@ -5902,7 +5909,7 @@ export class TownRoom extends Room<TownState> {
   }
 
   private nearStash(p: Player | undefined): p is Player {
-    return !!p && !p.dead && Math.hypot(p.x - STASH.x, p.y - STASH.y) <= STASH_RANGE * 1.6;
+    return !!p && !p.dead && !!stashNear(p.x, p.y, STASH_RANGE * 1.6); // any chest (Oakvale's, Saltmere's): one account stash
   }
 
   private stashSend(client: Client, text = "") {
@@ -6574,7 +6581,8 @@ export class TownRoom extends Room<TownState> {
     this.clients.find((c) => c.sessionId === tid)?.send("died", { by: byName, ms: RESPAWN_MS });
     this.clock.setTimeout(() => {
       if (!this.state.players.has(tid)) return;
-      const s = actSpawn(actAt(t.y, t.x), randomSpawn); // back at the act's own town (the moors: Cairnwatch; the badlands: the Rustwater Post)
+      // back at the act's own town (the moors: Cairnwatch; the badlands: the Rustwater Post); Act 1: Oakvale, or Saltmere when nearer and its waystone is woken
+      const s = actSpawn(actAt(t.y, t.x), () => act1Home(t.x, t.y, (id) => t.portals.has(id)));
       t.x = s.x; t.y = s.y; t.hp = t.maxHp; t.dead = false;
       if (usesGauge(t.cls)) { t.mana = 0; this.syncMana(t); } // the song gauge starts over empty
     }, RESPAWN_MS);
