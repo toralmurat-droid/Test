@@ -7,6 +7,9 @@ import Phaser from "phaser";
 import { TILE } from "../../shared/constants";
 import { AREAS, BARNS, OBJECTS, T, TILE_COUNT } from "../../shared/map";
 import { dressHouse, type HouseStyle, openDoor, storeyBeam } from "./houseLife";
+import type { WinRect } from "./houseSalt";
+import { SALT_BUILDINGS } from "../../shared/saltmere";
+import { SALT_PERCHES, SALT_SMOKE } from "./saltmereReg";
 
 /**
  * Iso buildings (phase 4 polish): whole houses with walls and a pitched roof, and the materials used for
@@ -126,6 +129,12 @@ const houseStyle = (x: number, y: number): HouseStyle | undefined => {
   const a = AREAS.find((r) => STYLE_AREAS[r.name] && x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h);
   return a && STYLE_AREAS[a.name];
 };
+/**
+ * Saltmere's new buildings (shared/saltmere.ts SALT_BUILDINGS) are matched to their houses by footprint, so the tavern,
+ * the chandlery and the smokehouse get their own look (houseSalt.ts); the cottages keep the fisher style.
+ */
+const saltBuilding = (x0: number, y0: number, w: number, h: number) => SALT_BUILDINGS.find((b) => b.x === x0 && b.y === y0 && b.w === w && b.h === h);
+const SALT_STYLE: Record<string, HouseStyle> = { tavern: "tavern", chandlery: "chandlery", smokehouse: "smokehouse" };
 /** Height of one storey of a tall house (world px). */
 const STOREY = 30;
 
@@ -359,6 +368,30 @@ function weatherHouse(ctx: CanvasRenderingContext2D, S: (x: number, y: number, z
   }
 }
 
+/**
+ * The smokehouse's roof vent: a slatted louvre box on the ridge with a little cap, where the smoke of its fires gets out.
+ * The plume itself is the ambient layer's (ambient.ts reads SALT_SMOKE).
+ */
+function smokeLouvre(ctx: CanvasRenderingContext2D, S: (x: number, y: number, z?: number) => Pt,
+  b: { X0: number; X1: number; Y0: number; Y1: number; top: number; alongX: boolean }) {
+  const { X0, X1, Y0, Y1, top, alongX } = b;
+  if (!alongX) return; // the smokehouse's ridge runs east-west
+  // a box 18 along the ridge, 10 across it, 9 tall, a third of the way along; (a, c) = along / across the ridge
+  const lx = X0 + (X1 - X0) * 0.34, ly = (Y0 + Y1) / 2;
+  const P2 = (a: number, c: number, z: number) => S(lx + a, ly + c, top + z);
+  const z0 = -1, z1 = 8.5;
+  quad(ctx, [P2(-9, 5, z0), P2(9, 5, z0), P2(9, 5, z1), P2(-9, 5, z1)], "#3a2c20"); // front (south)
+  quad(ctx, [P2(9, 5, z0), P2(9, -5, z0), P2(9, -5, z1), P2(9, 5, z1)], "#251a12"); // east end
+  for (let z = z0 + 1.6; z < z1; z += 2.2) { // slats, each with a dark gap under it
+    const a = P2(-9, 5, z), c = P2(9, 5, z);
+    line(ctx, a, c, "rgba(8,5,3,0.75)", 1); line(ctx, { x: a.x, y: a.y - 1 }, { x: c.x, y: c.y - 1 }, "rgba(150,112,72,0.4)", 0.6);
+  }
+  quad(ctx, [P2(-11, 7, z1), P2(11, 7, z1), P2(11, 7, z1 + 1.6), P2(-11, 7, z1 + 1.6)], "#4a3a2c"); // the cap's front edge
+  quad(ctx, [P2(-11, 7, z1 + 1.6), P2(11, 7, z1 + 1.6), P2(11, -7, z1 + 1.6), P2(-11, -7, z1 + 1.6)], "#5e4c3a"); // its top
+  quad(ctx, [P2(11, 7, z1), P2(11, -7, z1), P2(11, -7, z1 + 1.6), P2(11, 7, z1 + 1.6)], "#2e2218");
+  SALT_SMOKE.push({ x: lx, y: ly, z: top + z1 + 3, scale: 1.5 });
+}
+
 function house(scene: Phaser.Scene, x0: number, y0: number, x1: number, yb: number, roof: number) {
   const src = (scene.textures.get("tiles") as Phaser.Textures.CanvasTexture).getSourceImage() as HTMLCanvasElement;
   const tsx = (id: number) => (id % TILE_COUNT) * TILE, tsy = (id: number) => Math.floor(id / TILE_COUNT) * TILE;
@@ -366,9 +399,11 @@ function house(scene: Phaser.Scene, x0: number, y0: number, x1: number, yb: numb
   const wTiles = x1 - x0 + 1, dTiles = yb - y0 + 1;
   const alongX = wTiles >= dTiles; // ridge direction: along the longer side
   const half = (alongX ? Y1 - Y0 : X1 - X0) / 2;
-  const style = houseStyle(x0, y0), wallH = style ? STOREY * 2 + (style === "barracks" ? 4 : 0) : WALL_H;
-  // ridge height above the walls: tall houses get a steeper roof, the barracks a plainer, lower one
-  const RH = Math.round(half * (!style ? 0.8 : style === "barracks" ? 0.7 : 1.05)) + 4;
+  const salt = saltBuilding(x0, y0, wTiles, dTiles);
+  const style = (salt && SALT_STYLE[salt.id]) || houseStyle(x0, y0), wallH = style ? STOREY * 2 + (style === "barracks" ? 4 : 0) : WALL_H;
+  // ridge height above the walls: tall houses get a steeper roof, the barracks a plainer, lower one (Saltmere's deeper
+  // public buildings a gentler one, so their ridge stands about as high as the cottages')
+  const RH = Math.round(half * (!style ? 0.8 : style === "barracks" ? 0.7 : style === "tavern" ? 0.62 : style === "smokehouse" || style === "chandlery" ? 0.8 : 1.05)) + 4;
   const o = 6; // eaves overhang
   const top = wallH + RH, eave = wallH - 3;
   // canvas covering the whole building
@@ -459,7 +494,17 @@ function house(scene: Phaser.Scene, x0: number, y0: number, x1: number, yb: numb
   if (style) {
     storeyBeam(ctx, S, X0, X1, Y0, Y1, STOREY);
     if (doorAt !== undefined) openDoor(ctx, left, topY, S, X0 + doorAt * TILE, Y1, style, x0 * 13 + y0);
-    dressHouse(ctx, left, topY, style, { X0, X1, Y0, Y1, wallH, door: doorAt }, x0 * 29 + y0 * 3);
+    const wins: WinRect[] = []; // the tavern's lamplit panes (houseSalt.ts), measured from the window tile art
+    if (style === "tavern") for (const [z0, z1, up] of bands) for (let i = 0; i < wTiles; i++) {
+      const art = up ? upperArt(i) : facadeRow(i), stoneWin = art === T.WINDOW_STONE;
+      if (!stoneWin && art !== T.WINDOW_TIMBER) continue;
+      const k = (z1 - z0) / 32, a = stoneWin ? [12, 20, 10, 26] : [10, 22, 10, 22];
+      wins.push({ x0: X0 + i * TILE + a[0], x1: X0 + i * TILE + a[1], z1: z1 - a[2] * k, z0: z1 - a[3] * k });
+    }
+    dressHouse(ctx, left, topY, style, { X0, X1, Y0, Y1, wallH, door: doorAt, wins }, x0 * 29 + y0 * 3);
+  }
+  if (salt) { // gulls perch on the ridge (ambient.ts)
+    for (const f of [0.2, 0.8]) SALT_PERCHES.push(alongX ? { x: X0 + f * (X1 - X0), y: (Y0 + Y1) / 2, z: top + 3 } : { x: (X0 + X1) / 2, y: Y0 + f * (Y1 - Y0), z: top + 3 });
   }
 
   // 5. gable end (triangle of wall under the roof) and the front slope
@@ -487,6 +532,7 @@ function house(scene: Phaser.Scene, x0: number, y0: number, x1: number, yb: numb
   if (SMOOTH) houseRoof(ctx, S, { X0, X1, Y0, Y1, o, top, eave, alongX }, x0 * 53 + y0 * 11);
   if (SMOOTH && doorAt !== undefined && !style) porch(ctx, S, X0 + doorAt * TILE, X0 + (doorAt + 1) * TILE, Y1, x0 * 7 + y0);
   if (SMOOTH) weatherHouse(ctx, S, { X0, X1, Y0, Y1, o, top, eave, facadeH, alongX }, x0 * 131 + y0 * 17);
+  if (style === "smokehouse") smokeLouvre(ctx, S, { X0, X1, Y0, Y1, top, alongX });
   tex.refresh();
 
   sliced(scene, key, X0, Y0, X1, Y1, left, topY, cw, ch, true);
