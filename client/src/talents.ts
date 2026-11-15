@@ -10,6 +10,7 @@ import { iconImg } from "./skillIcons";
 import { Node, slabWidth, treeLayout } from "./treeLayout";
 import { SheetPreview, talentsOf } from "./sidepanel";
 import { own } from "./own";
+import { skillHint } from "./heroText";
 import {
   BRANCHES, childrenOf, EFFECT_TEXT, levelPower, lockReason, maxRank, nextRankLevel, RANK_POWER, rankOf, SkillDef, SKILLS, spentPoints, STACK_NAME,
   synergyPower, talentPoints, withMods, type SkillMod,
@@ -25,7 +26,7 @@ import { uiScale } from "./worldscale";
  * Hover a skill to read it (damage for your current stats, attribute scaling, cost), click it to spend a point.
  * Learned actives go on keys 1-0: hover the skill and press a number key, or click a key slot at the bottom.
  */
-const H = 520; // the stone slab with the three schools side by side, CSS px (620 wide, or as wide as the class needs: slabWidth)
+const H = 470; // the stone slab with the three schools side by side, CSS px (620 wide, or as wide as the class needs: slabWidth)
 
 export class TalentMenu {
   private el = document.getElementById("tree")!;
@@ -99,11 +100,16 @@ export class TalentMenu {
     const rc = respecCost(state.level), rcEl = document.getElementById("treeresetcost");
     if (rcEl) rcEl.textContent = rc ? `${rc} gold` : "free (up to level 5)";
     document.getElementById("treetitle")!.textContent = `${CLASSES[cls].name} skills`;
-    document.getElementById("treepoints")!.innerHTML = (free > 0
-      ? `<b class="free">${free} skill point${free > 1 ? "s" : ""} to spend</b>`
-      : state.level < 2 ? `You start with a ${cls === "songweaver" ? "Verse" : "basic attack"} only. Reach level 2 for your first skill point.` : "No points left. You get 1 point per level.") +
-      `<span class="treehint">Follow the stone paths: a node needs the one before it. Upgrades change the spell at the start of their path. ` +
-      (cls === "summoner" ? `Your creatures going back to the Void build Essence (up to 5) for the ultimates.</span>` : cls === "songweaver" ? `Every skill is a note on the scale. Three in the right order ring a chord by themselves. Hover a skill to see its step. Songs are Choruses, single notes are Verses. <button type="button" class="chhelp" title="Chord legend" aria-label="Chord legend">?</button><button type="button" class="sbbtn" title="Songbook: songs, materials, chord legend">Songbook</button></span>` : `Basic hits build ${STACK_NAME[cls]} (up to 5) for some skills.</span>`);
+    // one dim hint line; the full explanation is the "?" tooltip (the Songweaver keeps her chord legend and Songbook buttons)
+    const full = `Follow the stone paths: a node needs the one before it. Upgrades change the spell at the start of their path. ` +
+      (cls === "summoner" ? `Your creatures going back to the Void build Essence (up to 5) for the ultimates.` : cls === "songweaver"
+        ? `Every skill is a note on the scale. Three in the right order ring a chord by themselves. Hover a skill to see its step. Songs are Choruses, single notes are Verses.`
+        : `Basic hits build ${STACK_NAME[cls]} (up to 5) for some skills.`);
+    const q = `<span class="hq" data-tip="${full.replace(/"/g, "&quot;")}">?</span>`;
+    const songBtns = cls === "songweaver" ? `<button type="button" class="chhelp" title="Chord legend" aria-label="Chord legend">?</button><button type="button" class="sbbtn" title="Songbook: songs, materials, chord legend">Songbook</button>` : "";
+    document.getElementById("treepoints")!.innerHTML = `<span class="thint">${state.level < 2
+      ? `You start with a ${cls === "songweaver" ? "Verse" : "basic attack"} only · level 2 gives your first skill point`
+      : skillHint(free)} ${q}</span>${songBtns}`;
 
     const W = slabWidth(cls);
     const { nodes: layout, cols } = treeLayout(cls, W, H);
@@ -123,7 +129,7 @@ export class TalentMenu {
         `style="left:${n.x}px;top:${n.y}px;--c:${colors[s.branch]}">${iconImg(s.id, "nicon")}${key}${lvl}<span class="pips">${pips}</span><span class="trank">${r || ""}</span></button>`;
     }
     BRANCHES[cls].forEach((b, i) => { html += `<div class="tschool" style="left:${cols[i].mid}px;--c:${b.color}">${b.name}</div>`; });
-    html += `<div class="tfoot">${free > 0 ? `${free} skill choice${free > 1 ? "s" : ""} remaining` : "No skill choices remaining"}</div>`;
+    html += `<div class="tfoot${free > 0 ? " has" : ""}">${free > 0 ? `${free} point${free > 1 ? "s" : ""} to spend` : "No points to spend"}</div>`;
     html += `</div>`;
     const box = document.getElementById("treebranches")!;
     box.innerHTML = `<div class="treecol"><div class="treewrap theme-${cls}" style="width:${W}px;height:${H}px">${html}</div></div><div id="treeinfo"></div>`;

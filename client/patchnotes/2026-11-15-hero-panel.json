@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-15",
+  "title": "A tidier hero panel",
+  "changes": [
+    "The Character, Inventory and Skills panel is narrower and has a bronze frame. Your stats now show once, on the Character tab, with colours: health red, mana blue, spell damage violet.",
+    "Each attribute says in one plain line what a point gives you. Points left to spend show as a red badge on the tab.",
+    "Inventory: empty equipment slots show a faint icon instead of a word, and the loot filter hides behind the cog button.",
+    "Skills: one short hint line instead of three, and the skill details fit the panel on small screens."
+  ]
+}

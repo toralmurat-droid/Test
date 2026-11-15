@@ -1,5 +1,5 @@
 import { slotName } from "./songTables";
-import { icon } from "./pixelicons";
+import { icon, icon as pxIcon } from "./pixelicons";
 import { drawSongGearIcon } from "./songGearIcons";
 import { isSongbook, songItemHtml, BOUND_LINE } from "./songItems";
 import { openSongbook } from "./songbookReader";
@@ -19,6 +19,9 @@ import { itemRunes, socketsOf, socketProblem } from "../../shared/gear";
 import { parseRune, Rune, RUNE_KIND_NAMES, RUNES, runeName, runeText } from "../../shared/runes";
 import { runeCanvas, runeCss, runeStone } from "./runeArt";
 import { own } from "./own";
+
+/** Faint pixel icon of an empty paper-doll slot (pixelicons.ts). */
+const EMPTY_SLOT_ICON: Record<string, string> = { weapon: "sword", shield: "shield", armour: "robe", ranged: "bow", shoes: "boots", hat: "hat" };
 
 /** Rune lines of an item for tooltips (shared/runes.ts): what each set rune does, and the free sockets. */
 export function runeHtml(id: string): string {
@@ -251,6 +254,7 @@ export class GearMenu {
       this.dropAsk = 0;
       this.act("dropgears", list);
     });
+    btn("gfopen", () => { const f = document.getElementById("gearfilter")!; f.hidden = !f.hidden; document.getElementById("gfopen")!.classList.toggle("on", !f.hidden); });
     btn("gfrar", () => { const f = lootFilter(); setLootFilter({ ...f, minRarity: (f.minRarity + 1) % 4 }); });
     btn("gfcls", () => { const f = lootFilter(); setLootFilter({ ...f, ownClass: !f.ownClass }); });
   }
@@ -321,14 +325,15 @@ export class GearMenu {
       const row = document.createElement("button");
       row.className = `gslot slot-${slot}` + (id ? "" : " empty"); // slot-*: its place around the hero (paper doll, menus.css)
       if (id && itemRarity(id) > 0) { row.style.setProperty("--rc", itemColor(id)); row.classList.add(`rar-${itemRarity(id)}`); } // frame and glow in the rarity colour
-      const icon = id ? iconCanvas(this.scene, id) : Object.assign(document.createElement("span"), { className: "gicon" });
+      const icon = id ? iconCanvas(this.scene, id) : Object.assign(document.createElement("span"), { className: "gicon", innerHTML: pxIcon(EMPTY_SLOT_ICON[slot] ?? "bag") }); // an empty slot: a faint icon, its name in the tooltip
+      if (!id) row.setAttribute("data-tip", slotName(slot, cls));
       row.appendChild(icon);
       const txt = document.createElement("span");
       const why = id ? wearProblem(cls, id) || reqProblem(id, hero) : "";
       txt.innerHTML = id
         ? `<b style="color:${itemColor(id)}">${gearName(id, cls)}</b>${itemLevel(id) > 1 ? ` <span class="glvl">Lv ${itemLevel(id)}</span>` : ""}<br>` +
           (why ? `<small class="gbad">Inactive: ${why}</small>` : `<small>${itemText(id)}</small>`)
-        : `<b>${slotName(slot, cls)}</b><br><small>empty</small>`;
+        : "";
       row.appendChild(txt);
       const pips = id ? socketPips(id, (n) => this.act("unsocket", { slot, n })) : undefined;
       if (pips) row.appendChild(pips);
