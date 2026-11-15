@@ -74,7 +74,7 @@ Only the classes in `ACTIVE_CLASSES` can be played. Archived classes keep their 
   A broken-poise monster can be **executed**.
 - **Elemental reactions** on monsters (`shared/elements.ts`) and **champion monsters** with affixes
   (`shared/champions.ts`, `server/champions.ts`).
-- **PvP:** heroes can fight each other anywhere except the **Market Square** (safe zone). Newcomer protection is off
+- **PvP:** heroes can fight each other anywhere except the **Market Square**, Kel Ashar's market, Cairnwatch's square, the Rustwater Post and Ropewell's square (safe zones). Newcomer protection is off
   (`PVP_PROTECT_LEVEL = 0` in `shared/combat.ts`).
 - **Night Raiders** (`shared/raiders.ts`): named level-50 riders who roam both acts at night.
 
@@ -84,6 +84,20 @@ Only the classes in `ACTIVE_CLASSES` can be played. Archived classes keep their 
   `shared/spawns.ts`).
 - **Act 2 — the Sunscar** (`shared/desert.ts`, `shared/act2.ts`): a desert reached through the old waygate south of
   Oakvale once Act 1's last bosses are down, with the city of Kel Ashar and a final boss, Ishael the Sunwright, at the Sun Furnace.
+- **Act 3 — the Grey Barrow Moors** (`shared/moors.ts`): the Ossuary Host's barrow country (levels 20-35), reached
+  through the Moorgate in the forest north of the Hollow Throne once a hero reaches level 20. The Cairn Wardens hold the outpost of Cairnwatch (portal stone, bounty board,
+  shops); Warden-Captain Edra Vane's chain climbs through the barrows to the Barrow-King, who wakes at night.
+- **Act 4 — the Red Badlands** (`shared/badlands.ts`): the Redfang clan's homeland of red mesas, canyons
+  and dry riverbeds (levels 25-40), reached through the Red Pass at Oakvale's west edge once a hero reaches level 25.
+  The Rustwater Post holds out with a portal stone, a bounty board and shops; Marshal Hesk Varro's chain climbs
+  through Talon Fort and Gallows Canyon to Old Rourke in Fangrock Keep. The badlands are a land of the clan war, joined to
+  Oakvale by the Red Pass, with Fangrock as the Redfang seat.
+- **Act 5 — the Mawdeep Sinkholes** (`shared/sinkholes.ts`): the Hide-Kin's homeland of damp moss country,
+  sinkholes, collapsed slopes and burrow-warrens (levels 30-45), reached down the Sinkway, a cave on the beach south of
+  Sunken Lake, once a hero reaches level 30. Ropewell, the trappers' lodge round a tame sinkhole, holds a portal stone,
+  a bounty board and shops; Hidehall is the Hide-Kin's seat. Lodge-Warden Brannoc Tull's chain climbs the zones
+  through a Hide-Chieftain at Tunneltop and Hidehall to the Maw-Father in the Great Maw. The sinkholes are a land of the
+  clan war, joined to Oakvale by the Sinkway, with Hidehall as the Hide-Kin seat.
 - **Dungeons** (`shared/dungeon.ts`): the Mawdeep, the Lantern Crypt and the Undercity.
 - **Quests** (`shared/quests.ts`): zone quest arcs in both acts, quest bosses (some only at night).
 - **Bounty boards** (`shared/bounty.ts`): pick a hunt for your level, paid when the last kill lands.

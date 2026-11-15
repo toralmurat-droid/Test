@@ -132,6 +132,11 @@ const ITEM_ART: Record<string, { rows: string[]; pal: Record<string, number> }> 
     pal: { K: 0x3a2410, Y: 0xd8a040, W: 0xfff0b0, O: 0xff6a1e, B: 0x6a4a2a } },
   q_key: { rows: ["..KKK...", ".KYOYK..", ".KOWOK..", ".KYOYK..", "..KYK...", "..KYKK..", "..KYYK..", "..KYKK.."],
     pal: { K: 0x3a2410, Y: 0xd8a040, O: 0xff8a2a, W: 0xfff0b0 } },
+  // Act 3, the Grey Barrow Moors: a mire hag's tallow candle with its cold green flame, and the Barrow-King's door key
+  q_candle: { rows: ["...GL...", "..GLLG..", "...GG...", "...KK...", "..TTTD..", "..TTTD..", "..TTTD..", ".DDDDDD."],
+    pal: { G: 0x4aff7a, L: 0xdcffe0, K: 0x2a2018, T: 0xe8dfc0, D: 0xa89c78 } },
+  q_barrowkey: { rows: ["..SSS...", ".SLLKS..", ".SK.KS..", "..SSS...", "...B....", "...BB...", "...B....", "...BBB.."],
+    pal: { S: 0x8a8a82, L: 0xbcbcb0, K: 0x2a2a28, B: 0xb08a3a } },
 };
 
 /** Texture kind of a potion flask by size: "potion", "potion1", "potion2" (and "mpotion"...). */
@@ -305,7 +310,10 @@ const WISP_STANDIN: Record<string, string> = { fire: "fireblob", cold: "frostblo
 
 const PAINTED_MOBS = ["slime", "blobling", "shooterblob", "warriorblob", "healerblob", "motherblob", "venomblob", "frostblob", "fireblob", "stormblob", "skeleton", "bandit", "skeletonmage", "necromancer", "demon", "crawler", "banditchief", "hollowking", "gnawkin", "tuskborn", "silkwretch", "duskwing", "packlord", "hornbrute", "hidemother", "crowseer", "gnasher", "weaver",
   "nomad", "scorpion", "sanddead", "veiled", "camelfolk", "sphinx", "sunwright", "nightraider",
-  "golem_fire", "golem_cold", "golem_poison", "golem_shock", "golem_colossus", "bride"];
+  "golem_fire", "golem_cold", "golem_poison", "golem_shock", "golem_colossus", "bride",
+  "wight", "boghag", "bonehound", "mistwraith", "legionary", "cairnlord", "barrowking",
+  "outrider", "crossbowman", "firebrand", "warhound", "vulture", "rattler", "redcaptain", "rourke",
+  "delver", "cackler", "stagkin", "quillback", "stitcher", "sinkworm", "hidechief", "mawfather"]; // Act 5, the Mawdeep Sinkholes (tools/art/paint/look.ts, sinkholes.ts); Act 4, the Red Badlands (tools/art/paint/look.ts, badlands.ts); Act 3, the Grey Barrow Moors (tools/art/paint/look.ts, moors.ts)
 /** The Colossus is painted once per element (Mob.weapon holds it, shared/summons.ts). */
 const COLOSSUS_ELEMENTS = ["fire", "cold", "poison", "shock"];
 /** The wisps' painted sheets (tools/art/paint/wisps.ts), one per element. */
@@ -330,6 +338,19 @@ const PAINTED_LOOK: Record<string, { top: number; bar: number; oy: number; scale
   gnasher: { top: 50, bar: 28, oy: 35.5 / 38, scale: 1.4 }, weaver: { top: 52, bar: 30, oy: 37.5 / 40, scale: 1.45 },
   packlord: { top: 48, bar: 28, oy: 34 / 36, scale: 1.4 }, hornbrute: { top: 56, bar: 32, oy: 37.5 / 40, scale: 1.45 },
   hidemother: { top: 66, bar: 38, oy: 44 / 48, scale: 1.6 },
+  // Act 3, the Grey Barrow Moors (tools/art/paint/mobs.ts): frame sizes are the sheets' (w x h), the feet line oy
+  wight: { top: 24, bar: 14, oy: 27.5 / 30 }, boghag: { top: 27, bar: 14, oy: 31.2 / 32 }, bonehound: { top: 13, bar: 12, oy: 19 / 22 },
+  mistwraith: { top: 36, bar: 16, oy: 35 / 38 }, // hovers like the duskwing
+  legionary: { top: 27, bar: 16, oy: 29.5 / 32 },
+  cairnlord: { top: 54, bar: 30, oy: 37.5 / 40, scale: 1.45 }, barrowking: { top: 62, bar: 38, oy: 42 / 48, scale: 1.6 }, // elite and boss, as tall as the Hollow King
+  // Act 4, the Red Badlands (tools/art/paint/badlands.ts, look.ts): the hound 34x24, the vulture 36x34 (hovers), the rattler 32x22
+  outrider: { top: 24, bar: 14, oy: 27.5 / 30 }, crossbowman: { top: 25, bar: 14, oy: 27.5 / 30 }, firebrand: { top: 27, bar: 14, oy: 31.2 / 32 },
+  warhound: { top: 14, bar: 12, oy: 21 / 24 }, vulture: { top: 30, bar: 16, oy: 31 / 34 }, rattler: { top: 14, bar: 12, oy: 19 / 22 },
+  redcaptain: { top: 44, bar: 28, oy: 32 / 34, scale: 1.35 }, rourke: { top: 60, bar: 36, oy: 40 / 44, scale: 1.55 }, // Lv 40 warlord: nearly as tall as the Hollow King
+  // Act 5, the Mawdeep Sinkholes (tools/art/paint/look.ts, sinkholes.ts): the worm 32x28; the chieftain and the Maw-Father are elite and boss
+  delver: { top: 25, bar: 14, oy: 27.5 / 30 }, cackler: { top: 25, bar: 14, oy: 27.5 / 30 }, stagkin: { top: 34, bar: 18, oy: 35 / 38 }, quillback: { top: 25, bar: 14, oy: 27.5 / 30 },
+  stitcher: { top: 30, bar: 16, oy: 31.5 / 34 }, sinkworm: { top: 24, bar: 12, oy: 25 / 28 },
+  hidechief: { top: 50, bar: 30, oy: 35 / 38, scale: 1.45 }, mawfather: { top: 68, bar: 40, oy: 46 / 50, scale: 1.65 },
   // the clan war's soldiers (tools/art/paint/warLooks.ts): art-only keys, not MobKinds; line soldiers 36x32 frames, officers 36x34
   ...Object.fromEntries(["war_warden", "war_redfang", "war_host", "war_hidekin", "war_veiled"].map((k) => [k, { top: 27, bar: 14, oy: 30 / 32 }])),
   ...Object.fromEntries(["war_warden_cap", "war_redfang_chief", "war_host_cap", "war_hidekin_chief", "war_veiled_adept"].map((k) => [k, { top: 30, bar: 16, oy: 32 / 34 }])),
@@ -358,6 +379,7 @@ const PAINTED_LOOK: Record<string, { top: number; bar: number; oy: number; scale
 export function preloadPaintedMobs(scene: Phaser.Scene) {
   if (!SMOOTH) return;
   Object.assign(MOB_LOOK, PAINTED_LOOK);
+  lookStandins();
   scene.load.json("hd_mobs", "assets/hd/mobs/mobs.json");
   for (const k of [...PAINTED_MOBS.filter((m) => m !== "golem_colossus" && m !== "nightraider").map((m) => `mob_${m}`), "mob_motherblob2", "mob_motherblob3", "mob_skeleton_axe", "mob_skeleton_spear", "mob_skeleton_bow", "mob_bandit_brute", "mob_bandit_archer", "mob_demon1", "mob_demon2", "mob_demon3", "mob_demon4", ...FOLK_MOBS.map((m) => `mob_${m}_folk`), ...COLOSSUS_ELEMENTS.map((e) => `mob_golem_colossus_${e}`), ...WISP_ELEMENTS.map((e) => `mob_wisp_${e}`), ...RAIDERS.map((r) => `mob_nightraider_${r.key}`), ...AFFIX_KEYS.filter((k) => AFFIXES[k].overlay).map((k) => `mob_champ_${k}`), ...CHAMP_SHEETS.map((k) => `mob_${k}_champ`)]) scene.load.image(`hd_${k}`, `assets/hd/mobs/${k}.webp`);
 }
@@ -379,7 +401,24 @@ export function trooperArt(weapon: string): string {
 /** A monster's look entry (size, label height): a trooper's comes from its clan's soldier sheet. */
 export const mobLook = (kind: string, weapon = "") => MOB_LOOK[kind === "trooper" ? trooperArt(weapon) : kind];
 
+/**
+ * Act 3's monsters (shared/constants.ts MOORS_KINDS) until their own sheets are painted: each wears an existing
+ * monster's look ([kind, weapon]). Once tools/art paints mob_<kind>, add it to PAINTED_MOBS / PAINTED_LOOK and drop it here.
+ */
+const MOORS_STANDIN: Record<string, [string, string]> = {
+};
+/** The old pixel look (?pixel=1) of the moors monsters: no pixel sheets, so each wears an older monster's. */
+const MOORS_PIXEL: Record<string, string> = { wight: "skeleton", boghag: "nomad", bonehound: "gnawkin", mistwraith: "skeletonmage", legionary: "skeleton", cairnlord: "necromancer", barrowking: "necromancer",
+  outrider: "bandit", crossbowman: "bandit", firebrand: "nomad", warhound: "gnawkin", vulture: "skeletonmage", rattler: "bandit", redcaptain: "bandit", rourke: "necromancer",
+  delver: "gnawkin", cackler: "gnawkin", stagkin: "tuskborn", quillback: "silkwretch", stitcher: "crowseer", sinkworm: "bandit", hidechief: "packlord", mawfather: "hidemother" }; // Acts 4 and 5 (the pixel look has no sheets for them)
+/** The stand-in's size entry for a moors monster (MOB_LOOK, filled at load and again once the painted looks are in). */
+function lookStandins() { if (!SMOOTH) for (const [k, st] of Object.entries(MOORS_PIXEL)) if (MOB_LOOK[st]) MOB_LOOK[k] ??= MOB_LOOK[st];
+  for (const [k, [st]] of Object.entries(MOORS_STANDIN)) if (MOB_LOOK[st] && !PAINTED_MOBS.includes(k)) MOB_LOOK[k] = MOB_LOOK[st]; }
+lookStandins();
+
 export function mobTexture(scene: Phaser.Scene, kind: string, level = 1, weapon = "", bones = 0, champion = false): string {
+  const standin = MOORS_STANDIN[kind];
+  if (standin && !PAINTED_MOBS.includes(kind)) return mobTexture(scene, standin[0], level, standin[1], bones, champion);
   if (kind === "trooper") { // a clan soldier: its painted sheet once loaded, an old monster look meanwhile (the watchman is a hero sheet: a bandit stands in)
     const art = trooperArt(weapon), painted = warSoldierTexture(scene, art);
     if (painted) return painted;
@@ -405,7 +444,7 @@ export function mobTexture(scene: Phaser.Scene, kind: string, level = 1, weapon 
     const done = (champion && paintedSheet(scene, `${key}_champ`)) || paintedSheet(scene, key);
     if (done) return done;
   }
-  return pixelMobTexture(scene, kind === "demon" || kind === "hollowking" || kind === "sunwright" ? "necromancer" : BEAST_KINDS.includes(kind as any) || DESERT_KINDS.includes(kind as any) || kind === "bride" || kind === "nightraider" ? (kind === "sanddead" ? "skeleton" : "bandit") : kind, level); // no pixel demon sheet: a necromancer stands in
+  return pixelMobTexture(scene, MOORS_PIXEL[kind] ?? (kind === "demon" || kind === "hollowking" || kind === "sunwright" ? "necromancer" : BEAST_KINDS.includes(kind as any) || DESERT_KINDS.includes(kind as any) || kind === "bride" || kind === "nightraider" ? (kind === "sanddead" ? "skeleton" : "bandit") : kind), level); // no pixel demon sheet: a necromancer stands in
 }
 
 const warAsked = new Set<string>();

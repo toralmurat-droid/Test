@@ -23,7 +23,7 @@ import { conceptTextures } from "./questConceptArt";
 import { TILE } from "../../shared/constants";
 import { ISO } from "./isoflag";
 import { routeVia } from "../../shared/dungeon";
-import { actAt, WAYGATES } from "../../shared/act2";
+import { actAt, waygateById, WAYGATES } from "../../shared/act2";
 import type { MapMarker } from "./minimap";
 import { QuestLog } from "./questlog";
 import { MASTER_LEVELS, SHOPS, sellPrice, shopBuys, shopFuses } from "../../shared/shops";
@@ -75,10 +75,28 @@ function pageFor(id: string, q: QuestState): DialogPage | undefined {
  * a dialog panel and the quest tracker. The server checks distance and owns quest progress.
  */
 /** Where the way to the other act starts, for the tracker (shared/desert.ts WAYGATE_OAKVALE / WAYGATE_DESERT). */
-const GATE_HINT: Record<1 | 2, string> = {
+const GATE_HINT: Record<1 | 2 | 3 | 4 | 5, string> = {
   1: "Step through the waygate, just outside Oakvale's south gate",
   2: "Step through the waygate in the Sunstone Circle, south-west of Kel Ashar",
+  3: "Touch the Cairnwatch portal stone, or step back through the Moorgate by the stone ring",
+  4: "Walk back through the Red Pass at the badlands' east edge",
+  5: "Climb back up the Sinkway by the cave mouth at the sinkholes' north-west edge",
 };
+/** Act 1's way to the moors: the Moorgate is not Oakvale's south waygate. */
+const MOORGATE_HINT = "Step through the Moorgate in the forest north of the Hollow Throne";
+/** Act 1's way to the badlands: the Red Pass on the west edge. */
+const REDPASS_HINT = "Take the Red Pass on Oakvale's west edge, between Mirror Pond and the Barrow Downs";
+/** Act 1's way to the sinkholes: the Sinkway, a cave on the beach. */
+const SINKWAY_HINT = "Take the Sinkway on the beach south of Sunken Lake, west of the river mouth";
+const gateHint = (me: { x: number; y: number }, gateId?: string) =>
+  gateId === "moorsgate" ? MOORGATE_HINT : gateId === "redpass" ? REDPASS_HINT : gateId === "sinkway" ? SINKWAY_HINT : GATE_HINT[actAt(me.y, me.x)];
+
+/** This act's gate whose twin lies in the target's act (else any gate of this act): where to head for another act's target. */
+function gateToward(me: { x: number; y: number }, target: { x: number; y: number }) {
+  const here = actAt(me.y, me.x), there = actAt(target.y, target.x);
+  const mine = WAYGATES.filter((g) => actAt(g.y, g.x) === here);
+  return mine.find((g) => { const t = waygateById(g.to); return !!t && actAt(t.y, t.x) === there; }) ?? mine[0];
+}
 
 /** Who gives a zone arc (shared/quests.ts ZONE_ARCS), and the first quest's level of each of their arcs (some give two). */
 const ZONE_GIVERS = new Map<string, number[]>();
@@ -828,13 +846,16 @@ export class NpcLayer {
   }
 
   /** Point the arrow / ground marker at the nearest of these targets, by way of a rope, stair or waygate if it is elsewhere. */
+  /** Id of the gate the last aimAt() pointed at (picks the hint text). */
+  private gateId?: string;
   private aimAt(me: Me, targets: QuestTarget[], follow: boolean): boolean {
     let target = me && targets.length ? targets.reduce((a, b) => (Math.hypot(a.x - me.x, a.y - me.y) <= Math.hypot(b.x - me.x, b.y - me.y) ? a : b)) : undefined;
     // On another floor of the Mawdeep (or above it): point at the rope or stair first
     const via = target && me ? routeVia(target.x, target.y, me.x, me.y) : undefined;
     if (via) target = { x: via.x, y: via.y, kind: "object", label: via.label };
     // In the other act: point at this side's waygate
-    const gate = target && me && actAt(target.y, target.x) !== actAt(me.y, me.x) ? WAYGATES.find((g) => actAt(g.y, g.x) === actAt(me.y, me.x)) : undefined;
+    const gate = target && me && actAt(target.y, target.x) !== actAt(me.y, me.x) ? gateToward(me, target) : undefined;
+    this.gateId = gate?.id;
     if (gate) target = { x: gate.x, y: gate.y, kind: "object", label: gate.label };
     if (follow && target && me) {
       const dx = target.x - me.x, dy = target.y - me.y, d = Math.hypot(dx, dy) - (target.r ?? 0);
@@ -875,7 +896,7 @@ export class NpcLayer {
       const follow = this.followed === def.title;
       const viaGate = this.aimAt(me, questTargets(q), follow);
       const started = q.questStage > 0;
-      const gateLine = viaGate ? `<div class="qt-where">${GATE_HINT[actAt(me!.y, me!.x)]}</div>` : "";
+      const gateLine = viaGate ? `<div class="qt-where">${gateHint(me!, this.gateId)}</div>` : "";
       // the card: header (title, follow button), then just the objective and its progress bar
       return `<div class="qt-block${this.isFolded(def.title, started) ? " folded" : ""}${follow ? " following" : ""}" data-key="${def.title}" data-started="${started ? 1 : 0}">` +
         `<div class="qt-head"><span class="qt-title">${def.title}</span>${this.followBtn(follow)}</div>` +
@@ -893,7 +914,7 @@ export class NpcLayer {
       // In the other act (the step into Act 2): the waygate comes first, then the giver beyond it
       const talk = `${giver?.name ?? ""} <b class="bang">!</b>`;
       const body = viaGate
-        ? `<div class="qt-obj">${GATE_HINT[actAt(me!.y, me!.x)]}</div><div class="qt-where">Then talk to ${giver?.name ?? ""}: ${giver?.where ?? ""}</div>`
+        ? `<div class="qt-obj">${gateHint(me!, this.gateId)}</div><div class="qt-where">Then talk to ${giver?.name ?? ""}: ${giver?.where ?? ""}</div>`
         : `<div class="qt-obj">Talk to ${talk}</div>${where}`;
       const title = viaGate && actAt(me!.y, me!.x) === 1 ? "The waygate is awake" : "New quest available";
       return `<div class="qt-block${this.isFolded(key, false) ? " folded" : ""}${follow ? " following" : ""}" data-key="${key}" data-started="0">` +

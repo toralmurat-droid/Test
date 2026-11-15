@@ -1,7 +1,8 @@
 import Phaser from "phaser";
 import { staticObj } from "./staticChunks";
 import { TILE } from "../../shared/constants";
-import { AREAS, BARNS, EMPTY, GROUND, HOLLOW, HOLLOW_WARDS, OBJECTS, REDFANG_TOWERS, SIGNPOSTS, T, VILLAGE, WRECK } from "../../shared/map";
+import { AREAS, BARNS, EMPTY, GROUND, HOLLOW, HOLLOW_WARDS, OBJECTS, SIGNPOSTS, T, VILLAGE, WRECK } from "../../shared/map";
+import { CAMP_TOWERS } from "../../shared/bandits";
 import { standingStone, STONE_H, STONE_W, throne, THRONE_H, THRONE_W } from "./throneArt";
 import { NPCS, NPC_DECOR } from "../../shared/npcs";
 import { CHESTS } from "../../shared/chests";
@@ -368,7 +369,7 @@ function spots(): Spot[] {
   scatter(out, "Old Ruins", "wp_spears_ground", 2, 5);
   // Redfang Hollow: skull pikes and the bandits' spear rack
   // the watchtowers first (fixed spots by the gates, manned by lookouts), so nothing else is put under them
-  for (const [tx, ty] of REDFANG_TOWERS) out.push({ kind: "wp_watchtower", x: (tx + 0.5) * TILE, y: (ty + 0.5) * TILE });
+  for (const [tx, ty] of CAMP_TOWERS) out.push({ kind: "wp_watchtower", x: (tx + 0.5) * TILE, y: (ty + 0.5) * TILE }); // and Fangrock's and Talon Fort's (shared/bandits.ts CAMPS)
   scatter(out, "Redfang Hollow", "wp_skull_pike", 6, 3);
   scatter(out, "Redfang Hollow", "wp_spear_rack", 1, 4);
   // Heronwreck Strand: the Grey Heron (fixed spot, see WRECK in shared/map.ts)

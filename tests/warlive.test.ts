@@ -22,8 +22,10 @@ test("valor for an attacker pushes Control down; valor for the holder holds it",
   // A territory some clan may attack
   const k = CLAN_KEYS.find((c) => targetsOf(base, c).some((t) => !TERRITORIES[t].capitalOf))!;
   const t = targetsOf(base, k).find((x) => !TERRITORIES[x].capitalOf)!;
-  const quiet = warTick(newWar(), {}, { phase: 0 }).control[t];
-  const push = warTick(newWar(), {}, { phase: 0, valor: TERRITORIES.map((_, i) => (i === t ? { [k]: 1000 } : {})) }).control[t];
+  // the holder's army stood down, so the test reads the valor and not how thin the holder's borders are on today's map
+  const war = () => { const s = newWar(); s.army[s.owner[t]] = 0; return s; };
+  const quiet = warTick(war(), {}, { phase: 0 }).control[t];
+  const push = warTick(war(), {}, { phase: 0, valor: TERRITORIES.map((_, i) => (i === t ? { [k]: 1000 } : {})) }).control[t];
   assert.ok(push < quiet, `attacker valor lowers Control (${push} < ${quiet})`);
   // Garbage valor is ignored
   const junk: any[] = TERRITORIES.map(() => ({ nope: 5, [k]: NaN }));

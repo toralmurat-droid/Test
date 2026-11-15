@@ -100,7 +100,8 @@ const desertStock = (ids: string[]): ShopEntry[] => ids.map((base) => {
  * Armourers (Murat 2026-11-08: "a merchant selling armor in the villages"): shields, body armour, helms and boots only,
  * in steps across the levels of their part of the world. Each step is [tier, item level]; every step sells the four
  * armour slots of that tier. Oakvale covers the first half of Act 1, Saltmere (reached at Lv 16) the second half,
- * Kel Ashar Act 2 (Lv 30-50).
+ * Kel Ashar Act 2 (Lv 30-50), Cairnwatch the moors (Act 3, Lv 20-35), the Rustwater Post the badlands (Act 4, Lv 25-40),
+ * Ropewell the sinkholes (Act 5, Lv 30-45).
  */
 export const ARMOUR_BASES: Record<number, string[]> = {
   1: ["sh_wood", "a_leather", "h_cap", "s_leather"],
@@ -111,6 +112,9 @@ export const ARMOUR_STEPS: Record<string, [number, number][]> = {
   armourer: [[1, 3], [1, 6], [2, 9], [2, 12], [3, 15]],
   saltarmourer: [[2, 17], [2, 20], [3, 23], [3, 26], [3, 29]],
   sandarmourer: [[2, 32], [3, 36], [3, 40], [3, 44], [3, 48]],
+  moorarmourer: [[2, 21], [3, 24], [3, 27], [3, 30], [3, 33]], // Cairnwatch (Act 3, Lv 20-35)
+  rustarmourer: [[2, 26], [3, 29], [3, 32], [3, 35], [3, 38]], // the Rustwater Post (Act 4, Lv 25-40)
+  ropearmourer: [[3, 31], [3, 34], [3, 37], [3, 40], [3, 43]], // Ropewell (Act 5, Lv 30-45)
 };
 const armourStock = (shop: string): ShopEntry[] => ARMOUR_STEPS[shop].flatMap(([tier, level]) => ARMOUR_BASES[tier].map((base) => {
   const item = withLevel(base, level);
@@ -163,6 +167,42 @@ export const SHOPS: Record<string, Shop> = {
     stock: armourStock("sandarmourer"),
     buys: ARMOUR_SLOTS,
     levelHeads: true,
+  },
+  moorarmourer: {
+    greeting: "Gorm. Iron rings over boiled leather, and a hood against the mist. The dead out there bite cold, and the Wardens' wives knit the liners. Wear something thick.",
+    stock: armourStock("moorarmourer"),
+    buys: ARMOUR_SLOTS,
+    levelHeads: true,
+  },
+  // Cairnwatch's herbwife (Act 3): Medium and Greater flasks; she buys and fuses loose runes like Morwen and Zahra
+  moorherbalist: {
+    greeting: "Mother Ysolde, dear. Bog-myrtle, sundew, a drop of something stronger. Red keeps you breathing, blue keeps you thinking. Carved stones? I'll take them, or fuse four. Never take a candle from a hag.",
+    stock: [...potionStock("potion", [1, 2]), ...potionStock("mpotion", [1, 2])],
+    buys: ["rune"],
+  },
+  rustarmourer: {
+    greeting: "Boiled hide and riveted plate, cut for the heat. A Redfang bolt goes through cloth like it isn't there. Buy something that stops it.",
+    stock: armourStock("rustarmourer"),
+    buys: ARMOUR_SLOTS,
+    levelHeads: true,
+  },
+  // the Rustwater Post's healer (Act 4): Medium and Greater flasks; she buys and fuses loose runes like Morwen, Zahra and Ysolde
+  rusthealer: {
+    greeting: "Snakebite, burns, a bolt in the shoulder: I've stitched them all. Red for the blood, blue for the head. Carved stones? I'll buy them, or fuse four.",
+    stock: [...potionStock("potion", [1, 2]), ...potionStock("mpotion", [1, 2])],
+    buys: ["rune"],
+  },
+  ropearmourer: {
+    greeting: "Stitched hide over riveted plate. A Delver comes up under your feet and a Stagkin comes straight at your chest: dress for both.",
+    stock: armourStock("ropearmourer"),
+    buys: ARMOUR_SLOTS,
+    levelHeads: true,
+  },
+  // Ropewell's herb-wife (Act 5): Medium and Greater flasks; she buys and fuses loose runes like Morwen, Zahra, Ysolde and Sal
+  ropehealer: {
+    greeting: "Bites, gores, worm-burns, quills: bring them here. Red for the blood, blue for the head. Carved stones? I'll buy them, or fuse four.",
+    stock: [...potionStock("potion", [1, 2]), ...potionStock("mpotion", [1, 2])],
+    buys: ["rune"],
   },
   spicetrader: {
     greeting: "Cardamom, saffron, and flasks to keep you breathing in the sun. Water is extra. Joking. Mostly. Carved stones? I buy those too, or fuse four into one.",

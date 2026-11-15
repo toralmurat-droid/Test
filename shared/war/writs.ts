@@ -9,7 +9,7 @@
 import { CARAVAN, caravanLines, caravanRoute, type CaravanLine } from "./caravans";
 import { CLAN_KEYS, type ClanKey } from "./clans";
 import { patrolOf } from "./patrols";
-import { bordersOf, landOf, targetsOf, type WarState } from "./rules";
+import { bordersOf, landOf, rallyClan, targetsOf, type WarState } from "./rules";
 import { STANDARD, STANDARDS, isClan } from "./standards";
 import { TERRITORIES } from "./territories";
 import { WAR_TROOPS } from "./troops";
@@ -36,6 +36,8 @@ export const WRIT = {
   valor: 8,
   /** Underdog bonus on gold and renown: x(1 + rally) for a clan with no land, shrinking to x1 at a fair share. */
   rally: 0.5,
+  /** On top of that, writs of the clan the war rallies for (rules.ts rallyClan, the weakest) pay this many times more. */
+  rallyClan: 1.25,
   /** Offers by level: a land whose levels[0] <= L + above and levels[1] >= L - below. */
   above: 3, below: 5,
 };
@@ -75,10 +77,13 @@ export const writDay = (now: number) => Math.floor(now / 86_400_000);
 /** The land's level for pay: the middle of its band. */
 export const landLevel = (t: number) => { const l = TERRITORIES[t]?.levels ?? [1, 1]; return Math.round((l[0] + l[1]) / 2); };
 
-/** Gold and renown multiplier for clan `k`: up to 1 + WRIT.rally when it holds less than a fair share. */
+/**
+ * Gold and renown multiplier for clan `k`: up to 1 + WRIT.rally when it holds less than a fair share, and WRIT.rallyClan
+ * times that while the war rallies for `k` (the weakest clan; the Rally on valor and renown is in rules.ts).
+ */
 export function writRally(s: Pick<WarState, "owner">, k: ClanKey): number {
   const fair = s.owner.length / CLAN_KEYS.length;
-  return 1 + WRIT.rally * Math.max(0, 1 - landOf(s as WarState, k) / fair);
+  return (1 + WRIT.rally * Math.max(0, 1 - landOf(s as WarState, k) / fair)) * (rallyClan(s) === k ? WRIT.rallyClan : 1);
 }
 
 /** What a writ in land `t` pays clan `k` now. */

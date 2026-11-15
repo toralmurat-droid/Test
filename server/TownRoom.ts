@@ -6,9 +6,11 @@ import { MapSchema, Schema, StateView, type } from "@colyseus/schema";
 import {
   AGGRO, aggroLevelFactor, BLOB_AI, BONES, DEMON, BROOD, Dir, FACTION, FEUD, MERGE, MobDef, MOTHER, SKELETON_AI, HIT_RADIUS, mobScale, regionMobLevel, regionSpecialLevel, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, rollSkeletonWeapon, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
   RESPAWN_MS, TICK_RATE, TILE,
-  HOLLOW_KING, ELEM_BLOB, ELEM_MOVE, inputDir, DESERT_Y0, ELITE, BOSS, URSK, SUNWRIGHT, act2MobLevel, act2SpecialLevel, BEAST, BEAST_BROOD, BEAST_FOLK, BEAST_KINDS, BEAST_MOVES, BEAST_RIDER, type BeastMove,
-  MAP_W, MAP_H, WORLD_H, inDeepRow, actOfTile,
+  HOLLOW_KING, ELEM_BLOB, ELEM_MOVE, inputDir, ELITE, BOSS, URSK, SUNWRIGHT, act2MobLevel, act2SpecialLevel, BEAST, BEAST_BROOD, BEAST_FOLK, BEAST_KINDS, BEAST_MOVES, BEAST_RIDER, type BeastMove,
+  MAP_W, MAP_H, WORLD_H, inDeepRow, actOfTile, actMobLevel, actSpecialLevel, MOORS_AI, BADLANDS_AI, REDFANG_KINDS,
+  SINKHOLES_AI, HIDEKIN_KINDS, PACK_KINDS,
 } from "../shared/constants";
+import { HideKin, type HideKinState } from "./hidekin";
 import { ambushRoomAt, arrivalAt, CRACK_OPEN_MS, LINK_RANGE, linkById, LINKS, SHORTCUT_OPEN_MS, underground } from "../shared/dungeon";
 import {
   ATTACK_VARIANTS, basicDrain, CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, EMOTES, DASH_INVULN_MS, GUARD_REDUCTION, isActiveClass, isClassKind, levelFromXp, MAX_XP, XP_CURVE_VERSION, convertOldXp, capLevel, PVP_KILL_XP, xpForLevel,
@@ -53,7 +55,7 @@ import { blocked, moveStep } from "../shared/movement";
 import { NIGHT_RAID, raiderByKey, raiderIgnores, RAIDERS } from "../shared/raiders";
 import { SLOTS_BY_ZONE, WORK_SLOTS } from "../shared/siege";
 import { DAY_CYCLE_MS, dayFrac, isUndeadNight, NIGHT_BOSSES, UNDEAD_NIGHT } from "../shared/daynight";
-import { AMBUSH, BANDIT_AI, BANDIT_ROLES, CAMP_POSTS, CHIEF, clearWalk, findPath, postPos, roleOf } from "../shared/bandits";
+import { AMBUSH, BANDIT_AI, BANDIT_ROLES, CAMPS, campOfZone, CHIEF, clearWalk, findPath, POSTS, postKind, postPos, roleOf } from "../shared/bandits";
 import { flush, flushFinal, HeroSave, loadHero, loadStash, login, markChest, openedChests, resetChests, saveHero, saveStash, type Stash } from "./accounts";
 import { offerFrom, Offer, settle, STASH, STASH_GOLD_MAX, STASH_RANGE, STASH_SIZE, TRADE } from "../shared/trade";
 import { arrivalOf, cleanPortals, PORTAL_COMBAT_MS, PORTAL_RANGE, PORTAL_WAKE_RANGE, portalById, PORTALS } from "../shared/portals";
@@ -80,7 +82,7 @@ import { hashAddr, ideaLog, saveIdeas } from "./ideaStore";
 import { dropLive, LiveState, rememberLive, takeLive } from "./handoff";
 import { MobView } from "./mobView";
 import { copyPatches } from "./patchCopy";
-import { act2Missing, act2Open, actAt, desertSpawn, WAYGATE_RANGE, waygateArrival, waygateById, WAYGATES } from "../shared/act2";
+import { actAt, actOpen, actSpawn, gateColdNote, gateOpen, WAYGATE_RANGE, waygateArrival, waygateById, WAYGATES } from "../shared/act2";
 import { respecCost } from "../shared/upkeep";
 import { ARSENAL, ATTUNE_ORDER, attuneOf, bondShare, DEFAULT_GRIMOIRE, SUMMONER_TREE, ESSENCE, GOLEM, GOLEM_OF, golemSlots, isElement, isSummonKind, parseGrimoire, PORTAL, SUMMON, summonElement, summonScaleLevel, WISP, wispEls, type AttuneElement, type SummonKind } from "../shared/summons";
 import { cleanFeast, familyOf, type Feast, feastMult, THRALL, thrallMax } from "../shared/devour";
@@ -103,7 +105,7 @@ import { ASK_BURST, ASK_PER_SEC, Bucket, CHAT_BURST, CHAT_PER_SEC, CRAFT_BURST, 
 
 import { Player } from "./player";
 import { byPart, hitBy } from "./hitBy";
-import { addValor, attachWar, onWar, warNow, warState } from "./war";
+import { addValor, attachWar, onWar, rallyTell, warNow, warState } from "./war";
 import { clanView, cleanOath, Presence, swear } from "./warHeroes";
 import { WarTroops } from "./warTroops";
 import { WarCaravans } from "./warCaravans";
@@ -113,7 +115,8 @@ import { WarRituals } from "./warRituals";
 import { WarOaths } from "./warOaths";
 import { WarWrits } from "./warWrits";
 import { cleanWrit } from "../shared/war/writs";
-import { WAR_TROOPS } from "../shared/war/troops";
+import { parseTroop, WAR_TROOPS } from "../shared/war/troops";
+import { huntedClan, rallyClan } from "../shared/war/rules";
 import type { ClanKey } from "../shared/war/clans";
 import { cleanRenown } from "../shared/war/renown";
 export { Player, PlayerPrivate } from "./player"; // moved out; tests and tools import them from here
@@ -174,7 +177,7 @@ export class Mob extends Schema {
   // Beast-folk of the Mawdeep (BEAST): each move's next use, and a rush in progress (gore, stampede, swoop, pounce)
   bcd: Partial<Record<BeastMove, number>> = {};
   rushUntil = 0; rushVX = 0; rushVY = 0; rushTurn = 0; rushKind = ""; rushHit: string[] = []; rushDone = false;
-  // Redfang Hollow bandits (shared/bandits.ts): camp member, its post (CAMP_POSTS index), patrol progress, horn alert
+  // Redfang camps (shared/bandits.ts: the Hollow, Fangrock, Talon Fort): camp member, its post (POSTS index), patrol progress, horn alert
   camp = false; post = -1; perch = false; pLeg = 0; pDir = 1; stuckSince = 0; detourUntil = 0;
   alertUntil = 0; alertHero = ""; nextHorn = 0; nextVolley = 0; rallyUntil = 0; chargeMult = 1; dashHit = false; reinforced = false;
   nextSweep = 0; nextLeap = 0; nextCry = 0;
@@ -203,6 +206,7 @@ export class Mob extends Schema {
   @type("string") owner = ""; // a hero's summon (shared/summons.ts): session id of the hero it fights for
   @type("number") champion = 0; // a champion's affixes, packed (shared/champions.ts packAffixes); 0 = a plain monster
   champ?: ChampState; // a champion's own state (server/champions.ts)
+  hk?: HideKinState; // a Hide-Kin's burrow, stitch or pit (server/hidekin.ts)
   sk = newRuntime();
 
   stunUntil = 0;
@@ -467,6 +471,8 @@ function worldDayFrac(now: number): number {
 }
 /** Spawn zones of the dead (every kind in them is undead): they keep the night (shared/daynight.ts). */
 const UNDEAD_ZONES = new Set(SPAWN_ZONES.flatMap((z, zi) => (Object.keys(z.mobs) as MobKind[]).every((k) => FACTION[k] === "undead") && !underground(z.y * TILE) ? [zi] : [])); // below ground there is no day
+/** Lairs of the dead (zones of elites only, the Barrow-King's mound): their boss does not climb straight back out by night. */
+const SLOW_RISE = new Set(SPAWN_ZONES.flatMap((z, zi) => { const k = Object.keys(z.mobs) as MobKind[]; return k.length && k.every((x) => ELITE[x]) ? [zi] : []; }));
 
 /** Monsters with no player within this many px (square) doze until someone comes by. */
 const SLEEP_RANGE = 28 * TILE; // the screen shows about 12 tiles each way, so they are always awake well before they come into view
@@ -500,6 +506,15 @@ const RANGED: Partial<Record<MobKind, RangedCfg>> = {
   necromancer: { ...SKELETON_AI.necro, far: SKELETON_AI.necro.range * 0.8, shot: "shadowbolt", mult: SKELETON_AI.necro.boltMult },
   crowseer: { ...SKELETON_AI.mage, range: 135, keepAway: 70, far: 135 * 0.85, shot: "shadowbolt", mult: 1.1 }, // the crow-folk's hexes
   veiled: { ...SKELETON_AI.mage, range: 140, keepAway: 72, far: 140 * 0.85, shot: "sunbolt", shotSpeed: 160, mult: 1.1 }, // the Veiled Circle's sun-fire
+  // Act 3: the bog hags' rot and the mist wraiths' grave-cold (MOORS_AI)
+  boghag: { ...MOORS_AI.hag, far: MOORS_AI.hag.range * 0.85, shot: "shadowbolt" },
+  mistwraith: { ...MOORS_AI.wraith, far: MOORS_AI.wraith.range * 0.85, shot: "magicbolt" },
+  // Act 4: the Redfang crossbowmen's heavy bolts; the firebrands lob fire pots (elemSpecial "firepot"), no plain shot
+  crossbowman: { ...BADLANDS_AI.crossbow, far: BADLANDS_AI.crossbow.range * 0.85, shot: "arrow" },
+  firebrand: { keepAway: BADLANDS_AI.firepot.keepAway, far: BADLANDS_AI.firepot.range * 0.85, range: BADLANDS_AI.firepot.range, shot: "", shotSpeed: 0, shotRadius: 0 },
+  // Act 5: the Quillbacks' quills; the Hide-Stitchers' hexes (and their stitch, server/hidekin.ts)
+  quillback: { ...SINKHOLES_AI.quills, far: SINKHOLES_AI.quills.range * 0.85, shot: "arrow" },
+  stitcher: { ...SINKHOLES_AI.hex, far: SINKHOLES_AI.hex.range * 0.85, shot: "shadowbolt" },
 };
 /** Dustrider archers (the nomads' other half, BEAST_FOLK "folk"): short desert bows. */
 const NOMAD_BOW: RangedCfg = { range: 125, keepAway: 60, far: 125 * 0.85, shot: "arrow", shotSpeed: 175, shotRadius: 3, mult: 0.85 };
@@ -509,12 +524,20 @@ const BONE_SLING: RangedCfg = { range: 115, keepAway: 55, far: 115 * 0.85, shot:
 const BOW_SKELETON: RangedCfg = { ...SKELETON_BOW, range: SKELETON_WEAPONS.bow.range, far: SKELETON_WEAPONS.bow.range * 0.85, shot: "arrow", mult: SKELETON_WEAPONS.bow.dmg };
 const BANDIT_BOW: RangedCfg = { ...BANDIT_AI.bow, far: BANDIT_AI.bow.range * 0.85, shot: "arrow" };
 const LOOKOUT_BOW: RangedCfg = { ...BANDIT_AI.lookoutBow, keepAway: 0, far: 1e9, shot: "arrow" }; // never leaves its tower
+/** A Redfang crossbowman on a fort's tower (shared/bandits.ts CAMPS): a lookout's sight and reach, a crossbow's bolt. */
+const LOOKOUT_CROSSBOW: RangedCfg = { ...BADLANDS_AI.crossbow, range: BANDIT_AI.lookoutBow.range, keepAway: 0, far: 1e9, shot: "arrow" };
+/** A Quillback on a Hidehall lookout tower: a lookout's sight and reach, its quills. */
+const LOOKOUT_QUILLS: RangedCfg = { ...SINKHOLES_AI.quills, range: BANDIT_AI.lookoutBow.range, keepAway: 0, far: 1e9, shot: "arrow" };
 const rangedOf = (m: Mob): RangedCfg | undefined =>
   m.kind === "skeleton" && m.weapon === "bow" ? BOW_SKELETON
+  : m.kind === "crossbowman" && m.perch ? LOOKOUT_CROSSBOW
+  : m.kind === "quillback" && m.perch ? LOOKOUT_QUILLS
   : m.kind === "bandit" ? (m.weapon === "archer" ? BANDIT_BOW : m.weapon === "lookout" ? LOOKOUT_BOW : undefined)
   : m.kind === "gnawkin" && m.weapon === "folk" ? BONE_SLING
   : m.kind === "nomad" ? (m.weapon === "folk" ? NOMAD_BOW : undefined)
   : RANGED[m.kind];
+/** A warlord's war cry (the badlands' captains and Old Rourke, the sinkholes' Hide-Chieftains), if it cries war. */
+const warlordOf = (k: MobKind) => BADLANDS_AI.warlords[k] ?? SINKHOLES_AI.warlords[k];
 /** A monster's stats: its kind's numbers, a bandit's role on top, and the camp's horn alert (they come from far). */
 function mobDef(m: Mob, now = Date.now()): MobDef {
   const d = mobDefOf(m, now);
@@ -534,11 +557,13 @@ function mobDefOf(m: Mob, now: number): MobDef {
   if (m.kind === "sunwright" && m.uPhase >= 3) return { ...base, speed: base.speed * SUNWRIGHT.sun.speed, attackCooldownMs: base.attackCooldownMs * SUNWRIGHT.sun.cooldown };
   if (m.kind === "hidemother" && m.hp < m.maxHp * BEAST.rockfall.hpFrac) return { ...base, speed: base.speed * BEAST.rockfall.speed, attackCooldownMs: base.attackCooldownMs * BEAST.rockfall.cooldown };
   if (BEAST_KINDS.includes(m.kind)) return now < m.rallyUntil ? { ...base, speed: base.speed * BEAST.howl.rallySpeed, damage: base.damage * BEAST.howl.rallyDmg } : base;
-  if (m.kind !== "bandit" && m.kind !== "banditchief") return base;
+  // the Redfang (and the Hide-Kin, Hidehall's camp): a Hollow bandit's role, war cries (the Chief's, a badlands captain's,
+  // a Hide-Chieftain's and his howl) and the horn alert; a camp's lookout sees far
+  if (m.kind !== "bandit" && m.kind !== "banditchief" && !REDFANG_KINDS.includes(m.kind) && !HIDEKIN_KINDS.includes(m.kind)) return base;
   const r = m.kind === "bandit" ? BANDIT_ROLES[roleOf(m.weapon)] : undefined;
   const rally = now < m.rallyUntil;
   const alert = now < m.alertUntil;
-  const H = BANDIT_AI.horn;
+  const H = BANDIT_AI.horn, look = m.weapon === "lookout" || m.perch;
   return {
     ...base,
     name: r?.name ?? base.name,
@@ -547,8 +572,8 @@ function mobDefOf(m: Mob, now: number): MobDef {
     speed: base.speed * (r?.speed ?? 1) * (rally ? CHIEF.warCry.speed : 1),
     attackCooldownMs: base.attackCooldownMs * (r?.cooldown ?? 1),
     xp: base.xp * (r?.xp ?? 1),
-    aggroRange: m.weapon === "lookout" ? H.sight : alert ? Math.max(base.aggroRange, H.alertAggro) : base.aggroRange,
-    leash: m.weapon === "lookout" ? 1e9 : alert ? Math.max(base.leash, H.alertLeash) : base.leash,
+    aggroRange: look ? H.sight : alert ? Math.max(base.aggroRange, H.alertAggro) : base.aggroRange,
+    leash: look ? 1e9 : alert ? Math.max(base.leash, H.alertLeash) : base.leash,
   };
 }
 /** Melee reach, damage, cooldown and wind-up of a monster (skeletons depend on their weapon). */
@@ -607,6 +632,28 @@ export class TownRoom extends Room<TownState> {
       this.state.projectiles.set(`s${++this.shotSeq}`, s);
     },
     canStand: (x, y) => !isSolidAt(x, y) && !isSafeZone(x, y) && !noMobsAt(x, y),
+  });
+  /** The Hide-Kin's own moves (server/hidekin.ts): burrow, stitch, the worms in the pits. */
+  private hidekin = new HideKin({
+    hero: (id) => this.state.players.get(id),
+    heroes: () => this.state.players.entries(),
+    mob: (id) => this.state.mobs.get(id),
+    mobsNear: (x, y, r) => this.state.mobs.inBox(x, y, r),
+    broadcast: (type, msg) => this.broadcast(type, msg),
+    dmg: (m, mult) => Math.max(1, Math.round(mobDef(m as Mob).damage * mobScale(m.level, "damage") * mult)),
+    hurtHero: (pid, dmg, fromId, what, push, kb, stunMs) => {
+      const m = this.state.mobs.get(fromId);
+      this.damagePlayer(pid, dmg, `${m ? mobDef(m).name : "?"}'s ${what}`, push, kb, { atkLevel: m?.level, from: fromId, stunMs });
+    },
+    canStand: (x, y) => !isSolidAt(x, y) && !isSafeZone(x, y) && !noMobsAt(x, y),
+    hideNow: (m, id, radius) => {
+      const s = findHideSpot(m.kind, m.x, m.y, radius, this.takenSpots(m as Mob));
+      if (!s) return false;
+      this.takeSpot(m as Mob, s);
+      this.hide(m as Mob, id, Date.now());
+      return true;
+    },
+    seekSpot: (m, radius) => this.claimSpot(m as Mob, m.homeX, m.homeY, radius, Date.now(), false),
   });
   private itemSeq = 0;
   /** The quest steps that need more than a count (server/questSteps.ts): choices, NPCs in any order, picks. */
@@ -690,7 +737,11 @@ export class TownRoom extends Room<TownState> {
 
   onCreate() {
     liveRooms.add(this);
-    const offNews = attachWar(this), offTroops = onWar((v) => { this.sieges.tick(Date.now()); this.warTroops.onWar(v); this.writs.onWar(v); }); // the clan war (server/war.ts) runs on its own; the room passes on the news
+    const offNews = attachWar(this), offTroops = onWar((v, _e, news) => {
+      this.sieges.tick(Date.now()); this.warTroops.onWar(v); this.writs.onWar(v);
+      const r = news.rally?.clan; // the Rally came to a clan: its sworn heroes here hear what it means for them
+      if (r) for (const [id, p] of this.state.players.entries()) if (p.clan === r) this.clients.getById(id)?.send("chat", { id: "", name: "Herald", text: rallyTell(r) });
+    }); // the clan war (server/war.ts) runs on its own; the room passes on the news
     this.offWar = () => { offNews(); offTroops(); };
     this.limitMessages();
     this.qsteps = new QuestSteps({
@@ -1075,7 +1126,9 @@ export class TownRoom extends Room<TownState> {
     if (!save?.kit) this.wearKit(p);
     this.applyStats(p);
     p.hp = p.maxHp;
-    const s = save?.act === 2 && act2Open(p) ? desertSpawn() : randomSpawn(); // left from the desert: back in Kel Ashar
+    // left from the desert: back in Kel Ashar; from the moors: Cairnwatch; from the badlands: the Rustwater Post
+    // (a save that no longer fits, its gate cold for the hero or an act unknown: Oakvale)
+    const s = save?.act && actOpen(save.act, p) ? actSpawn(save.act, randomSpawn) : randomSpawn();
     p.x = s.x; p.y = s.y;
     // Back after an update (or a dropped connection): right where they stood, as hurt as they were, in their group
     if (options?.newGame) dropLive(p.name, p.cls);
@@ -1106,6 +1159,7 @@ export class TownRoom extends Room<TownState> {
     client.send("tunnels", this.tunnels.view()); // Hide-Kin tunnel mouths (server/warTunnels.ts)
     client.send("rituals", this.rituals.view()); // the Veiled noon ritual circle (server/warRituals.ts)
     client.send("clan", clanView(p));
+    { const ws = warState(); if (p.clan && ws && rallyClan(ws) === p.clan) client.send("chat", { id: "", name: "Herald", text: rallyTell(p.clan) }); } // Rally for the weakest
     this.oaths.sync(); client.send("oaths", this.oaths.full()); // tabards: others learn this hero's oath, this client gets everyone's
     this.writs.join(client.sessionId); // a war writ in progress (or withdrawn while away)
     console.log(`${p.name} the ${CLASSES[p.cls].name} joined (${this.clients.length} online)`);
@@ -1306,10 +1360,11 @@ export class TownRoom extends Room<TownState> {
 
   /** A spawn spot in the zone away from every hero, or null if none turned up (the hero stands in a small zone). */
   private freeSpawnPoint(zi: number, kind: MobKind) {
-    if (kind === "bandit" && SPAWN_ZONES[zi].name === "Redfang Hollow") {
-      const post = this.freePost("");
+    const camp = campOfZone(SPAWN_ZONES[zi].name);
+    if (camp >= 0) {
+      const post = this.freePost("", camp, kind);
       if (post < 0) return null;
-      const at = postPos(CAMP_POSTS[post]);
+      const at = postPos(POSTS[post]);
       return this.playerNear(at.x, at.y, NO_SPAWN_RANGE) ? null : { ...at, level: spawnPoint(SPAWN_ZONES[zi], kind).level };
     }
     for (let i = 0; i < 12; i++) {
@@ -1330,14 +1385,19 @@ export class TownRoom extends Room<TownState> {
     m.nextSweep = 0; m.nextLeap = 0; m.nextCry = 0;
     m.ambusher = false; m.ambushAt = 0; m.ambushHero = ""; m.flyUntil = 0;
     m.nextSplurt = 0; m.nextNova = 0; m.nextBreath = 0; m.nextSparks = 0;
-    if (kind === "bandit" && SPAWN_ZONES[zi]?.name === "Redfang Hollow") {
-      // The camp: every bandit takes the first free post (its role, spot and patrol route)
-      const post = this.freePost(id);
+    const camp = zi >= 0 ? campOfZone(SPAWN_ZONES[zi]?.name) : -1;
+    if (camp >= 0) {
+      // The camp: every bandit takes the first free post of its kind (its role, spot and patrol route). A Hollow bandit
+      // wears its role in Mob.weapon; the badlands' Redfang kinds keep theirs in the flags (a lookout's "lookout" too, so
+      // the client draws it up on its tower)
+      const post = this.freePost(id, camp, kind);
       if (post >= 0) {
-        const P = CAMP_POSTS[post];
-        m.camp = true; m.post = post; m.weapon = P.role; m.perch = P.role === "lookout"; m.ambusher = P.role === "ambusher";
+        const P = POSTS[post];
+        m.camp = true; m.post = post; m.weapon = kind === "bandit" || P.role === "lookout" ? P.role : ""; m.perch = P.role === "lookout"; m.ambusher = P.role === "ambusher";
         home = { ...postPos(P), level: home.level };
       }
+    } else if (kind === "rourke") {
+      m.camp = true; m.post = -1; // Old Rourke leads Fangrock: hears its horn, rallies his men
     } else if (kind === "bandit" && SPAWN_ZONES[zi]?.name === "Gullrock Cove") {
       m.weapon = (["cutthroat", "brute", "archer", "cutthroat"] as const)[this.mobSeq % 4]; // the raiding party: a mix of roles
     }
@@ -1362,6 +1422,7 @@ export class TownRoom extends Room<TownState> {
     if (!this.state.mobs.has(id)) this.state.mobs.set(id, m);
     // An ambusher is already up in its tree when it comes (nobody is near: spawns keep NO_SPAWN_RANGE from heroes)
     if (m.ambusher && this.treeFor(m, Date.now())) this.hide(m, id, Date.now());
+    this.hidekin.spawned(m, id); // (a Gullet Worm is already down in its pit)
     m.lurk = "";
     if (zi >= 0) this.lurkIfAmbush(m, id);
   }
@@ -1434,11 +1495,11 @@ export class TownRoom extends Room<TownState> {
     }
   }
 
-  /** First camp post nobody alive holds (-1 if all are taken). */
-  private freePost(self: string): number {
+  /** First post of the camp (CAMPS index) for this kind that nobody alive holds (a POSTS index; -1 if all are taken). */
+  private freePost(self: string, camp: number, kind: MobKind): number {
     const held = new Set<number>();
     this.state.mobs.forEach((o, oid) => { if (oid !== self && o.camp && !o.dead && o.post >= 0) held.add(o.post); });
-    return CAMP_POSTS.findIndex((_, i) => !held.has(i));
+    return POSTS.findIndex((p, i) => p.camp === camp && postKind(p) === kind && !held.has(i));
   }
 
   // ---- Special blobs --------------------------------------------------------
@@ -1543,7 +1604,7 @@ export class TownRoom extends Room<TownState> {
   /** An ambusher picks a free tree near its post to climb (walks to it, hides on arrival). False if none is free. */
   private treeFor(m: Mob, now: number): boolean {
     if (now < m.spotRetry) return false; // it looked a moment ago and found no free tree
-    const s = findHideSpot(m.kind, m.homeX, m.homeY, AMBUSH.treeRadius, this.takenSpots(m), HIDE.spots.slime);
+    const s = findHideSpot(m.kind, m.homeX, m.homeY, AMBUSH.treeRadius, this.takenSpots(m), CAMPS[POSTS[m.post]?.camp ?? 0].hide); // the Hollow's trees, the badlands' rocks
     if (!s) { m.spotRetry = now + HIDE.retryMs; return false; }
     this.takeSpot(m, s);
     m.seekUntil = now + AMBUSH.seekMs; m.fleeing = false;
@@ -1600,6 +1661,7 @@ export class TownRoom extends Room<TownState> {
     m.target = victim;
     m.lastAttack = 0; // strike right away
     if (victim) this.broadcast("ambush", { id, x: m.x, y: m.y, victim });
+    if (victim && m.kind === "sinkworm") this.hidekin.burst(m, id); // a Gullet Worm bursts out of its pit (server/hidekin.ts)
   }
 
   /** A Mother Blob buds a blobling next to her, unless she already has a full brood (or the world is full of them). */
@@ -1716,7 +1778,7 @@ export class TownRoom extends Room<TownState> {
    */
   private elemSpecial(m: Mob, id: string, t: Player | undefined, dist: number, now: number): boolean {
     const E = ELEM_BLOB;
-    if (m.specialAt && (m.specialKind === "splurt" || m.specialKind === "nova" || m.specialKind === "breath")) {
+    if (m.specialAt && (m.specialKind === "splurt" || m.specialKind === "nova" || m.specialKind === "breath" || m.specialKind === "firepot")) {
       if (now < m.specialAt) return true;
       const kind = m.specialKind;
       m.specialAt = 0; m.specialKind = ""; m.winding = false; m.lastAttack = now;
@@ -1732,6 +1794,18 @@ export class TownRoom extends Room<TownState> {
             this.damagePlayer(pid, dmg, `${name}'s venom`, [0, 0], 0, { mobEl: "poison", atkLevel: level, from: id });
           });
           this.addHazard(m, id, tx, ty, S.puddle.radius, S.puddle.ms, S.puddle.tickMs, tick, "poison", Date.now());
+        });
+      } else if (kind === "firepot") {
+        // a Firebrand's pot flies to where the hero stands NOW, bursts, and the ground burns a while (BADLANDS_AI.firepot)
+        const tx = t ? t.x : m.castX, ty = t ? t.y : m.castY, F = BADLANDS_AI.firepot;
+        this.broadcast("firepot", { id, x0: Math.round(m.x), y0: Math.round(m.y - 8), x: Math.round(tx), y: Math.round(ty), ms: F.flightMs, r: F.burn.radius, burnMs: F.burn.ms });
+        const dmg = this.elemDmg(m, F.dmgMult), tick = this.elemDmg(m, F.burn.dmgMult), level = m.level;
+        this.host.later(F.flightMs, () => {
+          this.state.players.forEach((p, pid) => {
+            if (p.dead || Math.hypot(p.x - tx, p.y - ty) > F.burn.radius) return;
+            this.damagePlayer(pid, dmg, `${name}'s fire pot`, [0, 0], 0, { mobEl: "fire", atkLevel: level, from: id });
+          });
+          this.addHazard(m, id, tx, ty, F.burn.radius, F.burn.ms, F.burn.tickMs, tick, "fire", Date.now());
         });
       } else if (kind === "nova") {
         const N = E.nova, dmg = this.elemDmg(m, N.dmgMult);
@@ -1765,6 +1839,11 @@ export class TownRoom extends Room<TownState> {
       m.aimX = (t.x - m.x) / d; m.aimY = (t.y - m.y) / d;
       m.specialKind = "breath"; m.specialAt = now + E.breath.windupMs; m.nextBreath = now + E.breath.cooldownMs;
       this.broadcast("elemwind", { id, kind: "breath", ms: E.breath.windupMs, x: Math.round(m.x), y: Math.round(m.y), ax: m.aimX, ay: m.aimY, reach: E.breath.reach, half: E.breath.halfAngle });
+    } else if (moves.includes("firepot") && now >= m.nextSplurt && dist <= BADLANDS_AI.firepot.range && dist > 20) {
+      const F = BADLANDS_AI.firepot;
+      m.castX = t.x; m.castY = t.y;
+      m.specialKind = "firepot"; m.specialAt = now + F.windupMs; m.nextSplurt = now + F.cooldownMs;
+      this.broadcast("elemwind", { id, kind: "firepot", ms: F.windupMs, x: Math.round(t.x), y: Math.round(t.y), r: F.burn.radius });
     } else if (moves.includes("splurt") && now >= m.nextSplurt && dist <= E.splurt.range && dist > 20) {
       m.castX = t.x; m.castY = t.y;
       m.specialKind = "splurt"; m.specialAt = now + E.splurt.windupMs; m.nextSplurt = now + E.splurt.cooldownMs;
@@ -1848,7 +1927,7 @@ export class TownRoom extends Room<TownState> {
       }
     } else this.state.players.forEach(hero);
     const side = m.perch ? undefined : FACTION[m.kind]; // lookouts stay up on their tower
-    const fr = m.camp && CAMP_POSTS[m.post]?.route ? BANDIT_AI.patrolFeud : FEUD.range; // patrols go looking for trouble
+    const fr = m.camp && POSTS[m.post]?.route ? BANDIT_AI.patrolFeud : FEUD.range; // patrols go looking for trouble
     if (side && !m.mergeInto && !m.summonFor && Math.hypot(m.x - m.homeX, m.y - m.homeY) <= def.leash) {
       const cx = Math.floor(m.x / FEUD_CELL), cy = Math.floor(m.y / FEUD_CELL);
       for (let gy = cy - 1; gy <= cy + 1; gy++) for (let gx = cx - 1; gx <= cx + 1; gx++) {
@@ -3262,7 +3341,7 @@ export class TownRoom extends Room<TownState> {
       // The dead keep the night: by day only a few of them are up and no necromancer walks; by night they climb out fast
       const undead = UNDEAD_ZONES.has(zi), day = undead && !this.undeadUp;
       const cap = day ? this.dayCap(zi, zone.cap) : zone.cap;
-      const every = undead && !day ? Math.min(z.respawnMs, UNDEAD_NIGHT.riseMs) : z.respawnMs;
+      const every = undead && !day && !SLOW_RISE.has(zi) ? Math.min(z.respawnMs, UNDEAD_NIGHT.riseMs) : z.respawnMs;
       if (zone.alive >= cap) { zone.nextAt = 0; if (zone.nextIn) zone.nextIn = 0; return; }
       if (!zone.nextAt || zone.nextAt > now + every) zone.nextAt = now + every;
       if (now >= zone.nextAt) {
@@ -3350,6 +3429,7 @@ export class TownRoom extends Room<TownState> {
     }
     if (m.kind === "motherblob" && now >= m.nextBrood) this.brood(m, id, now);
     if (m.champ && this.champs.tick(m, id, now)) return; // a champion's affixes (server/champions.ts): busy under the sand, veiled, building
+    if (HideKin.moves(m.kind) && this.hidekin.tick(m, id, now)) return; // the Hide-Kin's own (server/hidekin.ts): burrowed, coming up, sewing
     if (m.hidden) return this.updateHidden(m, id, dt, now);
     // Answering a merge call: rush to the caller and fuse on contact
     if (m.mergeInto) {
@@ -3386,7 +3466,8 @@ export class TownRoom extends Room<TownState> {
     if (m.work && (t || foe || m.spot)) this.dropWork(m, id, now);
     // Redfang Hollow: lookouts blow the horn, the chief rallies his camp and calls for more men
     if (t && m.perch && now >= m.nextHorn) this.blowHorn(m, id, now);
-    if (t && m.kind === "banditchief") this.chiefOrders(m, id, now);
+    if (t && (m.kind === "banditchief" || warlordOf(m.kind))) this.chiefOrders(m, id, now);
+    if (t && PACK_KINDS.includes(m.kind) && now >= m.nextCall) this.packCall(m, id, m.target, now); // its pack runs in (warhounds, cacklers)
 
     // Dizzy: run for the nearest grave/tree if there is one
     if (t && m.broken && !m.spot && HIDE.spots[m.kind]) this.claimSpot(m, m.x, m.y, HIDE.fleeRadius, now, true);
@@ -3433,7 +3514,7 @@ export class TownRoom extends Room<TownState> {
             m.windUntil = 0; m.winding = false; m.lastAttack = now;
             if (dist <= cfg.range * 1.2) {
               this.mobShot(m, id, t.x, t.y);
-              if (m.kind === "bandit" && now >= m.nextVolley) this.volley(m, id, t, now);
+              if ((m.kind === "bandit" || m.kind === "quillback") && now >= m.nextVolley) this.volley(m, id, t, now);
             }
           }
         } else if (dist <= cfg.range && now - m.lastAttack >= def.attackCooldownMs * melee.cooldown / poiseSpeed(poiseFrac(m, mobPoiseMax(m)))) {
@@ -3460,9 +3541,9 @@ export class TownRoom extends Room<TownState> {
         m.chargeUntil = now + BLOB_AI.warrior.chargeMs; m.nextCharge = now + BLOB_AI.warrior.cooldownMs; m.chargeMult = BLOB_AI.warrior.chargeMult;
         this.broadcast("blobcharge", { id });
       }
-      // Cutthroat: darts in and stabs on arrival
+      // Cutthroat (and a badlands outrider): darts in and stabs on arrival
       const D = BANDIT_AI.dash;
-      if (m.kind === "bandit" && m.weapon === "cutthroat" && !m.broken && !m.windUntil && now >= m.nextCharge && dist >= D.min && dist <= D.max) {
+      if (((m.kind === "bandit" && m.weapon === "cutthroat") || m.kind === "outrider") && !m.broken && !m.windUntil && now >= m.nextCharge && dist >= D.min && dist <= D.max) {
         m.chargeUntil = now + D.ms; m.nextCharge = now + D.cooldownMs; m.chargeMult = D.mult; m.dashHit = true;
         this.broadcast("bdash", { id });
       }
@@ -3533,7 +3614,7 @@ export class TownRoom extends Room<TownState> {
       input = this.work(m, now); // back to the siege works
     } else if (m.ambusher && !m.broken && this.treeFor(m, now)) {
       input = STILL; // nothing left to fight: back up into a tree (walks there next tick)
-    } else if (m.camp && CAMP_POSTS[m.post]?.route) {
+    } else if (m.camp && POSTS[m.post]?.route) {
       input = this.patrolStep(m, now); // walk the trail, back and forth
     } else if (Math.hypot(m.x - m.homeX, m.y - m.homeY) > 40) {
       input = this.go(m, m.homeX, m.homeY, now); // walk back home
@@ -3654,20 +3735,21 @@ export class TownRoom extends Room<TownState> {
 
   /** Living things a rider may cut down: every hero, every monster except the dead and the golems. */
   private raiderPrey(m: Mob, id: string, now: number): void {
-    const S = NIGHT_RAID.sight;
+    const S = NIGHT_RAID.sight, ws = warState(), hunt = ws && huntedClan(ws); // the war's leading clan is their prey first (shared/war/rules.ts)
     let best = 0, target = "", foe = "";
     this.state.players.forEach((p, pid) => {
       if (p.dead || isSafeZone(p.x, p.y)) return;
       const d = Math.hypot(p.x - m.x, p.y - m.y), hated = pid === m.hateId ? m.hate : 0;
       if (d >= (hated > 0 ? S * 2 : S)) return;
-      const score = 0.3 + Math.max(0, 1 - d / S) + hated + (pid === m.target ? AGGRO.stick : 0);
+      const score = 0.3 + Math.max(0, 1 - d / S) + hated + (pid === m.target ? AGGRO.stick : 0) + (hunt && p.clan === hunt ? NIGHT_RAID.huntPrey : 0);
       if (score > best) { best = score; target = pid; foe = ""; }
     });
     for (const [oid, o] of this.state.mobs.inBox(m.x, m.y, S)) {
       if (o === m || o.dead || o.hidden || raiderIgnores(o.kind) || o.kind === "bride") continue;
       const d = Math.hypot(o.x - m.x, o.y - m.y);
       if (d >= S) continue;
-      const score = Math.max(0, 1 - d / S) + (oid === m.hateId ? m.hate : 0) + (oid === m.foe ? AGGRO.stick : 0);
+      const prey = hunt && o.kind === "trooper" && parseTroop(o.weapon)?.clan === hunt ? NIGHT_RAID.huntPrey : 0; // the hunted clan's soldiers and carts
+      const score = Math.max(0, 1 - d / S) + (oid === m.hateId ? m.hate : 0) + (oid === m.foe ? AGGRO.stick : 0) + prey;
       if (score > best) { best = score; target = ""; foe = oid; }
     }
     const had = m.target || m.foe;
@@ -3795,7 +3877,7 @@ export class TownRoom extends Room<TownState> {
   /** Patrol: walk to the next point of the route; at the end turn round. Home follows, so after a fight it carries on. */
   private patrolStep(m: Mob, now: number): InputState {
     if (now < m.detourUntil) return m.wander;
-    const route = CAMP_POSTS[m.post].route!;
+    const route = POSTS[m.post].route!;
     m.pLeg = Math.max(0, Math.min(route.length - 1, m.pLeg));
     const [tx, ty] = route[m.pLeg], x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE;
     m.homeX = x; m.homeY = y;
@@ -3854,9 +3936,9 @@ export class TownRoom extends Room<TownState> {
     this.alertCamp(m.x, m.y, BANDIT_AI.shout.range, heroId, now);
   }
 
-  /** Archers now and then loose two more arrows beside the aimed one. */
+  /** Archers (and Quillbacks, SINKHOLES_AI.quills) now and then loose two more arrows beside the aimed one. */
   private volley(m: Mob, id: string, t: Player, now: number) {
-    const V = BANDIT_AI.volley;
+    const V = m.kind === "quillback" ? SINKHOLES_AI.quills.volley : BANDIT_AI.volley;
     m.nextVolley = now + V.everyMs * (0.8 + Math.random() * 0.4);
     const a0 = Math.atan2(t.y - m.y, t.x - m.x), d = Math.hypot(t.x - m.x, t.y - m.y);
     for (let k = 1; k < V.arrows; k++) {
@@ -3866,19 +3948,39 @@ export class TownRoom extends Room<TownState> {
     this.broadcast("volley", { id });
   }
 
-  /** The chief: War Cry (rallies everyone around him) and, once badly hurt, two more cutthroats out of the huts. */
+  /**
+   * The chief: War Cry (rallies everyone around him) and, once badly hurt, two more cutthroats out of the huts. The
+   * badlands' warlords (BADLANDS_AI.warlords: a Redfang Captain, Old Rourke) cry war the same way, rallying the clan's
+   * own round them (camp or not); Old Rourke calls outriders out of his keep once badly hurt. A Hide-Chieftain
+   * (SINKHOLES_AI.warlords) rallies the Hide-Kin round him the same way.
+   */
   private chiefOrders(m: Mob, id: string, now: number) {
-    const W = CHIEF.warCry;
+    const lord = m.kind === "banditchief" ? undefined : warlordOf(m.kind), kin = HIDEKIN_KINDS.includes(m.kind) ? HIDEKIN_KINDS : REDFANG_KINDS;
+    const W = lord ?? CHIEF.warCry;
     if (now >= m.nextCry && !m.broken) {
       m.nextCry = now + W.cooldownMs;
       const ids: string[] = [id];
       m.rallyUntil = now + W.buffMs;
       for (const [oid, o] of this.state.mobs.inBox(m.x, m.y, W.range)) {
-        if (oid === id || o.dead || !o.camp || Math.hypot(o.x - m.x, o.y - m.y) > W.range) continue;
+        if (oid === id || o.dead || !(o.camp || (lord && kin.includes(o.kind) && !o.owner)) || Math.hypot(o.x - m.x, o.y - m.y) > W.range) continue;
         o.rallyUntil = now + W.buffMs; ids.push(oid);
       }
       this.broadcast("warcry", { id, ids, ms: W.buffMs });
       this.alertCamp(m.x, m.y, W.range, m.target, now);
+    }
+    if (lord) {
+      const R = lord.reinforce;
+      if (!R || m.reinforced || m.hp >= m.maxHp * R.hpFrac) return;
+      m.reinforced = true;
+      let mine = 0; // his men still alive from an earlier fight count too
+      this.state.mobs.forEach((o) => { if (!o.dead && o.mother === id) mine++; });
+      const pts: [number, number][] = [];
+      for (let i = mine; i < R.count; i++) {
+        const c = this.callReinforcement(m, id, R.kind, "");
+        if (c) pts.push([Math.round(c.x), Math.round(c.y)]);
+      }
+      this.broadcast("reinforce", { id, pts });
+      return;
     }
     if (!m.reinforced && m.hp < m.maxHp * CHIEF.reinforce.hpFrac) {
       m.reinforced = true;
@@ -3893,15 +3995,34 @@ export class TownRoom extends Room<TownState> {
     }
   }
 
-  /** One extra cutthroat runs out next to the chief (his own man: no post, never respawns). */
-  private callReinforcement(chief: Mob, chiefId: string): Mob | undefined {
+  /**
+   * A Warhound (or a Cackler, PACK_KINDS) bays (BADLANDS_AI.pack): every one of its kind within range that has nobody to
+   * chase comes for its prey too. Each bays at most once per cooldown.
+   */
+  private packCall(m: Mob, id: string, heroId: string, now: number) {
+    const P = BADLANDS_AI.pack;
+    m.nextCall = now + P.cooldownMs;
+    if (!this.state.players.has(heroId)) return;
+    const ids: string[] = [];
+    for (const [oid, o] of this.state.mobs.inBox(m.x, m.y, P.range)) {
+      if (oid === id || o.kind !== m.kind || o.dead || o.hidden || o.owner || o.target || Math.hypot(o.x - m.x, o.y - m.y) > P.range) continue;
+      o.target = heroId; o.foe = ""; o.nextAggro = now + AGGRO.everyMs; o.nextCall = now + P.cooldownMs; // (they don't bay on in a chain)
+      this.addHate(o, heroId, 0);
+      ids.push(oid);
+    }
+    if (ids.length) this.broadcast("bay", { id, ids }); // a lone hound keeps quiet: no howl spam every cooldown
+  }
+
+  /** One extra cutthroat (or a lord's `kind`) runs out next to the chief (his own man: no post, never respawns). */
+  private callReinforcement(chief: Mob, chiefId: string, kind: MobKind = "bandit", weapon = "cutthroat"): Mob | undefined {
     for (let i = 0; i < 12; i++) {
       const a = Math.random() * Math.PI * 2, r = 30 + Math.random() * 30;
       const x = chief.x + Math.cos(a) * r, y = chief.y + Math.sin(a) * r;
       if (isSolidAt(x, y) || isSafeZone(x, y) || noMobsAt(x, y)) continue;
       const c = new Mob();
-      c.kind = "bandit"; c.weapon = "cutthroat"; c.zone = -1; c.mother = chiefId; c.camp = true; c.post = -1;
-      c.x = c.homeX = x; c.y = c.homeY = y; c.level = chief.level;
+      c.kind = kind; c.weapon = weapon; c.zone = -1; c.mother = chiefId; c.camp = true; c.post = -1;
+      c.x = c.homeX = x; c.y = c.homeY = y;
+      c.level = kind === "bandit" ? chief.level : actMobLevel(actOfTile(Math.floor(x / TILE), Math.floor(y / TILE)), chief.level); // a lord's men: his land's regular ceiling
       c.hp = c.maxHp = Math.round(mobDef(c).maxHp * mobScale(c.level, "hp"));
       c.target = chief.target; c.alertUntil = Date.now() + BANDIT_AI.horn.alertMs; c.rallyUntil = chief.rallyUntil;
       c.stunUntil = Date.now() + 350;
@@ -4085,16 +4206,20 @@ export class TownRoom extends Room<TownState> {
    * Act 2's waygates (shared/act2.ts): used like a portal stone, by clicking it or pressing E next to it (Murat
    * 2026-11-13), which takes the hero to the other act once they have beaten the first zone's two last bosses.
    * Walking into it used to cross, and a hero still walking north came out next to the other gate and went straight
-   * back. Before Act 2 is open, the gate is cold: a note says who still stands in the way.
+   * back. Before Act 2 is open, the gate is cold: a note says who still stands in the way. The homelands' gates (the
+   * moorgate, Act 3; the Red Pass, Act 4) work the same way and wake at their act's hero level (shared/act2.ts HOMELAND_GATES).
    */
   private useWaygate(client: Client) {
     const pid = client.sessionId, p = this.state.players.get(pid);
     if (!p || p.dead) return;
     const g = WAYGATES.find((o) => Math.hypot(o.x - p.x, o.y - p.y) <= WAYGATE_RANGE * 1.5);
     if (!g) return;
-    if (!act2Open(p)) {
+    if (!gateOpen(g, p)) {
       const now = Date.now();
-      if (now - p.gateNoteAt > 3000) { p.gateNoteAt = now; this.note(pid, `The waygate's stones are cold. It will wake when ${act2Missing(p).join(" and ")} ${act2Missing(p).length > 1 ? "are" : "is"} beaten.`); }
+      if (now - p.gateNoteAt > 3000) {
+        p.gateNoteAt = now;
+        this.note(pid, gateColdNote(g, p));
+      }
       return;
     }
     if (this.lanternHeld(pid, p)) return;
@@ -4180,7 +4305,7 @@ export class TownRoom extends Room<TownState> {
       const c = new Mob();
       c.kind = kind; c.zone = -1; c.mother = bid; c.servant = true;
       c.x = c.homeX = x; c.y = c.homeY = y;
-      c.level = actOfTile(Math.floor(b.x / TILE), Math.floor(b.y / TILE)) === 2 ? act2MobLevel(b.level - levelDrop) : regionMobLevel(b.level - levelDrop);
+      c.level = actMobLevel(actOfTile(Math.floor(b.x / TILE), Math.floor(b.y / TILE)), b.level - levelDrop);
       c.hp = c.maxHp = Math.round(MOBS[kind].maxHp * mobScale(c.level, "hp"));
       c.target = b.target;
       if (c.target) this.addHate(c, c.target, 0);
@@ -4399,7 +4524,7 @@ export class TownRoom extends Room<TownState> {
           if (kind === "howl") {
             // every beast in earshot is driven wild for a while (faster, harder blows)
             const until = now + B.howl.rallyMs;
-            for (const [, c] of this.state.mobs.inBox(m.x, m.y, B.howl.range)) if (!c.dead && BEAST_KINDS.includes(c.kind) && Math.hypot(c.x - m.x, c.y - m.y) <= B.howl.range) c.rallyUntil = until;
+            for (const [, c] of this.state.mobs.inBox(m.x, m.y, B.howl.range)) if (!c.dead && (BEAST_KINDS.includes(c.kind) || HIDEKIN_KINDS.includes(c.kind)) && Math.hypot(c.x - m.x, c.y - m.y) <= B.howl.range) c.rallyUntil = until;
           }
           this.broadcast("bhit", { id, kind, x, y, pts, r: kind === "howl" ? B.howl.range : 0 });
           break;
@@ -6049,7 +6174,7 @@ export class TownRoom extends Room<TownState> {
     const p = this.state.players.get(client.sessionId);
     if (!p) return;
     const board = nearestBoard(p.x, p.y);
-    const offers = board ? bountyOffers(p.level, p.bountyDone, board.y >= DESERT_Y0 * TILE) : [];
+    const offers = board ? bountyOffers(p.level, p.bountyDone, actOfTile(Math.floor(board.x / TILE), Math.floor(board.y / TILE))) : []; // the board's own act
     if (msg.drop) p.bounty = undefined;
     else if (typeof msg.take === "number" && board && !p.bounty && offers[msg.take]) p.bounty = { ...offers[msg.take], n: 0 };
     client.send("bounty", { board: board?.id ?? "", offers, active: p.bounty ?? null });
@@ -6146,7 +6271,7 @@ export class TownRoom extends Room<TownState> {
     const m = new Mob();
     m.kind = host; m.zone = -1; m.summonFor = pid; m.summonChain = c;
     m.x = m.homeX = sm.x; m.y = m.homeY = sm.y;
-    m.level = actOfTile(Math.floor(sm.x / TILE), Math.floor(sm.y / TILE)) === 2 ? act2SpecialLevel(sm.level) : regionSpecialLevel(sm.level);
+    m.level = actSpecialLevel(actOfTile(Math.floor(sm.x / TILE), Math.floor(sm.y / TILE)), sm.level);
     m.title = sm.title ?? "";
     const id = `q${++this.mobSeq}`;
     if (sm.voice) { // a boss with something to say: it has its say as it rises, then speaks now and then (bossVoices)
@@ -6444,7 +6569,7 @@ export class TownRoom extends Room<TownState> {
     this.clients.find((c) => c.sessionId === tid)?.send("died", { by: byName, ms: RESPAWN_MS });
     this.clock.setTimeout(() => {
       if (!this.state.players.has(tid)) return;
-      const s = actAt(t.y, t.x) === 2 ? desertSpawn() : randomSpawn(); // back at the act's own town
+      const s = actSpawn(actAt(t.y, t.x), randomSpawn); // back at the act's own town (the moors: Cairnwatch; the badlands: the Rustwater Post)
       t.x = s.x; t.y = s.y; t.hp = t.maxHp; t.dead = false;
       if (usesGauge(t.cls)) { t.mana = 0; this.syncMana(t); } // the song gauge starts over empty
     }, RESPAWN_MS);

@@ -12,6 +12,8 @@ import { hudSlot } from "./hudSlots";
 import "./warPlaque.css";
 
 export interface WarEv { kind: "siege" | "flip" | "held"; t: number; by: ClanKey; from: ClanKey }
+/** Server "warraid": the Night Raiders struck these lands of the clan they hunt (server/war.ts attachWar). */
+export interface WarRaid { clan: ClanKey; ts: number[] }
 
 export class WarNotice {
   private el = document.createElement("div");
@@ -29,6 +31,24 @@ export class WarNotice {
     if (e.kind === "siege") return `Siege! ${by} march on ${land}. ${Math.round((WAR.siegeWarnTicks * WAR.tickMs) / 60_000)} min to the walls.`;
     if (e.kind === "flip") return `${land} falls to ${by}!`;
     return `${land} holds against ${by}!`;
+  }
+
+  /** Text of the Night Raiders' notice for a struck land. */
+  static raidText(r: WarRaid, t: number): string {
+    return `Night Raiders! They strike ${TERRITORIES[t]?.name ?? "?"}, land of ${CLANS[r.clan]?.name ?? "?"}.`;
+  }
+
+  /** The Night Raiders struck the hunted clan: horn and notice if the hero stands in one of those lands. */
+  raid(r: WarRaid, me: { x: number; y: number } | undefined) {
+    if (!me || !Array.isArray(r?.ts)) return;
+    const here = territoryAt(Math.floor(me.x / TILE), Math.floor(me.y / TILE));
+    if (!here || !r.ts.includes(here.id)) return;
+    play("horn", undefined, undefined, 0.6, undefined, { minGap: 4000 });
+    this.el.textContent = WarNotice.raidText(r, here.id);
+    this.el.className = "siege";
+    this.el.hidden = false;
+    clearTimeout(this.timer);
+    this.timer = window.setTimeout(() => { this.el.hidden = true; }, 7000);
   }
 
   /** A war event: horn and notice if the hero is in that land or next to it. */

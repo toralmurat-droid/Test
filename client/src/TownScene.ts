@@ -130,6 +130,7 @@ import { icon, fillIcons } from "./pixelicons";
 import { ResourceBars } from "./resourceBars";
 import { OverloadGauge } from "./overloadGauge";
 import { bindElemFx } from "./elemFx";
+import { bindHidekinFx } from "./hidekinFx";
 import { ChampionFx } from "./championFx";
 import { bindBeastFx } from "./beastFx";
 import { bindRaiderFx, raiderTrail } from "./raiderFx";
@@ -484,7 +485,7 @@ export class TownScene extends Phaser.Scene {
       // Gloomy and dark (Murat 2026-11-07: "too cute"): colour drained, darker overall, heavy vignette
       const cm = cam.postFX.addColorMatrix();
       this.grade = cm;
-      this.setGrade(false);
+      this.setGrade(1);
       cam.postFX.addVignette(0.5, 0.5, 0.82, 0.55);
       addPixelGrid(cam); // one pixel density for everything in the world
     }
@@ -787,9 +788,9 @@ export class TownScene extends Phaser.Scene {
       e.sprite.setPosition(x, y); e.tx = x; e.ty = y; e.lastX = x; e.lastY = y;
       if (id !== this.me) return;
       this.jumped(); this.snapCamera();
-      showLoading(to === "desert" ? "Crossing into the Sunscar…" : "Crossing home to Oakvale…");
+      showLoading(to === "desert" ? "Crossing into the Sunscar…" : to === "moors" ? "Crossing into the Grey Barrow Moors…" : to === "badlands" ? "Crossing into the Red Badlands…" : to === "sinkholes" ? "Going down into the Mawdeep Sinkholes…" : to === "sinkway" ? "Climbing back up to Oakvale…" : "Crossing home to Oakvale…");
       this.settled = 0;
-      this.cameras.main.fadeIn(1200, 60, 30, 8);
+      if (to === "moors") this.cameras.main.fadeIn(1200, 30, 36, 44); else if (to === "badlands") this.cameras.main.fadeIn(1200, 70, 28, 14); else if (to === "sinkholes") this.cameras.main.fadeIn(1200, 22, 30, 14); else this.cameras.main.fadeIn(1200, 60, 30, 8);
     });
     // Down a rope or a stair in the Mawdeep (shared/dungeon.ts LINKS): a jump to the other end, a fade through the dark
     this.room.onMessage("descend", ({ id, x, y }) => {
@@ -1021,6 +1022,12 @@ export class TownScene extends Phaser.Scene {
       squash: (id, kx, ky, ms) => { const e = this.entities.get(id); if (e) this.squash(e, kx, ky, ms / 2); },
       shout: (x, y, text, color) => this.floatText(x, y, text, color, PIXEL_FONT, 2),
       sound: (name, x, y, arg) => playSfx(name, x, y, 1, arg),
+    });
+    // The Hide-Kin's burrows, stitches and pit worms (client/src/hidekinFx.ts)
+    bindHidekinFx(this.room, {
+      scene: this, fx: this.fx, ent: (id) => this.entities.get(id),
+      say: (x, y, text, color) => this.floatText(x, y, text, color, PIXEL_FONT),
+      squash: (id, kx, ky, ms) => { const e = this.entities.get(id); if (e) this.squash(e, kx, ky, ms / 2); },
     });
     // The beast-folk's moves in the Mawdeep Warrens (client/src/beastFx.ts)
     bindBeastFx(this.room, {
@@ -1585,6 +1592,7 @@ export class TownScene extends Phaser.Scene {
     this.room.onMessage("tunnels", (m) => { if (m && Array.isArray(m.mouths)) this.tunnelMouths = m.mouths; }); // Hide-Kin tunnel mouths (server/warTunnels.ts), kept for a war-table marker later
     const warNotice = new WarNotice(document.getElementById("hud")!);
     this.room.onMessage("warev", (e) => warNotice.show(e, this.entities.get(this.me)?.sprite));
+    this.room.onMessage("warraid", (r) => warNotice.raid(r, this.entities.get(this.me)?.sprite)); // the Night Raiders strike the leading clan's lands
     this.room.onMessage("mv", alive);
     this.startPing();
     window.setInterval(() => { if (!this.quitting && Date.now() - lastPatch > 15_000) reconnectSoon(login); }, 3000);
@@ -1995,7 +2003,7 @@ export class TownScene extends Phaser.Scene {
   /** Redfang lookouts stand up on their watchtower's platform: drawn lifted, label and HP bar above them. */
   private perch(e: Entity, p: any) {
     const look = mobLook(p.kind, p.weapon), base = look?.oy ?? 0.85, top = look?.top ?? 14;
-    const up = p.kind === "bandit" && p.weapon === "lookout";
+    const up = p.weapon === "lookout"; // a camp's lookout (shared/bandits.ts): a Hollow bandit or a badlands crossbowman
     e.sprite.setOrigin(0.5, base + (up ? PERCH_LIFT / e.sprite.frame.height : 0));
     e.top = top + (up ? PERCH_LIFT : 0);
   }
@@ -3197,23 +3205,27 @@ export class TownScene extends Phaser.Scene {
     cam.resetFX();
     cam.fadeIn(c.ms, c.r, c.g, c.b);
   }
-  /** The camera's colour grade (SMOOTH only): Oakvale drained and gloomy; the desert (Act 2) keeps a little more of its warm colour. */
+  /** The camera's colour grade (SMOOTH only): Oakvale drained and gloomy; the desert (Act 2) keeps a little more of its warm colour; the moors (Act 3) go cool grey; the badlands (Act 4) are warm, dusty and harsh (high contrast, red cast); the sinkholes (Act 5) are damp, earthy and dim (green-brown cast). */
   private grade?: Phaser.FX.ColorMatrix;
-  private gradeDesert?: boolean;
-  private setGrade(desert: boolean) {
-    if (!this.grade || this.gradeDesert === desert) return;
-    this.gradeDesert = desert;
+  private gradeAct?: 1 | 2 | 3 | 4 | 5;
+  private setGrade(act: 1 | 2 | 3 | 4 | 5) {
+    if (!this.grade || this.gradeAct === act) return;
+    this.gradeAct = act;
+    const desert = act === 2, moors = act === 3, badlands = act === 4, sink = act === 5;
     this.grade.reset();
-    this.grade.saturate(desert ? -0.22 : -0.4);
-    this.grade.contrast(desert ? 0.12 : 0.16, true);
-    this.grade.brightness(desert ? 0.92 : 0.86, true);
+    this.grade.saturate(sink ? -0.3 : moors ? -0.5 : badlands ? -0.12 : desert ? -0.22 : -0.4);
+    this.grade.contrast(sink ? 0.14 : badlands ? 0.22 : desert ? 0.12 : 0.16, true);
+    this.grade.brightness(sink ? 0.88 : moors ? 0.9 : badlands ? 0.97 : desert ? 0.92 : 0.86, true);
+    if (moors) this.grade.multiply([0.93, 0, 0, 0, 0, 0, 0.98, 0, 0, 0, 0, 0, 1.08, 0, 0, 0, 0, 0, 1, 0], true); // the moors' cool grey cast (Act 3)
+    if (sink) this.grade.multiply([0.95, 0, 0, 0, 0, 0, 1.04, 0, 0, 0, 0, 0, 0.93, 0, 0, 0, 0, 0, 1, 0], true); // the sinkholes' damp green-brown cast (Act 5)
+    if (badlands) this.grade.multiply([1.1, 0, 0, 0, 0, 0, 0.97, 0, 0, 0, 0, 0, 0.88, 0, 0, 0, 0, 0, 1, 0], true); // the badlands' hot dusty cast (Act 4)
   }
 
   update(_t: number, dtMs: number) {
     if (this.camSnap > 0 && --this.camSnap === 0) this.cameras.main.setLerp(CAM_LERP, CAM_LERP);
     this.iso?.update(dtMs);
     this.updateCover();
-    { const me = this.entities?.get(this.me)?.state; if (me) this.setGrade(me.y >= DESERT_Y0 * TILE && me.y < (DESERT_Y0 + DESERT_H) * TILE); }
+    { const me = this.entities?.get(this.me)?.state; if (me) this.setGrade(((a) => (a === 3 || a === 4 || a === 5 ? a : 0))(actOfTile(me.x / TILE, me.y / TILE)) || ( me.y >= DESERT_Y0 * TILE && me.y < (DESERT_Y0 + DESERT_H) * TILE ? 2 : 1)); }
     if (loadingActive()) this.checkLoaded();
     this.ambient?.update(this.time.now, dtMs);
     if (this.dungeon) { this.dungeon.torch = this.torch && !this.entities?.get(this.me)?.state?.dead; this.dungeon.night = this.details?.darkNow ?? 0; }
@@ -3469,8 +3481,8 @@ export class TownScene extends Phaser.Scene {
           e.bar.fillStyle(col, 0.25).fillRect(x - 4, ey - 1, 9, 3);
           e.bar.fillStyle(col).fillRect(x - 2, ey, 1, 1).fillRect(x + 2, ey, 1, 1);
         } else if (!blink) {
-          const col = p.kind === "skeleton" ? 0xff5252 : p.kind === "skeletonmage" ? 0x7fe7ff : p.kind === "sanddead" ? 0xffb030 : p.kind === "scorpion" ? 0x9dff6a : 0xfff176;
-          const ey = y - (p.kind === "skeleton" || p.kind === "skeletonmage" || p.kind === "sanddead" || p.kind === "scorpion" ? 2 : 5);
+          const col = p.kind === "skeleton" ? 0xff5252 : p.kind === "skeletonmage" ? 0x7fe7ff : p.kind === "sanddead" ? 0xffb030 : p.kind === "scorpion" ? 0x9dff6a : p.kind === "wight" ? 0xa6e8ff : 0xfff176;
+          const ey = y - (p.kind === "skeleton" || p.kind === "skeletonmage" || p.kind === "sanddead" || p.kind === "scorpion" || p.kind === "wight" ? 2 : 5);
           e.bar.fillStyle(0x000000, 0.6).fillRect(x - 3, ey - 1, 7, 3);
           e.bar.fillStyle(col).fillRect(x - 2, ey, 1, 1).fillRect(x + 2, ey, 1, 1);
         }
@@ -3568,6 +3580,7 @@ export class TownScene extends Phaser.Scene {
       const tx = meEnt.sprite.x / TILE, ty = meEnt.sprite.y / TILE;
       const zdef = zoneAt(Math.floor(tx), Math.floor(ty));
       setMusicZone(zdef?.name, zdef?.mobs, this.areaName, actOfTile(tx, ty));
+      this.ambient?.setHero(tx, ty); // the moors' mist thickens in its hollows
       this.warStd?.update(meEnt.state.dead ? undefined : meEnt.sprite, !!this.npcs?.isOpen || !!this.npcs?.busy || !!this.chests?.near || !!this.stash?.near || !!this.bounty?.near || !!this.portals?.near || !!this.shrine?.near || !!this.waygates?.near || !!this.dungeon?.nearDoor, now);
       this.warTroops?.update(meEnt.state.dead ? undefined : meEnt.sprite, now);
       this.warRituals?.update(meEnt.state.dead ? undefined : meEnt.sprite); // the Veiled ritual circle (warRituals.ts)

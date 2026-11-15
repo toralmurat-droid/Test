@@ -8,7 +8,7 @@ const AREAS = {
   schema: { about: "synced Player / Mob schema", files: [/^server\/player\.ts$/, /^shared\/mobView\.ts$/],
     lines: { file: /^server\/TownRoom\.ts$/, line: /^[+-](?![+-]).*@type\(/ } },
   "skill-engine": { about: "the shared skill engine", files: [/^shared\/skillEngine\.ts$/] },
-  map: { about: "the deterministic world map", files: [/^shared\/(map|desert)\.ts$/] },
+  map: { about: "the deterministic world map", files: [/^shared\/(map|desert|moors|badlands|sinkholes)\.ts$/] },
   deploy: { about: "CI, build and deploy", files: [/^\.github\//, /^Dockerfile$/, /^railway\.json$/, /^package(-lock)?\.json$/,
     /^server\/index\.ts$/, /^tsconfig\.json$/, /^vite\.config\.mts$/] },
 };

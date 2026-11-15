@@ -16,11 +16,36 @@ export const DESERT_H = 216;
 export const DEEP_Y0 = DESERT_Y0 + DESERT_H + 8;
 export const DEEP_END = DEEP_Y0 + 64;
 export const DEEP_SPLIT = 144;
-export const MAP_H = DEEP_END + 4; // tiles: overworld, underground band, rock, desert, rock, deep band
+/** Act 3, the Grey Barrow Moors (shared/moors.ts): the Ossuary Host's homeland, its own band under the deep band's rock. */
+export const MOORS_Y0 = DEEP_END + 8;
+export const MOORS_H = 176;
+/** Act 4, the Red Badlands (shared/badlands.ts): the Redfang clan's homeland, its own band under the moors' rock. */
+export const BADLANDS_Y0 = MOORS_Y0 + MOORS_H + 8;
+export const BADLANDS_H = 176;
+/** Act 5, the Mawdeep Sinkholes (shared/sinkholes.ts): the Hide-Kin's homeland, its own band under the badlands' rock. */
+export const SINKHOLES_Y0 = BADLANDS_Y0 + BADLANDS_H + 8;
+export const SINKHOLES_H = 176;
+export const MAP_H = SINKHOLES_Y0 + SINKHOLES_H + 4; // tiles: overworld, underground band, rock, desert, rock, deep band, rock, moors, rock, badlands, rock, sinkholes
+/** The acts (one per land): 1 Oakvale (and the Mawdeep, the Lantern Crypt), 2 the Sunscar, 3 the moors, 4 the badlands, 5 the sinkholes. */
+export type Act = 1 | 2 | 3 | 4 | 5;
 /** True in the deep band (tiles). */
 export const inDeepRow = (ty: number) => ty >= DEEP_Y0 && ty < DEEP_END;
-/** Which act a tile belongs to: the desert and the Undercity are Act 2, the rest (the Lantern Crypt too) Act 1. */
-export const actOfTile = (tx: number, ty: number): 1 | 2 => (ty >= DESERT_Y0 && !(ty >= DEEP_Y0 - 4 && tx < DEEP_SPLIT) ? 2 : 1);
+/**
+ * True for a map row in the sinkholes band, with the rock strip round it: the 8 rows of rock between two bands split
+ * evenly, 4 to each, so a tile there is never mistaken for the band above.
+ */
+export const inSinkholesBand = (ty: number) => ty >= SINKHOLES_Y0 - 4;
+/** True for a map row in the badlands band, with its share of the rock strips above and below. */
+export const inBadlandsBand = (ty: number) => ty >= BADLANDS_Y0 - 4 && ty < SINKHOLES_Y0 - 4;
+/** True for a map row in the moors band, with its share of the rock strips above and below. */
+export const inMoorsBand = (ty: number) => ty >= MOORS_Y0 - 4 && ty < BADLANDS_Y0 - 4;
+/**
+ * Which act a tile belongs to: the sinkholes band is Act 5, the badlands band Act 4, the moors band Act 3; the desert
+ * and the Undercity Act 2; the rest (the Lantern Crypt too) Act 1. The homeland bands are tested first: every row from
+ * the desert down would otherwise count as Act 2.
+ */
+export const actOfTile = (tx: number, ty: number): Act =>
+  inSinkholesBand(ty) ? 5 : inBadlandsBand(ty) ? 4 : inMoorsBand(ty) ? 3 : ty >= DESERT_Y0 && !(ty >= DEEP_Y0 - 4 && tx < DEEP_SPLIT) ? 2 : 1;
 export const TICK_RATE = 20; // server updates per second
 export const PLAYER_SPEED = 90; // px per second (default; classes override, see classes.ts)
 export const PLAYER_RADIUS = 5; // collision half-size in px
@@ -83,6 +108,14 @@ export type MobKind = "slime" | "skeleton" | "motherblob" | "blobling" | "shoote
   | "sunwright"
   // the Night Raiders (shared/raiders.ts): seven named riders who roam both acts by night
   | "nightraider"
+  // Act 3, the Grey Barrow Moors (shared/moors.ts): the Ossuary Host's dead, the fen-hags who serve them, and the Barrow-King
+  | "wight" | "boghag" | "bonehound" | "mistwraith" | "legionary" | "cairnlord" | "barrowking"
+  // Act 4, the Red Badlands (shared/badlands.ts): the Redfang clan's riders, bowmen, fire-throwers, dogs and captains, the
+  // badlands' vultures and rattlesnakes, and Old Rourke, the Fang-Father, in his keep at Fangrock
+  | "outrider" | "crossbowman" | "firebrand" | "warhound" | "vulture" | "rattler" | "redcaptain" | "rourke"
+  // Act 5, the Mawdeep Sinkholes (shared/sinkholes.ts): the Hide-Kin's diggers, hyena packs, stag-chargers, quill-throwers
+  // and hide-stitching shamans, the Gullet Worms in the pit floors, the Hide-Chieftains, and the Maw-Father in the Great Maw
+  | "delver" | "cackler" | "stagkin" | "quillback" | "stitcher" | "sinkworm" | "hidechief" | "mawfather"
   // clan troops of the war (shared/war/troops.ts): the clan rides in Mob.weapon; art comes per clan (shared/war/patrols.ts TROOP_LOOK)
   | "trooper"
   // summoned by heroes (shared/summons.ts): they fight for their owner
@@ -167,12 +200,45 @@ export const MOBS: Record<MobKind, MobDef> = {
   // hero of their level (pve.ts --troops); no XP, no loot. troopStats adds the clan, officer and veteran multipliers
   trooper: { name: "Soldier", maxHp: 230, speed: 64, damage: 21, attackCooldownMs: 950, aggroRange: 160, leash: 192, xp: 0 },
   hidemother: { name: "The Hide-Mother", maxHp: 950, speed: 50, damage: 28, attackCooldownMs: 1300, aggroRange: 240, leash: 480, xp: 1000 },
+  // Act 3, the Grey Barrow Moors (Lv 20-35): base numbers set with tools/balance/pve.ts --moors so the moors play like
+  // Act 1's Lv 20-25 zones for a hero of their level (MOORS_KINDS below; moves in BEAST_MOVES, shots in server RANGED)
+  wight: { name: "Barrow-Wight", maxHp: 170, speed: 56, damage: 23, attackCooldownMs: 1000, aggroRange: 120, leash: 220, xp: 34 },
+  boghag: { name: "Bog Hag", maxHp: 125, speed: 50, damage: 22, attackCooldownMs: 1800, aggroRange: 150, leash: 230, xp: 36 },
+  bonehound: { name: "Bone Hound", maxHp: 105, speed: 84, damage: 10, attackCooldownMs: 800, aggroRange: 150, leash: 260, xp: 28 },
+  mistwraith: { name: "Mist Wraith", maxHp: 110, speed: 62, damage: 20, attackCooldownMs: 1700, aggroRange: 160, leash: 240, xp: 36 },
+  legionary: { name: "Host Legionary", maxHp: 220, speed: 54, damage: 24, attackCooldownMs: 1150, aggroRange: 130, leash: 230, xp: 42 },
+  // the elite of the barrow fields, and the Host's old king under Kingsbarrow (a boss of the dead: only about at night)
+  cairnlord: { name: "Cairn-Lord", maxHp: 750, speed: 50, damage: 27, attackCooldownMs: 1300, aggroRange: 170, leash: 320, xp: 340 },
+  barrowking: { name: "The Barrow-King", maxHp: 1900, speed: 52, damage: 32, attackCooldownMs: 1250, aggroRange: 240, leash: 460, xp: 1100 },
+  // Act 4, the Red Badlands (Lv 25-40): base numbers set with tools/balance/pve.ts --badlands so the badlands play like the
+  // moors and Act 1's late zones for a hero of their level (BADLANDS_KINDS below; moves in BEAST_MOVES, BADLANDS_AI)
+  outrider: { name: "Redfang Outrider", maxHp: 200, speed: 64, damage: 21, attackCooldownMs: 950, aggroRange: 140, leash: 240, xp: 36 },
+  crossbowman: { name: "Redfang Crossbowman", maxHp: 150, speed: 54, damage: 23, attackCooldownMs: 1800, aggroRange: 170, leash: 240, xp: 38 },
+  firebrand: { name: "Redfang Firebrand", maxHp: 155, speed: 52, damage: 20, attackCooldownMs: 1500, aggroRange: 150, leash: 230, xp: 40 },
+  warhound: { name: "Redfang Warhound", maxHp: 125, speed: 86, damage: 10, attackCooldownMs: 800, aggroRange: 150, leash: 260, xp: 28 },
+  vulture: { name: "Vulture", maxHp: 120, speed: 70, damage: 16, attackCooldownMs: 1100, aggroRange: 160, leash: 280, xp: 30 },
+  rattler: { name: "Rattler", maxHp: 115, speed: 58, damage: 14, attackCooldownMs: 1000, aggroRange: 100, leash: 200, xp: 30 },
+  // the clan's captains (elite) and its lord, Old Rourke, the Fang-Father, in Fangrock's keep (a living boss: about by day and night)
+  redcaptain: { name: "Redfang Captain", maxHp: 760, speed: 56, damage: 27, attackCooldownMs: 1250, aggroRange: 180, leash: 320, xp: 350 },
+  rourke: { name: "Old Rourke", maxHp: 1900, speed: 56, damage: 26, attackCooldownMs: 1200, aggroRange: 240, leash: 460, xp: 1200 },
+  // Act 5, the Mawdeep Sinkholes (Lv 30-45): base numbers set with tools/balance/pve.ts --sinkholes so the sinkholes play
+  // like the badlands for a hero of their level (SINKHOLES_KINDS below; moves in BEAST_MOVES, SINKHOLES_AI, server/hidekin.ts)
+  delver: { name: "Hide-Kin Delver", maxHp: 175, speed: 58, damage: 20, attackCooldownMs: 1000, aggroRange: 140, leash: 240, xp: 38 },
+  cackler: { name: "Cackler", maxHp: 120, speed: 84, damage: 10, attackCooldownMs: 800, aggroRange: 150, leash: 260, xp: 30 },
+  stagkin: { name: "Stagkin", maxHp: 205, speed: 62, damage: 22, attackCooldownMs: 1150, aggroRange: 150, leash: 260, xp: 42 },
+  quillback: { name: "Quillback", maxHp: 145, speed: 52, damage: 20, attackCooldownMs: 1700, aggroRange: 170, leash: 240, xp: 38 },
+  stitcher: { name: "Hide-Stitcher", maxHp: 130, speed: 52, damage: 18, attackCooldownMs: 1600, aggroRange: 160, leash: 240, xp: 42 },
+  sinkworm: { name: "Gullet Worm", maxHp: 150, speed: 50, damage: 18, attackCooldownMs: 1100, aggroRange: 110, leash: 200, xp: 36 },
+  // the Hide-Chieftains (elite) and the Maw-Father, the Hide-Kin's first father, in the Great Maw (a living boss: about by day and night)
+  hidechief: { name: "Hide-Chieftain", maxHp: 780, speed: 58, damage: 27, attackCooldownMs: 1250, aggroRange: 180, leash: 320, xp: 380 },
+  mawfather: { name: "The Maw-Father", maxHp: 2000, speed: 54, damage: 32, attackCooldownMs: 1250, aggroRange: 240, leash: 460, xp: 1400 },
 };
 
 /** Elite monsters: much tougher than the rest of their zone, with a bigger look and an "Elite" tag. */
-export const ELITE: Partial<Record<MobKind, true>> = { necromancer: true, demon: true, banditchief: true, hollowking: true, packlord: true, hornbrute: true, hidemother: true, gnasher: true, weaver: true, sunwright: true };
+export const ELITE: Partial<Record<MobKind, true>> = { necromancer: true, demon: true, banditchief: true, hollowking: true, packlord: true, hornbrute: true, hidemother: true, gnasher: true, weaver: true, sunwright: true, cairnlord: true, barrowking: true,
+  redcaptain: true, rourke: true, hidechief: true, mawfather: true };
 /** Bosses: elites that lead a whole camp (tagged "Boss" instead of "Elite"). */
-export const BOSS: Partial<Record<MobKind, true>> = { banditchief: true, hollowking: true, hidemother: true, sunwright: true };
+export const BOSS: Partial<Record<MobKind, true>> = { banditchief: true, hollowking: true, hidemother: true, sunwright: true, barrowking: true, rourke: true, mawfather: true };
 
 /**
  * Skeleton casters. Distances in px.
@@ -278,6 +344,10 @@ export const FACTION: Partial<Record<MobKind, "blob" | "undead" | "outlaw">> = {
   skeleton: "undead", skeletonmage: "undead", necromancer: "undead", crawler: "undead", demon: "undead",
   bandit: "outlaw", banditchief: "outlaw",
   sanddead: "undead",
+  // Act 3: the Ossuary Host (the bog hags are living witches in its pay: no side)
+  wight: "undead", bonehound: "undead", mistwraith: "undead", legionary: "undead", cairnlord: "undead", barrowking: "undead",
+  // Act 4: the Redfang clan and its dogs (the vultures and the rattlers take no side)
+  outrider: "outlaw", crossbowman: "outlaw", firebrand: "outlaw", warhound: "outlaw", redcaptain: "outlaw", rourke: "outlaw",
 };
 
 /**
@@ -324,7 +394,8 @@ export const ELEM_BLOB = {
   sparks: { everyMs: 800, count: 3, spread: 42, radius: 11, ms: 2400, tickMs: 450, dmgMult: 0.55, max: 9 },
 };
 /** Which move each elemental blob kind brings (a merged blob gets the moves of every elemental blob inside it). */
-export const ELEM_MOVE: Partial<Record<MobKind, "splurt" | "nova" | "breath" | "sparks">> = { venomblob: "splurt", frostblob: "nova", fireblob: "breath", stormblob: "sparks" };
+export const ELEM_MOVE: Partial<Record<MobKind, "splurt" | "nova" | "breath" | "sparks" | "firepot">> = { venomblob: "splurt", frostblob: "nova", fireblob: "breath", stormblob: "sparks",
+  firebrand: "firepot" }; // Act 4: the Redfang Firebrand's fire pots (BADLANDS_AI.firepot), thrown and landing like the Venom Blob's splurt
 
 /** Mother Blob brood: every few seconds (random) she may bud a blobling, up to `perMother` alive at once. */
 export const BROOD = { minMs: 5000, maxMs: 12000, perMother: 4, worldCap: 160 };
@@ -349,6 +420,37 @@ export const regionSpecialLevel = (l: number) => Math.min(REGION_LEVEL.special, 
 export const ACT2_LEVEL = { min: 30, mob: 47, special: 50 };
 export const act2MobLevel = (l: number) => Math.min(ACT2_LEVEL.mob, Math.max(ACT2_LEVEL.min, Math.round(l)));
 export const act2SpecialLevel = (l: number) => Math.min(ACT2_LEVEL.special, Math.max(ACT2_LEVEL.min, Math.round(l)));
+/**
+ * Act 3, the Grey Barrow Moors: Lv 20-35, open from hero Lv 20 (shared/act2.ts moorsOpen). Regular monsters Lv 20-33,
+ * a level every `tilesPerLevel` tiles away from the moorgate (shared/spawns.ts baseLevelAt).
+ */
+export const MOORS_LEVEL = { min: 20, mob: 33, special: 35, tilesPerLevel: 10 };
+export const moorsMobLevel = (l: number) => Math.min(MOORS_LEVEL.mob, Math.max(MOORS_LEVEL.min, Math.round(l)));
+export const moorsSpecialLevel = (l: number) => Math.min(MOORS_LEVEL.special, Math.max(MOORS_LEVEL.min, Math.round(l)));
+/**
+ * Act 4, the Red Badlands: Lv 25-40, open from hero Lv 25 (shared/act2.ts badlandsOpen). Regular monsters Lv 25-38, a
+ * level every `tilesPerLevel` tiles west of the Red Pass's badlands side (the band's east edge) toward Fangrock, the
+ * Redfang stronghold in the far west (shared/spawns.ts baseLevelAt).
+ */
+export const BADLANDS_LEVEL = { min: 25, mob: 38, special: 40, tilesPerLevel: 16 };
+/**
+ * Act 5, the Mawdeep Sinkholes: Lv 30-45, open from hero Lv 30 (the Sinkway, shared/act2.ts HOMELAND_GATES). Regular
+ * monsters Lv 30-43, a level every `tilesPerLevel` tiles from the Sinkway's arrival (the band's north-west) toward
+ * Hidehall, the Hide-Kin's seat in the far south-east (shared/spawns.ts baseLevelAt).
+ */
+export const SINKHOLES_LEVEL = { min: 30, mob: 43, special: 45, tilesPerLevel: 12 };
+/**
+ * Every act's level band in one table (min, regular ceiling, special ceiling), so a new homeland is one row here. Act 1
+ * starts at Lv 1 (regionMobLevel); the others hold their monsters inside their own band.
+ */
+export const ACT_LEVEL: Record<Act, { min: number; mob: number; special: number }> = {
+  1: { min: 1, ...REGION_LEVEL }, 2: ACT2_LEVEL, 3: MOORS_LEVEL, 4: BADLANDS_LEVEL, 5: SINKHOLES_LEVEL,
+};
+const actLevels = (act: number) => ACT_LEVEL[act as Act] ?? ACT_LEVEL[1];
+/** A regular monster's level held to its act's band (act from actOfTile). */
+export const actMobLevel = (act: number, l: number) => { const L = actLevels(act); return Math.min(L.mob, Math.max(L.min, Math.round(l))); };
+/** A merged blob, demon, elite or boss: its act's special ceiling. */
+export const actSpecialLevel = (act: number, l: number) => { const L = actLevels(act); return Math.min(L.special, Math.max(L.min, Math.round(l))); };
 
 export const MOB_ATTACK_RANGE = 14; // px
 
@@ -433,6 +535,23 @@ export const BEAST_MOVES: Partial<Record<MobKind, BeastMove[]>> = {
   sphinx: ["pounce"], // spreads its wings and drops onto you
   // the Sunwright: Zenith (when ready) before everything, then her choir, falling sun, the flare when crowded, the lance
   sunwright: ["zenith", "brood", "sunfall", "flare", "beam"],
+  // Act 3: the legionary rushes behind its tower shield; the Cairn-Lord calls wights out of the mounds, stamps and cleaves;
+  // the Barrow-King brings his barrow's roof down when badly hurt, calls his host, roars (slows) and cleaves
+  legionary: ["gore"],
+  cairnlord: ["brood", "stomp", "maul"],
+  barrowking: ["rockfall", "brood", "roar", "maul"],
+  // Act 4: vultures drop out of the sky onto you (and drink); warhounds leap at your throat; a Redfang Captain stamps and
+  // cleaves (and cries war, BADLANDS_AI.warlords); Old Rourke leaps on you, cleaves, and roars (slows)
+  vulture: ["swoop"],
+  warhound: ["pounce"],
+  redcaptain: ["stomp", "maul"],
+  rourke: ["pounce", "roar", "maul"],
+  // Act 5: the Stagkin lower their antlers and charge (a long stampede, a short gore); a Hide-Chieftain howls up his
+  // cacklers (and cries war, SINKHOLES_AI.warlords) and cleaves; the Maw-Father brings the pit's walls down when badly
+  // hurt, calls his brood, roars and cleaves (and burrows, server/hidekin.ts)
+  stagkin: ["stampede", "gore"],
+  hidechief: ["howl", "maul"],
+  mawfather: ["rockfall", "brood", "roar", "maul"],
 };
 /** Damage over time after a plain blow (BEAST.plague / bleed / venom). */
 /**
@@ -484,9 +603,13 @@ export const SUNWRIGHT = {
     death: ["The night... it is so cold... I only wanted..."],
   },
 };
-export const BEAST_RIDER: Partial<Record<MobKind, "plague" | "bleed" | "venom">> = { gnawkin: "plague", packlord: "bleed", silkwretch: "venom", hidemother: "bleed", gnasher: "plague", weaver: "venom", scorpion: "venom" };
+export const BEAST_RIDER: Partial<Record<MobKind, "plague" | "bleed" | "venom">> = { gnawkin: "plague", packlord: "bleed", silkwretch: "venom", hidemother: "bleed", gnasher: "plague", weaver: "venom", scorpion: "venom", bonehound: "bleed", boghag: "venom",
+  warhound: "bleed", rattler: "venom",
+  cackler: "bleed" };
 /** Who answers a beast's Brood or Howl (default BEAST.brood.kinds / BEAST.howl.summon). */
-export const BEAST_BROOD: Partial<Record<MobKind, MobKind[]>> = { gnasher: ["gnawkin", "gnawkin", "gnawkin"], weaver: ["silkwretch", "silkwretch"], sunwright: ["veiled", "veiled", "veiled"] };
+export const BEAST_BROOD: Partial<Record<MobKind, MobKind[]>> = { gnasher: ["gnawkin", "gnawkin", "gnawkin"], weaver: ["silkwretch", "silkwretch"], sunwright: ["veiled", "veiled", "veiled"],
+  cairnlord: ["wight", "wight"], barrowking: ["wight", "legionary", "bonehound", "bonehound"],
+  hidechief: ["cackler", "cackler"], mawfather: ["delver", "cackler", "cackler", "stagkin"] };
 /**
  * Half-folk variants (Mob.weapon "folk", Murat 2026-11-05): a man's face under the flayed animal head, the body gone
  * over to the beast. Gnawkin bone-slingers throw stones from range; the rest fight like their kind.
@@ -494,6 +617,71 @@ export const BEAST_BROOD: Partial<Record<MobKind, MobKind[]>> = { gnasher: ["gna
 export const BEAST_FOLK: Partial<Record<MobKind, number>> = { gnawkin: 0.4, tuskborn: 0.35, silkwretch: 0.4, duskwing: 0.4, nomad: 0.35 }; // nomad "folk": a Dustrider archer
 /** Act 2's monsters (the Sunscar): levels from ACT2_LEVEL. */
 export const DESERT_KINDS: MobKind[] = ["nomad", "scorpion", "sanddead", "veiled", "camelfolk", "sphinx", "sunwright"];
+/**
+ * The moors' casters (server RANGED, pve.ts): the Bog Hag hangs back and spits green rot (poison, MOB_SHOT_ELEMENT), the
+ * Mist Wraith drifts at the edge of sight and throws shards of grave-cold (cold). Distances in px.
+ */
+export const MOORS_AI = {
+  hag: { range: 130, keepAway: 65, shotSpeed: 150, shotRadius: 3, mult: 1 },
+  wraith: { range: 140, keepAway: 75, shotSpeed: 165, shotRadius: 3, mult: 1 },
+};
+/** Act 3's monsters (the Grey Barrow Moors): levels from MOORS_LEVEL. */
+export const MOORS_KINDS: MobKind[] = ["wight", "boghag", "bonehound", "mistwraith", "legionary", "cairnlord", "barrowking"];
+/**
+ * The badlands' moves (server TownRoom, pve.ts). Distances in px, times in ms, damage as a multiple of the monster's own.
+ * - crossbow: the Crossbowman's heavy bolt, slow to reload; perched on a tower (a camp lookout, shared/bandits.ts) it sees
+ *   and shoots as far as a Redfang Hollow lookout.
+ * - firepot: the Firebrand lobs a clay pot of burning cinnabar oil where you stand (marked first); it bursts and leaves
+ *   the ground burning (a fire hazard like the Venom Blob's puddle).
+ * - pack: a Warhound that is hit (or sees its prey) bays, and every warhound within `range` without a target runs in.
+ * - warlords: war cries (the rallied hit and run like the Redfang Chief's men, shared/bandits.ts CHIEF.warCry): the
+ *   Captain rallies the Redfang round him; Old Rourke rallies them and, once badly hurt, calls outriders out of the keep.
+ */
+export const BADLANDS_AI = {
+  crossbow: { range: 150, keepAway: 65, shotSpeed: 230, shotRadius: 3, mult: 1.15 },
+  firepot: { range: 135, keepAway: 70, windupMs: 650, flightMs: 700, cooldownMs: 3600, dmgMult: 1.1, burn: { radius: 24, ms: 4500, tickMs: 500, dmgMult: 0.32 } },
+  pack: { range: 8 * 32, cooldownMs: 6000 },
+  warlords: {
+    redcaptain: { cooldownMs: 20000, range: 10 * 32, buffMs: 9000 },
+    rourke: { cooldownMs: 20000, range: 14 * 32, buffMs: 10000, reinforce: { hpFrac: 0.5, count: 3, kind: "outrider" as MobKind } },
+  } as Partial<Record<MobKind, { cooldownMs: number; range: number; buffMs: number; reinforce?: { hpFrac: number; count: number; kind: MobKind } }>>,
+};
+/** Act 4's monsters (the Red Badlands): levels from BADLANDS_LEVEL. */
+export const BADLANDS_KINDS: MobKind[] = ["outrider", "crossbowman", "firebrand", "warhound", "vulture", "rattler", "redcaptain", "rourke"];
+/** The Redfang clan's own (the badlands' men and dogs): they answer the horn and their captains' war cries. */
+export const REDFANG_KINDS: MobKind[] = ["outrider", "crossbowman", "firebrand", "warhound", "redcaptain", "rourke"];
+/**
+ * The sinkholes' moves (server/hidekin.ts, TownRoom, pve.ts). Distances in px, times in ms, damage as a multiple of the
+ * monster's own.
+ * - quills: the Quillback shakes quills off its back at range like a crossbowman's bolt, and every so often a fan of
+ *   them (`volley`, like a Redfang archer's); up on a Hidehall lookout it sees and throws as far as a camp lookout.
+ * - hex: the Hide-Stitcher's bone-needle hex, thrown from range (poison, MOB_SHOT_ELEMENT).
+ * - stitch: a Hide-Stitcher sews a hurt kinsman back up (the most hurt Hide-Kin in `range` under `hpFrac`): a cast,
+ *   then `heal` of its max HP. Kill the stitcher first.
+ * - burrow: a Delver (and the Maw-Father) digs in, tunnels under its hero, marks the ground where it will come up
+ *   (`markMs` to step off) and bursts out there: damage and a short stun in `radius`.
+ * - burst: a Gullet Worm lies buried in a pit floor (shared/spawns.ts HIDE) and bursts out at a hero who walks by.
+ * - warlords: a Hide-Chieftain's war cry rallies the Hide-Kin round him like a Redfang Captain's (BADLANDS_AI.warlords).
+ */
+export const SINKHOLES_AI = {
+  quills: { range: 140, keepAway: 60, shotSpeed: 210, shotRadius: 3, mult: 0.95, volley: { everyMs: 5500, arrows: 3, spread: 0.2 } },
+  hex: { range: 135, keepAway: 70, shotSpeed: 160, shotRadius: 3, mult: 1 },
+  stitch: { everyMs: 8000, castMs: 900, range: 6 * 32, hpFrac: 0.6, heal: 0.25, eliteHeal: 0.08 }, // elites and bosses take far less: a ring of stitchers must not keep a chieftain up
+  burrow: {
+    delver: { minDist: 60, maxDist: 220, firstMs: 2500, everyMs: 8000, underMs: 1100, markMs: 650, radius: 30, dmgMult: 1.5, stunMs: 400 },
+    mawfather: { minDist: 90, maxDist: 320, firstMs: 6000, everyMs: 14000, underMs: 1400, markMs: 900, radius: 52, dmgMult: 1.9, stunMs: 600 },
+  } as Partial<Record<MobKind, { minDist: number; maxDist: number; firstMs: number; everyMs: number; underMs: number; markMs: number; radius: number; dmgMult: number; stunMs: number }>>,
+  burst: { radius: 36, dmgMult: 1.4, stunMs: 450, knockback: 1.5, seekRadius: 10 },
+  warlords: {
+    hidechief: { cooldownMs: 20000, range: 10 * 32, buffMs: 9000 },
+  } as Partial<Record<MobKind, { cooldownMs: number; range: number; buffMs: number; reinforce?: { hpFrac: number; count: number; kind: MobKind } }>>,
+};
+/** Act 5's monsters (the Mawdeep Sinkholes): levels from SINKHOLES_LEVEL. */
+export const SINKHOLES_KINDS: MobKind[] = ["delver", "cackler", "stagkin", "quillback", "stitcher", "sinkworm", "hidechief", "mawfather"];
+/** The Hide-Kin themselves (the Gullet Worms are only beasts of their pits): they answer the horn, the war cries and the stitch. */
+export const HIDEKIN_KINDS: MobKind[] = ["delver", "cackler", "stagkin", "quillback", "stitcher", "hidechief", "mawfather"];
+/** Pack hunters: one that has prey bays, and every one of its own kind near with nobody to chase runs in (BADLANDS_AI.pack). */
+export const PACK_KINDS: MobKind[] = ["warhound", "cackler"];
 /** Beast-folk that fly (drawn hovering, client textures.ts). */
-export const BEAST_FLYERS: MobKind[] = ["duskwing", "crowseer"];
+export const BEAST_FLYERS: MobKind[] = ["duskwing", "crowseer", "vulture"];
 export const BEAST_KINDS: MobKind[] = ["gnawkin", "tuskborn", "silkwretch", "duskwing", "packlord", "hornbrute", "hidemother", "crowseer", "gnasher", "weaver"];

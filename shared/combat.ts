@@ -86,6 +86,32 @@ export const MOB_COMBAT: Record<MobKind, { poise: number; windupMs: number; soun
   sunwright: { poise: 460, windupMs: 480, sound: { tier: "dull", pitch: "L", mode: "major" } },
   trooper: { poise: 200, windupMs: 300, sound: { tier: "normal", pitch: "M" } },
   nightraider: { poise: 3000, windupMs: 460, sound: { tier: "deaf" } }, // barely flinches: a hero alone can hardly break it
+  // Act 3, the moors: the Host's dead hear in the major key like the valley's; the hags and the wraiths' hollow cold ring easily
+  wight: { poise: 80, windupMs: 360, sound: { tier: "normal", pitch: "L", mode: "major" } },
+  boghag: { poise: 40, windupMs: 440, sound: { tier: "keen", pitch: "M", mode: "minor" } },
+  bonehound: { poise: 35, windupMs: 240, sound: { tier: "fragile", pitch: "H", mode: "major" } },
+  mistwraith: { poise: 30, windupMs: 420, sound: { tier: "keen", pitch: "H", mode: "major" } },
+  legionary: { poise: 150, windupMs: 380, sound: { tier: "dull", pitch: "L", mode: "major" } }, // behind a tower shield: hard to break
+  cairnlord: { poise: 300, windupMs: 460, sound: { tier: "dull", pitch: "L", mode: "major" } },
+  barrowking: { poise: 440, windupMs: 480, sound: { tier: "dull", pitch: "L", mode: "major" } },
+  // Act 4, the badlands: the Redfang in leather and mail (minor key like their Hollow kin), beasts that ring thin
+  outrider: { poise: 60, windupMs: 300, sound: { tier: "normal", pitch: "M", mode: "minor" } },
+  crossbowman: { poise: 45, windupMs: 520, sound: { tier: "normal", pitch: "M", mode: "minor" } }, // a slow crank of the windlass
+  firebrand: { poise: 45, windupMs: 450, sound: { tier: "keen", pitch: "M", mode: "minor" } },
+  warhound: { poise: 35, windupMs: 240, sound: { tier: "fragile", pitch: "H", mode: "minor" } },
+  vulture: { poise: 30, windupMs: 320, sound: { tier: "fragile", pitch: "H", mode: "minor" } },
+  rattler: { poise: 25, windupMs: 260, sound: { tier: "keen", pitch: "H", mode: "minor" } },
+  redcaptain: { poise: 300, windupMs: 440, sound: { tier: "dull", pitch: "L", mode: "minor" } },
+  rourke: { poise: 460, windupMs: 460, sound: { tier: "dull", pitch: "L", mode: "minor" } },
+  // Act 5, the sinkholes: the Hide-Kin in sewn hides and bone (the chargers and chiefs dull under theirs), the worms ring wet and low
+  delver: { poise: 70, windupMs: 340, sound: { tier: "normal", pitch: "M", mode: "minor" } },
+  cackler: { poise: 35, windupMs: 240, sound: { tier: "fragile", pitch: "H", mode: "minor" } },
+  stagkin: { poise: 110, windupMs: 420, sound: { tier: "dull", pitch: "L", mode: "minor" } },
+  quillback: { poise: 55, windupMs: 480, sound: { tier: "keen", pitch: "M", mode: "minor" } },
+  stitcher: { poise: 45, windupMs: 460, sound: { tier: "normal", pitch: "M", mode: "minor" } },
+  sinkworm: { poise: 60, windupMs: 320, sound: { tier: "normal", pitch: "L", mode: "minor" } },
+  hidechief: { poise: 310, windupMs: 440, sound: { tier: "dull", pitch: "L", mode: "minor" } },
+  mawfather: { poise: 480, windupMs: 470, sound: { tier: "dull", pitch: "L", mode: "minor" } },
 };
 
 /**

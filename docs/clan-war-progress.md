@@ -534,3 +534,226 @@ sims are unchanged.
   load round trip with names.
 - Sims (`npx tsx tools/balance/war.ts 200 30`, and `--clever=host`): identical before and after but for the run time.
 - Not done: a land's own map, zones and capitals (the homelands themselves); the Crown.
+
+## NL-2: Grey Barrow Moors, Cairnwatch quests and words (2026-11-15, moors PR2)
+- Quest chain `moors` ("The Grey Barrow Road", `MOOR_QUESTS` in `shared/quests.ts`) is a zone arc (`ZONE_ARCS`, last entry:
+  local giver, later quests `auto`, each ends in the field with an `outro`, no report-back). It costs no Player field: it
+  lives in the shared `quests` map under `moors`. Given by Warden-Captain Edra Vane (`cairncaptain`), Lv 20-35, rewards from
+  `arcReward` like the Act 1/2 arcs (a boss fight counts half a level's XP). Eight quests: The Cairns Are Open (Grey Ring,
+  Lv 20), Candles in the Mire (Sorrow Mire, 22), Thane's Rest (23), The Cairn-Lord (Cairnfield, 25, Maelgar), Lamps on the
+  Black Water (Blackwater Fen, 26), The Nine Widows (29), The Road to Kingsbarrow (31), The Barrow-King (33; Aldric
+  Hollowcrown, Lv 35, `night: true` summon in the Barrow-King's Mound). Both summoned bosses talk (`BossVoice`).
+- Two new quest items, `candle` (Corpse-Candle) and `barrowkey` (Barrow-Key); the client draws drops as `q_<id>`.
+- Edra's idle line and the herbwife's and armourer's shop greetings reworded. Nothing in `npcs.ts` but the existing text.
+- Signposts: `buildMoors` returns `posts` (local tiles); `shared/map.ts` sets each beside the nearest road like the desert's.
+  `tools/map-metrics.ts`: the moors stay 100% reachable.
+- Tests: `tests/moors-quests.test.ts` (shape, and the whole chain start to finish), `tests/zone-arcs.test.ts` now reads the
+  act from the giver's tile (Act 3 levels 20-36).
+- Not done: Weeping Stones, Drowned Hollow and the Host's Muster have no quest; the war land (Host territories) is still to come.
+
+## NL-3: the Grey Barrow Moors at war (2026-11-15, PR #442)
+The moors are the first homeland built after the acts: the Host fights from home.
+- `shared/war/regions.ts`: "moors" (The Grey Barrow Moors, NE, home `host`) now has `contains: actOfTile === 3` and one
+  capitals: the Host's seat at **The Host's Muster** (its war camp, `HOST_CAMP`, far east) and the Wardens' **The Grey
+  Ring** (the Cairnwatch garrison's ring by the outpost, not forward: like Palmshade Oasis in the Sunscar). `REGION_LINKS` gains **The
+  Barrowgate** (`MOORSGATE_OAKVALE` <-> `MOORSGATE_MOORS`): Rimewater Hollow <-> Sorrow Mire.
+- With the homeland built, `capitalsOf` drops the Host's forward capitals (Greywatch Keep, Kharsun): ordinary
+  territories now. Redfang's and the Hide-Kin's forward capitals stay.
+- Sanctuaries: `isSanctuary` also counts a zone whose only spawns are bosses as a lair (the Barrow-King's Mound; no other
+  zone is boss-only, so Acts 1-2 do not move). Cairnwatch lies outside every zone; the open moor is `wild`.
+- 42 territories: Oakvale 21, Sunscar 10, moors 11 (ids 31-41; Acts 1-2 keep ids 0-30, so active writs keep their ids).
+  Golden fingerprint in `tests/warregions.test.ts` refreshed on purpose.
+- Saved war: the existing `migrateWar` does it by name: old territories keep holder, Control, forts, sieges, pressure,
+  the leaders' targets and the log; the moors territories start at Control 100 with the Host (home clan), but the Grey Ring with the Wardens (a capital
+  always starts with its clan);
+  the former forward capitals keep their holder (no capital override). `server/war.ts` `PRE_MOORS_NAMES` (frozen) lets an
+  **unnamed** save of the old size (31) be remapped too instead of restarting. The old save is kept as `war-old-<ms>`.
+- Writs: the Cairnwatch board (act 3) offers moors writs; carts and writ roads stay inside one land (no cart through a gate).
+- Client war table: each link is drawn from its territory to the gate in each land (one straight line would cross the
+  Sunscar band), with a diamond and the link's name at each gate. Land labels just above the canvas are pulled into it.
+  Screenshots: `clan-war/war-moors-1920.png`, `-1366.png`.
+
+Sims (`npx tsx tools/balance/war.ts 200 30 [--clever=host]`):
+
+| clan | before avg / most | moors, Host only | final (with the Wardens' Grey Ring) |
+|---|---|---|---|
+| Wardens | 23.8% / 29.0% | 21.0% / 23.8% | 21.6% / 23.8% |
+| Redfang | 24.7% / 29.0% | 19.0% / 21.4% | 21.9% / 28.6% |
+| Ossuary Host | 12.0% / 19.4% | 26.3% / 31.0% | 21.4% / 23.8% |
+| Hide-Kin | 17.8% / 22.6% | 15.6% / 26.2% | 15.7% / 21.4% |
+| Veiled Circle | 21.7% / 25.8% | 18.2% / 21.4% | 19.3% / 21.4% |
+
+- Flips per war day 7.33 -> 2.04; domination 0.0% throughout. Host ruse: 12.9% vs 12.0% before; 22.7% vs 21.4% final
+  (domination 0.0%): the ruse pays.
+- With the moors all the Host's (first try) the Host went from smallest to largest (26.3%) and its ruse lost land
+  (21.1%): it held its 11 moors and nothing outside, the moors meeting the rest only at the Barrowgate. The Wardens'
+  Grey Ring capital (orchestrator's call, 2026-11-15) gives the other clans a foothold in the moors and fixes both.
+  Capitals for all four other clans in the moors overshot (Host 11.7%, ruse no gain).
+- Open: the moors' war is quiet (one gate, one owner); Weeping Stones / Drowned Hollow / Host's Muster still have no quest.
+
+## M2: Night Raiders hunt the leading clan; Rally for the weakest (2026-11-15)
+
+- Rules and numbers in `shared/war/rules.ts` (`WAR`), so the live war and `tools/balance/war.ts` run the same brakes:
+  - `huntedClan(owner)`: a clan over `leaderShare` (30%, ahead of the next), or at least `huntShare` (26%) and `huntLead`
+    (2) territories ahead of every other. `nightRaid(s, phase)`: by night (phase 2) the Night Raiders strike `huntLands`
+    (2) of its non-capital border lands, weakest Control first (then most pressed, then lowest id): each loses
+    `huntControl` (4) Control, and the hunted army loses `raidersHit` (3%, as before, which used to need over 30%).
+  - `rallyClan(owner)`: the clan with the least land when that is under `rallyBelow` (0.8) x a fair share; a tie goes to
+    CLAN_KEYS order (the smaller army would hand it back and forth). Its heroes' valor counts `rallyValor` (1.3) in
+    `warTick` before `valorForce` (so `valorCap` still caps a crowd); renown at standards and for troop kills grows
+    `rallyRenown` (1.25) times (`rallyRenown()` in `server/warHeroes.ts`, `server/warTroops.ts`); its writs pay
+    `WRIT.rallyClan` (1.25) times on top of the old underdog bonus (`writRally`). The income rally (`WAR.rally`) is unchanged.
+- Live (`server/war.ts`): `tickOnce` reads `nightRaid` before `warTick` (like the tunnel strikes) and keeps the struck lands
+  in memory (`lastRaided`, not saved). Listeners get a third argument `WarNews` `{raid?, rally?}`; `attachWar` sends a
+  Herald line and `warraid` `{clan, ts}` for a raid, a Herald line when the Rally passes or ends. The room tells sworn
+  heroes of the newly rallied clan what it means (`rallyTell`), and on login. `WarView` gained optional `hunt`, `raided`,
+  `rally` (message only, no schema field). The writ board view has `rally: true` for the rallied clan's sworn.
+- In the room the riders hunt too: `NIGHT_RAID.huntPrey` (0.35) extra prey score for the hunted clan's sworn heroes and
+  its soldiers and carts (`raiderPrey`).
+- Client: `warraid` -> horn and notice in a struck land (`warNotice.ts`, the existing horn), plaque line ("Night Raiders
+  struck here" / "The Night Raiders hunt its holder" / "Rally for ..."), war table: violet dashed ring on struck lands,
+  "hunted" / "Rally" after the clan in the legend; bounty board: a Rally line over the writs. No new sfx `ev`.
+- Saves: none changed. Schema: none changed.
+- Sim, 200 wars x 30 days, no players, before -> after (avg / most land): Wardens 21.6/23.8 -> 21.7/26.2, Redfang
+  21.9/28.6 -> 21.9/28.6, Host 21.4/23.8 -> 21.4/23.8, Hide-Kin 15.7/21.4 -> 15.7/21.4, Veiled 19.3/21.4 -> 19.4/21.4;
+  flips 2.04 -> 2.00 a day; domination (one clan over 30% for over 3 days) 0.0% -> 0.0%. The Raiders hunt on 4.5% of
+  night ticks (always Redfang); the Rally is on 43.5% of ticks for the Hide-Kin, 5.8% for the Veiled.
+  Ruses (`--clever`), clan's land with the ruse before -> after: Host 22.7 -> 22.6%, Redfang 21.2 -> 21.2%, Hide-Kin
+  15.6 -> 15.6%, Wardens 19.5 -> 20.1%; domination 0.0% throughout.
+- New sim flags: `--zeal=<clan|all>[:valor]` (sworn heroes add that valor a tick at the clan's main target) and
+  `--old-brakes` (the brakes before this change) to see the brakes with players. 100 x 30, old -> new brakes: Redfang
+  carried by players (30 valor) 24.6% -> 24.2%, hunted on 25% of nights; a crowd for Redfang (200) 25.0% -> 24.5%; every
+  clan's heroes alike (30 each): Hide-Kin 14.9% -> 15.5%, Redfang 24.5% -> 24.1%. Flips per day rise with the brakes on
+  under zeal (5.8 -> 7.7): the struck borders change hands more. Domination 0.0% in every run.
+- Open: the exit criterion "live" needs days of live play to check (the live war runs the same rules). The brakes rarely
+  bite without players (no clan gets far ahead); they matter once players carry a clan.
+
+## NL-4: the Red Badlands, Rustwater Post quests and words (2026-11-15, badlands PR2, PR #445)
+- Quest chain `badlands` ("The Redfang Road", `BAD_QUESTS` in `shared/quests.ts`) is a side arc, the last entry of
+  `SIDE_ARCS`, not a zone arc: the client sends chain indices, so nothing before it moves. Local giver (Marshal Hesk
+  Varro, `rustmarshal`), later quests `auto`, each ends in the field with an `outro`. No Player field: it lives in the
+  shared `quests` map under `badlands`. Rewards from `arcReward` like the moors chain.
+- Eight quests: Salt on the Wind (Saltlick Flats, Lv 25), The Drovers' Draw (26), Tally-Stones (Hanging Arches, 27), Fire
+  in the Pits (Cinnabar Pits, 28), The Hawk of Bloodstone Mesa (30; Dask Morrow, redcaptain summon Lv 32), Talon Fort (32),
+  Gallows Canyon (35), Old Rourke (37; `rourke` summon Lv 40 in Fangrock Keep, hpMult 2, no night). Both summoned bosses
+  talk (`BossVoice`). Only existing object kinds (`clue`, `cairn`, `nest`) and no new quest items, so no new art.
+- Loot: Old Rourke's gold, potions and gear already come from `LOOT` / `GEAR_DROP`; the summoned one drops them like the
+  Barrow-King. No chest logic added.
+- Marshal Varro's idle line reworded. The armourer's and healer's shop greetings (`shared/shops.ts`) were already written.
+- Tests: `tests/badlands-quests.test.ts` (shape, and the whole chain start to finish).
+- Not done: Vulture's Roost and Rattlesnake Gulch have no quest; the war land (Redfang territories in Act 4) is still to come.
+
+## NL-5: the Red Badlands at war (2026-11-15, PR #446)
+The badlands are the second homeland at war after the acts: Redfang fights from home, as the Host does on the moors (NL-3).
+- `shared/war/regions.ts`: "badlands" (The Red Badlands, W, home `redfang`) now has `contains: actOfTile === 4` and one
+  capital, the Redfang seat at **Fangrock** (the clan's stockade in the far west). `REGION_LINKS` gains **The Red Pass**
+  (`REDPASS_OAKVALE` <-> `REDPASS_BADLANDS`): Mirror Pond <-> The Saltlick Flats.
+- With the homeland built, `capitalsOf` drops Redfang's forward capitals (Redfang Hollow, Dustrider Camp): ordinary
+  territories now. Only the Hide-Kin's forward capitals (Thornwood, the Humpback Mesas) are left.
+- Sanctuaries: Fangrock Keep is Old Rourke's alone (boss-only, a lair like the Barrow-King's Mound), the open badlands are
+  `wild`. The Rustwater Post lies outside every zone (a no-mob area): a safe hub out of the war, like Cairnwatch.
+- 52 territories: Oakvale 21, Sunscar 10, moors 11, badlands 10 (ids 42-51; Acts 1-3 keep ids 0-41, so active writs keep
+  their ids): Saltlick Flats, Drovers' Draw, the Hanging Arches, the Cinnabar Pits, Bloodstone Mesa, Talon Fort, Vulture's
+  Roost, Rattlesnake Gulch, Gallows Canyon, Fangrock. A new war starts 11/11/10/10/10 (Wardens, Veiled / Host, Hide-Kin,
+  Redfang). Golden fingerprint in `tests/warregions.test.ts` refreshed on purpose.
+- Saved war: `migrateWar` by name, as for the moors: Acts 1-3 keep holder, Control, forts, sieges, pressure, the leaders'
+  targets and the log; the badlands start at Control 100 with Redfang (home clan; Fangrock its capital); Redfang Hollow and
+  Dustrider Camp keep their holder. `server/war.ts` `PRE_BADLANDS_NAMES` (frozen, the moors-era 42) joins
+  `PRE_MOORS_NAMES` in `OLD_MAPS`, so an unnamed save of either old size is remapped too (saves on the moors map are all
+  named, so this is a fallback). The old save is kept as `war-old-<ms>`.
+- Writs: the Rustwater board (act 4) offers badlands writs (it came back empty before). On a new war Redfang gets hold /
+  clear writs at home, the Wardens raid writs over the Red Pass; clans with no way in get none there until they reach it.
+- `shared/badlands.ts` (area:map): the "Talon Fort" area (and so its zone and territory) now takes 4 tiles of ground
+  round the stockade, like Redfang Hollow's: the bare 18x14 stockade had no room for a war Hold (5x5 clear ground away
+  from the standard's ring), and with no Hold no patrol, ritual circle or tunnel mouth. Borders, the golden fingerprint
+  and the sims are the same either way; `tools/map-metrics.ts`: the badlands stay 100% reachable.
+- Client: nothing new needed; the war table already draws every built land and link (a dashed box, the Red Pass's line
+  from each territory to its gate with a diamond and the name) and the world map has an Act 4 view.
+- `tests/warbrakes-room.test.ts`: the opening map no longer rallies for anyone (too even), so the Rally room tests build
+  a war where the Hide-Kin lost land to the Wardens.
+
+Sims (`npx tsx tools/balance/war.ts 200 30 [--clever=<clan>]`):
+
+| clan | before avg / most | badlands, Redfang only (final) |
+|---|---|---|
+| Wardens | 21.7% / 26.2% | 21.3% / 25.0% |
+| Redfang | 21.9% / 28.6% | 17.9% / 21.2% |
+| Ossuary Host | 21.4% / 23.8% | 19.1% / 19.2% |
+| Hide-Kin | 15.7% / 21.4% | 19.3% / 26.9% |
+| Veiled Circle | 19.4% / 21.4% | 22.4% / 25.0% |
+
+- Flips per war day 2.00 -> 3.21; domination 0.0% before and after. Night Raiders 4.5% -> 0.1% of night ticks; the Rally
+  43.5% -> 8.0% of ticks for the Hide-Kin, 5.8% -> 0.2% for the Veiled.
+- Unlike the moors, Redfang did not jump (it shrank: its Oakvale and Sunscar land went to the others at the start), so no
+  foothold capital for another clan was added. Ruses, with vs without: Redfang 18.4% vs 17.9% (pays; before 21.2 vs 21.9),
+  Host 19.2 vs 19.1 (before 22.6 vs 21.4), Hide-Kin 18.3 vs 19.3, Wardens 18.2 vs 21.3, Veiled 20.0 vs 22.4; domination
+  0.0% in every run.
+- Open: like the moors, the badlands meet the rest at one gate, so their war is quiet; Vulture's Roost and Rattlesnake
+  Gulch still have no quest.
+
+## NL-6: the Mawdeep Sinkholes, Ropewell quests and words (2026-11-15, sinkholes PR #448)
+- Side arc `sinkholes` ("The Rope and the Maw"), last in `SIDE_ARCS`, from Lodge-Warden Brannoc Tull (`ropewarden`): Rootfall
+  Rope (Lv 30), Hollowbrook Laughter (31), The Old Warren (32), the Hide-Chieftain of Tunneltop (34, talking summon
+  Gorrow Splitear), Mosslight Snares (35), Over the Pitfields (36), Hidehall (40), The Maw-Father (42; the talking
+  `mawfather` summon, Lv 45, own, no night: he is awake day and night).
+- The chain ties to Act 1's Hide Rite: the trappers' kin were taken into the warrens. Warden idle line added; the two
+  Ropewell traders already had shop greetings. Test: `tests/sinkholes-quests.test.ts`.
+- Open: the sinkholes' war land; Gnawed Bank, Scratchroot Burrows and Rushmere Hollows have no quest.
+
+## NL-7: the Mawdeep Sinkholes at war (2026-11-15, PR #449)
+The sinkholes are the third and last homeland at war: the Hide-Kin fight from home, as the Host does on the moors (NL-3)
+and Redfang in the badlands (NL-5).
+- `shared/war/regions.ts`: "sinkholes" (The Mawdeep Sinkholes, S, home `hidekin`) now has `contains: actOfTile === 5` and
+  one capital, the Hide-Kin seat at **Hidehall** (their warren town in the far south-east). `REGION_LINKS` gains **The
+  Sinkway** (`SINKWAY_OAKVALE` <-> `SINKWAY_SINKHOLES`): Sunken Lake <-> Hollowbrook Dells.
+- With the homeland built, `capitalsOf` drops the Hide-Kin's forward capitals (Thornwood, the Humpback Mesas): ordinary
+  territories now. **No forward capitals are left** (tested); the rule stays in `capitalsOf` for lands to come (the
+  fake-land test in `tests/warregions.test.ts` still checks it).
+- **Footholds** (orchestrator's target: no clan above ~23% average): with every forward capital gone, Oakvale and the
+  Sunscar were the Wardens' and the Veiled's alone, and the Veiled grew to 27.0% (hunted by the Night Raiders on 59% of
+  nights), the Wardens to 24.1%. Two Oakvale capitals that are not forward (they stay, like the Wardens' Grey Ring): the
+  Host's at **Stormbreak Crags**, Redfang's at **Heronwreck Strand**. A foothold near Ropewell (the remedy planned for
+  a Hide-Kin jump, which did not happen) only took land from the Hide-Kin and left the Veiled at 27-28% (table below).
+- Sanctuaries: the Great Maw is the Maw-Father's alone (boss-only, a lair), the open sinkholes are `wild`. Ropewell lies
+  outside every zone (a no-mob area): a safe hub out of the war.
+- 62 territories: Oakvale 21, Sunscar 10, moors 11, badlands 10, sinkholes 10 (ids 52-61; Acts 1-4 keep ids 0-51, so
+  active writs keep their ids): Rootfall Slopes, Hollowbrook Dells, the Old Warren, Tunneltop, Mosslight Fen, the
+  Pitfields, the Gnawed Bank, Scratchroot Burrows, Rushmere Hollows, Hidehall. A new war starts 12/15/15/10/10 (Wardens,
+  Redfang, Host, Hide-Kin, Veiled); the Wardens now also claim Thane's Rest next to the Grey Ring. Golden fingerprint in
+  `tests/warregions.test.ts` refreshed on purpose.
+- Every sinkholes territory has a Hold (`SINK_LANDS` hold patches; `tests/warheroes.test.ts` checks one per territory).
+- Saved war: `migrateWar` by name, as before: Acts 1-4 keep holder, Control, forts, sieges, pressure, the leaders'
+  targets and the log; the sinkholes start at Control 100 with the Hide-Kin; Thornwood and the Humpback Mesas keep their
+  holder. The footholds are capitals, so a save's holder there gives way to the Host / Redfang (Control 100, siege
+  lifted; forts and pressure stay), as a capital always has. `server/war.ts` `PRE_SINKHOLES_NAMES` (frozen, the
+  badlands-era 52) joins `OLD_MAPS`, so an unnamed save of that size is remapped too. The old save is kept as `war-old-<ms>`.
+- Writs: the Ropewell board (act 5) offers sinkholes writs. On a new war the Hide-Kin get hold / clear writs at home, the
+  Wardens raid writs over the Sinkway from Sunken Lake.
+- Tests touched for the new map: `tests/war.test.ts` (the tunnel test now builds its tunnel target: the Hide-Kin's only
+  way out of the sinkholes is far from Hidehall), `tests/warworks-room.test.ts` (the hero's spot outside every front's
+  ring is searched for, not assumed halfway: the picked land changed with the starting owners).
+- Client: nothing new needed; the war table draws every built land and link from `REGIONS` / `LAND_LINKS`.
+
+Sims (`npx tsx tools/balance/war.ts 200 30 [--clever=<clan>]`):
+
+| clan | before avg / most | sinkholes, Hide-Kin only | final (with the Oakvale footholds) |
+|---|---|---|---|
+| Wardens | 21.3% / 25.0% | 24.1% / 27.4% | 21.8% / 27.4% |
+| Redfang | 17.9% / 21.2% | 15.9% / 17.7% | 22.0% / 29.0% |
+| Ossuary Host | 19.1% / 19.2% | 15.7% / 17.7% | 19.9% / 27.4% |
+| Hide-Kin | 19.3% / 26.9% | 17.4% / 19.4% | 16.2% / 17.7% |
+| Veiled Circle | 22.4% / 25.0% | 27.0% / 29.0% | 20.0% / 25.8% |
+
+- Flips per war day 3.21 -> 3.75 (Hide-Kin only) -> 5.59; domination 0.0% throughout. Night Raiders 0.1% -> 58.8% ->
+  1.0% of night ticks.
+- Footholds tried (100 x 30, avg; highest clan): near Ropewell for the Host (Hollowbrook Dells / Rootfall Slopes) Veiled
+  27.5 / 26.8%, Redfang Veiled 27.2 / 27.2%, the Veiled 28.0%, the Wardens Veiled 26.5%; in Oakvale, one only: the Host at
+  Stormbreak Crags Host 23.1% (200 x 30), at Gravemoor Cemetery 24.2%, Blightmire Fen 24.8%, Old Watchtower 25.8%; Redfang
+  at Stormbreak Crags 25.8%, Gullrock Cove 26.2% (domination 9%); the Hide-Kin at Gullrock Cove 26.4% (15%). Two: the Host
+  at Gravemoor + Redfang at Heronwreck Strand 22.2% (200 x 30), the Host at Stormbreak + Redfang at Heronwreck 22.0%
+  (chosen).
+- Ruses, with vs without (final map): Host 20.7 vs 19.9% (pays), Redfang 22.2 vs 22.0% (pays), Hide-Kin 16.2 vs 16.2%,
+  Wardens 19.2 vs 21.8%, Veiled 16.6 vs 20.0%; domination 0.0% in every run (before: Hide-Kin 18.3 vs 19.3%).
+- Open: the Hide-Kin end at 16.2%, about their homeland and no more (they start with no land outside it and the Sinkway is
+  far from Hidehall); not rallied (10 of 62 is just over the line). Gnawed Bank, Scratchroot Burrows and Rushmere Hollows
+  still have no quest.

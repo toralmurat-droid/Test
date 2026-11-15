@@ -57,9 +57,9 @@ test("bag room: a full bag can still fuse (four out, one in); only an over-full 
   assert.match(fuseProblem(e1, st(full, 1000, 6)) as string, /No room/);
 });
 
-test("the service is offered by every rune buyer, in Act 1 and Act 2, and nowhere else", () => {
+test("the service is offered by every rune buyer, one in each act, and nowhere else", () => {
   const fusers = NPCS.filter((n) => n.shop && shopFuses(SHOPS[n.shop])).map((n) => n.id);
-  assert.deepEqual(fusers.sort(), ["spicetrader", "witch"]);
+  assert.deepEqual(fusers.sort(), ["moorherbalist", "ropehealer", "rusthealer", "spicetrader", "witch"]);
   for (const [id, s] of Object.entries(SHOPS)) assert.equal(shopFuses(s), !!s.buys?.includes("rune"), id);
 });
 

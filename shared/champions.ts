@@ -78,6 +78,14 @@ export const FAMILY_OF: Partial<Record<MobKind, ChampionFamily>> = {
   scorpion: "scorpion",
   nomad: "nomad",
   camelfolk: "camel",
+  // Act 3: the Ossuary Host's raised dead come back Risen, or with a siege engine of their own (a Host siege-clan habit);
+  // their own family (and affix) is still to come. The bog hags never come as champions.
+  wight: "necro", legionary: "necro", mistwraith: "necro", bonehound: "necro",
+  // Act 4: the Redfang's own men (and their war dogs, with the handlers) come with a gang of cutthroats like their Hollow kin;
+  // a rattler can be Deep-Venomed like the Sunscar's scorpions; the vultures never come as champions
+  outrider: "redfang", crossbowman: "redfang", firebrand: "redfang", warhound: "redfang", rattler: "scorpion",
+  // Act 5: the Hide-Kin come Hide-Stitched like their Mawdeep kin (beast-folk of the same rite); the Gullet Worms never come as champions
+  delver: "beast", cackler: "beast", stagkin: "beast", quillback: "beast", stitcher: "beast",
 };
 
 export interface AffixDef {

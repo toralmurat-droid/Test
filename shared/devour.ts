@@ -13,6 +13,12 @@ export const FAMILY: Partial<Record<MobKind, Family>> = {
   gnawkin: "beast", tuskborn: "beast", silkwretch: "beast", duskwing: "beast", crowseer: "beast",
   gnasher: "beast", weaver: "beast", packlord: "beast", hornbrute: "beast", hidemother: "beast",
   nomad: "outlaw", veiled: "outlaw", sunwright: "outlaw", scorpion: "beast", camelfolk: "beast", sphinx: "beast",
+  boghag: "outlaw", // Act 3: the fen-hags are living witches in the Host's pay (its dead have nothing to eat)
+  // Act 4: the Redfang clan, its dogs, the badlands' vultures and rattlers
+  outrider: "outlaw", crossbowman: "outlaw", firebrand: "outlaw", redcaptain: "outlaw", rourke: "outlaw",
+  warhound: "beast", vulture: "beast", rattler: "beast",
+  // Act 5: the Hide-Kin are beast-folk like their Mawdeep kin; the Gullet Worms plain beasts
+  delver: "beast", cackler: "beast", stagkin: "beast", quillback: "beast", stitcher: "beast", sinkworm: "beast", hidechief: "beast", mawfather: "beast",
 };
 export const familyOf = (kind: string): Family | undefined => FAMILY[kind as MobKind];
 

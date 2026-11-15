@@ -1,8 +1,8 @@
 /** How each painted character looks: materials, colours and kit. Poses and animation timing come from characters.ts. */
-export type HeadGear = "crown" | "greathelm" | "ninjahood" | "wizardhat" | "hood" | "horned" | "cap" | "helm" | "kettle" | "bandana" | "wide" | "witch" | "none";
+export type HeadGear = "crown" | "greathelm" | "ninjahood" | "wizardhat" | "hood" | "horned" | "cap" | "helm" | "kettle" | "bandana" | "wide" | "witch" | "stonecrown" | "none";
 export type TorsoKind = "plate" | "wrap" | "robe" | "jerkin" | "bare" | "shirt" | "mail" | "leather" | "tailcoat";
 export type LegKind = "trousers" | "mail" | "wrapped" | "robe" | "fur" | "dress" | "bare";
-export type WeaponKind = "katana" | "sword" | "staff" | "wand" | "bow" | "axe" | "hammer" | "pick" | "spear" | "dagger" | "druidstaff" | "witchstaff" | "boneblade" | "spade" | "lute" | "none";
+export type WeaponKind = "katana" | "sword" | "staff" | "wand" | "bow" | "axe" | "hammer" | "pick" | "spear" | "dagger" | "druidstaff" | "witchstaff" | "boneblade" | "spade" | "lute" | "mace" | "none";
 
 export interface Look {
   skin: number;
@@ -16,7 +16,7 @@ export interface Look {
   legs: LegKind; legCol: number; boots: number; bootStyle?: "greave" | "leather" | "wrap" | "shoe" | "bare";
   sleeve: number; arms: "plate" | "cloth" | "bare" | "wrap"; glove?: number; bracer?: number;
   weapon: WeaponKind;
-  shield?: { col: number; trim: number; emblem: number; style: "kite" | "round" | "book"; /** style "book": the id in paint/books.ts BOOKS */ book?: string };
+  shield?: { col: number; trim: number; emblem: number; style: "kite" | "round" | "book" | "tower"; /** style "book": the id in paint/books.ts BOOKS */ book?: string };
   back?: "cape" | "quiver" | "pelt"; capeCol?: number; capeShort?: boolean;
   orb?: number;   // glowing staff stone
   lips?: number;    // painted lips (front view)
@@ -37,6 +37,8 @@ export interface Look {
   weaponKind?: WeaponKind; // what found weapons look like in this hero's hands (heroes start with weapon "none")
   /** Bone Demon (DEMON.harvest): skeleton pieces it wears, painted onto the body: 1 pauldrons, 2 rib cuirass, 3 bone blade, 4 skull crown. */
   boneArmour?: number;
+  /** Act 3 (Grey Barrow Moors): a bronze neck-ring, a permanent stoop (px the body sinks), a hanging lantern on the staff (its light), cold mist round the feet, a notched blade, blade metal colour, a gold funeral mask. */
+  torc?: number; stoop?: number; lantern?: number; mist?: number; notched?: boolean; bladeCol?: number; faceMask?: number; reeds?: number; /** A woven basket of herbs in the near hand (colour of the weave). */ basket?: number;
   /** Sword length/width multiplier (the Hollow King's greatsword). */
   bladeLen?: number;
   /** Beast-folk of the Mawdeep (shared/dungeon.ts): the animal head whose hide this man or woman was sewn into. */
@@ -44,9 +46,11 @@ export interface Look {
   /** The other half of the beast-folk: a man's face, the animal's head flayed back as a hood (the rest is beast). */
   beastHood?: boolean;
   /** What the rite grew on their backs: a naked tail, spider legs, wings that beat. */
+  /** Act 5 (Mawdeep Sinkholes, the Hide-Kin): a porcupine's back of quills (colour of the dark bands), big digging claws on the hands (claw colour), bone and charm fetishes hanging from the belt (cord colour). */
+  quills?: number; claws?: number; fetishes?: number;
   tail?: number; spiderLegs?: number; wings?: { col: number; kind: "bat" | "feather"; rest?: boolean; tip?: number };
 }
-export type BeastHead = "rat" | "boar" | "spider" | "bat" | "wolf" | "bull" | "bear" | "crow" | "camel" | "lion";
+export type BeastHead = "rat" | "boar" | "spider" | "bat" | "wolf" | "bull" | "bear" | "crow" | "camel" | "lion" | "mole" | "hyena" | "stag" | "quill";
 
 /** Monsters painted with the same body code (sheets built by paint/mobs.ts). */
 export const MOB_LOOKS: Record<string, Look> = {
@@ -209,6 +213,174 @@ export const MOB_LOOKS: Record<string, Look> = {
     sleeve: 0xc8923a, arms: "bare", bracer: 0xe0b040, weapon: "sword", bladeLen: 1.1, fx: 0xffe8a0,
     shield: { col: 0x24418a, trim: 0xe0b040, emblem: 0xf0c850, style: "round" },
     wings: { col: 0xead08a, kind: "feather", rest: true, tip: 0x2a4a9a }, tail: 0xb8843a, build: 1.3,
+  },
+  // ---- Act 3, the Grey Barrow Moors: the Ossuary Host's homeland (shared/moors.ts). Cold blue-white light, tarnished bronze, bog green.
+  // The Barrow-Wight: a gaunt grey-blue corpse in rotted grave-wrappings, a tarnished bronze torc, pale cold eyes, a notched bronze sword
+  wight: {
+    skin: 0x8aa0ae, hair: 0x5a636c, hairStyle: "long", eyeGlow: 0xa6e8ff, head: "none",
+    torso: "wrap", torsoCol: 0x6e6652, trim: 0x4a4434, belt: 0x30281c, buckle: 0x9a7a3c, torc: 0xa07a3a,
+    legs: "wrapped", legCol: 0x5c5644, boots: 0x4a4436, bootStyle: "wrap",
+    sleeve: 0x6e6652, arms: "wrap", rags: 0x9a9680, bracer: 0x8a6a34, glove: 0x62705c, weapon: "sword", bladeCol: 0xa08240, notched: true, fx: 0xa6e8ff,
+    back: "cape", capeCol: 0x3e4a4c, capeShort: true, build: 0.96,
+  },
+  // The Bog Hag: stooped in a dripping moss-and-peat shawl, reeds and sundew in her hair, a crooked bog-oak staff with a swinging lantern
+  boghag: {
+    skin: 0x8c9a6a, hair: 0x424230, hairStyle: "long", eye: 0xc8ff6a, eyeGlow: 0x9dff5a, head: "none", reeds: 0xdccb80,
+    torso: "robe", torsoCol: 0x3a3424, trim: 0x5a6a34, vest: 0x58742e, sash: 0x4a3e2a, belt: 0x2a2418,
+    legs: "robe", legCol: 0x2e2a1e, boots: 0x2a2418, bootStyle: "wrap",
+    sleeve: 0x3a3424, arms: "cloth", glove: 0x6e7e4c, bracer: 0x4a5a2c, weapon: "witchstaff", orb: 0x9dff5a, lantern: 0xc8ff7a, fx: 0x9dff5a,
+    back: "pelt", capeCol: 0x62803a, stoop: 1.7,
+  },
+  // The Host Legionary: a skeleton soldier in rusted bronze scale under a crested helm, a tall tower shield with the Host's bone sigil
+  legionary: {
+    skin: 0xd6ceb4, skull: true, bones: true, eyeGlow: 0x8fe8c8, head: "helm", headCol: 0x7a5c30, headTrim: 0x4f7d6a, plume: 0x2a3a34, rags: 0x1f2422,
+    torso: "mail", torsoCol: 0x806238, trim: 0x4f7d6a, tabard: { col: 0x1f2422, trim: 0x4f7d6a, emblem: 0xd8cfb2 }, belt: 0x2a2418, buckle: 0x9a7a3c,
+    legs: "trousers", legCol: 0xd6ceb4, boots: 0x2a3a34, bootStyle: "wrap",
+    sleeve: 0xd6ceb4, arms: "bare", bracer: 0x806238, weapon: "spear", bladeCol: 0x8a6a34, fx: 0x8fe8c8, build: 1.18,
+    shield: { col: 0x1f2422, trim: 0x7a5c30, emblem: 0xd8cfb2, style: "tower" },
+  },
+  // The Cairn-Lord: a tall armoured barrow-noble in corroded bronze plate, a mantle of cairn-stone, a crown of standing-stone shards, a great bronze blade
+  cairnlord: {
+    skin: 0xcfc8b0, skull: true, eyeGlow: 0x8fe8ff, head: "stonecrown", headCol: 0x8c8c84, headTrim: 0x8a6a30,
+    torso: "plate", torsoCol: 0x6c7452, trim: 0x8a6a30, belt: 0x2a2418, buckle: 0xa07a3a,
+    legs: "mail", legCol: 0x5a5c44, boots: 0x4a5044, bootStyle: "greave",
+    sleeve: 0x6c7452, arms: "plate", glove: 0x3a3e34, weapon: "sword", bladeLen: 1.6, bladeCol: 0x8a8048, notched: true, fx: 0x8fe8ff,
+    back: "pelt", capeCol: 0x74766e, build: 1.38,
+  },
+  // The Barrow-King: a gold-leaf funeral mask on blackened bronze plate, a long torn purple-grey burial cloak, a barrow-key mace, cold mist pouring off him
+  barrowking: {
+    skin: 0x62727e, hairStyle: "none", faceMask: 0xdcb458, eyeGlow: 0xa6e8ff, head: "hood", headCol: 0x2c2824, headTrim: 0xdcb458,
+    torso: "plate", torsoCol: 0x4a4440, trim: 0xdcb458, tabard: { col: 0x3e2c4e, trim: 0x8a7a50, emblem: 0xdcb458 }, belt: 0x201c18, buckle: 0xdcb458,
+    legs: "mail", legCol: 0x2c2a28, boots: 0x2a2826, bootStyle: "greave",
+    sleeve: 0x34302c, arms: "plate", glove: 0x222024, weapon: "mace", bladeCol: 0x3c362e, fx: 0xa6e8ff, bladeLen: 1.15,
+    back: "cape", capeCol: 0x4a3e5c, build: 1.4, mist: 0xb4d8ee,
+  },
+  // ---- Act 4, the Red Badlands: the Redfang bandits' homeland (shared/badlands.ts). Red dust, rust, oxblood scarves, sun-bleached leather.
+  // The Redfang Outrider: a lean raider in a dust-red headwrap and face-cloth, a long streaming scarf, light leather, a curved sabre
+  outrider: {
+    skin: 0xc48a5e, hair: 0x2a1c16, hairStyle: "short", mask: 0x9e231a, eye: 0x1a1008,
+    head: "hood", headCol: 0x8a3a24, headTrim: 0x5a2014,
+    torso: "leather", torsoCol: 0x6a4a34, trim: 0x3a2418, sash: 0xa3231b, belt: 0x2b1d14, buckle: 0xc9a050,
+    legs: "trousers", legCol: 0x5a4636, boots: 0x2a1c14, bootStyle: "wrap",
+    sleeve: 0x7a4a30, arms: "cloth", bracer: 0x3a2418, glove: 0x2b1d14, weapon: "sword", bladeCol: 0xc8c0b0, fx: 0xff9a70,
+    scarf: { col: 0xa3231b, band: 0x5a1410 }, back: "cape", capeCol: 0x7a3420, capeShort: true, build: 0.96,
+  },
+  // The Redfang Crossbowman: a heavy sun-bleached coat under a rusty kettle helm, a bolt-quiver at the hip, a crossbow braced to the shoulder
+  crossbowman: {
+    skin: 0xcf9468, hair: 0x4a3020, hairStyle: "short", beard: 0x4a3020, beardStyle: "stubble", mask: 0x9e231a,
+    head: "kettle", headCol: 0x7a4a34, headTrim: 0x4a2a1c,
+    torso: "mail", torsoCol: 0x7a6a5a, trim: 0x3a2418, tabard: { col: 0x8e1f1a, trim: 0x3a1410, emblem: 0x3a1410 }, belt: 0x2b1d14, buckle: 0x9a8a6a,
+    legs: "trousers", legCol: 0x4a3a2c, boots: 0x231a14, bootStyle: "leather",
+    sleeve: 0x6a4a34, arms: "cloth", bracer: 0x3a2a1e, glove: 0x2b1d14, weapon: "bow", fx: 0xffd0a0, back: "quiver", capeCol: 0x4a2a1c, build: 1.1,
+  },
+  // The Firebrand: a wild fire-thrower swaddled in layers of red scarves, a soot-black face-cloth, scorched leather, a pot of fire cupped in the open hand
+  firebrand: {
+    skin: 0xb27a52, hair: 0x1a1210, hairStyle: "none", mask: 0x241410, eye: 0xffa030, eyeGlow: 0xffa030,
+    head: "hood", headCol: 0xb02a1c, headTrim: 0xe85a1a,
+    torso: "wrap", torsoCol: 0xa3231b, trim: 0xe0701c, sash: 0xe85a1a, belt: 0x2a1810, buckle: 0xc9a050,
+    legs: "wrapped", legCol: 0x5a2a1c, boots: 0x2a1a12, bootStyle: "wrap",
+    sleeve: 0x8e1f1a, arms: "wrap", glove: 0x2a1a12, bracer: 0x3a2418, weapon: "none", palmFlame: 0xff7a22, fx: 0xff7a22,
+    scarf: { col: 0xd8401c, band: 0x7a1a10 }, back: "cape", capeCol: 0x7a1a14, capeShort: true,
+  },
+  // The Redfang Captain: a brute in blackened plate under an oxblood tabard, a red-crested helm, a great war-axe, a fur-trimmed cloak
+  redcaptain: {
+    skin: 0xb98056, hair: 0x2a201a, hairStyle: "short", beard: 0x2a201a, beardStyle: "full", eye: 0x1a1008,
+    head: "helm", headCol: 0x5a4a44, headTrim: 0x8e1f1a, plume: 0xa3231b,
+    torso: "plate", torsoCol: 0x5a4a44, trim: 0x8e1f1a, tabard: { col: 0x8e1f1a, trim: 0x2a1410, emblem: 0xe0b060 }, belt: 0x2b1d14, buckle: 0xc9a050,
+    legs: "mail", legCol: 0x4a3a30, boots: 0x231a14, bootStyle: "greave",
+    sleeve: 0x5a4a44, arms: "plate", glove: 0x2b1d14, bracer: 0x3a2a1e, weapon: "axe", bladeCol: 0xb0a89a, fx: 0xff8a70,
+    back: "cape", capeCol: 0x6a1814, build: 1.3,
+  },
+  // Old Rourke, the Redfang warlord: a grey-bearded old giant of a man in dented black plate, a ragged blood-red cloak over a bear pelt, a huge notched war-axe
+  rourke: {
+    skin: 0xb07a56, hair: 0xb8b2a8, hairStyle: "long", beard: 0xc4beb0, beardStyle: "long", eye: 0xe8c060, eyeGlow: 0xff5030,
+    head: "horned", headCol: 0x3e3a38, headTrim: 0xd0c8b0,
+    torso: "plate", torsoCol: 0x46403c, trim: 0xa3231b, tabard: { col: 0x7e1814, trim: 0x2a1410, emblem: 0xd8a040 }, belt: 0x241812, buckle: 0xd0aa4e,
+    legs: "mail", legCol: 0x3a342e, boots: 0x1e1814, bootStyle: "greave",
+    sleeve: 0x4e4844, arms: "plate", glove: 0x241812, bracer: 0x8e1f1a, weapon: "axe", bladeLen: 1.35, bladeCol: 0x9a948a, notched: true, fx: 0xff5030,
+    back: "pelt", capeCol: 0x6a1410, build: 1.45,
+  },
+  // Rustwater Post: Marshal Hesk Varro (a weathered ex-watch marshal in a rust-red coat and a dented helm, a spear), Corra Flint (the armourer), Old Sal (the healer)
+  rustmarshal: {
+    skin: 0xc48c62, hair: 0x6a5a4a, hairStyle: "short", beard: 0x7a6e60, beardStyle: "stubble", eye: 0x3a2a1a,
+    head: "helm", headCol: 0x8a7a6a, headTrim: 0x5a3a28,
+    torso: "mail", torsoCol: 0x8a7a6a, trim: 0x4a3020, tabard: { col: 0x8a3a24, trim: 0xd9a93a, emblem: 0xf0c75a }, belt: 0x3a2a1c, buckle: 0xd9a93a,
+    legs: "trousers", legCol: 0x4a3828, boots: 0x2a2018, bootStyle: "leather",
+    sleeve: 0x7a6a5a, arms: "cloth", glove: 0x4a3020, weapon: "spear", fx: 0xffffff, back: "cape", capeCol: 0x6a3a28, capeShort: true, build: 1.08,
+  },
+  rustarmourer: {
+    skin: 0xa86e4a, hair: 0x2a1a14, hairStyle: "ponytail", eye: 0x2a1a10,
+    head: "bandana", headCol: 0xb02a1c, headTrim: 0x5a1a12,
+    torso: "shirt", torsoCol: 0xc8b090, apron: 0x4a2c1c, belt: 0x2a1c12, buckle: 0x9a7a3a,
+    legs: "trousers", legCol: 0x5a463a, boots: 0x2a1c14, bootStyle: "leather",
+    sleeve: 0xa86e4a, arms: "bare", bracer: 0x4a2c1c, glove: 0x2a1c12, weapon: "hammer", fx: 0xffffff, build: 1.12,
+  },
+  rusthealer: {
+    skin: 0xb88a64, hair: 0xd8d2c8, hairStyle: "long", eye: 0x3a2a1a,
+    head: "hood", headCol: 0xc8ae8a, headTrim: 0x8a5a3a,
+    torso: "robe", torsoCol: 0xa8683e, trim: 0xe0c090, vest: 0x7a3a24, apron: 0xe4d8bc, sash: 0xa3231b, belt: 0x4a3020,
+    legs: "dress", legCol: 0x6a3a28, boots: 0x3a281c, bootStyle: "shoe",
+    sleeve: 0xa8683e, arms: "cloth", glove: 0xb88a64, weapon: "none", fx: 0xffffff, back: "cape", capeCol: 0xb88a58, capeShort: true, basket: 0x8a6a3a, build: 0.92,
+  },
+  // ---- Act 5, the Mawdeep Sinkholes: the Hide-Kin, the Warrens' beast-folk gone feral in the pits. Damp earth, hide, bone, moss.
+  delver: { // mole: a stooped, blind-eyed digger with a pink star-nose, great spade-claws, a moss-stained hide
+    skin: 0x6a5a4c, beast: "mole", hairStyle: "none", head: "none", eyeGlow: 0xd8c090,
+    torso: "bare", torsoCol: 0x54483e, belt: 0x2e2218, harness: true, legs: "fur", legCol: 0x463c32, boots: 0x3a3028, bootStyle: "bare",
+    sleeve: 0x54483e, arms: "bare", glove: 0x54483e, bracer: 0x3a3a26, weapon: "none", fx: 0xd8d0b8, claws: 0xe2d8bc, stoop: 1.2, build: 1.18, tail: 0xc09a8a,
+  },
+  cackler: { // hyena: hunched, spotted tan hide, a ragged dark mane, a wide bared grin, a bone-handled hooked knife
+    skin: 0x9a7a4a, beast: "hyena", hairStyle: "none", head: "none", eyeGlow: 0xffc03a,
+    torso: "leather", torsoCol: 0x8a6a40, trim: 0x3a2a1a, belt: 0x2e2218, buckle: 0xe2d8bc, legs: "fur", legCol: 0x7a5a38, boots: 0x3a2a1c, bootStyle: "wrap",
+    sleeve: 0x9a7a4a, arms: "bare", bracer: 0x3a2a1a, glove: 0x3a2a1a, weapon: "dagger", fx: 0xffe0b0, back: "pelt", capeCol: 0x6a4a2a, stoop: 1.6, build: 1.0, tail: 0x7a5a38,
+  },
+  stagkin: { // stag: a tall, lean charger under a branching rack of antlers, a hide of damp brown, a bone-studded harness
+    skin: 0x8a6a4c, beast: "stag", hairStyle: "none", head: "none", eyeGlow: 0xff8a3a,
+    torso: "leather", torsoCol: 0x4a382a, trim: 0x2a1e16, belt: 0x2a1e16, buckle: 0xe2d8bc, harness: true, legs: "fur", legCol: 0x5a4430, boots: 0x2a1e16, bootStyle: "wrap",
+    sleeve: 0x8a6a4c, arms: "bare", bracer: 0x4a382a, glove: 0x2a1e16, weapon: "spear", bladeCol: 0xe2d8bc, fx: 0xffd0a0, back: "pelt", capeCol: 0x5a4632, build: 1.2, tail: 0xd8c8a8,
+  },
+  quillback: { // porcupine: a squat thrower hunched under a fan of banded quills, a bandolier of spare ones
+    skin: 0x7a6a58, beast: "quill", hairStyle: "none", head: "none", eyeGlow: 0xffe080,
+    torso: "leather", torsoCol: 0x4a3c30, trim: 0x2a2018, belt: 0x2a2018, buckle: 0xe2d8bc, harness: true, legs: "fur", legCol: 0x3e3228, boots: 0x2a2018, bootStyle: "wrap",
+    sleeve: 0x7a6a58, arms: "bare", bracer: 0x3a2e24, glove: 0x2a2018, weapon: "none", fx: 0xf0e8d0, quills: 0x2a2220, stoop: 0.8, build: 1.1,
+  },
+  stitcher: { // a Hide-Stitcher: a shaman in a patchwork robe of mismatched hides, a face-cloth, a long bone needle, fetishes on every cord
+    skin: 0xa88a6e, hair: 0x2a2018, hairStyle: "long", mask: 0x6a5a40, eye: 0x1a1008, eyeGlow: 0xffa83a,
+    head: "hood", headCol: 0x6a4e36, headTrim: 0xe2d8bc,
+    torso: "robe", torsoCol: 0x5a4a38, trim: 0xe2d8bc, vest: 0x7a5a3a, sash: 0x6a2a1a, belt: 0x2a2018, buckle: 0xe2d8bc,
+    legs: "robe", legCol: 0x4a3c2e, boots: 0x2a2018, bootStyle: "wrap",
+    sleeve: 0x6a5a40, arms: "cloth", glove: 0x3a2e24, weapon: "spear", bladeCol: 0xe8dfc4, bladeLen: 1.1, fx: 0xe8dfc4, back: "pelt", capeCol: 0x4e4a30, fetishes: 0xd8cfb4, build: 0.98,
+  },
+  hidechief: { // the Hide-Chieftain: a bear's skin worn whole, the head a hood over a scarred man's face, a bone-bound maul
+    skin: 0xa07a5e, hairStyle: "none", beard: 0x2a1e16, beardStyle: "full", beast: "bear", beastHood: true, head: "none", eye: 0xff8a2a,
+    torso: "bare", torsoCol: 0x4a3626, belt: 0x241a14, buckle: 0xe2d8bc, harness: true, legs: "fur", legCol: 0x3e2e22, boots: 0x241a14, bootStyle: "wrap",
+    sleeve: 0x4a3626, arms: "bare", bracer: 0x2e2218, glove: 0x241a14, weapon: "hammer", bladeCol: 0x8a8070, fx: 0xff9a70, back: "pelt", capeCol: 0x4a3626, fetishes: 0xe2d8bc, build: 1.5, notched: true,
+  },
+  mawfather: { // the Maw-Father: a vast old patriarch, mole-faced and bear-built, scarred and mossed, a crown of bone, a hide cloak
+    skin: 0x6a5a4c, beast: "mole", hairStyle: "none", head: "none", eyeGlow: 0xffd080,
+    torso: "bare", torsoCol: 0x54483e, trim: 0x3a3a26, belt: 0x241a14, buckle: 0xe2d8bc, harness: true, legs: "fur", legCol: 0x3e342a, boots: 0x2a2018, bootStyle: "bare",
+    sleeve: 0x54483e, arms: "bare", bracer: 0x3a3a26, glove: 0x54483e, weapon: "hammer", bladeCol: 0x8a8070, fx: 0xffb070, back: "pelt", capeCol: 0x3e3226, claws: 0xe2d8bc, fetishes: 0xe2d8bc, stoop: 1.0, build: 1.6, tail: 0xc09a8a, notched: true,
+  },
+  // Ropewell, the lodge-town on the lip of the sinkholes: Lodge-Warden Brannoc Tull, Hesta Coil the armourer, Mother Fennick the herb-wife
+  ropewarden: {
+    skin: 0xb48862, hair: 0x4a3a2a, hairStyle: "short", beard: 0x5a4a38, beardStyle: "full", eye: 0x2a1c10,
+    head: "hood", headCol: 0x5a4632, headTrim: 0xd8cdb0,
+    torso: "leather", torsoCol: 0x5e4a36, trim: 0xd8cdb0, tabard: { col: 0x4a5a34, trim: 0x2a3418, emblem: 0xd8cdb0 }, belt: 0x2a1e14, buckle: 0xc9a050,
+    legs: "trousers", legCol: 0x4a3c2c, boots: 0x2a1e14, bootStyle: "wrap",
+    sleeve: 0x6a5238, arms: "cloth", bracer: 0x3a2a1c, glove: 0x2a1e14, weapon: "spear", fx: 0xffffff, back: "pelt", capeCol: 0x6a5a48, fetishes: 0xc8b890, build: 1.12,
+  },
+  ropearmourer: {
+    skin: 0xc49a76, hair: 0x6a3a22, hairStyle: "ponytail", eye: 0x2a1a10,
+    head: "bandana", headCol: 0x4a5a34, headTrim: 0x2a3418,
+    torso: "shirt", torsoCol: 0xb8a888, apron: 0x4a3322, belt: 0x2a1e14, buckle: 0xc9a050,
+    legs: "trousers", legCol: 0x4a4034, boots: 0x2a1e14, bootStyle: "leather",
+    sleeve: 0xc49a76, arms: "bare", bracer: 0x4a3322, glove: 0x2a1e14, weapon: "hammer", fx: 0xffffff, fetishes: 0xb8a070, build: 1.1,
+  },
+  ropehealer: {
+    skin: 0xbc9272, hair: 0xc8c4b8, hairStyle: "long", eye: 0x3a2a1a,
+    head: "hood", headCol: 0x6a7a44, headTrim: 0xd8cc9c,
+    torso: "robe", torsoCol: 0x5e6a3a, trim: 0xd8cc9c, vest: 0x7a5a38, apron: 0xe0d6b8, sash: 0x8a4a2a, belt: 0x4a3a24,
+    legs: "dress", legCol: 0x4a5430, boots: 0x3a2c1c, bootStyle: "shoe",
+    sleeve: 0x5e6a3a, arms: "cloth", glove: 0xbc9272, weapon: "none", fx: 0xffffff, back: "cape", capeCol: 0x4a5a30, capeShort: true, basket: 0x7a6a3a, build: 0.94,
   },
   // summoned by a skeleton ritual (BONES.ritual): a hulking red brute with horns, a bone harness and a cleaver
   demon: {
@@ -704,6 +876,29 @@ export const LOOKS: Record<string, Look> = {
     legs: "trousers", legCol: 0xe2d6bc, boots: 0x4a2e1a, bootStyle: "wrap",
     sleeve: 0xece2c8, arms: "cloth", bracer: 0xc89c44, weapon: "none", fx: 0xffffff,
     shield: { col: 0x9a722c, trim: 0xead07a, emblem: 0xf2ecdc, style: "round" },
+  },
+  // Warden-Captain Edra Vane of Cairnwatch: weathered, grey wool under a bronze-studded leather coat, the grey-green cairn-warden cloak, a spear
+  cairncaptain: {
+    skin: 0xd4a888, hair: 0x6a5a4a, hairStyle: "ponytail", eye: 0x3a4a3a, head: "none",
+    torso: "leather", torsoCol: 0x4e3e2c, trim: 0xa8843a, belt: 0x2a2018, buckle: 0xa8843a,
+    legs: "trousers", legCol: 0x5a5c58, boots: 0x2e2a24, bootStyle: "leather",
+    sleeve: 0x7a7e7c, arms: "cloth", glove: 0x3a2e22, bracer: 0x8a6a34, weapon: "spear", bladeCol: 0x9aa4a8, fx: 0xffffff,
+    back: "cape", capeCol: 0x56685c, build: 1.05,
+  },
+  // Mother Ysolde the herbwife: old and small, a heather-dyed shawl over a plum dress, grey hair under a hood, a basket of herbs
+  moorherbalist: {
+    skin: 0xd8b090, hair: 0xcfcfd0, hairStyle: "long", eye: 0x3a3a4a,
+    head: "hood", headCol: 0x7a5a8a, headTrim: 0x5a3e6a,
+    torso: "robe", torsoCol: 0x6e4e7e, trim: 0xb89ac8, vest: 0x8a6aa0, apron: 0xcbbf9a, sash: 0x4a3a2a, belt: 0x4a3a2a,
+    legs: "dress", legCol: 0x4a3a52, boots: 0x3a2a22, bootStyle: "shoe",
+    sleeve: 0x6e4e7e, arms: "cloth", glove: 0xd8b090, weapon: "none", fx: 0xffffff, back: "cape", capeCol: 0x84609a, capeShort: true, basket: 0x8a6a3a, build: 0.92,
+  },
+  // Gorm the armourer: a big grey-bearded moor-man, bare forearms, a scorched leather apron, a smith's hammer
+  moorarmourer: {
+    skin: 0xc89a76, hair: 0x8a8a88, hairStyle: "short", beard: 0x9a9a98, beardStyle: "full",
+    head: "none", torso: "shirt", torsoCol: 0x6a5a4a, apron: 0x4a3322, belt: 0x2a1c12, buckle: 0x9a7a3a, belly: true,
+    legs: "trousers", legCol: 0x4a463c, boots: 0x2a2018, bootStyle: "leather",
+    sleeve: 0xc89a76, arms: "bare", bracer: 0x4a3424, glove: 0x2a1c12, weapon: "hammer", fx: 0xffffff, build: 1.3,
   },
   // Morwen: a young witch in a red dress, black corset bodice, bare arms and a tall black hat with a red band
   witch: {

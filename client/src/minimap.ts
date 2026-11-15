@@ -1,13 +1,44 @@
 import { uiScale } from "./worldscale";
-import { DESERT_H, DESERT_Y0, inDeepRow, MAP_H, MAP_W, TILE, UNDER_END, WORLD_H } from "../../shared/constants";
+import { decodeFog, encodeFog, loadFog } from "./fogmigrate";
+import { BADLANDS_H, BADLANDS_Y0, DESERT_H, DESERT_Y0, inBadlandsBand, inDeepRow, inMoorsBand, inSinkholesBand, SINKHOLES_H, SINKHOLES_Y0, MOORS_Y0, MOORS_H, MAP_H, MAP_W, TILE, UNDER_END, WORLD_H } from "../../shared/constants";
 import { floorAt, SEA_END } from "../../shared/dungeon";
 import { AREAS, EMPTY, GROUND, OBJECTS, T } from "../../shared/map";
 import { createTilesetCanvas, tileColors } from "./tileset";
 import { ISO } from "./isoflag";
 import { pixelText } from "./pixeltext";
 import { clasp, frameBorderImage, plaque, FRAME } from "./mapframe";
-import { drawWarLegend, drawWarTable, warLandLabels, warTableOn, setWarTableOn } from "./warTable";
+import { drawWarLegend, drawWarTable, warLandLabels, warLinkLabels, warTableOn, setWarTableOn } from "./warTable";
 import type { WarView } from "../../shared/war/view";
+
+/** Moors colours (cool greys and heather) for the minimap and world map; the rest falls back to the tileset. */
+function moorsColor(o: number, g: number, colors: string[]): string {
+  if (o === T.CLIFF) return "#555a62";
+  if (o === T.BARROW) return "#6d7a6a";
+  if (o === T.STANDING_STONE) return "#9aa0a8";
+  if (o === T.BONE_PILE) return "#c9c4b0";
+  if (o !== EMPTY && o !== T.BUSH) return colors[o];
+  return g === T.HEATHER ? "#6b5a78" : g === T.BOG ? "#2f3d3a" : g === T.GRASS ? "#4f6048" : g === T.DIRT ? "#5f5850" : g === T.SAND ? "#8a8a82" : colors[g];
+}
+
+/** Badlands colours (red sand, red mesas, grey-brown riverbeds) for the minimap and world map; the rest falls back to the tileset. */
+function badlandsColor(o: number, g: number, colors: string[]): string {
+  if (o === T.CLIFF) return "#7a3a26";
+  if (o === T.ARCH) return "#9a4a30";
+  if (o === T.CACTUS) return "#5f7a3a";
+  if (o !== EMPTY && o !== T.BUSH) return colors[o];
+  return g === T.SAND ? "#b8603a" : g === T.CLAY ? "#8a4a32" : g === T.GRAVEL ? "#7a6a5c" : g === T.DIRT ? "#9a6444" : g === T.GRASS ? "#8a7f4a" : colors[g];
+}
+
+/** Sinkholes colours (damp moss, loam cliffs, black pits) for the minimap and world map; the rest falls back to the tileset. */
+function sinkholesColor(o: number, g: number, colors: string[]): string {
+  if (o === T.CLIFF) return "#6a4a30";
+  if (o === T.PIT) return "#14120f";
+  if (o === T.BURROW) return "#8a6a44";
+  if (o === T.CAVE) return "#1c1410";
+  if (o === T.TREE) return "#3f5a32";
+  if (o !== EMPTY && o !== T.BUSH) return colors[o];
+  return g === T.MOSS ? "#587040" : g === T.WATER ? "#1f3338" : g === T.DIRT ? "#7a5a3c" : g === T.GRASS_DARK ? "#3f5a34" : g === T.TALL_GRASS ? "#4a6a38" : colors[g];
+}
 
 const VIEW_W = 56, VIEW_H = 56; // tiles shown around the player on the (round) minimap
 const PX = 3; // minimap canvas pixels per tile (56x56 tiles -> 168x168)
@@ -54,7 +85,13 @@ export class Minimap {
   private bx0 = MAP_W; private by0 = MAP_H; private bx1 = -1; private by1 = -1;
   /** The same for Act 2's desert (shared/desert.ts): the maps frame the act the hero is in. */
   private dx0 = MAP_W; private dy0 = MAP_H; private dx1 = -1; private dy1 = -1;
+  private mx0 = MAP_W; private my0 = MAP_H; private mx1 = -1; private my1 = -1; // explored box of the moors
   private inDesert = false;
+  private inMoors = false;
+  private inBadlands = false;
+  private inSinkholes = false;
+  private sx0 = MAP_W; private sy0 = MAP_H; private sx1 = -1; private sy1 = -1; // explored box of the sinkholes
+  private ax0 = MAP_W; private ay0 = MAP_H; private ax1 = -1; private ay1 = -1; // explored box of the badlands
   private view = MIN_VIEW; // tiles currently shown across the minimap (eases towards the explored size)
   /** Quest and NPC markers, set by the NPC layer every frame. */
   markers: MapMarker[] = [];
@@ -90,7 +127,10 @@ export class Minimap {
       const o = OBJECTS[y][x];
       // the Mawdeep: black rock, dim cave floors
       const g = GROUND[y][x];
-      b.fillStyle = y >= DESERT_Y0 && y < DESERT_Y0 + DESERT_H ? (o === T.CLIFF ? "#7a4a2c" : o !== EMPTY && o !== T.BUSH ? colors[o] : g === T.SAND ? "#c99c60" : g === T.DIRT ? "#a8744a" : g === T.GRASS ? "#5e6e30" : colors[g]) // the desert
+      b.fillStyle = inSinkholesBand(y) ? sinkholesColor(o, g, colors) // the Mawdeep Sinkholes
+        : inBadlandsBand(y) ? badlandsColor(o, g, colors) // the Red Badlands
+        : inMoorsBand(y) ? moorsColor(o, g, colors) // the Grey Barrow Moors
+        : y >= DESERT_Y0 && y < DESERT_Y0 + DESERT_H ? (o === T.CLIFF ? "#7a4a2c" : o !== EMPTY && o !== T.BUSH ? colors[o] : g === T.SAND ? "#c99c60" : g === T.DIRT ? "#a8744a" : g === T.GRASS ? "#5e6e30" : colors[g]) // the desert
         : y >= SEA_END ? (o !== EMPTY ? "#0d0b0c" : "#4a3d33") : colors[o !== EMPTY ? o : g];
       b.fillRect(x, y, 1, 1);
     }
@@ -242,6 +282,9 @@ export class Minimap {
     const f = me && floorAt(Math.floor(me.x / TILE), Math.floor(me.y / TILE));
     if (f) return { x0: f.x, y0: f.y, x1: f.x + f.w, y1: f.y + f.h };
     if (me && me.y >= WORLD_H * TILE && me.y < UNDER_END * TILE) return { x0: 0, y0: WORLD_H, x1: MAP_W, y1: UNDER_END };
+    if (this.inSinkholes) return { x0: 0, y0: SINKHOLES_Y0, x1: MAP_W, y1: SINKHOLES_Y0 + SINKHOLES_H };
+    if (this.inBadlands) return { x0: 0, y0: BADLANDS_Y0, x1: MAP_W, y1: BADLANDS_Y0 + BADLANDS_H };
+    if (this.inMoors) return { x0: 0, y0: MOORS_Y0, x1: MAP_W, y1: MOORS_Y0 + MOORS_H };
     return this.inDesert ? { x0: 0, y0: DESERT_Y0, x1: MAP_W, y1: DESERT_Y0 + DESERT_H } : { x0: 0, y0: 0, x1: MAP_W, y1: WORLD_H };
   }
 
@@ -307,21 +350,15 @@ export class Minimap {
     try {
       const s = localStorage.getItem(this.key);
       if (!s) return;
-      const bin = atob(s);
-      if (bin.length === this.seen.length) { for (let i = 0; i < bin.length; i++) this.seen[i] = bin.charCodeAt(i); return; }
-      for (const [ow, oh] of [[288, 288], [288, 216], [224, 168], [160, 120]]) { // saved before the map grew: same coordinates, copy row by row
-        if (bin.length !== ow * oh) continue;
-        for (let y = 0; y < oh && y < MAP_H; y++) for (let x = 0; x < ow && x < MAP_W; x++) this.seen[y * MAP_W + x] = bin.charCodeAt(y * ow + x);
-      }
+      const bin = decodeFog(s); // compressed "z1:" or the older raw form
+      loadFog(bin, this.seen, MAP_W, MAP_H); // (saved before the map grew: same coordinates, copied row by row)
     } catch { /* storage unavailable: start with nothing discovered */ }
   }
 
   private save() {
-    try {
-      let bin = "";
-      for (let i = 0; i < this.seen.length; i += 4096) bin += String.fromCharCode(...this.seen.subarray(i, i + 4096));
-      localStorage.setItem(this.key, btoa(bin));
-    } catch { /* ignore */ }
+    const z = encodeFog(this.seen); // always the compressed form (a few KB): the raw one could hit the storage quota
+    try { localStorage.setItem(this.key, z); }
+    catch (e) { console.warn("minimap: fog not saved (kept in memory, retried on the next save)", e); } // never remove the stored copy: it may be the only one
   }
 
   private paintFog(x0: number, y0: number, w: number, h: number) {
@@ -336,6 +373,21 @@ export class Minimap {
 
   private grow(x: number, y: number) {
     if (inDeepRow(y)) return; // the deep dungeons frame their floor
+    if (y >= SINKHOLES_Y0 - 4) {
+      if (x < this.sx0) this.sx0 = x; if (x > this.sx1) this.sx1 = x;
+      if (y < this.sy0) this.sy0 = y; if (y > this.sy1) this.sy1 = y;
+      return;
+    }
+    if (y >= BADLANDS_Y0 - 4) {
+      if (x < this.ax0) this.ax0 = x; if (x > this.ax1) this.ax1 = x;
+      if (y < this.ay0) this.ay0 = y; if (y > this.ay1) this.ay1 = y;
+      return;
+    }
+    if (y >= MOORS_Y0) {
+      if (x < this.mx0) this.mx0 = x; if (x > this.mx1) this.mx1 = x;
+      if (y < this.my0) this.my0 = y; if (y > this.my1) this.my1 = y;
+      return;
+    }
     if (y >= DESERT_Y0) {
       if (x < this.dx0) this.dx0 = x; if (x > this.dx1) this.dx1 = x;
       if (y < this.dy0) this.dy0 = y; if (y > this.dy1) this.dy1 = y;
@@ -347,6 +399,9 @@ export class Minimap {
   }
   /** The explored box of the act the hero is in. */
   private box() {
+    if (this.inSinkholes) return { x0: this.sx0, y0: this.sy0, x1: this.sx1, y1: this.sy1 };
+    if (this.inBadlands) return { x0: this.ax0, y0: this.ay0, x1: this.ax1, y1: this.ay1 };
+    if (this.inMoors) return { x0: this.mx0, y0: this.my0, x1: this.mx1, y1: this.my1 };
     return this.inDesert ? { x0: this.dx0, y0: this.dy0, x1: this.dx1, y1: this.dy1 } : { x0: this.bx0, y0: this.by0, x1: this.bx1, y1: this.by1 };
   }
 
@@ -368,7 +423,7 @@ export class Minimap {
       return { x: f.x + f.w / 2 - cw / s / 2, y: f.y + f.h / 2 - ch / s / 2, s };
     }
     const B = this.box();
-    if (B.x1 < 0) return { x: 0, y: this.inDesert ? DESERT_Y0 : 0, s: Math.max(1, Math.floor(Math.min(cw / MAP_W, ch / WORLD_H))) };
+    if (B.x1 < 0) return { x: 0, y: this.inSinkholes ? SINKHOLES_Y0 : this.inBadlands ? BADLANDS_Y0 : this.inMoors ? MOORS_Y0 : this.inDesert ? DESERT_Y0 : 0, s: Math.max(1, Math.floor(Math.min(cw / MAP_W, ch / WORLD_H))) };
     const w = Math.max(24, B.x1 - B.x0 + 1 + MAP_PAD * 2), hh = Math.max(18, B.y1 - B.y0 + 1 + MAP_PAD * 2);
     const s = Math.max(1, Math.floor(Math.min(cw / w, ch / hh)));
     const cx = (B.x0 + B.x1 + 1) / 2, cy = (B.y0 + B.y1 + 1) / 2;
@@ -402,7 +457,13 @@ export class Minimap {
   }
 
   private drawMini(now: number, me: P | undefined, others: OtherHero[]) {
-    if (me) this.inDesert = me.y >= DESERT_Y0 * TILE && !inDeepRow(Math.floor(me.y / TILE));
+    if (me) {
+      const ty = Math.floor(me.y / TILE);
+      this.inSinkholes = inSinkholesBand(ty);
+      this.inBadlands = inBadlandsBand(ty);
+      this.inMoors = inMoorsBand(ty);
+      this.inDesert = !this.inMoors && !this.inBadlands && !this.inSinkholes && me.y >= DESERT_Y0 * TILE && !inDeepRow(ty);
+    }
     if (me) this.reveal(Math.floor(me.x / TILE), Math.floor(me.y / TILE));
     if (this.dirty && now - this.lastSave > 3000) { this.save(); this.dirty = false; this.lastSave = now; }
 
@@ -507,9 +568,17 @@ export class Minimap {
       // the lands' names, upright at the top corner of each land's dashed box (warTable.ts)
       g.font = `15px ${PF}`; g.textAlign = "left"; g.textBaseline = "alphabetic";
       for (const l of warLandLabels()) {
-        const [lx, ly] = T((l.x - R.x) * BIG, (l.y - R.y) * BIG), x = Math.round(lx - g.measureText(l.name).width / 2), y = Math.round(ly) - 6;
+        const [lx, ly] = T((l.x - R.x) * BIG, (l.y - R.y) * BIG), x = Math.round(lx - g.measureText(l.name).width / 2), y0 = Math.round(ly) - 6;
+        if (y0 < -40) continue; // another band's land, far off the top
+        const y = Math.max(16, y0); // a label just above the canvas comes down into it
         g.fillStyle = "#000"; g.fillText(l.name, x + 1, y + 1);
         g.fillStyle = "#ffe8a3"; g.fillText(l.name, x, y);
+      }
+      g.font = `12px ${PF}`; g.textAlign = "center";
+      for (const l of warLinkLabels()) { // the ways between lands, named at their gates
+        const [lx, ly] = T((l.x - R.x) * BIG, (l.y - R.y) * BIG), x = Math.round(lx), y = Math.round(ly) - 22; // above the gate's own map label
+        g.fillStyle = "#000"; g.fillText(l.name, x + 1, y + 1);
+        g.fillStyle = "#96d7ff"; g.fillText(l.name, x, y);
       }
       drawWarLegend(g, this.war, PF);
     }

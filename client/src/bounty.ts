@@ -18,7 +18,7 @@ const SCALE = 0.72;
 
 interface View { board?: string; offers?: Bounty[]; active?: BountyState | null; done?: Bounty }
 /** Server "writ" (server/warWrits.ts WritMsg). */
-export interface WritView { board?: string; offers?: Writ[]; active?: WritState | null; left?: number; note?: string; done?: Writ & { valor: number }; err?: string }
+export interface WritView { board?: string; offers?: Writ[]; active?: WritState | null; left?: number; note?: string; done?: Writ & { valor: number }; err?: string; rally?: true }
 
 const hex = (c: number) => `#${c.toString(16).padStart(6, "0")}`;
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
@@ -32,6 +32,7 @@ export class BountyUI {
   private writ: WritState | null = null;
   private writOffers: Writ[] = [];
   private writNote = "";
+  private writRally = false;
   private writErr = "";
   private writLeft = 0;
   near?: (typeof BOARDS)[number];
@@ -64,6 +65,7 @@ export class BountyUI {
     if (v.offers) this.writOffers = v.offers;
     if (v.left !== undefined) this.writLeft = v.left;
     if (v.note !== undefined || v.offers) this.writNote = v.note ?? "";
+    if (v.offers || v.note !== undefined) this.writRally = !!v.rally; // a full board view says whether the war rallies for the hero's clan
     this.writErr = v.err ?? "";
     if (v.done) floatText(`War writ done! +${v.done.gold} gold +${v.done.renown} renown`, "#ffd166");
     if (this.open) this.render();
@@ -116,6 +118,7 @@ export class BountyUI {
     if (w) body = `<p class="bt-help">Your writ</p>${this.writRow(w, `${w.n} / ${w.goal}`)}<div class="bt-btns"><button data-wdrop>Tear up this writ</button></div>`;
     else if (this.writNote) body = `<p class="bt-help">${esc(this.writNote)}</p>`;
     else if (this.writOffers.length) body = `<p class="bt-help">Clan work: one writ at a time, ${this.writLeft} left today. Pays gold, renown and valor.</p>` +
+      (this.writRally ? `<p class="bt-help wr-rally">Rally! Your clan holds the least land: its writs pay more.</p>` : "") +
       this.writOffers.map((o, i) => this.writRow(o, `<button data-wtake="${i}">Take</button>`)).join("");
     else body = `<p class="bt-help">No war writs for a hero of your level here.</p>`;
     return `<h3 class="wr-head">War Writs</h3>${err}${body}`;

@@ -60,11 +60,17 @@ const hasTrack = (id: string) => { const t = TRACKS.find((x) => x.id === id); re
 const firstOf = (...ids: (string | null)[]) => ids.find((id): id is string => !!id && hasTrack(id)) ?? null;
 /** Act 2 calm areas with their own tune (else the Dune tune). */
 const DESERT_TOWNS = ["Kel Ashar", "Kel Ashar Market"];
+/** Act 3 calm areas that play the village tune (Cairnwatch, the moors' outpost). */
+const MOORS_TOWNS = ["Cairnwatch"];
+/** Act 4 calm area that plays the village tune (the Rustwater Post) until the badlands have their own music. */
+const BADLANDS_TOWNS = ["The Rustwater Post", "Rustwater Post"];
+/** Act 5 calm area that plays the village tune (Ropewell) until the sinkholes have their own music. */
+const SINKHOLES_TOWNS = ["Ropewell"];
 const OASES = ["Palmshade Oasis", "Mirage Wells", "Jackal Springs"];
 const BURIED = ["Kharsun, the Buried City", "The Veiled Sanctum"];
 const FURNACE = "The Sun Furnace";
-const UNDEAD = ["skeleton", "skeletonmage", "necromancer", "sanddead"];
-const FIGHT = ["slime", "shooterblob", "warriorblob", "healerblob", "motherblob", "bandit", "venomblob", "frostblob", "fireblob", "stormblob", "nomad", "scorpion", "veiled", "camelfolk", "sphinx", "sunwright", "nightraider"];
+const UNDEAD = ["skeleton", "skeletonmage", "necromancer", "sanddead", "wight", "bonehound", "mistwraith", "legionary", "cairnlord", "barrowking"];
+const FIGHT = ["slime", "shooterblob", "warriorblob", "healerblob", "motherblob", "bandit", "venomblob", "frostblob", "fireblob", "stormblob", "nomad", "scorpion", "veiled", "camelfolk", "sphinx", "sunwright", "nightraider", "boghag", "outrider", "crossbowman", "firebrand", "warhound", "vulture", "rattler", "redcaptain", "rourke", "delver", "cackler", "stagkin", "quillback", "stitcher", "sinkworm", "hidechief", "mawfather"];
 const TOWNS = ["Oakvale", "Market Square", "Chapel of the Dawn", "The Rusty Tankard", "The Smithy", "Saltmere", "Hunter's Camp"];
 
 const FADE_IN = 2.5;
@@ -291,7 +297,8 @@ function tick() {
  * Where the hero stands: the monster zone (name + its `mobs`, or undefined outside any) and the area
  * name. Cheap to call every frame.
  */
-export function setMusicZone(zone: string | undefined, mobs: Partial<Record<string, number>> | undefined, area: string, actNow: 1 | 2 = 1) {
+export function setMusicZone(zone: string | undefined, mobs: Partial<Record<string, number>> | undefined, area: string, actNowRaw: 1 | 2 | 3 | 4 | 5 = 1) {
+  const actNow: 1 | 2 = actNowRaw === 2 ? 2 : 1; // Acts 3, 4 and 5 borrow the valley's calm country track until the moors, the badlands and the sinkholes have their own music (slots: a badlands / sinkholes calm track here)
   if (!inWorld) {
     // In the world now: the opening song plays on to its end instead of looping
     inWorld = true;
@@ -323,7 +330,7 @@ export function setMusicZone(zone: string | undefined, mobs: Partial<Record<stri
   } else {
     zoneName = zone;
     zoneBattle = actOneBattle;
-    calm = !zone && TOWNS.includes(area) ? "village" : "country";
+    calm = !zone && (TOWNS.includes(area) || (actNowRaw === 3 && MOORS_TOWNS.includes(area)) || (actNowRaw === 4 && BADLANDS_TOWNS.includes(area)) || (actNowRaw === 5 && SINKHOLES_TOWNS.includes(area))) ? "village" : "country";
   }
   // Back to the valley while the theme plays: it fades with the calm change below
   if (actNow !== act) { act = actNow; if (arrival === "playing") arrival = "done"; }

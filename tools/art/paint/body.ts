@@ -73,9 +73,9 @@ function rig(name: string, p: PoseLike, info: FrameInfo): Rig {
   const L = lookOf(name), dir = p.dir, R = dir === "right", b = L.build ?? 1;
   const lean = R ? -p.lean : 0;
   const ly = dir === "down" ? -Math.min(p.lean, 1) : dir === "up" ? Math.min(p.lean, 1) : 0;
-  const ux = lean + (p.run && R ? 1 : 0), uy = p.bob + p.crouch + ly, lx = lean;
+  const stoop = L.stoop ?? 0, ux = lean + (p.run && R ? 1 : 0) + (R ? stoop * 0.8 : 0), uy = p.bob + p.crouch + ly + stoop, lx = lean;
   const cx = 16 + ux, sy = 12.7 + uy;
-  const hipY = 19.5 + p.crouch * 0.95 + ly + p.bob * 0.45;
+  const hipY = 19.5 + (p.crouch + stoop * 0.7) * 0.95 + ly + p.bob * 0.45;
   const SW = 3.45 * b;
   const nearS: P = dir === "down" ? [cx - SW, sy + 0.2] : dir === "up" ? [cx + SW, sy + 0.2] : [cx - 0.3, sy + 0.3];
   const farS: P = dir === "down" ? [cx + SW, sy + 0.2] : dir === "up" ? [cx - SW, sy + 0.2] : [cx + 0.9, sy];
@@ -394,6 +394,13 @@ function torso(c: C2, r: Rig) {
     grain(c, s, box, col, r.seed + 1, 45, 0.16, 0.8, 1.2);
     const fold = sh(col, 0.55);
     if (tk.kind === "wrap") {
+      if (L.rags !== undefined) { // grave-wrappings: bands of lighter cloth wound across the chest, loose ends hanging off the belt
+        const bc = C(L.rags);
+        clipTo(c, s, () => { for (let k = 0; k < 5; k++) { const y = sy - 0.4 + k * 1.35; line(c, [[cx - 4, y + 1.2], [cx + 4, y - 0.9]], k % 2 ? bc : sh(bc, 0.8), 0.5, 0.9); line(c, [[cx - 4, y + 1.6], [cx + 4, y - 0.5]], sh(bc, 0.5), 0.15, 0.7); } });
+        const sw = Math.sin(r.p.t * 1.2) * 0.35;
+        if (!r.R) for (const [dx, len] of [[-1.8, 3.2], [0.4, 4.2], [2.0, 2.8]]) limb(c, [cx + dx, hipY], [cx + dx + sw * (dx > 0 ? 1 : -1), hipY + len], 0.9, 0.35, sh(bc, 0.75));
+        else limb(c, [cx - 1.4, hipY], [cx - 2.2 + sw, hipY + 3.6], 0.9, 0.35, sh(bc, 0.75));
+      }
       if (down) { curve(c, [cx - 2.4, sy - 0.9], [cx - 0.6, sy + 1.4], [cx + 1.4, sy + 4.2], fold, 0.32, 0.8); curve(c, [cx + 2.4, sy - 0.9], [cx + 1.2, sy + 0.8], [cx + 0.3, sy + 2.2], sh(col, 1.4), 0.2, 0.5); }
       else if (r.R) curve(c, [cx + 1.0, sy - 0.9], [cx + 1.8, sy + 1.8], [cx + 0.6, sy + 4.2], fold, 0.3, 0.8);
       else line(c, [[cx, sy - 0.5], [cx, hipY - 1.5]], fold, 0.25, 0.5);
@@ -539,6 +546,7 @@ function tabard(c: C2, r: Rig) {
 function backItem(c: C2, r: Rig, front: boolean) {
   const L = r.L, { cx, sy, hipY } = r;
   if ((r.dir === "up") === front) beastParts(c, r);
+  if (front) fetishes(c, r);
   coatTails(c, r, front);
   if (L.scarf) scarfEnds(c, r, front);
   if (L.back === "cape") {
@@ -596,6 +604,18 @@ function backItem(c: C2, r: Rig, front: boolean) {
  */
 function beastParts(c: C2, r: Rig) {
   const L = r.L, { cx, sy, hipY } = r, t = r.p.t, R = r.R, up = r.dir === "up";
+  if (L.quills !== undefined) {
+    // a porcupine's back: banded quills fanning out of the spine; behind the body from the front, over it from behind
+    const dark = C(L.quills), n = up ? 26 : 16;
+    for (let k = 0; k < n; k++) {
+      const u = (k + 0.5) / n, rs = (k * 7919 % 13) / 13;
+      let a: P, b: P;
+      if (up) { const bx = cx + (u - 0.5) * 7, by = sy + 1 + ((k * 5) % 6) * 1.5; a = [bx, by]; b = [bx + (u - 0.5) * 5, by - 2.6 - rs * 2.2]; }
+      else if (R) { const ang = -2.6 + u * 1.9; a = [cx - 1.4 + Math.cos(ang) * 1.0, sy + 2.2 + Math.sin(ang) * 1.0 + u * 2]; b = [a[0] + Math.cos(ang) * (4 + rs * 2.4), a[1] + Math.sin(ang) * (4 + rs * 2.4)]; }
+      else { const ang = -Math.PI + u * Math.PI, side = Math.cos(ang); a = [cx + side * 3.0, sy + 0.8 + Math.sin(ang) * -0.5]; b = [a[0] + side * (2.6 + rs * 1.8), a[1] - 3.4 - rs * 2.4 + Math.abs(side) * 1.2]; }
+      line(c, [a, b], sh(0x2a2220, 0.6), 0.62, 1); line(c, [a, lerpP(a, b, 0.62)], dark, 0.4, 1); line(c, [lerpP(a, b, 0.55), b], 0xe8dfc4, 0.36, 1);
+    }
+  }
   if (L.tail !== undefined) {
     const col = C(L.tail), sw = Math.sin(t * 1.3) * 0.8;
     const pts: P[] = R ? [[cx - 1.2, hipY], [cx - 4.5, hipY + 3.5], [cx - 7.5 + sw, 28.6]] : [[cx + 0.6, hipY + 0.4], [cx + 3.2 + sw, hipY + 4.5], [cx + 5.5 + sw, 28.8]];
@@ -644,6 +664,20 @@ function beastParts(c: C2, r: Rig) {
   }
 }
 
+/** Bone and charm fetishes hanging on cords from the belt (the Hide-Kin shamans, the trappers' lodge charms). */
+function fetishes(c: C2, r: Rig) {
+  const L = r.L; if (L.fetishes === undefined) return;
+  const col = C(L.fetishes), { cx, hipY } = r, t = r.p.t, R = r.R;
+  const spots: [number, number][] = R ? [[-0.8, 0], [0.6, 0.4], [-2.0, 0.6]] : r.dir === "up" ? [[-2.4, 0], [2.4, 0.3]] : [[-2.8, 0.2], [-1.3, 0.7], [2.6, 0.2], [1.2, 0.6]];
+  spots.forEach(([dx, dy], i) => {
+    const x = cx + dx, y = hipY - 1.6 + dy, sw = Math.sin(t * 1.3 + i * 1.7) * 0.3, len = 2.2 + (i % 2) * 1.2;
+    line(c, [[x, y], [x + sw, y + len]], 0x2a1c12, 0.14, 0.9);
+    if (i % 3 === 0) fillShape(c, poly([[x + sw - 0.6, y + len], [x + sw + 0.6, y + len], [x + sw + 0.35, y + len + 1.6], [x + sw - 0.35, y + len + 1.6]]), css(col)); // a bone
+    else if (i % 3 === 1) { fillShape(c, ellipseP(x + sw, y + len + 0.5, 0.65, 0.75), css(col)); fillShape(c, ellipseP(x + sw - 0.2, y + len + 0.4, 0.14, 0.14), css(0x1a1008)); fillShape(c, ellipseP(x + sw + 0.2, y + len + 0.4, 0.14, 0.14), css(0x1a1008)); } // a tiny skull
+    else { fillShape(c, ellipseP(x + sw, y + len + 0.4, 0.6, 0.6), css(0x7a2a1a)); fillShape(c, ellipseP(x + sw, y + len + 0.4, 0.28, 0.28), css(0xd8a040)); } // a clay charm
+  });
+}
+
 // ---------------------------------------------------------------- arms
 function arm(c: C2, r: Rig, which: "near" | "far") {
   const L = r.L, isNear = which === "near";
@@ -678,6 +712,11 @@ function arm(c: C2, r: Rig, which: "near" | "far") {
   const hs = ellipseP(h[0], h[1], 0.85, 0.8);
   if (plate) metal(c, hs, hc, [h[0] - 0.8, h[1] - 0.8], [h[0] + 0.8, h[1] + 0.8], 0.4); else vol(c, hs, hc, [h[0] - 0.9, h[1] - 0.9, 1.8, 1.8], { ao: 0.2 });
   void skin;
+  if (L.claws !== undefined) { // great digging claws: three long curved nails past the knuckles
+    const dx = h[0] - e[0], dy = h[1] - e[1], l = Math.hypot(dx, dy) || 1, ux = dx / l, uy = dy / l, cc = C(L.claws);
+    for (const o of [-0.8, 0, 0.8]) { const bx = h[0] - uy * o * 0.9, by = h[1] + ux * o * 0.9, tx = bx + ux * 2.4 - uy * o * 0.7, ty = by + uy * 2.4 + ux * o * 0.7;
+      limb(c, [bx, by], [tx, ty], 0.55, 0.12, sh(cc, 0.5)); limb(c, [bx, by], [tx, ty], 0.4, 0.06, cc); }
+  }
   // pauldron
   if (plate || armoured) {
     const pc = C(armoured ? gear!.color : L.sleeve);
@@ -934,6 +973,10 @@ const BEAST: Record<NonNullable<Look["beast"]>, { fur: number; muz: number; nose
   crow: { fur: 0x1e1a24, muz: 0x4a4650, nose: 0x2a2830, rx: 2.15, ry: 2.15 },
   camel: { fur: 0xb88a58, muz: 0xd0aa78, nose: 0x5a3a24, rx: 1.9, ry: 2.0 },
   lion: { fur: 0xc8923a, muz: 0xe2c690, nose: 0x3a2018, rx: 2.15, ry: 2.15 },
+  mole: { fur: 0x54483e, muz: 0xb89a8a, nose: 0xd89a98, rx: 2.2, ry: 2.05 },
+  hyena: { fur: 0x9a7a4a, muz: 0x3e2e22, nose: 0x120c0a, rx: 2.3, ry: 2.1 },
+  stag: { fur: 0x6a4a34, muz: 0xc0a080, nose: 0x1a1210, rx: 2.1, ry: 2.25 },
+  quill: { fur: 0x3e3228, muz: 0x8a7a68, nose: 0x1a1210, rx: 2.3, ry: 2.15 },
 };
 function beastHead(c: C2, r: Rig, hood = false) {
   const L = r.L, kind = L.beast!, B = BEAST[kind], [hx, hy] = r.head, dir = r.dir, R = r.R, fo = r.fo, qx = hx + fo;
@@ -960,6 +1003,22 @@ function beastHead(c: C2, r: Rig, hood = false) {
   if (kind === "bat") for (const sx of sides) ear(earAt(sx, 1.5, 0), hy - 2.6, 0.9, 2.1, sx * 0.25, false, 0x7a4a4a);
   if (kind === "wolf") for (const sx of sides) ear(earAt(sx, 1.4, 0), hy - 2.4, 0.8, 1.6, sx * 0.15, false, 0x5a4a44);
   if (kind === "bear") for (const sx of sides) ear(earAt(sx, 2.0, 0), hy - 2.0, 0.85, 0.8, 0, true, 0x2e2018);
+  if (kind === "mole") for (const sx of sides) ear(earAt(sx, 1.9, 0.2), hy - 1.2, 0.5, 0.5, 0, true, 0x8a6a5c);
+  if (kind === "hyena") for (const sx of sides) ear(earAt(sx, 2.0, 0), hy - 2.0, 1.15, 1.15, 0, true, 0x2a1a14);
+  if (kind === "quill") for (const sx of sides) ear(earAt(sx, 1.9, 0), hy - 1.5, 0.7, 0.7, 0, true, 0x6a5a48);
+  if (kind === "stag") {
+    for (const sx of sides) ear(earAt(sx, 2.0, 0), hy - 1.1, 0.5, 1.3, sx * 1.1, false, 0x8a5a44);
+    // antlers: a main beam rising and curving, tines branching forward and out; bone, darkening toward the tips
+    const AN = 0xd8cdae, shaft = (a: P, b: P, w: number) => { limb(c, a, b, w, w * 0.6, C(sh(AN, 0.55))); limb(c, a, b, w * 0.7, w * 0.4, C(AN)); };
+    for (const sx of sides) {
+      const b0: P = R ? [hx - 0.6, hy - 2.0] : [hx + sx * 1.2, hy - 2.0], b1: P = R ? [hx - 1.4, hy - 4.6] : [hx + sx * 2.3, hy - 4.5], b2: P = R ? [hx - 0.2, hy - 7.2] : [hx + sx * 1.8, hy - 7.4];
+      shaft(b0, b1, 0.9); shaft(b1, b2, 0.7);
+      shaft(b1, R ? [hx + 1.2, hy - 5.8] : [hx + sx * 4.1, hy - 5.8], 0.45);
+      shaft(lerpP(b0, b1, 0.55), R ? [hx + 0.8, hy - 3.9] : [hx + sx * 3.9, hy - 3.2], 0.4);
+      shaft(b2, R ? [hx + 1.4, hy - 8.6] : [hx + sx * 3.0, hy - 8.8], 0.4);
+      shaft(b2, R ? [hx - 1.6, hy - 8.8] : [hx + sx * 0.6, hy - 9.2], 0.36);
+    }
+  }
   if (kind === "camel") {
     // a long neck rising out of the shoulders, then little round ears
     if (!hood) limb(c, [r.cx + (R ? -0.4 : 0), r.sy - 0.6], [hx - (R ? 0.6 : 0), hy + 1.2], 2.0, 1.5, sh(fur, 0.85));
@@ -1023,6 +1082,13 @@ function beastHead(c: C2, r: Rig, hood = false) {
   }
   if (kind === "crow") { // ragged feathers sticking up off the crown and the nape
     for (let k = -2; k <= 2; k++) { const x = hx + k * 0.6 + (R ? -1 : 0), y = hy - B.ry + 0.2; line(c, [[x, y + 0.6], [x + (R ? -0.9 : k * 0.25), y - 0.9 - (k % 2 ? 0.3 : 0)]], sh(fur, 0.7), 0.3, 0.95); }
+  }
+  if (kind === "quill") { // quills sprouting off the crown and the nape, banded
+    for (let k = -3; k <= 3; k++) { const x = hx + k * 0.55 + (R ? -0.8 : 0), y = hy - B.ry + 0.3 + Math.abs(k) * 0.15; line(c, [[x, y + 0.5], [x + (R ? -0.8 : k * 0.28), y - 1.9 + Math.abs(k) * 0.25]], 0x2a2220, 0.26, 0.95); line(c, [[x + (R ? -0.5 : k * 0.17), y - 0.9], [x + (R ? -0.8 : k * 0.28), y - 1.9 + Math.abs(k) * 0.25]], 0xe8dfc4, 0.2, 0.95); }
+  }
+  if (kind === "hyena") { // a dark ragged crest and spots on the crown
+    for (let k = -3; k <= 3; k++) { const x = hx + k * 0.5 + (R ? -0.8 : 0), y = hy - B.ry - 0.1 + Math.abs(k) * 0.15; line(c, [[x, y + 0.6], [x + (R ? -0.6 : k * 0.1), y - 0.9 - (k % 2 ? 0.3 : 0)]], 0x2a1a12, 0.24, 0.95); }
+    for (const [dx, dy] of dir === "up" ? [[-1, -1], [0.8, -0.2], [-0.4, 0.8], [1.2, 1]] : [[-1.4, -1.4], [1.3, -1.2], [-0.2, -1.9]]) fillShape(c, ellipseP((R ? hx - 0.6 : qx) + dx, hy + dy, 0.3, 0.26), css(0x3a2616));
   }
   if (kind === "boar" || kind === "wolf") { // bristle mane along the crown
     for (let k = -3; k <= 3; k++) { const x = hx + k * 0.45 + (R ? -0.8 : 0), y = hy - B.ry - 0.1 + Math.abs(k) * 0.12; line(c, [[x, y + 0.6], [x + (R ? -0.4 : k * 0.08), y - 0.5]], sh(fur, 0.6), 0.22, 0.9); }
@@ -1137,6 +1203,50 @@ function beastHead(c: C2, r: Rig, hood = false) {
     const kohl = (x: number, y: number, sg: number) => line(c, [[x - sg * 0.45, y - 0.3], [x + sg * 0.8, y - 0.3], [x + sg * 1.2, y + 0.15]], 0x1a1210, 0.2, 0.95);
     if (R) { eye(hx + 0.7, hy - 0.3, 0.36); kohl(hx + 0.7, hy - 0.3, -1); }
     else for (const sg of [-1, 1]) { eye(qx + sg * 1.0, hy - 0.2, 0.36); kohl(qx + sg * 1.0, hy - 0.2, sg); }
+  } else if (kind === "mole") {
+    // a long pale snout ending in a pink star of feelers; eyes are specks buried in the fur
+    muzzle(3.0, 1.0, 1.2, 0.6);
+    const t = tip(3.0, 0.6);
+    const sx0 = R ? t[0] + 0.5 : qx, sy0 = R ? t[1] - 0.1 : hy + 1.8;
+    for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2; line(c, [[sx0, sy0], [sx0 + Math.cos(a) * (R ? 0.9 : 1.2), sy0 + Math.sin(a) * 0.9]], 0xe8aaa4, 0.2, 0.95); }
+    fillShape(c, ellipseP(sx0, sy0, 0.45, 0.4), css(C(B.nose)));
+    // two chisel incisors under it
+    if (!R) for (const sg of [-1, 1]) fillShape(c, poly([[qx + sg * 0.4 - 0.25, hy + 3.2], [qx + sg * 0.4 + 0.25, hy + 3.2], [qx + sg * 0.4, hy + 4.0]]), css(C(ivory)));
+    else fillShape(c, poly([[t[0] - 0.6, t[1] + 0.9], [t[0] - 0.1, t[1] + 0.9], [t[0] - 0.3, t[1] + 1.7]]), css(C(ivory)));
+    const sp = (x: number, y: number) => { fillShape(c, ellipseP(x, y, 0.2, 0.2), css(0x0c0806)); fillShape(c, ellipseP(x + 0.05, y - 0.05, 0.07, 0.07), css(C(eyeC))); };
+    if (R) sp(hx + 0.9, hy - 0.4); else { sp(qx - 1.0, hy - 0.3); sp(qx + 1.0, hy - 0.3); }
+  } else if (kind === "hyena") {
+    // a heavy, dark muzzle drawn back in a wide grin, big teeth, a pale chin, bright amber eyes
+    muzzle(2.2, 1.3, 1.25, 0.4);
+    const t = tip(2.2, 0.4);
+    nose(t[0] + (R ? 0.2 : 0), t[1] - (R ? 0.35 : 0.55), R ? 0.45 : 0.6, 0.4);
+    if (R) {
+      line(c, [[hx + 0.2, t[1] + 0.6], [t[0], t[1] + 0.5]], 0x1a0c08, 0.26);
+      for (const x of [t[0] - 0.4, t[0] - 1.2, hx + 0.8]) fillShape(c, poly([[x - 0.18, t[1] + 0.5], [x + 0.18, t[1] + 0.5], [x, t[1] + 1.3]]), css(C(0xf0e8d8)));
+    } else {
+      curve(c, [qx - 1.4, hy + 1.9], [qx, hy + 3.0], [qx + 1.4, hy + 1.9], 0x1a0c08, 0.26);
+      for (const sg of [-1, 0, 1]) fillShape(c, poly([[qx + sg * 0.75 - 0.17, hy + 2.45 - Math.abs(sg) * 0.35], [qx + sg * 0.75 + 0.17, hy + 2.45 - Math.abs(sg) * 0.35], [qx + sg * 0.75, hy + 3.2 - Math.abs(sg) * 0.3]]), css(C(0xf0e8d8)));
+    }
+    if (R) eye(hx + 0.7, hy - 0.6, 0.3); else { eye(qx - 0.95, hy - 0.5, 0.3); eye(qx + 0.95, hy - 0.5, 0.3); }
+  } else if (kind === "stag") {
+    // a long, narrow muzzle with a dark wet nose, large dark eyes set wide
+    muzzle(2.8, 1.0, 1.3, 0.7);
+    const t = tip(2.8, 0.7);
+    nose(t[0] + (R ? 0.2 : 0), t[1] - (R ? 0.2 : 0.3), R ? 0.45 : 0.65, 0.42);
+    if (R) line(c, [[hx + 1.2, t[1] + 0.6], [t[0], t[1] + 0.5]], 0x2a1a12, 0.16);
+    else line(c, [[qx, hy + 2.4], [qx, hy + 3.2]], 0x2a1a12, 0.14);
+    if (R) eye(hx + 0.4, hy - 0.5, 0.3); else { eye(qx - 1.15, hy - 0.4, 0.3); eye(qx + 1.15, hy - 0.4, 0.3); }
+    line(c, R ? [[hx + 0.1, hy + 0.9], [hx + 1.3, hy + 0.7]] : [[qx - 1.6, hy + 0.7], [qx - 0.8, hy + 0.9]], 0x2a1a12, 0.12, 0.6); // tear-track
+  } else if (kind === "quill") {
+    // a blunt, bulbous snout with a big dark nose, whiskers, small bright eyes under a bristling brow
+    muzzle(1.4, 1.15, 1.0, 0.4);
+    const t = tip(1.4, 0.4);
+    if (R) fillShape(c, ellipseP(t[0] + 0.1, t[1] - 0.1, 0.5, 0.55), css(C(B.nose)));
+    else nose(qx, hy + 1.5, 0.8, 0.55);
+    if (R) fillShape(c, poly([[t[0] - 0.5, t[1] + 0.6], [t[0] - 0.1, t[1] + 0.6], [t[0] - 0.3, t[1] + 1.6]]), css(C(0xe8d070)));
+    else for (const sg of [-1, 1]) fillShape(c, poly([[qx + sg * 0.3 - 0.25, hy + 2.4], [qx + sg * 0.3 + 0.25, hy + 2.4], [qx + sg * 0.3, hy + 3.4]]), css(C(0xe8d070)));
+    for (const sg of R ? [1] : [-1, 1]) for (let k = 0; k < 3; k++) line(c, [[(R ? t[0] : qx) + sg * 0.5, hy + 1.6], [(R ? t[0] : qx) + sg * 2.2, hy + 0.9 + k * 0.7]], 0xe8dfc4, 0.06, 0.7);
+    if (R) eye(hx + 0.6, hy - 0.5, 0.28); else { eye(qx - 0.95, hy - 0.4, 0.27); eye(qx + 0.95, hy - 0.4, 0.27); }
   } else if (kind === "bear") {
     muzzle(1.7, 1.4, 1.15, 0.45);
     const t = tip(1.7, 0.45);
@@ -1165,7 +1275,7 @@ function head(c: C2, r: Rig) {
   const covered = hg === "greathelm" || hg === "ninjahood";
   if (L.skull) { skull(c, r); if (worn !== "none") hat(c, r, worn); if ((L.boneArmour ?? 0) >= 4) boneCrown(c, r); return; }
   if (L.beast && !L.beastHood) { // the animal head reads bigger than a man's: it is what you see of them
-    const k = L.beast === "bull" || L.beast === "bear" || L.beast === "lion" ? 1.4 : 1.3;
+    const k = L.beast === "bull" || L.beast === "bear" || L.beast === "lion" ? 1.4 : L.beast === "stag" ? 1.15 : 1.3;
     c.save(); c.translate(r.head[0], r.head[1] + 1.4); c.scale(k, k); c.translate(-r.head[0], -r.head[1] - 1.4);
     beastHead(c, r); c.restore(); return;
   }
@@ -1213,6 +1323,24 @@ function head(c: C2, r: Rig) {
     else line(c, [[ex - 0.35, ey + 0.1], [ex + 0.35, ey + 0.1]], col, 0.2);
     line(c, [[ex - 0.5, ey - 0.6], [ex + 0.5, ey - 0.55]], sh(L.hair ?? skin, 0.45), 0.2, 0.8);
   }
+  if (L.eyeGlow !== undefined && !covered && dir !== "up") { // the cold light of the barrow dead behind a living face
+    if (!r.R) for (const sg of [-1, 1]) curve(c, [qx + sg * 1.9, hy + 0.5], [qx + sg * 1.5, hy + 1.6], [qx + sg * 0.7, hy + 2.3], sh(skin, 0.55), 0.35, 0.7); // hollow cheeks
+    for (const [x, y] of (r.R ? [[hx + 1.25, hy + 0.25]] : (fo ? [qx - 0.8, qx + 0.85] : [hx - 0.95, hx + 0.95]).map((v) => [v, hy + 0.25])) as P[]) {
+      fillShape(c, ellipseP(x, y, 0.78, 0.62), css(0x0a1014, 0.85)); // sunken socket
+      glow(c, x, y, 1.05, L.eyeGlow, 0.7); fillShape(c, ellipseP(x, y, 0.4, 0.26), css(mix(L.eyeGlow, 0xffffff, 0.8)));
+    }
+  }
+  if (L.faceMask !== undefined && dir !== "up") { // a beaten gold funeral mask: calm brow, slit eyes, a long nose, a closed mouth
+    const g = C(L.faceMask), mx = r.R ? hx + 0.5 : qx;
+    const m = r.R ? blobPath([[hx - 0.5, hy - 2.5], [hx + 2.1, hy - 2.1], [hx + 2.7, hy + 0.9], [hx + 1.4, hy + 2.9], [hx - 0.4, hy + 2.6]])
+      : blobPath([[mx - 2.4, hy - 2.2], [mx, hy - 2.9], [mx + 2.4, hy - 2.2], [mx + 2.3, hy + 0.9], [mx + 1.2, hy + 2.7], [mx, hy + 3.1], [mx - 1.2, hy + 2.7], [mx - 2.3, hy + 0.9]]);
+    vol(c, m, g, [mx - 2.4, hy - 2.9, 4.8, 6], { hi: 1.35, ao: 0.3, spec: 0.6 });
+    line(c, [[mx - 1.9, hy - 0.9], [mx - 0.5, hy - 0.5]], sh(g, 0.55), 0.28, 0.9); line(c, [[mx + 1.9, hy - 0.9], [mx + 0.5, hy - 0.5]], sh(g, 0.55), 0.28, 0.9);
+    for (const x of r.R ? [hx + 1.35] : [mx - 1.0, mx + 1.0]) { fillShape(c, ellipseP(x, hy + 0.1, 0.55, 0.2), css(0x0a0c10)); glow(c, x, hy + 0.1, 1.2, L.eyeGlow ?? 0x9fe4ff, 0.7); }
+    line(c, [[mx + (r.R ? 0.9 : 0), hy + 0.2], [mx + (r.R ? 1.4 : 0.1), hy + 1.5]], sh(g, 0.5), 0.2, 0.8);
+    line(c, [[mx - 0.7 + (r.R ? 0.9 : 0), hy + 2.0], [mx + 0.7 + (r.R ? 0.9 : 0), hy + 2.0]], sh(g, 0.5), 0.2, 0.9);
+    line(c, [[mx - 1.8, hy - 2.1], [mx - 1.0, hy + 2.0]], sh(g, 1.5), 0.18, 0.5);
+  }
   if (L.mask !== undefined && dir !== "up") {
     const mc = C(L.mask);
     const m = r.R ? blobPath([[hx - 0.4, hy + 0.7], [hx + 2.8, hy + 0.6], [hx + 2.2, hy + 2.6], [hx + 0.2, hy + 2.9]])
@@ -1257,7 +1385,36 @@ function head(c: C2, r: Rig) {
     beastHead(c, r, true); c.restore();
   }
   if (worn !== "none") hat(c, r, worn);
+  if (L.torc !== undefined) torc(c, r);
+  if (L.reeds !== undefined) reeds(c, r);
 }
+
+/** Bog reeds and a few sundew sprigs tucked in the hair (Look.reeds), swaying a little. */
+function reeds(c: C2, r: Rig) {
+  const [hx, hy] = r.head, col = C(r.L.reeds!), sw = Math.sin(r.p.t * 0.9) * 0.3, back = r.R ? -1 : 0;
+  for (const [dx, h, a] of [[-1.6, 5.0, -0.5], [-0.4, 6.2, 0.1], [1.2, 4.6, 0.6]] as number[][]) {
+    const b: P = [hx + dx + back * 0.6, hy - 2.4], tip: P = [b[0] + a * 1.8 + sw, b[1] - h];
+    curve(c, b, [b[0] + a * 0.4, b[1] - h * 0.6], tip, sh(col, 0.8), 0.3, 1);
+    fillShape(c, ellipseP(tip[0], tip[1] + 0.5, 0.35, 0.9, a * 0.4), css(sh(col, 0.55)));
+  }
+  for (const [dx, dy] of [[-2.2, -0.4], [2.2, -1.2], [-1.0, -2.8]] as P[]) { // sundew: sticky red drops on green sprigs
+    fillShape(c, ellipseP(hx + dx + back * 0.5, hy + dy, 0.5, 0.4), css(C(0x5a7a30)));
+    glow(c, hx + dx + back * 0.5, hy + dy - 0.3, 0.8, 0xe04a4a, 0.55); fillShape(c, ellipseP(hx + dx + back * 0.5, hy + dy - 0.3, 0.22, 0.22), css(0xff7a6a));
+  }
+}
+
+/** A bronze neck-ring with ball ends, worn by the barrow dead (Look.torc). */
+function torc(c: C2, r: Rig) {
+  const col = C(L_TORC(r)), { cx, sy } = r, y = sy - 0.9;
+  if (r.dir === "up") { line(c, [[cx - 1.5, y - 0.3], [cx + 1.5, y - 0.3]], sh(col, 0.7), 0.4, 0.9); return; }
+  const w = r.R ? 1.2 : 2.1, x0 = cx + (r.R ? 0.4 : 0);
+  c.beginPath(); c.moveTo(x0 - w, y - 0.4); c.quadraticCurveTo(x0, y + 1.6, x0 + w, y - 0.4);
+  c.strokeStyle = css(sh(col, 0.5)); c.lineWidth = 0.75; c.lineCap = "round"; c.stroke();
+  c.beginPath(); c.moveTo(x0 - w, y - 0.4); c.quadraticCurveTo(x0, y + 1.6, x0 + w, y - 0.4);
+  c.strokeStyle = css(sh(col, 1.25)); c.lineWidth = 0.4; c.stroke();
+  for (const sg of r.R ? [1] : [-1, 1]) metal(c, ellipseP(x0 + sg * w, y - 0.4, 0.5, 0.5), col, [x0 + sg * w - 0.5, y - 0.9], [x0 + sg * w + 0.5, y + 0.1], 0.6);
+}
+const L_TORC = (r: Rig) => r.L.torc!;
 
 function hat(c: C2, r: Rig, hg: HeadGear | "crown") {
   const L = r.L, [hx, hy] = r.head, dir = r.dir, fo = r.fo, qx = hx + fo;
@@ -1388,6 +1545,11 @@ function hat(c: C2, r: Rig, hg: HeadGear | "crown") {
       if (dir === "down") metal(c, (cc) => cc.rect(qx - 0.32, hy - 0.4, 0.64, 2.1), col, [qx - 0.3, hy], [qx + 0.3, hy + 1]);
       if (dir !== "up") line(c, [[hx - 0.2, hy - 3.4], [hx + (r.R ? 1.2 : 0), hy - 0.8]], sh(col, 1.45), 0.25, 0.6);
       if (g) glow(c, hx, hy - 3.5, 0.8, trim, 0.6);
+      if (L.plume !== undefined) { // a horsehair crest along the dome (front-to-back from the side, a comb from the front)
+        const pl = C(L.plume), sway = Math.sin(t * 1.1) * 0.25;
+        if (dir === "down") { const cr = poly([[hx - 0.55, hy - 3.2], [hx - 0.9, hy - 5.1], [hx - 0.3, hy - 5.7 + sway], [hx + 0.3, hy - 5.7 - sway], [hx + 0.9, hy - 5.1], [hx + 0.55, hy - 3.2]]); vol(c, cr, pl, [hx - 1, hy - 5.8, 2, 2.6], { ao: 0.3 }); }
+        else { const cr = blobPath([[hx - 2.4, hy - 1.4 + (r.R ? 0 : 0)], [hx - 2.0, hy - 4.6 + sway], [hx - 0.2, hy - 5.7], [hx + 1.8, hy - 4.9], [hx + 2.2, hy - 3.2], [hx + 0.2, hy - 3.6], [hx - 1.4, hy - 2.8]]); vol(c, cr, pl, [hx - 2.4, hy - 5.8, 4.6, 4.4], { ao: 0.3 }); grain(c, cr, [hx - 2.4, hy - 5.8, 4.6, 4.4], pl, 17, 30, 0.4, 0.9, 1.5); }
+      }
       break;
     }
     case "cap": {
@@ -1405,6 +1567,18 @@ function hat(c: C2, r: Rig, hg: HeadGear | "crown") {
       const s = poly([[hx - w, y0 + 1.2], [hx - w, y0 - 0.9], [hx - w * 0.55, y0 + 0.1], [hx - w * 0.3, y0 - 1.4], [hx, y0 - 0.1], [hx + w * 0.3, y0 - 1.4], [hx + w * 0.55, y0 + 0.1], [hx + w, y0 - 0.9], [hx + w, y0 + 1.2]]);
       metal(c, s, col, [hx - w, y0 - 1.4], [hx + w, y0 + 1.2], 0.9);
       if (dir !== "up") { glow(c, hx, y0 + 0.5, 0.7, trim, 0.9); fillShape(c, ellipseP(hx, y0 + 0.5, 0.35, 0.35), css(trim)); }
+      break;
+    }
+    case "stonecrown": { // a ring of standing-stone shards (the Cairn-Lord)
+      const base = hy - 2.0, n = 7;
+      for (let k = 0; k < n; k++) {
+        const t = (k - (n - 1) / 2) / ((n - 1) / 2), x = hx + t * 2.5 + (r.R ? -0.3 : 0), hgt = (2.6 + ((k * 5) % 3) * 0.9 - Math.abs(t) * 0.9) * 1.0;
+        const lean = ((k * 7) % 3 - 1) * 0.35, w = 0.75 + ((k * 3) % 2) * 0.3;
+        const sp = poly([[x - w, base + 0.5], [x - w * 0.8 + lean * 0.5, base - hgt * 0.6], [x + lean, base - hgt], [x + w * 0.8 + lean * 0.5, base - hgt * 0.5], [x + w, base + 0.5]]);
+        vol(c, sp, k % 2 ? sh(col, 0.85) : col, [x - w, base - hgt, w * 2, hgt + 0.5], { ao: 0.4, spec: 0.15 });
+        line(c, [[x - w * 0.3, base - hgt * 0.8], [x - w * 0.4, base]], sh(col, 1.35), 0.14, 0.6);
+      }
+      metal(c, poly([[hx - 2.7, base + 0.3], [hx + 2.7, base + 0.3], [hx + 2.6, base + 1.1], [hx - 2.6, base + 1.1]]), trim, [hx - 2.7, base], [hx + 2.7, base + 1.2], 0.5);
       break;
     }
     case "bandana": {
@@ -1434,7 +1608,7 @@ const WOOD = 0x7a4f2a, STEEL = 0xc9d2dc;
 
 function weaponCols(r: Rig) {
   const g = gear?.slot === "weapon" ? gear : null;
-  return { blade: g ? g.color : STEEL, accent: g ? g.accent : 0, long: g?.style.startsWith("long") ? 1 + (g.bonus.reach ?? 0) * 0.9 : 1, glowing: !!g && g.style.endsWith("glow"), g };
+  return { blade: g ? g.color : r.L.bladeCol ?? STEEL, accent: g ? g.accent : 0, long: g?.style.startsWith("long") ? 1 + (g.bonus.reach ?? 0) * 0.9 : 1, glowing: !!g && g.style.endsWith("glow"), g };
 }
 
 function blade(c: C2, a: P, u: P, n: P, from: number, to: number, w: number, col: number, curveAmt = 0) {
@@ -1455,6 +1629,14 @@ function blade(c: C2, a: P, u: P, n: P, from: number, to: number, w: number, col
 
 function weapon(c: C2, r: Rig) {
   const L = r.L, h = r.nearH, u = r.u, n = r.n;
+  if (L.basket !== undefined && L.weapon === "none") { // a woven basket hung from the crook of the arm, herbs spilling over the rim
+    const bx = h[0] + (r.R ? 0.6 : 0), by = h[1] + 1.6, wv = C(L.basket);
+    line(c, [[bx - 1.6, by - 0.4], [bx, by - 2.2], [bx + 1.6, by - 0.4]], sh(wv, 0.7), 0.3, 1);
+    for (const [dx, hh, col] of [[-1.2, 2.2, 0x5a8a3a], [-0.3, 2.8, 0x8a6ab0], [0.7, 2.3, 0x6a9a44], [1.4, 1.9, 0xb8a0d0]] as number[][]) { line(c, [[bx + dx, by + 0.2], [bx + dx * 1.3, by - hh * 0.8]], col, 0.45, 1); fillShape(c, ellipseP(bx + dx * 1.3, by - hh * 0.8, 0.4, 0.4), css(col)); }
+    const b = blobPath([[bx - 2.4, by], [bx + 2.4, by], [bx + 1.9, by + 2.3], [bx, by + 2.9], [bx - 1.9, by + 2.3]]);
+    vol(c, b, wv, [bx - 2.4, by, 4.8, 3], { ao: 0.4 });
+    clipTo(c, b, () => { for (let k = 0; k < 4; k++) line(c, [[bx - 3, by + 0.4 + k * 0.7], [bx + 3, by + 0.4 + k * 0.7]], sh(wv, 0.55), 0.14, 0.8); for (let k = -2; k <= 2; k++) line(c, [[bx + k * 0.9, by], [bx + k * 0.7, by + 3]], sh(wv, 1.3), 0.1, 0.5); });
+  }
   const at = (t: number, o = 0): P => [h[0] + u[0] * t + n[0] * o, h[1] + u[1] * t + n[1] * o];
   const W = weaponCols(r);
   const glowAlong = (t0: number, t1: number, col: number) => { for (let t = t0; t <= t1; t += 1.2) glow(c, at(t)[0], at(t)[1], 1.5, col, 0.35); };
@@ -1467,6 +1649,7 @@ function weapon(c: C2, r: Rig) {
       blade(c, h, u, n, 1.0, len, 1.05 * Math.sqrt(big), W.blade);
       if (big > 1) { line(c, [at(1.6), at(len * 0.8)], sh(W.blade, 0.4), 0.22, 0.9); glowAlong(len * 0.35, len * 0.75, L.fx); } // fuller, and the Gloam's light along it
       line(c, [at(1.3), at(len * 0.75)], sh(W.blade, 0.55), 0.18, 0.8);
+      if (L.notched) for (const [t, sd] of [[3.3, 1], [5.5, -1], [7.8, 1], [9.0, -1]]) fillShape(c, poly([at(t - 0.5, sd * 0.75), at(t, sd * 0.1), at(t + 0.5, sd * 0.75)]), css(sh(W.blade, 0.22)));
       metal(c, poly([at(0.75, -1.7), at(0.75, 1.7), at(1.25, 1.7), at(1.25, -1.7)]), C(L.buckle ?? 0xd9a93a), at(0.5, -1.7), at(1.5, 1.7), 0.5);
       limb(c, at(-1.6), at(0.6), 0.6, 0.6, C(0x4a2a14));
       metal(c, ellipseP(at(-1.9)[0], at(-1.9)[1], 0.55, 0.55), C(0xd9a93a), at(-2.3), at(-1.5), 0.5);
@@ -1491,8 +1674,19 @@ function weapon(c: C2, r: Rig) {
       // claws holding the stone
       for (const s of [-1, 1]) curve(c, at(len - 0.3, s * 0.3), at(len + 1.2, s * 1.7), at(len + 3.2, s * 0.9), wood, 0.4);
       if (L.weapon === "druidstaff") for (let k = 0; k < 3; k++) { const lf = at(len - 1 - k * 1.3, (k % 2 ? 1 : -1) * 0.8); fillShape(c, ellipseP(lf[0], lf[1], 0.65, 0.32, Math.atan2(u[1], u[0]) + (k % 2 ? 0.6 : -0.6)), css(C(0x6fae3a))); }
+      if (L.lantern !== undefined) { // a little cage-lantern swinging from a hook on the crook
+        const sw = Math.sin(r.p.t * 1.1) * 0.5, hk = at(len - 0.6, 1.6), lx = hk[0] + sw, ly = hk[1] + 3.2;
+        line(c, [hk, [lx, ly - 1]], 0x2a2418, 0.22, 0.9);
+        glow(c, lx, ly, 2.6, L.lantern, 0.6);
+        vol(c, (cc) => cc.rect(lx - 0.8, ly - 1, 1.6, 2.2), L.lantern, [lx - 0.8, ly - 1, 1.6, 2.2], { ao: 0.2, hi: 1.7, spec: 0.5 });
+        line(c, [[lx - 1.0, ly - 1.1], [lx + 1.0, ly - 1.1]], 0x1e1a12, 0.35, 1); line(c, [[lx - 1.0, ly + 1.25], [lx + 1.0, ly + 1.25]], 0x1e1a12, 0.35, 1);
+        line(c, [[lx - 0.8, ly - 1], [lx - 0.8, ly + 1.2]], 0x1e1a12, 0.16, 0.9); line(c, [[lx + 0.8, ly - 1], [lx + 0.8, ly + 1.2]], 0x1e1a12, 0.16, 0.9);
+      }
+      if (L.lantern !== undefined) vol(c, ellipseP(ox[0], ox[1], 0.9, 1.1), wood, [ox[0] - 1, ox[1] - 1.2, 2, 2.4], { ao: 0.3 }); // a bog-oak knot instead of a stone
+      else {
       glow(c, ox[0], ox[1], 3.0, orb, 0.55 + (r.p.attack >= 0 ? 0.25 : 0));
       vol(c, ellipseP(ox[0], ox[1], 1.25, 1.25), orb, [ox[0] - 1.3, ox[1] - 1.3, 2.6, 2.6], { ao: 0.15, hi: 1.6, spec: 0.8 });
+      }
       if (W.glowing) glowAlong(-4, len, W.accent);
       break;
     }
@@ -1549,6 +1743,19 @@ function weapon(c: C2, r: Rig) {
       const hd = poly([at(len - 0.8, -2.0), at(len - 0.8, 2.0), at(len + 1.6, 2.0), at(len + 1.6, -2.0)]);
       metal(c, hd, W.g ? W.blade : C(0x6f7883), at(len, -2), at(len + 1.6, 2), 0.5);
       if (W.glowing) glowAlong(len - 1, len + 1, W.accent);
+      break;
+    }
+    case "mace": { // the barrow-key mace: a long haft, a heavy flanged bronze head and the great key's bow at its end
+      const len = 9 * W.long * (L.bladeLen ?? 1), bz = W.blade, hd = at(len + 1.6);
+      limb(c, at(-2.6), at(len), 0.8, 0.75, C(WOOD));
+      for (const t of [0, 1.3, 2.6]) line(c, [at(t - 0.2, -0.5), at(t + 0.2, 0.5)], C(0x2a1a10), 0.25, 0.9);
+      for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2, o = [Math.cos(a) * 3.0, Math.sin(a) * 3.0]; metal(c, poly([at(len + 1.6 + o[0] * 0.55, o[1] * 0.55 - 0.6), at(len + 1.6 + o[0] * 0.55, o[1] * 0.55 + 0.6), at(len + 1.6 + o[0], o[1])]), sh(bz, 0.8), at(len + 1.6, 0), at(len + 1.6 + o[0], o[1]), 0.3); }
+      metal(c, ellipseP(hd[0], hd[1], 2.1, 2.1), bz, [hd[0] - 2, hd[1] - 2], [hd[0] + 2, hd[1] + 2], 0.7);
+      line(c, [at(len + 0.2, -1.2), at(len + 3.0, -1.2)], sh(bz, 1.5), 0.2, 0.7);
+      const kb = at(len + 4.6);
+      c.beginPath(); c.arc(kb[0], kb[1], 1.0, 0, Math.PI * 2); c.strokeStyle = css(sh(bz, 0.9)); c.lineWidth = 0.55; c.stroke();
+      glow(c, hd[0], hd[1], 2.8, L.fx, 0.28);
+      if (W.glowing) glowAlong(len, len + 3, W.accent);
       break;
     }
     case "spade": {
@@ -1619,7 +1826,7 @@ function shield(c: C2, r: Rig) {
     else paintBook(c, bookId, fh[0] + (r.dir === "down" ? 0.6 : -0.6) + face[0] * 0.3, fh[1] - 1.6, r.dir === "up" ? "back" : "front", C);
     return;
   }
-  const style = g ? (g.style === "round" ? "round" : "kite") : L.shield!.style === "round" ? "round" : "kite";
+  const style = g ? (g.style === "round" ? "round" : "kite") : L.shield!.style === "round" ? "round" : L.shield!.style === "tower" ? "tower" : "kite";
   const col = C(g ? g.color : L.shield!.col), trim = C(g ? g.accent : L.shield!.trim), emb = C(g ? g.accent : L.shield!.emblem);
   const push = r.info.mv.kind === "bash" && r.p.attack >= 0 ? (r.R ? [-1, 2, 2, 1] : [-1, 3, 4, 2])[r.p.attack] : 0;
   const face = r.face;
@@ -1633,9 +1840,11 @@ function shield(c: C2, r: Rig) {
   }
   const up = r.dir === "up";
   const cx = fh[0] + (r.dir === "down" ? 0.6 : -0.6) + face[0] * push, cy = fh[1] - 2.4 + face[1] * push * 0.8;
-  const s = style === "round" ? ellipseP(cx, cy, 3.1, 3.3)
+  const tw = style === "tower";
+  const s = tw ? blobPath([[cx - 3.2, cy - 4.3], [cx, cy - 4.6], [cx + 3.2, cy - 4.3], [cx + 3.35, cy + 4.6], [cx + 3.0, cy + 6.2], [cx - 3.0, cy + 6.2], [cx - 3.35, cy + 4.6]])
+    : style === "round" ? ellipseP(cx, cy, 3.1, 3.3)
     : blobPath([[cx - 2.9, cy - 3.4], [cx, cy - 3.8], [cx + 2.9, cy - 3.4], [cx + 2.8, cy + 0.6], [cx + 1.3, cy + 3.3], [cx, cy + 4.6], [cx - 1.3, cy + 3.3], [cx - 2.8, cy + 0.6]]);
-  const box: [number, number, number, number] = [cx - 3, cy - 3.8, 6, 8.4];
+  const box: [number, number, number, number] = tw ? [cx - 3.3, cy - 4.5, 6.6, 10.7] : [cx - 3, cy - 3.8, 6, 8.4];
   if (up) {
     // the back: planks and straps
     vol(c, s, C(0x6b4a2c), box, { ao: 0.45 });
@@ -1649,8 +1858,16 @@ function shield(c: C2, r: Rig) {
   } else {
     vol(c, s, col, box, { ao: 0.45, spec: 0.2 });
     grain(c, s, box, col, 91, 30, 0.12, 1.0, 1.4);
+    if (tw) { // the Ossuary Host's bone sigil: a skull over crossed bones, studded at the corners
+      vol(c, ellipseP(cx, cy - 1.2, 1.35, 1.45), emb, [cx - 1.4, cy - 2.7, 2.8, 3], { ao: 0.25, spec: 0.3 });
+      fillShape(c, poly([[cx - 0.75, cy + 0.0], [cx + 0.75, cy + 0.0], [cx + 0.55, cy + 0.9], [cx - 0.55, cy + 0.9]]), css(emb));
+      for (const sx of [-0.55, 0.55]) fillShape(c, ellipseP(cx + sx, cy - 1.1, 0.34, 0.4), css(0x14181a));
+      line(c, [[cx - 2.3, cy + 1.6], [cx + 2.3, cy + 4.4]], emb, 0.5); line(c, [[cx + 2.3, cy + 1.6], [cx - 2.3, cy + 4.4]], emb, 0.5);
+      for (const [bx, by] of [[-2.5, -3.4], [2.5, -3.4], [-2.5, 5.2], [2.5, 5.2]]) fillShape(c, ellipseP(cx + bx, cy + by, 0.32, 0.32), css(sh(trim, 1.2)));
+    } else {
     // heraldry: a lion-ish cross device
     line(c, [[cx, cy - 2.8], [cx, cy + 3.4]], emb, 0.75); line(c, [[cx - 2.2, cy - 0.6], [cx + 2.2, cy - 0.6]], emb, 0.75);
+    }
     if (g?.id === "sh_dragon") { glow(c, cx, cy - 0.6, 2.2, 0xff8a3c, 0.5); }
   }
   // rim
@@ -1994,6 +2211,7 @@ export function paintFrame(name: string, p: PoseLike, info: FrameInfo, withShado
   }
 
   if (L.palmFlame !== undefined && p.attack < 0 && dir !== "up") palmFlame(c, r, L.palmFlame);
+  if (L.mist !== undefined) coldMist(c, r, L.mist);
   if (PIX) return pixelFrame(body, under, r, K, S, flash, withShadow);
   const out = post(body, S), oc = out.getContext("2d");
   oc.save(); oc.scale(S, S);
@@ -2018,6 +2236,18 @@ export function paintFrame(name: string, p: PoseLike, info: FrameInfo, withShado
   const hc = new HiCanvas(32, 32, K);
   hc.data.set(img.data);
   return hc;
+}
+
+/** Cold mist pouring off the body and pooling round the feet (Look.mist): drifting puffs, thicker low down. */
+function coldMist(c: C2, r: Rig, col: number) {
+  const rr = rng(77), t = r.p.t, pale = mix(col, 0xffffff, 0.55);
+  // low wisps curling along the ground round the feet (drifting with the frame)
+  for (let k = 0; k < 7; k++) {
+    const a = k * 0.9 + t * 0.3, x = r.cx + Math.cos(a) * (4.2 + (k % 3)) , y = 28.3 + Math.sin(a * 1.7) * 0.7 + (k % 2) * 0.5, w = 2.4 + rr() * 1.6;
+    c.beginPath(); c.moveTo(x - w, y + 0.2); c.quadraticCurveTo(x - w * 0.2, y - 1.0 - rr() * 0.6, x + w, y - 0.1);
+    c.strokeStyle = css(pale, 0.5); c.lineWidth = 0.9; c.lineCap = "round"; c.stroke();
+    c.strokeStyle = css(col, 0.28); c.lineWidth = 1.8; c.stroke();
+  }
 }
 
 /** A small witch-fire dancing a little above the open near hand: red-orange tongue, yellow heart (a Void flame for the Summoner: violet, pale heart). */

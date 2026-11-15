@@ -659,6 +659,125 @@ const DRAW: Record<number, (p: Painter, f: number, v: number) => void> = {
     p.disc(8, 8, 5, 2.2, 0xb08a5a); p.disc(8, 8, 2.8, 1.1, 0x8b6a40);
     p.px(2, 13, 0x4e301a); p.px(13, 13, 0x4e301a);
   },
+  // Act 3, the Grey Barrow Moors (the iso view draws the objects from moorsArt.ts; these are the top-down tiles and minimap colours)
+  [T.HEATHER]: (p) => {
+    p.fill(0x4a4056);
+    for (let k = 0; k < 70; k++) p.fpx(p.ri(SZ), p.ri(SZ), 0x5c506a);
+    for (let k = 0; k < 50; k++) p.fpx(p.ri(SZ), p.ri(SZ), 0x382f44);
+    for (let k = 0; k < 14; k++) p.fpx(p.ri(SZ), p.ri(SZ), 0x8c7c9c); // bloom
+    for (let k = 0; k < 8; k++) { const x = p.ri(SZ - 2), y = p.ri(SZ - 2); p.fpx(x, y, 0x4a6a4c); p.fpx(x + 1, y, 0x3a5a3e); } // grass tufts
+  },
+  [T.BOG]: (p) => {
+    p.fill(0x1f2b28);
+    for (let k = 0; k < 60; k++) p.fpx(p.ri(SZ), p.ri(SZ), 0x2a3a35);
+    for (let k = 0; k < 40; k++) p.fpx(p.ri(SZ), p.ri(SZ), 0x151e1c);
+    for (let k = 0; k < 2; k++) { const x = 3 + p.ri(SZ - 10), y = 4 + p.ri(SZ - 8); p.frect(x, y, 6, 3, 0x101614); p.frect(x + 1, y, 4, 1, 0x3a5048); } // a puddle with a sheen
+  },
+  [T.BARROW]: (p) => {
+    p.disc(8, 14, 7.5, 1.8, SHADOW);
+    p.disc(8, 10.5, 7.6, 5.6, 0x3a4a3a);
+    p.disc(7.5, 9.6, 6.4, 4.4, 0x4e6450);
+    p.disc(6, 7.6, 3.2, 1.8, 0x6a8466);
+    p.speckle(0x6a5a78, 6, 3, 6, 10, 6);
+  },
+  [T.STANDING_STONE]: (p) => {
+    p.disc(8, 14.5, 4.5, 1.3, SHADOW);
+    p.rect(5, 2, 6, 12, 0x6a7078); p.rect(5, 2, 2, 12, 0x8a9097); p.rect(9, 2, 2, 12, 0x464b52); p.rect(6, 1, 4, 1, 0x8a9097);
+    p.speckle(0x7f9868, 5, 5, 3, 6, 10);
+  },
+  [T.BONE_PILE]: (p) => {
+    p.disc(8, 14, 6.5, 1.6, SHADOW);
+    p.disc(8, 11.5, 6, 3, 0x38312a);
+    p.rect(4, 9, 8, 1, 0x9aa586); p.rect(5, 11, 7, 1, 0x7a8668); p.disc(6.5, 8.6, 1.9, 1.5, 0xb0bb9c); p.disc(10.5, 9.6, 1.6, 1.3, 0xa0ab8c);
+    p.px(6, 8, 0x1c221d); p.px(7, 8, 0x1c221d);
+  },
+  // Act 4, the Red Badlands (the iso view draws the objects from badlandsArt.ts; these are the top-down tiles and minimap colours)
+  [T.CLAY]: (p, _f, v) => { // cracked red-ochre clay: polygon plates with dark cracks, a few lit plate edges
+    const C = 11, ox = v * 5, oy = v * 7, hs = (x: number, y: number, s: number) => { let h = (Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(s, 982451653)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+    p.each((x, y) => {
+      const wx = (x + 0.5) * 2 + ox, wy = (y + 0.5) * 2 + oy, gx = Math.floor(wx / C), gy = Math.floor(wy / C);
+      let d1 = 1e9, d2 = 1e9, id = 0;
+      for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
+        const qx = (gx + i + hs(gx + i, gy + j, 3)) * C, qy = (gy + j + hs(gx + i, gy + j, 4)) * C, d = Math.hypot(wx - qx, wy - qy);
+        if (d < d1) { d2 = d1; d1 = d; id = (gx + i) * 31 + gy + j; } else if (d < d2) d2 = d;
+      }
+      const e = d2 - d1, plate = hs(id, 7, 5), g = hs(Math.floor(wx), Math.floor(wy), 6);
+      if (e < 0.9) return 0x4a2418;
+      if (e < 1.8) return 0x7a4228;
+      const base = plate < 0.33 ? 0x9a5638 : plate < 0.66 ? 0xa8643f : 0xb4704a;
+      return g < 0.1 ? 0x84482e : g > 0.93 ? 0xc48458 : base;
+    });
+  },
+  [T.GRAVEL]: (p) => { // riverbed: grey and tan pebbles packed over dry grit
+    p.fill(0x7a7468);
+    p.speckle(0x625c52, 30); p.speckle(0x938b7a, 20);
+    const cols = [[0x8a8478, 0xb6af9c, 0x56514a], [0xa0865c, 0xcdb184, 0x6e5a3a], [0x6a6a6c, 0x9a9a9c, 0x44444a], [0xa89c88, 0xd2c8b0, 0x6c6454]];
+    for (let k = 0; k < 20; k++) {
+      const x = 1 + p.r() * 14, y = 1 + p.r() * 14, rx = 0.8 + p.r() * 1.5, c = cols[p.ri(4)];
+      p.disc(x + 0.3, y + 0.35, rx, rx * 0.8, c[2]); p.disc(x, y, rx, rx * 0.8, c[0]); p.disc(x - rx * 0.3, y - rx * 0.3, rx * 0.5, rx * 0.35, c[1]);
+    }
+  },
+  [T.ARCH]: (p) => { // a sandstone pier seen from above: banded red rock on a dark footing
+    p.disc(8, 12.5, 7.4, 3.6, SHADOW);
+    p.rect(2, 3, 12, 10, 0x8f4a2e); p.rect(2, 3, 12, 2, 0xcf8450); p.rect(2, 11, 12, 2, 0x4a2218);
+    p.rect(2, 6, 12, 1, 0xb0643a); p.rect(2, 8, 12, 1, 0x6e3322); p.rect(2, 9, 12, 1, 0xb0643a);
+    p.speckle(0xe8a468, 6, 2, 3, 12, 4); p.speckle(0x2a1410, 6, 2, 7, 12, 6);
+  },
+  [T.CACTUS]: (p) => { // a saguaro: ribbed trunk with two upturned arms
+    p.disc(8, 14.5, 5, 1.4, SHADOW);
+    const G = 0x3a7a3a, GL = 0x68a85a, GD = 0x244e2c;
+    p.rect(6.5, 3, 3, 12, G); p.rect(6.5, 3, 1, 12, GL); p.rect(8.5, 3, 1, 12, GD); p.rect(7, 2, 2, 1, GL);
+    p.rect(3, 8, 4, 2, G); p.rect(3, 5, 2, 4, G); p.rect(3, 5, 1, 4, GL); p.rect(3, 4, 2, 1, GL);
+    p.rect(9, 6, 4, 2, G); p.rect(11, 3, 2, 4, G); p.rect(11, 3, 1, 4, GL); p.rect(12, 3, 1, 4, GD);
+    p.speckle(0xe8e0b0, 4, 4, 3, 9, 11); p.px(11.5, 2, 0xd8506a);
+  },
+  // Act 5, the Mawdeep Sinkholes (the iso view draws the objects from sinkholesArt.ts; these are the top-down tiles and minimap colours)
+  [T.MOSS]: (p) => { // damp moss over dark loam: a thick green pile, wet black gaps, pale spore dots
+    p.fill(0x34482a);
+    p.each((x, y) => {
+      const a = Math.sin(x * 1.3 + p.r() * 0.8) * Math.cos(y * 1.1), g = p.r();
+      if (g < 0.1) return 0x233420;
+      if (g > 0.92) return 0x6a8a46;
+      return a > 0.55 ? 0x3e5830 : a < -0.55 ? 0x2c3e24 : undefined;
+    });
+    for (let k = 0; k < 3; k++) { const x = 2 + p.ri(SZ - 9), y = 3 + p.ri(SZ - 8); p.frect(x, y, 5, 2, 0x20241a); p.frect(x + 1, y, 3, 1, 0x3c4a3a); } // wet patches
+    for (let k = 0; k < 6; k++) p.fpx(p.ri(SZ), p.ri(SZ), 0xb4c890); // spore dots
+    for (let k = 0; k < 3; k++) { const x = p.ri(SZ - 2), y = p.ri(SZ - 2); p.fpx(x, y, 0x5c4630); p.fpx(x + 1, y, 0x4a3826); } // a leaf-litter fleck
+  },
+  [T.PIT]: (p) => { // a sinkhole from above: a ragged loam lip round a black drop, roots over the edge
+    p.fill(0x3e3022);
+    p.speckle(0x2c2016, 24); p.speckle(0x5a4630, 16);
+    p.disc(8, 8.4, 7.6, 7, 0x2a4020);
+    p.disc(8, 8.6, 6.4, 5.8, 0x6a5238);
+    p.disc(8, 8.8, 5.6, 4.9, 0x24190f);
+    p.disc(8.6, 9.4, 4.2, 3.6, 0x120c08);
+    p.disc(9, 10, 2.4, 1.9, 0x070504);
+    p.rect(2.5, 4.5, 3.5, 1, 0x4a6a34); p.rect(10, 12.4, 3.5, 1, 0x3a5a2c);
+    p.speckle(0x7a5a38, 8, 2, 2, 12, 12);
+    for (let k = 0; k < 3; k++) { const a = 0.9 + k * 2.1 + p.r(), x = 8 + Math.cos(a) * 6.2, y = 8.6 + Math.sin(a) * 5.6; p.disc(x, y, 1.4, 1.1, 0x4a6a34); }
+  },
+  [T.BURROW]: (p) => { // a Hide-Kin burrow mound: a turfed dome with a dark door in a timber frame
+    p.disc(8, 14, 7.6, 1.9, SHADOW);
+    p.disc(8, 10, 7.5, 5.6, 0x4a3828);
+    p.disc(7.6, 9.2, 7, 4.9, 0x3e5a2c);
+    p.disc(6.8, 7.6, 4.6, 2.6, 0x5a7a3c);
+    p.speckle(0x7a9a50, 8, 3, 5, 10, 6); p.speckle(0x2a3c20, 8, 2, 5, 12, 8);
+    p.rect(5.5, 9.5, 5, 4.5, 0x5a3a20); p.rect(6.5, 10.5, 3, 3.5, 0x0c0806);
+    p.rect(5.5, 9.5, 1, 4.5, 0x3a2412); p.rect(9.5, 9.5, 1, 4.5, 0x3a2412); p.rect(5.5, 9, 5, 1, 0x7a5430);
+    p.rect(11, 4, 1, 3, 0x7a5430); p.px(11, 3, 0xb89a60); // a smoke stick
+    p.px(4, 13, 0xb8a888); p.px(12, 13.5, 0xb8a888);
+  },
+  [T.CAVE]: (p) => { // a cave mouth in a loam cliff: layered brown earth, a black arch, roots and moss over the lip
+    p.fill(0x6a4c32);
+    for (let y = 0; y < 16; y += 3) p.rect(0, y, 16, 1, y % 6 ? 0x4e3622 : 0x806040);
+    p.speckle(0x3a2616, 22); p.speckle(0x8c6c48, 14);
+    p.rect(0, 0, 16, 3, 0x4a6a34); p.speckle(0x2e4824, 8, 0, 0, 16, 3); p.speckle(0x7a9a50, 6, 0, 0, 16, 3);
+    p.disc(8, 13.5, 6.4, 7.8, 0x22160d);
+    p.disc(8, 13.5, 5.4, 6.8, 0x0a0705);
+    p.rect(1, 14, 14, 2, 0x4a3422);
+    p.rect(2.5, 3, 1, 4, 0x4a6a34); p.rect(12.5, 3, 1, 5, 0x3a5a2c); p.rect(7, 6.4, 1, 2, 0x5a3a20);
+    for (let k = 0; k < 4; k++) { p.px(4.5 + k * 2.3, 6.6 + (k % 2), 0x3a2618); p.px(4.5 + k * 2.3, 7.6 + (k % 2), 0x1c120c); } // drip teeth
+  },
 };
 
 /**
@@ -674,7 +793,7 @@ export const ROWS = 128;
  * palisades and signposts are painted as sprites, so the 112 palisade/signpost mask rows are never drawn there.
  */
 export const COMMON_ROWS = 16;
-const VARIED = new Set<number>([T.GRASS, T.TALL_GRASS, T.FLOWERS, T.DIRT, T.COBBLE, T.SAND, T.WATER, T.FLOOR, T.FLAGS, T.FIELD, T.BRIDGE]);
+const VARIED = new Set<number>([T.GRASS, T.TALL_GRASS, T.FLOWERS, T.DIRT, T.COBBLE, T.SAND, T.WATER, T.FLOOR, T.FLAGS, T.FIELD, T.BRIDGE, T.HEATHER, T.BOG, T.CLAY, T.GRAVEL, T.MOSS]);
 const CONNECTED = new Set<number>([T.RUIN, T.BEAM, T.PALISADE]);
 const LIGHT = new Set<number>([T.GRASS, T.TALL_GRASS, T.FLOWERS]);
 

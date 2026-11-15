@@ -1,5 +1,5 @@
 import { MAX_LEVEL, xpForLevel } from "./classes";
-import { actOfTile, DESERT_Y0, MOBS, TILE, type MobKind } from "./constants";
+import { actOfTile, ELITE, MOBS, TILE, type MobKind } from "./constants";
 import { isSolidAt, PORTAL_SPOTS } from "./map";
 import { SPAWN_ZONES, type SpawnZone } from "./spawns";
 
@@ -60,12 +60,13 @@ export const nearestBoard = (x: number, y: number) => {
 export function signature(z: SpawnZone): MobKind | undefined {
   let best: MobKind | undefined, bn = 0;
   for (const [k, n] of Object.entries(z.mobs) as [MobKind, number][]) {
-    if (k === "motherblob" || k === "necromancer" || !n) continue;
+    if (k === "motherblob" || ELITE[k] || !n) continue;
     if (n > bn) { bn = n; best = k; }
   }
   return best;
 }
-const GOAL: Partial<Record<MobKind, number>> = { bandit: 6, skeletonmage: 5, tuskborn: 5, crowseer: 3, duskwing: 5, silkwretch: 5 };
+const GOAL: Partial<Record<MobKind, number>> = { bandit: 6, skeletonmage: 5, tuskborn: 5, crowseer: 3, duskwing: 5, silkwretch: 5, legionary: 6, boghag: 6, mistwraith: 6,
+  crossbowman: 6, firebrand: 6, quillback: 6, stitcher: 5 };
 
 /** Small seeded random (offers stay the same until the hero finishes one or levels up; rumours seed it with the day). */
 export function rng(seed: number) {
@@ -73,18 +74,19 @@ export function rng(seed: number) {
   return () => { s = (s + 0x6d2b79f5) >>> 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t ^= t + Math.imul(t ^ (t >>> 7), 61 | t); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
 
-/** A zone with a monster to hunt (not a wild zone, not an empty lair) in Act 1 (or Act 2 with `desert`). Shared with the rumours. */
-export const huntable = (z: SpawnZone, desert = false) => !z.wild && !!signature(z) && (actOfTile(z.x, z.y) === 2) === desert;
+/** A zone with a monster to hunt (not a wild zone, not an empty lair) in this act (1 to 5). Shared with the rumours. */
+export const huntable = (z: SpawnZone, act = 1) => !z.wild && !!signature(z) && actOfTile(z.x, z.y) === act;
 /** The zone's levels overlap the hero's level ±`by` (bounties and rumours: work about the hero's level). */
 export const nearLevel = (z: SpawnZone, level: number, by = 2) => z.levels[0] <= level + by && z.levels[1] >= level - by;
 
 /**
  * The board's offers for a hero of this level (`done` = bounties finished so far, so each one brings new offers).
- * A board only offers hunts in its own act (`desert`: Act 2, the Sunscar), so Oakvale never sends anyone to a land they can't reach.
+ * A board only offers hunts in its own act (`act`: actOfTile of the board; the Cairnwatch board is the moors'), so
+ * Oakvale never sends anyone to a land they can't reach.
  */
-export function bountyOffers(level: number, done: number, desert = false): Bounty[] {
+export function bountyOffers(level: number, done: number, act = 1): Bounty[] {
   const L = Math.min(level, MAX_LEVEL);
-  const zones = SPAWN_ZONES.filter((z) => huntable(z, desert) && nearLevel(z, L));
+  const zones = SPAWN_ZONES.filter((z) => huntable(z, act) && nearLevel(z, L));
   const r = rng(L * 1000 + done);
   // closest to the hero's level first, ties shuffled by the seed
   const scored = zones.map((z) => ({ z, s: Math.abs((z.levels[0] + z.levels[1]) / 2 - L) + r() * 1.5 })).sort((a, b) => a.s - b.s);

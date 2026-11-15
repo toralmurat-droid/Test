@@ -1,7 +1,10 @@
-import { actOfTile, inDeepRow, act2MobLevel, act2SpecialLevel, DESERT_Y0, ELITE, MobKind, regionMobLevel, regionSpecialLevel, TILE } from "./constants";
+import { actMobLevel, actOfTile, actSpecialLevel, BADLANDS_LEVEL, inDeepRow, ELITE, MobKind, MOORS_LEVEL, SINKHOLES_LEVEL, TILE } from "./constants";
 import { D, SUNSTONE } from "./desert";
+import { MOORSGATE_MOORS } from "./moors";
+import { REDPASS_BADLANDS } from "./badlands";
+import { MAW_LEDGE_RECT, SINKWAY_SINKHOLES, SR } from "./sinkholes";
 import { AREAS, isSafeZone, isSolidAt, OBJECTS, T, VILLAGE } from "./map";
-import { CAMP_POSTS } from "./bandits";
+import { CAMP_POSTS, campMobs } from "./bandits";
 import { AMBUSH_ROOMS, chamberAtPx, FLOORS, LAIRS, LANDING, pointInChamber } from "./dungeon";
 
 /**
@@ -26,7 +29,10 @@ export function rollLevel(z: SpawnZone): number {
 }
 
 /** Peaceful places inside monster zones (with a margin in tiles): nothing spawns or walks in there. */
-export const NO_MOB_AREAS = ["Saltmere", "Kel Ashar", "The Sunstone Circle", "The Sun Furnace"]; // Act 2: the oasis town, the waygate's circle and the final fight's plateau
+export const NO_MOB_AREAS = ["Saltmere", "Kel Ashar", "The Sunstone Circle", "The Sun Furnace", // Act 2: the oasis town, the waygate's circle and the final fight's plateau
+  "Cairnwatch", "The Moorgate", // Act 3: the outpost (walls and all) and the moorgate's arrival clearing
+  "The Rustwater Post", "The Red Pass", // Act 4: the outpost (walls and all) and the Red Pass's arrival clearing
+  "Ropewell", "The Sinkway"]; // Act 5: the outpost (walls and all) and the Sinkway's arrival clearing
 const NO_MOB_RECTS = NO_MOB_AREAS.flatMap((n) => AREAS.filter((a) => a.name === n)).map((a) => ({ x0: a.x - 2, y0: a.y - 2, x1: a.x + a.w + 2, y1: a.y + a.h + 2 }));
 /** True where monsters may not go (pixel coords). */
 export function noMobsAt(px: number, py: number): boolean {
@@ -126,17 +132,79 @@ const ZONE_MOBS: { name: string; mobs: Partial<Record<MobKind, number>>; respawn
   { name: "The Thornspire Heights", mobs: { veiled: 8, camelfolk: 4, sanddead: 3, sphinx: 4 }, respawnMs: 7000, levels: [43, 46] },
   { name: "The Red Wastes", mobs: { nomad: 6, scorpion: 8 }, respawnMs: 6000, wild: true },
   { name: "The Sunscar", mobs: { scorpion: 10, nomad: 6, camelfolk: 2 }, respawnMs: 6000, wild: true }, // the open desert, last
+  // ---- Act 3, the Grey Barrow Moors (shared/moors.ts): Lv 20-33, climbing away from Cairnwatch toward the Host's camp on the
+  // far eastern moor; the Barrow-King (Lv 35) under Kingsbarrow. The Host's dead (wights, bone hounds, legionaries, the
+  // Cairn-Lords) keep the barrows and the stone rings and, like the valley's dead, keep the night (server UNDEAD_ZONES:
+  // a zone of only undead is thin by day). The mist wraiths are the Host's dead too; only the zones with bog hags stay full by day.
+  { name: "The Grey Ring", mobs: { wight: 6, bonehound: 4 }, respawnMs: 6000, levels: [21, 24] },
+  { name: "Sorrow Mire", mobs: { boghag: 6, bonehound: 3 }, respawnMs: 6000, levels: [22, 25] },
+  { name: "Thane's Rest", mobs: { wight: 6, legionary: 3 }, respawnMs: 6500, levels: [23, 26] },
+  { name: "The Cairnfield", mobs: { wight: 8, bonehound: 4, cairnlord: 1 }, respawnMs: 6500, levels: [25, 28] },
+  { name: "Blackwater Fen", mobs: { boghag: 6, mistwraith: 4 }, respawnMs: 6000, levels: [26, 29] },
+  { name: "The Hollow Mounds", mobs: { wight: 6, legionary: 4, mistwraith: 2 }, respawnMs: 6500, levels: [27, 30] },
+  { name: "The Drowned Hollow", mobs: { mistwraith: 6, boghag: 4 }, respawnMs: 6500, levels: [28, 31] },
+  { name: "The Nine Widows", mobs: { mistwraith: 6, wight: 4 }, respawnMs: 6500, levels: [29, 32] },
+  { name: "The Weeping Stones", mobs: { mistwraith: 5, legionary: 4, cairnlord: 1 }, respawnMs: 7000, levels: [30, 33] },
+  // the Barrow-King's own mound: his alone, only at night (NIGHT_BOSSES), a long wait between kings (server SLOW_RISE)
+  { name: "The Barrow-King's Mound", mobs: { barrowking: 1 }, respawnMs: 300000, fixed: true, levels: [35, 35] },
+  { name: "Kingsbarrow", mobs: { wight: 6, legionary: 5, bonehound: 3, cairnlord: 1 }, respawnMs: 7000, levels: [31, 33] },
+  { name: "The Host's Muster", mobs: { legionary: 8, bonehound: 4, cairnlord: 1 }, respawnMs: 7000, levels: [31, 33] },
+  // the open moor: hounds and wights on the heather, a hag or two by every pool (so it stays alive by day); levels by distance
+  { name: "The Grey Barrow Moors", mobs: { bonehound: 6, wight: 5, boghag: 3 }, respawnMs: 6000, wild: true },
+  // ---- Act 4, the Red Badlands (shared/badlands.ts): Lv 25-38, climbing west from the Rustwater Post toward Fangrock;
+  // Old Rourke (Lv 40) in Fangrock's keep. Living things all: the Redfang and their dogs, the vultures and the rattlers
+  // keep the day as well as the night (nothing here thins by day, server UNDEAD_ZONES). Fangrock and Talon Fort are
+  // organised camps like Redfang Hollow (shared/bandits.ts CAMPS: one monster per post, no density scaling).
+  { name: "The Saltlick Flats", mobs: { rattler: 6, vulture: 4 }, respawnMs: 6000, levels: [25, 28] },
+  { name: "Drovers' Draw", mobs: { warhound: 5, outrider: 3, vulture: 2 }, respawnMs: 6000, levels: [25, 28] },
+  { name: "The Hanging Arches", mobs: { vulture: 5, rattler: 4, outrider: 3 }, respawnMs: 6000, levels: [27, 30] },
+  { name: "The Cinnabar Pits", mobs: { firebrand: 5, outrider: 4, crossbowman: 3 }, respawnMs: 6500, levels: [28, 31] },
+  { name: "Bloodstone Mesa", mobs: { vulture: 5, warhound: 5, crossbowman: 3, redcaptain: 1 }, respawnMs: 6500, levels: [29, 32] },
+  { name: "Talon Fort", mobs: campMobs("Talon Fort"), respawnMs: 20000, fixed: true, levels: [32, 35] },
+  { name: "Vulture's Roost", mobs: { vulture: 8, rattler: 3 }, respawnMs: 6500, levels: [33, 36] },
+  { name: "Rattlesnake Gulch", mobs: { rattler: 7, outrider: 4, firebrand: 3 }, respawnMs: 6500, levels: [33, 36] },
+  { name: "Gallows Canyon", mobs: { crossbowman: 5, outrider: 5, warhound: 4, redcaptain: 1 }, respawnMs: 7000, levels: [35, 38] },
+  // Old Rourke's keep: his alone, by day and night (a living lord, not a night boss), a long wait for a new Fang-Father
+  { name: "Fangrock Keep", mobs: { rourke: 1 }, respawnMs: 300000, fixed: true, levels: [40, 40] },
+  { name: "Fangrock", mobs: campMobs("Fangrock"), respawnMs: 20000, fixed: true, levels: [36, 38] },
+  // the open badlands: vultures overhead, rattlers under the rocks, stray warhounds; levels by distance (last in its block)
+  { name: "The Red Badlands", mobs: { vulture: 5, rattler: 5, warhound: 4 }, respawnMs: 6000, wild: true },
+  // ---- Act 5, the Mawdeep Sinkholes (shared/sinkholes.ts): Lv 30-43, climbing south-east from Ropewell toward Hidehall;
+  // the Maw-Father (Lv 45) on his ledge down in the Great Maw. Living things all (nothing here thins by day). Hidehall is
+  // an organised camp like the badlands' forts (shared/bandits.ts CAMPS: one monster per post). Every land keeps its
+  // 7x7 hold patch clear for the war (shared/sinkholes.ts SINK_LANDS).
+  { name: "Rootfall Slopes", mobs: { stagkin: 4, cackler: 4, delver: 3 }, respawnMs: 6000, levels: [30, 33] },
+  { name: "Hollowbrook Dells", mobs: { cackler: 5, stagkin: 3, quillback: 2, sinkworm: 2 }, respawnMs: 6000, levels: [31, 34] },
+  { name: "The Old Warren", mobs: { delver: 6, quillback: 3, stitcher: 2 }, respawnMs: 6000, levels: [32, 35] },
+  { name: "Tunneltop", mobs: { delver: 5, cackler: 4, stitcher: 2, hidechief: 1 }, respawnMs: 6500, levels: [34, 37] },
+  { name: "Mosslight Fen", mobs: { quillback: 4, stitcher: 3, cackler: 3, stagkin: 2 }, respawnMs: 6500, levels: [35, 38] },
+  { name: "The Pitfields", mobs: { sinkworm: 5, delver: 4, quillback: 3, stitcher: 2 }, respawnMs: 6500, levels: [36, 39] },
+  { name: "The Gnawed Bank", mobs: { delver: 5, quillback: 3, stitcher: 2, hidechief: 1 }, respawnMs: 6500, levels: [37, 40] },
+  { name: "Scratchroot Burrows", mobs: { delver: 5, cackler: 4, stitcher: 2 }, respawnMs: 7000, levels: [38, 41] },
+  { name: "Rushmere Hollows", mobs: { stagkin: 5, cackler: 4, quillback: 3, hidechief: 1 }, respawnMs: 7000, levels: [39, 42] },
+  { name: "Hidehall", mobs: campMobs("Hidehall"), respawnMs: 20000, fixed: true, levels: [40, 43] },
+  // the Maw-Father's ledge: his alone, by day and night (a living lord, not a night boss), a long wait for a new one
+  { name: "The Great Maw", mobs: { mawfather: 1 }, respawnMs: 300000, fixed: true, levels: [45, 45] },
+  // the open sinkholes: cackler packs, stray stagkin and delvers, worms in the lesser sinks; levels by distance (last in its block)
+  { name: "The Mawdeep Sinkholes", mobs: { cackler: 4, stagkin: 3, delver: 3, sinkworm: 1 }, respawnMs: 6000, wild: true },
 ];
 /** Wild zones that are not map areas (no banner, no map label): their rect in tiles. */
 const WILD_RECTS: Record<string, { x: number; y: number; w: number; h: number }> = {
   "Oakvale Countryside": { x: 0, y: 0, w: 109, h: 184 },
+};
+/** Zones smaller than their map area (rect in tiles): the Maw-Father keeps to his ledge down in the Great Maw. */
+const ZONE_RECTS: Record<string, { x: number; y: number; w: number; h: number }> = {
+  "The Great Maw": { ...MAW_LEDGE_RECT, y: SR(MAW_LEDGE_RECT.y) },
 };
 
 /**
  * Density (Murat wants monsters everywhere): every zone keeps at least one monster per this many walkable tiles.
  * Wild zones are a bit thinner than the named hunting grounds. Elites (necromancers) keep their hand-set count.
  */
-export const DENSITY = { tilesPerMob: 9, wildTilesPerMob: 12, desertTilesPerMob: 18, desertWildTilesPerMob: 28 }; // the desert is wide open: thinner
+export const DENSITY = { tilesPerMob: 9, wildTilesPerMob: 12, desertTilesPerMob: 18, desertWildTilesPerMob: 28, // the desert is wide open: thinner
+  moorsTilesPerMob: 15, moorsWildTilesPerMob: 30, // the moors: packs on the barrows and fens, the open heather between them thin
+  badlandsTilesPerMob: 16, badlandsWildTilesPerMob: 34, // the badlands: Redfang bands in the canyons and pits, the flats between them empty
+  sinkholesTilesPerMob: 18, sinkholesWildTilesPerMob: 46 }; // the sinkholes: Hide-Kin in their warrens and fens, the land between them quiet
 /** Blob variants only appear from these levels (Murat: shooter + warrior above Lv 3, healer above Lv 5). */
 export const KIND_MIN_LEVEL: Partial<Record<MobKind, number>> = { shooterblob: 4, warriorblob: 4, healerblob: 6, venomblob: 12, frostblob: 14, fireblob: 16, stormblob: 18 };
 
@@ -150,18 +218,28 @@ export function zoneLevels(a: { x: number; y: number; w: number; h: number }): [
 }
 /** Lowest monster level at a tile, from its distance to the village centre (a spot spans this level to +2). */
 export function baseLevelAt(tx: number, ty: number): number {
+  const act = actOfTile(tx, ty);
+  // Act 5: from Lv 30 at the Sinkway (the band's north-west), a level every 12 tiles further on, south-east toward Hidehall
+  if (act === 5) return SINKHOLES_LEVEL.min + Math.floor(Math.max(0, Math.hypot(tx - SINKWAY_SINKHOLES.x, ty - SINKWAY_SINKHOLES.y) - 12) / SINKHOLES_LEVEL.tilesPerLevel);
+  // Act 4: from Lv 25 at the Red Pass (the band's east edge), a level every 16 tiles further on, west toward Fangrock
+  if (act === 4) return BADLANDS_LEVEL.min + Math.floor(Math.max(0, Math.hypot(tx - REDPASS_BADLANDS.x, ty - REDPASS_BADLANDS.y) - 12) / BADLANDS_LEVEL.tilesPerLevel);
+  // Act 3: from Lv 20 at the moorgate, a level every 10 tiles further out (held under MOORS_LEVEL by levelFns)
+  if (act === 3) return MOORS_LEVEL.min + Math.floor(Math.max(0, Math.hypot(tx - MOORSGATE_MOORS.x, ty - MOORSGATE_MOORS.y) - 12) / MOORS_LEVEL.tilesPerLevel);
   // Act 2: from Lv 30 at the Sunstone Circle, a level every 12 tiles further out
-  if (actOfTile(tx, ty) === 2) return 30 + Math.floor(Math.max(0, Math.hypot(tx - SUNSTONE.x, ty - D(SUNSTONE.y)) - 12) / 12);
+  if (act === 2) return 30 + Math.floor(Math.max(0, Math.hypot(tx - SUNSTONE.x, ty - D(SUNSTONE.y)) - 12) / 12);
   const cx = (VILLAGE.x0 + VILLAGE.x1) / 2, cy = (VILLAGE.y0 + VILLAGE.y1) / 2;
   return 1 + Math.floor(Math.max(0, Math.hypot(tx - cx, ty - cy) - 40) / 8);
 }
 
-/** The level ceilings for a zone or a tile: Oakvale's (regionMobLevel, Lv 25/30) or the desert's (ACT2_LEVEL, Lv 30-47/50). */
-const levelFns = (tx: number, ty: number) => actOfTile(tx, ty) === 2 ? { mob: act2MobLevel, special: act2SpecialLevel } : { mob: regionMobLevel, special: regionSpecialLevel };
+/** The level ceilings for a zone or a tile: its act's band (shared/constants.ts ACT_LEVEL: Oakvale Lv 25/30, the desert Lv 30-47/50, the moors Lv 20-33/35, the badlands Lv 25-38/40, the sinkholes Lv 30-43/45). */
+const levelFns = (tx: number, ty: number) => {
+  const act = actOfTile(tx, ty);
+  return { mob: (l: number) => actMobLevel(act, l), special: (l: number) => actSpecialLevel(act, l) };
+};
 
 const inRect = (r: { x: number; y: number; w: number; h: number }, tx: number, ty: number) => tx >= r.x && tx < r.x + r.w && ty >= r.y && ty < r.y + r.h;
 /** Areas so broad they never keep a wild zone's monsters out (they hold other zones). */
-const BROAD_AREAS = ["Whispering Woods", "River Ashwell", "The Sunscar"];
+const BROAD_AREAS = ["Whispering Woods", "River Ashwell", "The Sunscar", "The Grey Barrow Moors", "The Red Badlands", "The Dry Ashwell", "The Mawdeep Sinkholes"];
 /** Named areas (and Oakvale's surroundings) a wild zone leaves alone: its monsters stay in their own biome. */
 function claimedByArea(name: string, tx: number, ty: number): boolean {
   return AREAS.some((a) => a.name !== name && !BROAD_AREAS.includes(a.name) && inRect(a, tx, ty));
@@ -178,7 +256,7 @@ function spawnable(z: { name: string; wild?: boolean }, tx: number, ty: number):
 }
 
 export const SPAWN_ZONES: SpawnZone[] = ZONE_MOBS.flatMap((z) => {
-  const a = AREAS.find((area) => area.name === z.name) ?? WILD_RECTS[z.name];
+  const a = ZONE_RECTS[z.name] ?? AREAS.find((area) => area.name === z.name) ?? WILD_RECTS[z.name];
   if (!a) return [];
   const r = { x: a.x, y: a.y, w: a.w, h: a.h };
   // Walkable tiles -> how many monsters (kinds keep their mix, elites stay as set)
@@ -189,11 +267,16 @@ export const SPAWN_ZONES: SpawnZone[] = ZONE_MOBS.flatMap((z) => {
     if (z.wild) { const l = baseLevelAt(tx, ty); lo = Math.min(lo, l); hi = Math.max(hi, l + 2); }
   }
   const base = Math.max(1, Object.values(z.mobs).reduce((n, c) => n + (c ?? 0), 0));
-  const desert = r.y >= DESERT_Y0 && !inDeepRow(r.y);
-  const want = Math.round(tiles / (desert ? (z.wild ? DENSITY.desertWildTilesPerMob : DENSITY.desertTilesPerMob) : z.wild ? DENSITY.wildTilesPerMob : DENSITY.tilesPerMob));
+  // each act its own density (the Undercity under the desert is hand-set, a dungeon floor like the Mawdeep's)
+  const act = actOfTile(r.x, r.y), desert = act === 2 && !inDeepRow(r.y);
+  const per = act === 5 ? (z.wild ? DENSITY.sinkholesWildTilesPerMob : DENSITY.sinkholesTilesPerMob)
+    : act === 4 ? (z.wild ? DENSITY.badlandsWildTilesPerMob : DENSITY.badlandsTilesPerMob)
+    : act === 3 ? (z.wild ? DENSITY.moorsWildTilesPerMob : DENSITY.moorsTilesPerMob)
+    : desert ? (z.wild ? DENSITY.desertWildTilesPerMob : DENSITY.desertTilesPerMob) : z.wild ? DENSITY.wildTilesPerMob : DENSITY.tilesPerMob;
+  const want = Math.round(tiles / per);
   const f = z.fixed ? 1 : Math.max(1, want / base); // fixed: hand-set count
   const mobs: Partial<Record<MobKind, number>> = {};
-  for (const [k, n] of Object.entries(z.mobs) as [MobKind, number][]) mobs[k] = k === "necromancer" ? n : k === "motherblob" ? Math.max(n, Math.round(n * f / 4)) : Math.round(n * f); // big ones grow slower
+  for (const [k, n] of Object.entries(z.mobs) as [MobKind, number][]) mobs[k] = ELITE[k] ? n : k === "motherblob" ? Math.max(n, Math.round(n * f / 4)) : Math.round(n * f); // elites keep their count, big ones grow slower
   const raw: [number, number] = z.levels ?? (z.wild && hi > 0 ? [lo, hi] : zoneLevels(r));
   const L = levelFns(r.x, r.y), lvl = (Object.keys(z.mobs) as MobKind[]).every((k) => ELITE[k]) ? L.special : L.mob; // an elite's lair: the special ceiling
   const levels: [number, number] = [lvl(raw[0]), lvl(raw[1])];
@@ -258,7 +341,10 @@ export function levelsAt(z: SpawnZone, tx: number, ty: number): [number, number]
  */
 export const HIDE = {
   spots: { skeleton: [T.GRAVE], skeletonmage: [T.GRAVE], slime: [T.TREE, T.PINE], blobling: [T.TREE, T.PINE], shooterblob: [T.TREE, T.PINE], healerblob: [T.TREE, T.PINE], frostblob: [T.PINE],
-    sanddead: [T.BONES, T.GRAVE], scorpion: [T.ROCK] } as Partial<Record<MobKind, number[]>>, // Act 2: the dead sink into the sand by their bones, scorpions creep under rocks
+    sanddead: [T.BONES, T.GRAVE], scorpion: [T.ROCK], // Act 2: the dead sink into the sand by their bones, scorpions creep under rocks
+    wight: [T.BARROW, T.BONE_PILE], // Act 3: wights crawl back into their barrows
+    rattler: [T.ROCK, T.CACTUS], // Act 4: rattlers coil up under rocks and in the cactus
+    sinkworm: [T.PIT] } as Partial<Record<MobKind, number[]>>, // Act 5: the Gullet Worms lie buried in the pit floors (server/hidekin.ts)
   idleChance: 0.06, // per wander decision, chance an idle monster goes to hide
   idleRadius: 7, // tiles from home to look for a spot
   fleeRadius: 6, // tiles from the monster when it's dizzy

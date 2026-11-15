@@ -5,12 +5,12 @@
  * and not counted for the day, when its land changes hands, its caravan line stops running or the hero swears another clan. State is the hero's plain
  * Player.writ / writDay / writN, saved; TownRoom calls in through the small WritHost below.
  */
-import { DESERT_Y0, TILE } from "../shared/constants";
+import { actOfTile, TILE } from "../shared/constants";
 import { caravanLines, type CaravanLine } from "../shared/war/caravans";
 import { nearestBoard } from "../shared/bounty";
 import { CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import { RENOWN_RANKS, rankOf } from "../shared/war/renown";
-import type { WarState } from "../shared/war/rules";
+import { rallyClan, type WarState } from "../shared/war/rules";
 import { STANDARD } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
 import { clanOfIndex, type WarView } from "../shared/war/view";
@@ -35,8 +35,8 @@ export interface WritHost {
   save(id: string): void;
 }
 
-/** Server -> client "writ". `active` null = no writ; `left` = writs the hero may still finish today. */
-export interface WritMsg { board?: string; offers?: Writ[]; active?: WritState | null; left?: number; note?: string; done?: Writ & { valor: number }; err?: string }
+/** Server -> client "writ". `active` null = no writ; `left` = writs the hero may still finish today; `rally`: the war rallies for the hero's clan (its writs pay more). */
+export interface WritMsg { board?: string; offers?: Writ[]; active?: WritState | null; left?: number; note?: string; done?: Writ & { valor: number }; err?: string; rally?: true }
 
 export const SWEAR_FIRST = "Swear to a clan at a standard to take war writs.";
 
@@ -64,7 +64,8 @@ export class WarWrits {
     const out: WritMsg = { board: board?.id ?? "", offers: [], active: p.writ ?? null, left };
     if (!sworn) out.note = SWEAR_FIRST;
     else if (!left) out.note = `You have finished ${WRIT.perDay} war writs today. New ones at dawn (UTC).`;
-    else if (board && war) out.offers = writOffers(war, p.clan!, p.level, board.y >= DESERT_Y0 * TILE ? 2 : 1, war.tick + this.doneToday(p, now));
+    else if (board && war) out.offers = writOffers(war, p.clan!, p.level, actOfTile(Math.floor(board.x / TILE), Math.floor(board.y / TILE)), war.tick + this.doneToday(p, now));
+    if (sworn && war && rallyClan(war) === p.clan) out.rally = true;
     return out;
   }
 

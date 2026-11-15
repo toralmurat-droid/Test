@@ -62,4 +62,30 @@ export const LOOT: Record<MobKind, LootDef> = {
   sunwright: { gold: [600, 900], potionChance: 1, mats: mat("sunglass", 1, 3, 5) },
   nightraider: { gold: [180, 320], potionChance: 1 },
   trooper: { gold: [0, 0], potionChance: 0 }, // clan troops drop nothing (shared/war/troops.ts)
+  // Act 3, the moors: bone from the Host's dead (the hags carry only coin)
+  wight: { gold: [10, 22], potionChance: 0.3, mats: mat("bone", 0.12) },
+  boghag: { gold: [10, 24], potionChance: 0.35 },
+  bonehound: { gold: [5, 12], potionChance: 0.25, mats: mat("bone", 0.1) },
+  mistwraith: { gold: [10, 22], potionChance: 0.3 },
+  legionary: { gold: [12, 26], potionChance: 0.35, mats: mat("bone", 0.12) },
+  cairnlord: { gold: [80, 150], potionChance: 1, mats: mat("bone", 1, 3, 5) },
+  barrowking: { gold: [350, 550], potionChance: 1, mats: mat("bone", 1, 4, 6) },
+  // Act 4, the badlands (Lv 25-40): the Redfang carry coin (their captains and lord a fat purse); vultures leave bone
+  outrider: { gold: [12, 26], potionChance: 0.32 },
+  crossbowman: { gold: [12, 26], potionChance: 0.32 },
+  firebrand: { gold: [12, 28], potionChance: 0.35 },
+  warhound: { gold: [4, 10], potionChance: 0.22 },
+  vulture: { gold: [4, 10], potionChance: 0.25, mats: mat("bone", 0.08) },
+  rattler: { gold: [4, 10], potionChance: 0.25 },
+  redcaptain: { gold: [90, 160], potionChance: 1 },
+  rourke: { gold: [380, 600], potionChance: 1 },
+  // Act 5, the sinkholes (Lv 30-45): the Hide-Kin carry little coin but bone and hide; the Chieftains and the Maw-Father a hoard
+  delver: { gold: [12, 26], potionChance: 0.32, mats: mat("bone", 0.06) },
+  cackler: { gold: [5, 11], potionChance: 0.22, mats: mat("bone", 0.06) },
+  stagkin: { gold: [12, 28], potionChance: 0.34, mats: mat("bone", 0.1) },
+  quillback: { gold: [12, 26], potionChance: 0.32 },
+  stitcher: { gold: [13, 28], potionChance: 0.36 },
+  sinkworm: { gold: [5, 11], potionChance: 0.25 },
+  hidechief: { gold: [95, 170], potionChance: 1, mats: mat("bone", 1, 2, 4) },
+  mawfather: { gold: [400, 640], potionChance: 1, mats: mat("bone", 1, 4, 6) },
 };

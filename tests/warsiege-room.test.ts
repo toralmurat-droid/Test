@@ -76,7 +76,8 @@ test("sieges (room): a hero near a besieged land fields both sides at its fronts
     const [, a] = atk[0], [, d] = def[0];
     a.x = d.x + 30; a.y = d.y;
     const ids = new Set(def.map(([tid]) => tid)), hp0 = new Map(def.map(([tid, m]) => [tid, m.hp]));
-    assert.ok(await until(() => ids.has(a.target) || def.some(([tid, m]) => m.hp < hp0.get(tid)!)), "attackers fight defenders");
+    // wild monsters that respawn nearby (slow full runs) can draw the attacker first: keep clearing them while waiting
+    assert.ok(await until(() => { wild(); return ids.has(a.target) || def.some(([tid, m]) => m.hp < hp0.get(tid)!); }), "attackers fight defenders");
     assert.ok(await until(() => def.some(([tid, m]) => m.hp < hp0.get(tid)! || m.dead)), "and blows land");
   } finally { restore(); await srv.stop(); }
 });

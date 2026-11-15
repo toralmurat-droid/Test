@@ -78,7 +78,9 @@ export class WarPlaque {
     const line = sg ? `siege:${sg[1]}:${mins(sg[2] - now)}` : `tick:${mins(v.next - now)}`;
     const fronts = sg ? this.frontsLine(t.id, own) : "";
     const rite = this.ritual?.line(t.id) ?? "";
-    const key = `${t.id}|${own}|${ctl}|${line}|${standing}|${fronts}|${rite}`;
+    // the brakes (shared/war/rules.ts): the Night Raiders hunt the leading clan, the war rallies for the weakest
+    const brake = v.raided?.includes(t.id) ? "Night Raiders struck here" : v.hunt === v.owner[t.id] ? "The Night Raiders hunt its holder" : v.rally === v.owner[t.id] ? `Rally for ${CLANS[own].name}` : "";
+    const key = `${t.id}|${own}|${ctl}|${line}|${standing}|${fronts}|${rite}|${brake}`;
     if (key === this.shown) return;
     this.shown = key;
     const cl = CLANS[own];
@@ -95,6 +97,7 @@ export class WarPlaque {
     const text = document.createElement("div"); text.className = "wp-text"; text.append(name, held, bar, foot);
     if (fronts) { const fl = document.createElement("div"); fl.className = "wp-foot siege"; fl.textContent = fronts; text.append(fl); }
     if (rite) { const rl = document.createElement("div"); rl.className = "wp-foot"; rl.textContent = rite; text.append(rl); }
+    if (brake) { const bl = document.createElement("div"); bl.className = "wp-foot" + (v.rally === v.owner[t.id] && !v.raided?.includes(t.id) ? " rally" : " siege"); bl.textContent = brake; text.append(bl); }
     if (standing) { const me = document.createElement("div"); me.className = "wp-me" + (standing.startsWith("You hold") ? "" : " no"); me.textContent = standing; text.append(me); }
     this.el.replaceChildren(pennant(own), text);
     this.el.hidden = false;

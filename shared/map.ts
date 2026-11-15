@@ -1,6 +1,9 @@
 import { MAP_H as FULL_H, MAP_W, PLAYER_RADIUS, TILE, UNDER_END, WORLD_H, type MobKind } from "./constants";
 import { CRYPT_DOOR, FLOORS, LAIRS, SEA_END, SHORTCUTS, SINKHOLE, UNDER_SHAFT, type Floor } from "./dungeon";
 import { buildDesert, D, inDesertRow, KEL_MARKET, WAYGATE_OAKVALE } from "./desert";
+import { buildMoors, CAIRN_PORTAL, CAIRN_SQUARE, MOORSGATE_OAKVALE, MR } from "./moors";
+import { BR, buildBadlands, REDPASS_OAKVALE, RUSTWATER_PORTAL, RUSTWATER_SQUARE } from "./badlands";
+import { buildSinkholes, ROPEWELL_PORTAL, ROPEWELL_SQUARE, SINKWAY_OAKVALE, SR } from "./sinkholes";
 
 /** Mirror Pond, in tiles (centre and radii of its water): the Songweaver's Mirror Pond Air is played on its shore (shared/songbook.ts). */
 export const MIRROR_POND = { x: 24, y: 94, rx: 9, ry: 6 };
@@ -31,8 +34,17 @@ export const T = {
   SIGNPOST: 44,
   // Act 2, the desert (shared/desert.ts): sandstone peaks, date palms, mud-brick houses and walls, nomad tents, bleached bones
   CLIFF: 45, PALM: 46, ADOBE: 47, ADOBE_WALL: 48, TENT: 49, BONES: 50,
+  // Act 3, the Grey Barrow Moors (shared/moors.ts): heather and bog underfoot (walkable ground), burial mounds,
+  // standing stones and heaped bones (solid objects)
+  HEATHER: 51, BOG: 52, BARROW: 53, STANDING_STONE: 54, BONE_PILE: 55,
+  // Act 4, the Red Badlands (shared/badlands.ts; red sand is SAND, mesas CLIFF, bones BONES, the client paints them red
+  // there): cracked clay flats and dry riverbed gravel underfoot (walkable ground), stone-arch legs and cactus (solid)
+  CLAY: 56, GRAVEL: 57, ARCH: 58, CACTUS: 59,
+  // Act 5, the Mawdeep Sinkholes (shared/sinkholes.ts; loam cliffs are CLIFF, the client paints them brown there): moss
+  // underfoot (walkable ground), sinkhole pits, Hide-Kin burrow mounds and cave mouths (solid)
+  MOSS: 60, PIT: 61, BURROW: 62, CAVE: 63,
 } as const;
-export const TILE_COUNT = 51;
+export const TILE_COUNT = 64;
 export const EMPTY = -1;
 
 /** A named region. `mobs` hints which monsters belong there (empty or missing = none, e.g. inside the village). */
@@ -81,6 +93,12 @@ export const PORTAL_SPOTS = [
   { id: "ruins", name: "Old Ruins", x: 150, y: 59 },
   { id: "keep", name: "Greywatch Keep", x: 196, y: 69 },
   { id: "gravemoor", name: "Gravemoor Cemetery", x: 210, y: 120 },
+  // Act 3: in the cairn-yard of Cairnwatch, the moors' outpost (shared/moors.ts)
+  { id: "cairnwatch", name: "Cairnwatch", x: CAIRN_PORTAL.x, y: MR(CAIRN_PORTAL.y) },
+  // Act 4: in the yard of the Rustwater Post, the badlands' outpost (shared/badlands.ts)
+  { id: "rustwater", name: "Rustwater Post", x: RUSTWATER_PORTAL.x, y: BR(RUSTWATER_PORTAL.y) },
+  // Act 5: in the yard of Ropewell, the sinkholes' outpost (shared/sinkholes.ts)
+  { id: "ropewell", name: "Ropewell", x: ROPEWELL_PORTAL.x, y: SR(ROPEWELL_PORTAL.y) },
 ] as const;
 export const REDFANG = { x: 240, y: 102, w: 24, h: 18 };
 export const REDFANG_TOWERS: [number, number][] = [[254, 103], [249, 118], [241, 108]];
@@ -95,6 +113,12 @@ export const WRECK = { x: 27, y: 195, solid: [25, 194.3, 5.2, 1.1] as [number, n
 export const SAFE_ZONE = { x: 74, y: 55, w: 13, h: 11 };
 /** Act 2's safe zone: Kel Ashar's market (shared/desert.ts), in map tiles. */
 export const DESERT_SAFE = { x: KEL_MARKET.x, y: D(KEL_MARKET.y), w: KEL_MARKET.w, h: KEL_MARKET.h };
+/** Act 3's safe zone: Cairnwatch's square (shared/moors.ts), in map tiles. */
+export const MOORS_SAFE = { x: CAIRN_SQUARE.x, y: MR(CAIRN_SQUARE.y), w: CAIRN_SQUARE.w, h: CAIRN_SQUARE.h };
+/** Act 4's safe zone: the Rustwater Post's square (shared/badlands.ts), in map tiles. */
+export const BADLANDS_SAFE = { x: RUSTWATER_SQUARE.x, y: BR(RUSTWATER_SQUARE.y), w: RUSTWATER_SQUARE.w, h: RUSTWATER_SQUARE.h };
+/** Act 5's safe zone: Ropewell's square (shared/sinkholes.ts), in map tiles. */
+export const SINKHOLES_SAFE = { x: ROPEWELL_SQUARE.x, y: SR(ROPEWELL_SQUARE.y), w: ROPEWELL_SQUARE.w, h: ROPEWELL_SQUARE.h };
 
 /** Column of the river's center for a given row (River Ashwell, east of the village). */
 /** Gullrock Cove: a fishers' smokehouse on a little bay east of Saltmere, burned and pillaged by Redfang raiders (Redfang quest chain). */
@@ -894,6 +918,40 @@ function buildWorld() {
     grow(path);
   }
 
+  // ---------- 14b. The moorgate at the north-east edge (Act 3, shared/act2.ts): a dais cut into the border forest
+  // north of the Hollow Throne, a path down to the throne's clearing. Only trees, bushes and stones give way. Cut after
+  // the reachability pass, so the rest of Act 1 stays exactly as it was; the path joins the dais to open ground.
+  {
+    const G = MOORSGATE_OAKVALE;
+    disk(G.x + 0.5, G.y + 0.5, 3.6, 3.2, (x, y, d) => {
+      if (NATURE.has(objects[y][x])) setO(x, y, EMPTY);
+      if (objects[y][x] === EMPTY && ground[y][x] !== T.WATER) setG(x, y, d < 0.5 ? (hash(x, y, 321) < 0.8 ? T.FLAGS : T.RUBBLE) : d < 0.8 && hash(x, y, 322) < 0.5 ? T.RUBBLE : T.GRASS_DARK);
+    });
+    curve([[G.x, G.y + 3], [G.x + 1, G.y + 7], [G.x - 2, G.y + 12], [HOLLOW.cx + 3, HOLLOW.cy - 10]], 1, T.DIRT, (x, y) => { if (objects[y][x] === EMPTY || NATURE.has(objects[y][x])) road(x, y, 1, 1); });
+  }
+  // ---------- 14c. The Red Pass at the west edge (Act 4, shared/act2.ts): a dais cut into the border forest between
+  // Mirror Pond and Barrow Downs, a short path east to the open meadow. Cut after the reachability pass like the
+  // moorgate's, so the rest of Act 1 stays exactly as it was.
+  {
+    const G = REDPASS_OAKVALE;
+    disk(G.x + 0.5, G.y + 0.5, 3.6, 3.2, (x, y, d) => {
+      if (NATURE.has(objects[y][x])) setO(x, y, EMPTY);
+      if (objects[y][x] === EMPTY && ground[y][x] !== T.WATER) setG(x, y, d < 0.5 ? (hash(x, y, 331) < 0.8 ? T.FLAGS : T.RUBBLE) : d < 0.8 && hash(x, y, 332) < 0.5 ? T.RUBBLE : T.GRASS_DARK);
+    });
+    curve([[G.x + 2, G.y + 2], [G.x + 6, G.y + 2], [G.x + 10, G.y + 1]], 1, T.DIRT, (x, y) => { if (objects[y][x] === EMPTY || NATURE.has(objects[y][x])) road(x, y, 1, 1); });
+  }
+  // ---------- 14d. The Sinkway on the beach south of Sunken Lake (Act 5, shared/act2.ts): a dais of old flagstones in
+  // front of the cave the Hide-Kin came up by, a path north to the river road. Cut after the reachability pass like the
+  // Red Pass's, so the rest of Act 1 stays exactly as it was (outside shared/sinkholes.ts SINKWAY_BOX).
+  {
+    const G = SINKWAY_OAKVALE;
+    disk(G.x + 0.5, G.y + 0.5, 3.6, 3.2, (x, y, d) => {
+      if (NATURE.has(objects[y][x])) setO(x, y, EMPTY);
+      if (objects[y][x] === EMPTY && ground[y][x] !== T.WATER) setG(x, y, d < 0.5 ? (hash(x, y, 341) < 0.8 ? T.FLAGS : T.RUBBLE) : d < 0.8 && hash(x, y, 342) < 0.5 ? T.RUBBLE : T.SAND);
+    });
+    curve([[G.x + 1, G.y - 3], [G.x + 4, G.y - 7], [G.x + 7, G.y - 10], [G.x + 9, G.y - 12]], 1, T.DIRT, (x, y) => { if (objects[y][x] === EMPTY || NATURE.has(objects[y][x])) road(x, y, 1, 1); });
+  }
+
   const areas: Area[] = [
     { name: "Market Square", ...SQ },
     { name: "Chapel of the Dawn", x: 86, y: 50, w: 12, h: 7 },
@@ -959,6 +1017,21 @@ function buildWorld() {
     { name: "Mawdeep Sinkhole", x: SINKHOLE.x - 5, y: SINKHOLE.y - 5, w: 11, h: 10 },
     { name: "The Kharsun Well", x: UNDER_SHAFT.x - 3, y: UNDER_SHAFT.y - 3, w: 7, h: 7 });
   areas.push(...desert.areas);
+  // ---------- 17. Act 3: the Grey Barrow Moors, in their own band under the deep band (shared/moors.ts) ----------
+  const moors = buildMoors(T, ground, objects, EMPTY);
+  for (const k of moors.roads) roads.add(k);
+  areas.push(...moors.areas);
+  posts.push(...moors.posts); // the moors' signposts (set in shared/moors.ts)
+  // ---------- 18. Act 4: the Red Badlands, in their own band under the moors (shared/badlands.ts) ----------
+  const badlands = buildBadlands(T, ground, objects, EMPTY);
+  for (const k of badlands.roads) roads.add(k);
+  areas.push(...badlands.areas);
+  posts.push(...badlands.posts);
+  // ---------- 19. Act 5: the Mawdeep Sinkholes, in their own band under the badlands (shared/sinkholes.ts) ----------
+  const sinkholes = buildSinkholes(T, ground, objects, EMPTY);
+  for (const k of sinkholes.roads) roads.add(k);
+  areas.push(...sinkholes.areas);
+  posts.push(...sinkholes.posts);
   return { ground, objects, areas, posts, roads, broken, makeshift };
 }
 
@@ -1236,13 +1309,19 @@ export function randomSpawn(): { x: number; y: number } {
   return { x: (ROADS.RX + 1.5) * TILE, y: (ROADS.RY + 1.5) * TILE };
 }
 
-/** The market square is a safe zone: no damage there, and monsters will not enter. */
+/** The market squares (Oakvale's, Kel Ashar's, Cairnwatch's, the Rustwater Post's, Ropewell's) are safe zones: no damage there, and monsters will not enter. */
 export function isSafeZone(px: number, py: number): boolean {
   const tx = Math.floor(px / TILE), ty = Math.floor(py / TILE);
   const z = SAFE_ZONE;
   if (tx >= z.x && ty >= z.y && tx < z.x + z.w && ty < z.y + z.h) return true;
   const k = DESERT_SAFE; // Act 2: Kel Ashar's market
-  return tx >= k.x && ty >= k.y && tx < k.x + k.w && ty < k.y + k.h;
+  if (tx >= k.x && ty >= k.y && tx < k.x + k.w && ty < k.y + k.h) return true;
+  const m = MOORS_SAFE; // Act 3: Cairnwatch's square
+  if (tx >= m.x && ty >= m.y && tx < m.x + m.w && ty < m.y + m.h) return true;
+  const b = BADLANDS_SAFE; // Act 4: the Rustwater Post's square
+  if (tx >= b.x && ty >= b.y && tx < b.x + b.w && ty < b.y + b.h) return true;
+  const s = SINKHOLES_SAFE; // Act 5: Ropewell's square
+  return tx >= s.x && ty >= s.y && tx < s.x + s.w && ty < s.y + s.h;
 }
 
 /** Random walkable point outside the village palisade, where monsters live. */

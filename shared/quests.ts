@@ -4,6 +4,9 @@ import { SPAWN_ZONES, SpawnZone } from "./spawns";
 import { npcById } from "./npcs";
 import { chamberAt, COCOONS, CRYPT_FLOORS, DEN, FLOORS, HIGH_CHOIR, SINKHOLE, TOTEMS, UNDER_FLOORS, WATER_THRONE } from "./dungeon";
 import { D, FURNACE, KEL_ASHAR } from "./desert";
+import { BARROW_FIELDS, CAIRN_SQUARE, KINGS_MOUND, MR } from "./moors";
+import { BR, FANGROCK_KEEP, RUSTWATER_SQUARE } from "./badlands";
+import { GREAT_MAW, ROPEWELL_SQUARE, SR } from "./sinkholes";
 import { xpStep } from "./classes";
 import { type BargainSpec, type CarrySpec, type ChoiceId, type ChoiceSpec, choiceOf, type HoldSpec, nextStage, type PickSpec, sayFor, stepObjects, type SyncSpec, type UnseenSpec } from "./questSteps";
 
@@ -129,6 +132,9 @@ export const QUEST_ITEMS: Record<string, QuestItemDef> = {
   skyiron: { name: "Sky-Iron", plural: "Sky-Iron" },
   caravanseal: { name: "Caravan Seal", plural: "Caravan Seals" },
   pearl: { name: "Dune-Pearl", plural: "Dune-Pearls" },
+  // Act 3, the Grey Barrow Moors (MOOR_QUESTS)
+  candle: { name: "Corpse-Candle", plural: "Corpse-Candles" },
+  barrowkey: { name: "Barrow-Key", plural: "Barrow-Keys" },
 };
 
 // ---- Map objects you use with E ----
@@ -2150,7 +2156,165 @@ const TWOHANDS_QUESTS: QuestDef[] = [
   },
 ];
 
-/** The zone arcs, each its own chain (QuestChain.local): Act 1 then Act 2. */
+// -- Act 3: the Grey Barrow Moors, from Cairnwatch (Lv 20-35; shared/moors.ts, docs/clan-war-progress.md moors PR2) --
+/** Where things are, said from Cairnwatch's square (the moors' own compass). */
+function dirFromCairn(tx: number, ty: number): string {
+  const q = CAIRN_SQUARE, cx = q.x + q.w / 2, cy = MR(q.y + q.h / 2);
+  const k = (Math.round(Math.atan2(ty - cy, tx - cx) / (Math.PI / 4)) + 8) % 8;
+  return ["east", "south-east", "south", "south-west", "west", "north-west", "north", "north-east"][k];
+}
+const cdir = (name: string) => { const z = zoneByName(name); return dirFromCairn(z.x + z.w / 2, z.y + z.h / 2); };
+const MOOR_CAIRNS = [obj("moor_cairn1", "cairn", "Toppled cairn", "Raise", "The Grey Ring", 0.2, 0.5), obj("moor_cairn2", "cairn", "Toppled cairn", "Raise", "The Grey Ring", 0.5, 0.2), obj("moor_cairn3", "cairn", "Toppled cairn", "Raise", "The Grey Ring", 0.78, 0.62)];
+const MOOR_THANES = [obj("moor_thane1", "grave", "Thane's barrow-stone", "Read", "Thane's Rest", 0.25, 0.35), obj("moor_thane2", "grave", "Thane's barrow-stone", "Read", "Thane's Rest", 0.55, 0.7), obj("moor_thane3", "grave", "Thane's barrow-stone", "Read", "Thane's Rest", 0.8, 0.3)];
+const MOOR_BEACONS = [obj("moor_beacon1", "wardlamp", "Warden's fen-lamp", "Light", "Blackwater Fen", 0.2, 0.4), obj("moor_beacon2", "wardlamp", "Warden's fen-lamp", "Light", "Blackwater Fen", 0.5, 0.75), obj("moor_beacon3", "wardlamp", "Warden's fen-lamp", "Light", "Blackwater Fen", 0.82, 0.35)];
+const MOOR_WIDOWS = [obj("moor_widow1", "seal", "Widow-stone", "Read the names", "The Nine Widows", 0.25, 0.4), obj("moor_widow2", "seal", "Widow-stone", "Read the names", "The Nine Widows", 0.5, 0.78), obj("moor_widow3", "seal", "Widow-stone", "Read the names", "The Nine Widows", 0.78, 0.45)];
+const mt = (r: { x: number; y: number }) => ({ x: (r.x + 0.5) * TILE, y: MR(r.y) * TILE });
+const MOOR_QUESTS: QuestDef[] = [
+  {
+    id: "wightsring", title: "The Cairns Are Open", giver: "cairncaptain", zone: "The Grey Ring", minLevel: 20,
+    description: `Warden-Captain Edra Vane says the wardens' cairns at the Grey Ring, ${cdir("The Grey Ring")} of Cairnwatch, have been thrown down from inside. Put the wights back and raise the cairns.`,
+    offer: [
+      "Stand easy. You came in by the moorgate, so you've seen the mist. It is not weather. It is breath.",
+      "Under every mound on these moors lies a soldier of the Ossuary Host, buried standing with his spear. We, the Cairn Wardens, keep the cairns on top shut. That is all we do, and we have done it for four hundred years.",
+      `The cairns at the Grey Ring, ${cdir("The Grey Ring")} of here, were thrown down last week. From beneath. Kill the wights that came out, then raise the stones again.`,
+    ],
+    acceptText: "I'll shut them again",
+    steps: [
+      { type: "kill", zone: "The Grey Ring", kinds: ["wight"], goal: 8, text: "Kill 8 Barrow-Wights at the Grey Ring", banner: ["New quest", "The Cairns Are Open"], obj: "Barrow-Wights slain: {n} / {goal}", nag: "{n} of {goal}. They walk the stones of the Grey Ring." },
+      { type: "use", zone: "The Grey Ring", objects: MOOR_CAIRNS, chest: false, text: "Raise the 3 toppled cairns", banner: ["Shut the barrows", "Raise the cairns"], obj: "Cairns raised: {n} / {goal}", nag: "{n} of {goal}. Stack the stones as they lie, and the old rite does the rest." },
+    ],
+    outro: ["The last stone settles and the ground goes quiet. Scratched on the lowest stone, in a Warden's hand: \"They are not breaking out. They are being called.\"", "Every grave opened faces the same way: north-west, to the bogs."],
+    reward: arcReward(21),
+    after: "Called. Aye. That's the word I was afraid of. Go on to the mire, and mind the hags.",
+  },
+  {
+    id: "mirehags", title: "Candles in the Mire", giver: "cairncaptain", zone: "Sorrow Mire", minLevel: 22, auto: true,
+    description: `The bog-hags of Sorrow Mire, ${cdir("Sorrow Mire")} of Cairnwatch, light corpse-candles to lead the dead. Break the hags and take their candles.`,
+    offer: [
+      "The bog-hags of Sorrow Mire are living folk, of a sort. They were here before the Host, and they trade with the dead as other people trade at a market.",
+      "They light corpse-candles on the mire, and where a candle goes, a wight follows. Someone has been paying for candles, and the hags are lighting more than they ever did.",
+      "Thin them out. And bring me the candles. I want to see who made the wax.",
+    ],
+    acceptText: "I'll go into the mire",
+    steps: [
+      { type: "kill", zone: "Sorrow Mire", kinds: ["boghag"], goal: 6, text: "Kill 6 Bog Hags in Sorrow Mire", banner: ["New quest", "Candles in the Mire"], obj: "Bog Hags slain: {n} / {goal}", nag: "{n} of {goal}. They keep to the black pools. Mind their brood." },
+      { type: "collect", zone: "Sorrow Mire", kinds: ["boghag"], item: "candle", chance: { boghag: 0.4 }, goal: 4, text: "Take 4 Corpse-Candles from the hags", banner: ["Grave-wax", "Take 4 Corpse-Candles"], obj: "Corpse-Candles: {n} / {goal}", nag: "{n} of {goal}. The hags carry them on a cord at the belt." },
+    ],
+    outro: ["Pale wax, and in every candle a thumbnail of bone. The wax is cast with a mark pressed into the base: a skull inside a ring of spears.", "The Host's own mark. The hags were only the chandlers. The dead have been giving the orders."],
+    reward: arcReward(22),
+    after: "The Host's mark on grave-wax. They are not stirring in their sleep. They are awake.",
+  },
+  {
+    id: "thanesrest", title: "Thane's Rest", giver: "cairncaptain", zone: "Thane's Rest", minLevel: 23, auto: true,
+    description: `The Host's thanes lie at Thane's Rest, ${cdir("Thane's Rest")} of Cairnwatch. Read their stones, and cut down the legionaries who guard them.`,
+    offer: [
+      "The thanes of the Host are buried at Thane's Rest. Each barrow has a stone with the thane's name and the name of the legion he led.",
+      "I want those names. If the legions are marching again, I need to know whose, and how many.",
+      "The legionaries stand guard there. They were guarding it in life, too. Cut through them.",
+    ],
+    acceptText: "I'll read the stones",
+    steps: [
+      { type: "use", zone: "Thane's Rest", objects: MOOR_THANES, chest: false, text: "Read the 3 thanes' barrow-stones", banner: ["New quest", "Thane's Rest"], obj: "Barrow-stones read: {n} / {goal}", nag: "{n} of {goal}. They stand at the heads of the biggest mounds." },
+      { type: "kill", zone: "Thane's Rest", kinds: ["legionary"], goal: 6, text: "Cut down 6 Host Legionaries", banner: ["The legion stands", "Cut down 6 Host Legionaries"], obj: "Legionaries slain: {n} / {goal}", nag: "{n} of {goal}. Wait for the swing, then strike." },
+    ],
+    outro: ["Three stones, three thanes, and under each name the same line: \"Until the King calls.\"", "Every barrow-lid is slid open and every grave is empty. The thanes have gone to the King."],
+    reward: arcReward(23),
+    after: "Until the King calls. I knew that as a lullaby. I will not sing it again.",
+  },
+  {
+    id: "cairnlord", title: "The Cairn-Lord", giver: "cairncaptain", zone: "The Cairnfield", minLevel: 25, auto: true,
+    description: `A Cairn-Lord of the Host walks the Cairnfield, ${cdir("The Cairnfield")} of Cairnwatch, gathering the dead behind him. Break his escort and break him.`,
+    offer: [
+      "North of here is the Cairnfield, rows of mounds as far as you can see. That is where a Cairn-Lord has risen.",
+      "A Cairn-Lord is the thane's own captain, the last to be buried and the first to be called. If the dead are marching, he is the one marching them.",
+      "Cut down his wights. Then go and put him back in the ground.",
+    ],
+    acceptText: "I'll go north",
+    steps: [
+      { type: "kill", zone: "The Cairnfield", kinds: ["wight"], goal: 8, text: "Kill 8 Barrow-Wights in the Cairnfield", banner: ["New quest", "The Cairn-Lord"], obj: "Barrow-Wights slain: {n} / {goal}", nag: "{n} of {goal}. They rise out of the mounds in rows." },
+      { type: "kill", zone: "The Cairnfield", kinds: ["cairnlord"], goal: 1, own: true,
+        summon: { parts: ["cairnlord"], level: 28, title: "Maelgar, Cairn-Lord of the North Rows", hpMult: 1.5, ...mt(BARROW_FIELDS[0]),
+          voice: { wake: ["I was called. I came. Who calls me now?", "The rows are full, living one. There is room for one more."], taunt: ["I stood at the King's shield four hundred years. Do you think you are the first to try me?", "Kneel. It is only dirt."], half: ["Bone is patient. Bone does not bleed. Bone waits."], death: ["The King... will count me... absent..."] } },
+        text: "Put down Maelgar, the Cairn-Lord", banner: ["THE CAIRN-LORD WALKS", "Put down Maelgar"], obj: "The Cairn-Lord put down: {n} / {goal}", nag: "He rises among the mounds at night. Cut down his wights as they come, and keep clear of his stomp.", night: true },
+    ],
+    outro: ["Maelgar falls apart like a dropped sack of stones. On his breastplate, a ring of black iron with a single word cut into it: \"MUSTER\".", "East, then. Where the Fen Road ends, the Host has a camp."],
+    reward: arcReward(26, true),
+    after: "A Cairn-Lord. And only a lieutenant. Something bigger is giving the orders.",
+  },
+  {
+    id: "blackwater", title: "Lamps on the Black Water", giver: "cairncaptain", zone: "Blackwater Fen", minLevel: 26, auto: true,
+    description: `The Wardens' fen-lamps in Blackwater Fen, ${cdir("Blackwater Fen")} of Cairnwatch, have gone out, and the mist-wraiths walk the causeway. Relight them.`,
+    offer: [
+      "The Fen Road crosses Blackwater Fen on a causeway. The Wardens kept three lamps along it to keep the mist-wraiths off the road.",
+      "The lamps have gone dark. Nobody has crossed the fen alive in a month.",
+      "Take a flame. Light the lamps, and kill what you meet. The road is the only way east.",
+    ],
+    acceptText: "I'll light the lamps",
+    steps: [
+      { type: "use", zone: "Blackwater Fen", objects: MOOR_BEACONS, chest: false, text: "Relight the 3 Wardens' fen-lamps", banner: ["New quest", "Lamps on the Black Water"], obj: "Fen-lamps lit: {n} / {goal}", nag: "{n} of {goal}. They stand along the causeway in the fen." },
+      { type: "kill", zone: "Blackwater Fen", kinds: ["mistwraith"], goal: 6, text: "Kill 6 Mist Wraiths in the fen", banner: ["Lamps lit", "Kill 6 Mist Wraiths"], obj: "Mist Wraiths slain: {n} / {goal}", nag: "{n} of {goal}. They drift in out of the mist. Fight them by the lamps." },
+    ],
+    outro: ["The three lamps burn yellow across the black water, and the mist backs off them like a dog from a fire.", "By their light you see how many tracks lead east along the causeway. Hundreds. Marching in step."],
+    reward: arcReward(27),
+    after: "I saw the lamps from the wall. First light on the fen in a month. Thank you.",
+  },
+  {
+    id: "ninewidows", title: "The Nine Widows", giver: "cairncaptain", zone: "The Nine Widows", minLevel: 29, auto: true,
+    description: `At the Nine Widows, ${cdir("The Nine Widows")} of Cairnwatch, nine stones carry the names of the women who buried the Barrow-King. Read what they say of how he was put to sleep.`,
+    offer: [
+      "North, on the high way, nine tall stones stand in a ring: the Widows. They are the wives of the nine thanes the Barrow-King led out to die, and it was they who sang him to sleep.",
+      "Their stones carry the words of the rite. If we are to put him back to sleep, I need those words.",
+      "The wraiths gather round the stones and weep. Do not stand among them long.",
+    ],
+    acceptText: "I'll read the stones",
+    steps: [
+      { type: "use", zone: "The Nine Widows", objects: MOOR_WIDOWS, chest: false, text: "Read 3 of the Widow-stones", banner: ["New quest", "The Nine Widows"], obj: "Widow-stones read: {n} / {goal}", nag: "{n} of {goal}. The wraiths cluster at the foot of each." },
+      { type: "kill", zone: "The Nine Widows", kinds: ["mistwraith"], goal: 6, text: "Kill 6 Mist Wraiths at the Widows", banner: ["The weeping ring", "Kill 6 Mist Wraiths"], obj: "Mist Wraiths slain: {n} / {goal}", nag: "{n} of {goal}." },
+    ],
+    outro: ["Three verses, cut in the stone. \"Sleep, King, in the ground you took. Sleep, and the dead will keep your hall.\" And at the foot: \"He wakes when the ring is broken, at night, in his own mound.\"", "The ring is broken. Two of the Widows lie face down in the heather."],
+    reward: arcReward(29),
+    after: "At night, in his own mound. Kingsbarrow. So that is where this ends.",
+  },
+  {
+    id: "kingsbarrow", title: "The Road to Kingsbarrow", giver: "cairncaptain", zone: "Kingsbarrow", minLevel: 31, auto: true,
+    description: `Kingsbarrow, ${cdir("Kingsbarrow")} of Cairnwatch, is a hill of legions round the Barrow-King's mound. Fight through them and take a barrow-key.`,
+    offer: [
+      "Kingsbarrow is a hill of legion graves ringed round the King's own mound. All of them are open now, and every grave has someone standing in it.",
+      "The mound's door is locked with the Host's own iron. The legion captains carry the keys, by their custom. Take one.",
+      "When you have it, go in at nightfall. He sleeps in the day, even now.",
+    ],
+    acceptText: "I'll break through",
+    steps: [
+      { type: "kill", zone: "Kingsbarrow", kinds: ["legionary"], goal: 8, text: "Fight through 8 Host Legionaries at Kingsbarrow", banner: ["New quest", "The Road to Kingsbarrow"], obj: "Legionaries slain: {n} / {goal}", nag: "{n} of {goal}. They hold the slope in rows. Fight them in the gaps." },
+      { type: "collect", zone: "Kingsbarrow", kinds: ["legionary"], item: "barrowkey", chance: { legionary: 0.25 }, goal: 1, text: "Take a Barrow-Key from a legionary", banner: ["The King's door", "Take a Barrow-Key"], obj: "Barrow-Keys: {n} / {goal}", nag: "A legion captain wears it on a chain. Keep cutting." },
+    ],
+    outro: ["The key is black iron, cold enough to sting, cut in the shape of a skull.", "Above you the mound stands against the sky, and the door in its side is already ajar. Go in at night, and he will be waiting."],
+    reward: arcReward(31),
+    after: "Black iron, a skull's head. I have heard of that key. Come back from the mound.",
+  },
+  {
+    id: "barrowking", title: "The Barrow-King", giver: "cairncaptain", zone: "The Barrow-King's Mound", minLevel: 33, auto: true,
+    description: `The Barrow-King sleeps in his mound at Kingsbarrow, ${cdir("The Barrow-King's Mound")} of Cairnwatch. He wakes at night. Put him back in the ground.`,
+    offer: [
+      "He is the first of the Host and the last, a king who would not be buried. He is the reason for all of it: the cairns, the Wardens, the fort, every night I have stood on that wall.",
+      "I cannot go with you. The Wardens hold the cairns, and if the cairns open, nothing is left. So it is you.",
+      "Go at night. Put him in the ground, and keep him there.",
+    ],
+    acceptText: "I'll end it",
+    steps: [
+      { type: "reach", at: { ...mt(KINGS_MOUND), r: 9 * TILE, label: "The Barrow-King's Mound" }, zone: "The Barrow-King's Mound", text: "Go to the Barrow-King's Mound", banner: ["New quest", "The Barrow-King"], obj: `Go to the Barrow-King's Mound (${cdir("The Barrow-King's Mound")} of Cairnwatch)`, nag: "Follow the climb to Kingsbarrow and keep to the road." },
+      { type: "kill", zone: "The Barrow-King's Mound", kinds: ["barrowking"], goal: 1, own: true,
+        summon: { parts: ["barrowking"], level: 35, title: "Aldric Hollowcrown, the Barrow-King", hpMult: 2, ...mt(KINGS_MOUND),
+          voice: { wake: ["Who stands in my hall with a heartbeat?", "Four hundred years I slept. Four hundred, and still they could not pour enough earth on me."], taunt: ["My legions marched through a dozen kingdoms. You will not trouble them.", "Rise, my host. We have a guest.", "The living are so loud. So brief."], half: ["You think me broken? I was broken before the first spade. I am the Host. The Host does not end."], death: ["Count... the legions... one by one... and none... shall answer..."] } },
+        text: "Defeat the Barrow-King", banner: ["THE BARROW-KING WAKES", "Defeat Aldric Hollowcrown"], obj: "The Barrow-King defeated: {n} / {goal}", nag: "He wakes at night, on his own mound. Bring down his legion as it rises, then keep clear of the rockfall.", night: true },
+    ],
+    outro: ["The crown rolls from his skull and lies still. For the first time in four hundred years the mist begins to thin.", "Far behind you, on Cairnwatch's wall, a horn sounds once: the Wardens' sign for the cairns held shut. But the Host's camp in the east still burns with fires, and the dead there are not all his."],
+    reward: arcReward(35, true),
+    after: "The wall is quiet. I will stand it anyway. Come and drink with the Wardens whenever you like. You have earned the stool.",
+  },
+];
+
+/** The zone arcs, each its own chain (QuestChain.local): Act 1, 2, then 3. */
 export const ZONE_ARCS: { id: string; name: string; quests: QuestDef[]; needs?: (p: Quester | undefined) => boolean }[] = [
   { id: "mill", name: "Millbrook's Bad Water", quests: MILL_QUESTS },
   { id: "hunt", name: "The Lost Hunt", quests: HUNT_QUESTS },
@@ -2170,6 +2334,8 @@ export const ZONE_ARCS: { id: string; name: string; quests: QuestDef[]; needs?: 
   { id: "wheel", name: "Hold the Wheel", quests: WHEEL_QUESTS, needs: (p) => chainDone(p, chainIx("mill")) },
   { id: "unseen", name: "Unseen", quests: UNSEEN_QUESTS, needs: (p) => (chainState(p, chainIx("spire"))?.questId ?? 0) > SPIRE_QUESTS.findIndex((d) => d.id === "mirrorpath") },
   { id: "twohands", name: "Two Hands", quests: TWOHANDS_QUESTS, needs: (p) => (chainState(p, chainIx("under"))?.questId ?? 0) >= UNDER_QUESTS.findIndex((d) => d.id === "canopic") },
+  // Act 3: the Grey Barrow Moors, from Cairnwatch
+  { id: "moors", name: "The Grey Barrow Road", quests: MOOR_QUESTS },
 ];
 
 // ---- Side arcs: short local chains that may end on a hand-in (unlike ZONE_ARCS), stored in the shared Player.quests map the same way ----
@@ -2246,10 +2412,329 @@ const PENANCE_QUESTS: QuestDef[] = [
     sets: { flag: "bargain", v: 3 }, // penance done: the cold lines end (the trait stays)
   },
 ];
+// ---- Act 4: the Red Badlands, from the Rustwater Post (Lv 25-40; shared/badlands.ts, docs/clan-war-progress.md) ----
+/** Where things are, said from the Post's square (the badlands' own compass). */
+function dirFromPost(tx: number, ty: number): string {
+  const q = RUSTWATER_SQUARE, cx = q.x + q.w / 2, cy = BR(q.y + q.h / 2);
+  const k = (Math.round(Math.atan2(ty - cy, tx - cx) / (Math.PI / 4)) + 8) % 8;
+  return ["east", "south-east", "south", "south-west", "west", "north-west", "north", "north-east"][k];
+}
+const pdir = (name: string) => { const z = zoneByName(name); return dirFromPost(z.x + z.w / 2, z.y + z.h / 2); };
+const BAD_CARTS = [obj("bad_cart1", "clue", "Wrecked salt-cart", "Search", "The Saltlick Flats", 0.22, 0.4), obj("bad_cart2", "clue", "Wrecked salt-cart", "Search", "The Saltlick Flats", 0.55, 0.72), obj("bad_cart3", "clue", "Wrecked salt-cart", "Search", "The Saltlick Flats", 0.8, 0.35)];
+const BAD_TALLIES = [obj("bad_tally1", "cairn", "Tally-stone", "Read", "The Hanging Arches", 0.25, 0.45), obj("bad_tally2", "cairn", "Tally-stone", "Read", "The Hanging Arches", 0.5, 0.7), obj("bad_tally3", "cairn", "Tally-stone", "Read", "The Hanging Arches", 0.78, 0.4)];
+const BAD_FIREPOTS = [obj("bad_pots1", "nest", "Fire-pot cache", "Smash", "The Cinnabar Pits", 0.25, 0.4), obj("bad_pots2", "nest", "Fire-pot cache", "Smash", "The Cinnabar Pits", 0.55, 0.72), obj("bad_pots3", "nest", "Fire-pot cache", "Smash", "The Cinnabar Pits", 0.8, 0.45)];
+const BAD_BANNERS = [obj("bad_banner1", "nest", "Redfang war-banner", "Burn", "Talon Fort", 0.25, 0.5), obj("bad_banner2", "nest", "Redfang war-banner", "Burn", "Talon Fort", 0.55, 0.3), obj("bad_banner3", "nest", "Redfang war-banner", "Burn", "Talon Fort", 0.75, 0.6)];
+const BAD_LEDGERS = [obj("bad_ledger1", "clue", "Hangman's ledger", "Read", "Gallows Canyon", 0.2, 0.5), obj("bad_ledger2", "clue", "Hangman's ledger", "Read", "Gallows Canyon", 0.5, 0.3), obj("bad_ledger3", "clue", "Hangman's ledger", "Read", "Gallows Canyon", 0.8, 0.6)];
+const BAD_QUESTS: QuestDef[] = [
+  {
+    id: "saltcarts", title: "Salt on the Wind", giver: "rustmarshal", zone: "The Saltlick Flats", minLevel: 25,
+    description: `Marshal Hesk Varro says the salt-carts have stopped coming in from the Saltlick Flats, ${pdir("The Saltlick Flats")} of the Post. Clear the rattlers off the diggings and search the wrecked carts.`,
+    offer: [
+      "You came through the Red Pass on your own legs. Good. Most who come this way are carried.",
+      "I am Hesk Varro, Marshal of the Rustwater Post. The Post is a spring, a wall and forty people who will not pay the Redfang for water. That is the whole of our law.",
+      `The salt-carts have stopped coming in from the Saltlick Flats, ${pdir("The Saltlick Flats")} of here. Rattlers have the diggings, and somebody has been through the carts. Clear the one, search the other.`,
+    ],
+    acceptText: "I'll go to the Flats",
+    steps: [
+      { type: "kill", zone: "The Saltlick Flats", kinds: ["rattler"], goal: 6, text: "Kill 6 Rattlers on the Saltlick Flats", banner: ["New quest", "Salt on the Wind"], obj: "Rattlers slain: {n} / {goal}", nag: "{n} of {goal}. They lie in the white crust where the heat shimmers." },
+      { type: "use", zone: "The Saltlick Flats", objects: BAD_CARTS, chest: false, text: "Search the 3 wrecked salt-carts", banner: ["Wrecked carts", "Search the salt-carts"], obj: "Carts searched: {n} / {goal}", nag: "{n} of {goal}. They lie on their sides along the old miners' track." },
+    ],
+    outro: ["Every cart was cut open with a bolt-axe and the salt left in the dust. They did not want the salt. They wanted the drivers.", "A red fang is burnt into each tailboard, still warm."],
+    reward: arcReward(26),
+    after: "Cut open and left. They did not want salt. I have a bad feeling about what they did want.",
+  },
+  {
+    id: "droversdraw", title: "The Drovers' Draw", giver: "rustmarshal", zone: "Drovers' Draw", minLevel: 26, auto: true,
+    description: `The Redfang outriders hunt the drovers' herds in Drovers' Draw, ${pdir("Drovers' Draw")} of the Post, with their hounds. Break the riders and thin the pack.`,
+    offer: [
+      "The drovers water their herds in the Draw after rain. This year the Redfang outriders got there first, with their hounds.",
+      "A drover who loses a herd cannot pay his debts, and a Redfang tax-man is always waiting with an offer. That is how they take a country without a battle.",
+      "Ride them down. Outriders and hounds both.",
+    ],
+    acceptText: "I'll ride them down",
+    steps: [
+      { type: "kill", zone: "Drovers' Draw", kinds: ["outrider"], goal: 6, text: "Kill 6 Redfang Outriders in Drovers' Draw", banner: ["New quest", "The Drovers' Draw"], obj: "Outriders slain: {n} / {goal}", nag: "{n} of {goal}. They circle on the dry wash and strike from the flank." },
+      { type: "kill", zone: "Drovers' Draw", kinds: ["warhound"], goal: 4, text: "Kill 4 Redfang Warhounds", banner: ["The pack", "Kill 4 Warhounds"], obj: "Warhounds slain: {n} / {goal}", nag: "{n} of {goal}. Hold a wall at your back and let them come." },
+    ],
+    outro: ["The last hound drops, and the drovers' herd lifts its heads out of the thorn. They stand and watch you, and then they go back to drinking.", "On a dead outrider's belt, a rolled strip of hide with a ledger of debts. Half the Post's drovers are in it."],
+    reward: arcReward(27),
+    after: "A ledger of debts. Then it is true: they do not raid, they lend. I'll burn this.",
+  },
+  {
+    id: "talliestones", title: "Tally-Stones", giver: "rustmarshal", zone: "The Hanging Arches", minLevel: 27, auto: true,
+    description: `The Redfang scratch tally-marks under the wind-cut arches of the Hanging Arches, ${pdir("The Hanging Arches")} of the Post. Read their stones and cut down the outriders who keep them.`,
+    offer: [
+      "South, in the Hanging Arches, the Redfang keep tally-stones. A scratch for every wagon, every well, every family that passes under the stone.",
+      "I want to know what they count, and how close it is to the Post. Read three of them.",
+      "Outriders camp under the arches. They will not take kindly to a reader.",
+    ],
+    acceptText: "I'll read the stones",
+    steps: [
+      { type: "use", zone: "The Hanging Arches", objects: BAD_TALLIES, chest: false, text: "Read the 3 Redfang tally-stones", banner: ["New quest", "Tally-Stones"], obj: "Tally-stones read: {n} / {goal}", nag: "{n} of {goal}. They stand at the foot of the tallest arches." },
+      { type: "kill", zone: "The Hanging Arches", kinds: ["outrider"], goal: 6, text: "Cut down 6 Redfang Outriders", banner: ["The counters", "Cut down 6 Outriders"], obj: "Outriders slain: {n} / {goal}", nag: "{n} of {goal}. Watch the arches above you for the bolt." },
+    ],
+    outro: ["Scratches in rows of five, and at the end of each row a little picture of a spring with a line through it.", "The Rustwater Post. They have been counting us for a year."],
+    reward: arcReward(28),
+    after: "A spring with a line through it. Well. At least I know what I am worth to them.",
+  },
+  {
+    id: "firepots", title: "Fire in the Pits", giver: "rustmarshal", zone: "The Cinnabar Pits", minLevel: 28, auto: true,
+    description: `The Redfang Firebrands keep their fire-pots in the old diggings at the Cinnabar Pits, ${pdir("The Cinnabar Pits")} of the Post. Smash the caches and put the Firebrands down.`,
+    offer: [
+      "When the Redfang burn a wagon, they burn it with fire-pots: clay jars of cinnabar, pitch and quicksilver. They keep them in the old pits, south-west of here.",
+      "A Firebrand throws one the way you or I would throw a stone. They have a lot of stones.",
+      "Smash the caches. Do it before they find a use for them on my wall.",
+    ],
+    acceptText: "I'll break the caches",
+    steps: [
+      { type: "kill", zone: "The Cinnabar Pits", kinds: ["firebrand"], goal: 5, text: "Kill 5 Redfang Firebrands at the Cinnabar Pits", banner: ["New quest", "Fire in the Pits"], obj: "Firebrands slain: {n} / {goal}", nag: "{n} of {goal}. Keep moving. Their pots land where you stood." },
+      { type: "use", zone: "The Cinnabar Pits", objects: BAD_FIREPOTS, chest: false, text: "Smash the 3 fire-pot caches", banner: ["The stores", "Smash the fire-pot caches"], obj: "Caches smashed: {n} / {goal}", nag: "{n} of {goal}. They are stacked in the spoil heaps, under hide." },
+    ],
+    outro: ["The last cache goes up in a red sheet, and the pits glow like a forge for a quarter hour.", "Whoever stacked those pots was planning something bigger than a wagon."],
+    reward: arcReward(29),
+    after: "I saw the glow from the wall. Good. Let them wonder what happened to their stores.",
+  },
+  {
+    id: "mesahawk", title: "The Hawk of Bloodstone Mesa", giver: "rustmarshal", zone: "Bloodstone Mesa", minLevel: 30, auto: true,
+    description: `A Redfang captain holds Bloodstone Mesa, ${pdir("Bloodstone Mesa")} of the Post, and calls the signals for every raid on the Fang Road. Take down her crossbowmen, then her.`,
+    offer: [
+      "Bloodstone Mesa is the highest rock in the badlands. From its top you can see every road, which is why a Redfang captain sits on it with a mirror.",
+      "Dask Morrow, they call her the Mesa Hawk. Every raid on the Fang Road starts with her flash.",
+      "Her crossbowmen first, or they will have you on the climb. Then her.",
+    ],
+    acceptText: "I'll take the Hawk",
+    steps: [
+      { type: "kill", zone: "Bloodstone Mesa", kinds: ["crossbowman"], goal: 5, text: "Kill 5 Redfang Crossbowmen on Bloodstone Mesa", banner: ["New quest", "The Hawk of Bloodstone Mesa"], obj: "Crossbowmen slain: {n} / {goal}", nag: "{n} of {goal}. Close the distance fast. Cover is thin on the mesa." },
+      { type: "kill", zone: "Bloodstone Mesa", kinds: ["redcaptain"], goal: 1, own: true,
+        summon: { parts: ["redcaptain"], level: 32, title: "Dask Morrow, the Mesa Hawk", hpMult: 1.5, ...spotIn("Bloodstone Mesa", 0.5, 0.5),
+          voice: { wake: ["Look at that. A little glint down in the dust. Somebody sent you.", "Varro's dog, is it? Come up, then. The view is wonderful."], taunt: ["Every road in this country is mine to see.", "Fang, to me! There is a hero on the rock!"], half: ["I flashed the mirror for twelve years. Not once did anybody climb up. You are brave, or a fool."], death: ["The Fang... will see you... from Fangrock..."] } },
+        text: "Bring down Dask Morrow, the Mesa Hawk", banner: ["THE MESA HAWK", "Bring down Dask Morrow"], obj: "The Mesa Hawk brought down: {n} / {goal}", nag: "She holds the top of the mesa with her guard. Cut it down, then break her." },
+    ],
+    outro: ["Her signal mirror lies cracked on the rock, and from the top of the mesa the whole country spreads out in red and gold.", "West along the Dry Ashwell, a fort of grey logs: Talon Fort. Smoke from every tower."],
+    reward: arcReward(32, true),
+    after: "The Hawk is down. Then the Fang Road has lost her eyes. Not for long, mind. They'll find another.",
+  },
+  {
+    id: "talonfort", title: "Talon Fort", giver: "rustmarshal", zone: "Talon Fort", minLevel: 32, auto: true,
+    description: `Talon Fort, ${pdir("Talon Fort")} of the Post, watches the north road and the Dry Ashwell. Burn its war-banners and cut down its garrison.`,
+    offer: [
+      "Talon Fort is a little Fangrock: logs, towers, a horn, and forty men who have never had to ask permission for anything.",
+      "Three war-banners hang inside. The Redfang think a banner makes a man brave. Let us find out whether it works the other way.",
+      "Cut through the garrison, burn the banners, and be gone before the horn brings the rest.",
+    ],
+    acceptText: "I'll burn the banners",
+    steps: [
+      { type: "kill", zone: "Talon Fort", kinds: ["outrider", "crossbowman"], goal: 8, text: "Cut down 8 of Talon Fort's garrison", banner: ["New quest", "Talon Fort"], obj: "Garrison slain: {n} / {goal}", nag: "{n} of {goal}. Their lookouts are on the towers. Keep to cover." },
+      { type: "use", zone: "Talon Fort", objects: BAD_BANNERS, chest: false, text: "Burn the 3 Redfang war-banners", banner: ["The banners", "Burn the war-banners"], obj: "Banners burned: {n} / {goal}", nag: "{n} of {goal}. They hang on the inner posts, over the fire-pits." },
+    ],
+    outro: ["Three red banners go up and the fort's horn answers, but it is a ragged note. Nobody is left to blow it well.", "Among the ashes, a message in Rourke's own hand: \"Hold Talon. Hold it or hang.\" Every road in this country leads to Fangrock, and to him."],
+    reward: arcReward(34),
+    after: "Hold it or hang. Then he is frightened. Good. Come and drink to that.",
+  },
+  {
+    id: "gallowscanyon", title: "Gallows Canyon", giver: "rustmarshal", zone: "Gallows Canyon", minLevel: 35, auto: true,
+    description: `The road to Fangrock runs through Gallows Canyon, ${pdir("Gallows Canyon")} of the Post, where the Redfang hang the drovers who would not pay. Clear the crossbows from the cliffs and read the hangman's ledgers.`,
+    offer: [
+      "The Fang Road ends at Fangrock, and the last stretch is Gallows Canyon. They hang the ones who will not pay, and leave them there for whoever comes next.",
+      "Every one is in a ledger, with a name and what they owed. Three ledgers hang on the canyon posts. I want to know whose names are in them.",
+      "Crossbows on every ledge. Move quickly.",
+    ],
+    acceptText: "I'll go through",
+    steps: [
+      { type: "kill", zone: "Gallows Canyon", kinds: ["crossbowman"], goal: 6, text: "Kill 6 Redfang Crossbowmen in Gallows Canyon", banner: ["New quest", "Gallows Canyon"], obj: "Crossbowmen slain: {n} / {goal}", nag: "{n} of {goal}. They shoot from the ledges. Go up the scree and take them." },
+      { type: "use", zone: "Gallows Canyon", objects: BAD_LEDGERS, chest: false, text: "Read the 3 hangman's ledgers", banner: ["The ledgers", "Read the hangman's ledgers"], obj: "Ledgers read: {n} / {goal}", nag: "{n} of {goal}. They hang from the gibbet posts." },
+    ],
+    outro: ["Four hundred names. Most of them drovers, most of them owing less than a day's wage. At the foot of each page, in the same square hand: \"Rourke.\"", "The canyon opens on Fangrock's east gate, and above it a banner of a red fang on black."],
+    reward: arcReward(37),
+    after: "Four hundred names. I'll not forget one. Go on to Fangrock, and bring him down.",
+  },
+  {
+    id: "oldrourke", title: "Old Rourke", giver: "rustmarshal", zone: "Fangrock Keep", minLevel: 37, auto: true,
+    description: `Old Rourke, warlord of the Redfang, holds his keep inside Fangrock, ${pdir("Fangrock Keep")} of the Post. Go through the stockade and end him.`,
+    offer: [
+      "Old Rourke. Forty years a bandit and thirty a warlord. He took the Redfang when it was twelve men and a stolen well, and now it is a country.",
+      "He keeps a keep inside Fangrock, behind its own wall. I cannot take you there, and nobody else will. So go, and put him down.",
+      "If he offers you a deal, remember the ledgers.",
+    ],
+    acceptText: "I'll end it",
+    steps: [
+      { type: "reach", at: { ...at(FANGROCK_KEEP.x + FANGROCK_KEEP.w / 2, BR(FANGROCK_KEEP.y + FANGROCK_KEEP.h / 2), 9, "Old Rourke's keep") }, zone: "Fangrock Keep", text: "Go to Old Rourke's keep in Fangrock", banner: ["New quest", "Old Rourke"], obj: `Go to Old Rourke's keep in Fangrock (${pdir("Fangrock Keep")} of the Post)`, nag: "Take the Fang Road to Fangrock's east gate, and keep to the middle of the road." },
+      { type: "kill", zone: "Fangrock Keep", kinds: ["rourke"], goal: 1, own: true,
+        summon: { parts: ["rourke"], level: 40, title: "Old Rourke, Warlord of the Redfang", hpMult: 2, ...spotIn("Fangrock Keep", 0.5, 0.5),
+          voice: { wake: ["So. Varro's hound. You came a long way to bleed in my hall.", "Thirty years I've watched that little spring. Thirty years I let it live."], taunt: ["Every well in this country is mine. Every road. Every grave.", "Come, then. I cut down better than you at Gallows Canyon.", "Fang, to me! Come and see how a warlord dies!"], half: ["Hah! You can fight. I'll give you that. Walk out, and I will tell Varro you are dead, and you will never pay another copper. Well?"], death: ["Water's... free... then... for... a while..."] } },
+        text: "Defeat Old Rourke", banner: ["OLD ROURKE", "Defeat Old Rourke"], obj: "Old Rourke defeated: {n} / {goal}", nag: "He leaps, cleaves and roars, and calls his riders at half health. Keep moving and break his riders first." },
+    ],
+    outro: ["The warlord goes down on one knee, then on both. His war-axe rings once on the stone and lies still.", "A horn sounds on Fangrock's wall, long and low. Then another, and another. Nobody answers it. The Redfang's red fang banner comes down by itself."],
+    reward: arcReward(40, true),
+    after: "Rourke dead. I'll believe it when I see an empty Fangrock. Still: the water is free, and you may drink it any time. Stay a while, friend.",
+  },
+];
+
+// ---- Act 5: the Mawdeep Sinkholes, from Ropewell (Lv 30-45; shared/sinkholes.ts, docs/clan-war-progress.md) ----
+/** Where things are, said from Ropewell's square (the sinkholes' own compass). */
+function dirFromRope(tx: number, ty: number): string {
+  const q = ROPEWELL_SQUARE, cx = q.x + q.w / 2, cy = SR(q.y + q.h / 2);
+  const k = (Math.round(Math.atan2(ty - cy, tx - cx) / (Math.PI / 4)) + 8) % 8;
+  return ["east", "south-east", "south", "south-west", "west", "north-west", "north", "north-east"][k];
+}
+const rdir = (name: string) => { const z = zoneByName(name); return dirFromRope(z.x + z.w / 2, z.y + z.h / 2); };
+const SINK_LINES = [obj("sink_line1", "clue", "Snapped trap-line", "Search", "Rootfall Slopes", 0.25, 0.45), obj("sink_line2", "clue", "Snapped trap-line", "Search", "Rootfall Slopes", 0.55, 0.7), obj("sink_line3", "clue", "Snapped trap-line", "Search", "Rootfall Slopes", 0.8, 0.4)];
+const SINK_MARKS = [obj("sink_mark1", "cairn", "Kin-mark stone", "Read", "The Old Warren", 0.3, 0.4), obj("sink_mark2", "cairn", "Kin-mark stone", "Read", "The Old Warren", 0.55, 0.68), obj("sink_mark3", "cairn", "Kin-mark stone", "Read", "The Old Warren", 0.72, 0.4)];
+const SINK_SNARES = [obj("sink_snare1", "nest", "Hide-Kin snare-pit", "Spring", "Mosslight Fen", 0.25, 0.4), obj("sink_snare2", "nest", "Hide-Kin snare-pit", "Spring", "Mosslight Fen", 0.55, 0.7), obj("sink_snare3", "nest", "Hide-Kin snare-pit", "Spring", "Mosslight Fen", 0.78, 0.42)];
+const SINK_PEGS = [obj("sink_peg1", "clue", "Hide-pegged rope", "Cut", "The Pitfields", 0.22, 0.45), obj("sink_peg2", "clue", "Hide-pegged rope", "Cut", "The Pitfields", 0.5, 0.7), obj("sink_peg3", "clue", "Hide-pegged rope", "Cut", "The Pitfields", 0.8, 0.4)];
+const SINK_QUESTS: QuestDef[] = [
+  {
+    id: "rootfall", title: "Rootfall Rope", giver: "ropewarden", zone: "Rootfall Slopes", minLevel: 30,
+    description: `Lodge-Warden Brannoc Tull says the trap-lines on the Rootfall Slopes, ${rdir("Rootfall Slopes")} of Ropewell, keep snapping. Thin the stagkin that charge the lines, then search what is left of them.`,
+    offer: [
+      "You came down the Sinkway. Good. Few do twice.",
+      "I am Brannoc Tull, Warden of Ropewell. We are trappers and rope-makers, and the lodge hangs on scaffolds round that hole in the ground because the ground itself cannot be trusted.",
+      `The trap-lines on the Rootfall Slopes, ${rdir("Rootfall Slopes")} of here, keep snapping, and it is not the weather. Stagkin first, then search the lines.`,
+    ],
+    acceptText: "I'll go to the Slopes",
+    steps: [
+      { type: "kill", zone: "Rootfall Slopes", kinds: ["stagkin"], goal: 6, text: "Kill 6 Stagkin on the Rootfall Slopes", banner: ["New quest", "Rootfall Rope"], obj: "Stagkin slain: {n} / {goal}", nag: "{n} of {goal}. They charge from the high ground. Step aside at the last moment." },
+      { type: "use", zone: "Rootfall Slopes", objects: SINK_LINES, chest: false, text: "Search the 3 snapped trap-lines", banner: ["Snapped lines", "Search the trap-lines"], obj: "Lines searched: {n} / {goal}", nag: "{n} of {goal}. They run down the slope between the old stakes." },
+    ],
+    outro: ["Every line was cut clean with a knife, not torn. A stagkin cannot hold a knife.", "Hide-Kin work. Somebody wants the trappers off the slopes."],
+    reward: arcReward(31),
+    after: "Cut clean, you say. Then it is the Hide-Kin, and not the beasts. I had hoped it was the beasts.",
+  },
+  {
+    id: "hollowbrook", title: "Hollowbrook Laughter", giver: "ropewarden", zone: "Hollowbrook Dells", minLevel: 31, auto: true,
+    description: `Cacklers lurk in the Hollowbrook Dells, ${rdir("Hollowbrook Dells")} of Ropewell, and the sinkworms have come up in the brook. Thin both, so the trappers can cross.`,
+    offer: [
+      "Hollowbrook is the way to the old warrens, and the Hide-Kin have filled it with cacklers. You hear them long before you see them.",
+      "The worms came up with the last rains. I cannot say if it is chance. Nothing here is chance for long.",
+      "Cacklers first, worms after. I want the brook open.",
+    ],
+    acceptText: "I'll clear the brook",
+    steps: [
+      { type: "kill", zone: "Hollowbrook Dells", kinds: ["cackler"], goal: 6, text: "Kill 6 Cacklers in Hollowbrook Dells", banner: ["New quest", "Hollowbrook Laughter"], obj: "Cacklers slain: {n} / {goal}", nag: "{n} of {goal}. They hunt in packs. Keep your back to a bank." },
+      { type: "kill", zone: "Hollowbrook Dells", kinds: ["sinkworm"], goal: 3, text: "Kill 3 Gullet Worms in the brook", banner: ["The worms", "Kill 3 Gullet Worms"], obj: "Gullet Worms slain: {n} / {goal}", nag: "{n} of {goal}. They rise from the wet ground. Do not stand where the moss sinks." },
+    ],
+    outro: ["The brook runs quiet at last, and a trapper's boot floats down it with the laces still tied.", "The Warrens lie to the east. That is where the trappers' kin went."],
+    reward: arcReward(32),
+    after: "The brook runs clear. You have done more for the lodge in a day than the watch did in a year.",
+  },
+  {
+    id: "oldwarren", title: "The Old Warren", giver: "ropewarden", zone: "The Old Warren", minLevel: 32, auto: true,
+    description: `The trappers' kin were taken into the Old Warren, ${rdir("The Old Warren")} of Ropewell. Read the Hide-Kin's kin-mark stones and cut down the delvers who dig there.`,
+    offer: [
+      "My brother and his two girls went into the Old Warren to trap, three winters ago. The Hide-Kin took them. They call it a Hide Rite.",
+      "They mark every family they take on a stone. If there is a name I know, it will be there.",
+      "Read three stones. The Delvers come up under your feet, so mind the ground.",
+    ],
+    acceptText: "I'll read the stones",
+    steps: [
+      { type: "use", zone: "The Old Warren", objects: SINK_MARKS, chest: false, text: "Read the 3 kin-mark stones", banner: ["New quest", "The Old Warren"], obj: "Stones read: {n} / {goal}", nag: "{n} of {goal}. They stand at the mouths of the burrows." },
+      { type: "kill", zone: "The Old Warren", kinds: ["delver"], goal: 6, text: "Kill 6 Delvers in the Old Warren", banner: ["The diggers", "Kill 6 Delvers"], obj: "Delvers slain: {n} / {goal}", nag: "{n} of {goal}. They tunnel under you. Move when the ground shakes." },
+    ],
+    outro: ["Three names on the third stone, cut small. Brannoc's brother, and his girls, and a line of Hide-Kin script beneath.", "Taken in. Not killed. The Rite means what it says: they are being kept."],
+    reward: arcReward(33),
+    after: "Taken in, not killed. Three winters I thought them dead. I do not know if this is better.",
+  },
+  {
+    id: "tunneltop", title: "The Hide-Chieftain of Tunneltop", giver: "ropewarden", zone: "Tunneltop", minLevel: 34, auto: true,
+    description: `A Hide-Chieftain named Gorrow Splitear holds Tunneltop, ${rdir("Tunneltop")} of Ropewell, and his men guard the road to the kin. Cut down his stitchers, then him.`,
+    offer: [
+      "The stones say the Rite's road runs through Tunneltop. A Hide-Chieftain keeps it: Gorrow Splitear.",
+      "He has his stitchers about him, and he howls up cacklers when he is hurt. I would not go in alone, and I would not go in slow.",
+      "Break his stitchers. Then break him.",
+    ],
+    acceptText: "I'll take Gorrow",
+    steps: [
+      { type: "kill", zone: "Tunneltop", kinds: ["stitcher"], goal: 5, text: "Kill 5 Stitchers on Tunneltop", banner: ["New quest", "The Hide-Chieftain of Tunneltop"], obj: "Stitchers slain: {n} / {goal}", nag: "{n} of {goal}. They sew their own wounds shut. Strike them down fast." },
+      { type: "kill", zone: "Tunneltop", kinds: ["hidechief"], goal: 1, own: true,
+        summon: { parts: ["hidechief"], level: 36, title: "Gorrow Splitear, Hide-Chieftain", hpMult: 1.5, ...spotIn("Tunneltop", 0.5, 0.5),
+          voice: { wake: ["A trapper's dog, sniffing at my hill. Come up, little rope-maker.", "The Rite is older than your lodge, and it will outlast it."], taunt: ["Kin, to me! A rope-maker climbs our hill!", "You cut our snares. Now we cut you."], half: ["I have bled for the Hide-Kin since before you were weaned. One more cut does not frighten me."], death: ["The Maw... will... take you... as well..."] } },
+        text: "Bring down Gorrow Splitear", banner: ["GORROW SPLITEAR", "Bring down the Hide-Chieftain"], obj: "Gorrow Splitear brought down: {n} / {goal}", nag: "He howls up cacklers at half health. Break the pack first, then him." },
+    ],
+    outro: ["The Chieftain goes down in his own spoil, and on his belt hangs a key of bone and a strip of hide cut with the trappers' mark.", "From Tunneltop you can see the whole fen laid out below, silver in the moss, and beyond it a long dark line of pits."],
+    reward: arcReward(36, true),
+    after: "Gorrow is down. Then the kin are held further in. I will keep the key, and the hope.",
+  },
+  {
+    id: "mosslight", title: "Mosslight Snares", giver: "ropewarden", zone: "Mosslight Fen", minLevel: 35, auto: true,
+    description: `The Hide-Kin pit-snare the paths of Mosslight Fen, ${rdir("Mosslight Fen")} of Ropewell, to keep trappers from the kin. Spring the snares and thin the quillbacks that guard them.`,
+    offer: [
+      "Mosslight Fen is where the kin were walked through. The Hide-Kin dug snare-pits along every path, and set quillbacks to watch them.",
+      "Spring three snares. You will see the way the pits are laid, and I will know the way they went.",
+      "Quillbacks throw their spines at a distance. Close with them or stay clear.",
+    ],
+    acceptText: "I'll spring the snares",
+    steps: [
+      { type: "kill", zone: "Mosslight Fen", kinds: ["quillback"], goal: 5, text: "Kill 5 Quillbacks in Mosslight Fen", banner: ["New quest", "Mosslight Snares"], obj: "Quillbacks slain: {n} / {goal}", nag: "{n} of {goal}. Their spines fly as you come in. Take them in a rush." },
+      { type: "use", zone: "Mosslight Fen", objects: SINK_SNARES, chest: false, text: "Spring the 3 Hide-Kin snare-pits", banner: ["The snares", "Spring the snare-pits"], obj: "Snares sprung: {n} / {goal}", nag: "{n} of {goal}. They lie under moss mats along the fen paths." },
+    ],
+    outro: ["Under the last snare, a little braid of rope-makers' twine, still knotted in the lodge's way. A child's work.", "She was alive when she passed this way, and she left it for someone to find."],
+    reward: arcReward(37),
+    after: "Twine, knotted our way. She left it on purpose. She knew we would come.",
+  },
+  {
+    id: "pitfields", title: "Over the Pitfields", giver: "ropewarden", zone: "The Pitfields", minLevel: 36, auto: true,
+    description: `The way to Hidehall crosses the Pitfields, ${rdir("The Pitfields")} of Ropewell, where the Hide-Kin hang ropes across the sinks. Cut the sinkworms down, then cut the pegged ropes that mark the road.`,
+    offer: [
+      "Past the fen lies the Pitfields: a hundred sinks, and a worm in every second one. Nobody crosses without a rope.",
+      "The Hide-Kin peg their ropes across the pits. Cut three, and their road across is gone, and so is their easy supply.",
+      "Mind the worms. I have lost good men to them.",
+    ],
+    acceptText: "I'll cross the pits",
+    steps: [
+      { type: "kill", zone: "The Pitfields", kinds: ["sinkworm"], goal: 5, text: "Kill 5 Gullet Worms in the Pitfields", banner: ["New quest", "Over the Pitfields"], obj: "Gullet Worms slain: {n} / {goal}", nag: "{n} of {goal}. They wait under the rims. Walk the firm ground between the sinks." },
+      { type: "use", zone: "The Pitfields", objects: SINK_PEGS, chest: false, text: "Cut the 3 hide-pegged ropes", banner: ["The ropes", "Cut the pegged ropes"], obj: "Ropes cut: {n} / {goal}", nag: "{n} of {goal}. They span the widest sinks, pegged at both ends." },
+    ],
+    outro: ["The last rope falls into its sink and is gone. The Pitfields lie open, and the Hide-Kin supply line is cut.", "South-east, a great palisade of root and hide on the far rise. Hidehall. They will have felt the ropes go."],
+    reward: arcReward(38),
+    after: "The ropes cut. Then Hidehall is on its own. Good. It will make them angry, and angry men are careless.",
+  },
+  {
+    id: "hidehall", title: "Hidehall", giver: "ropewarden", zone: "Hidehall", minLevel: 40, auto: true,
+    description: `Hidehall, ${rdir("Hidehall")} of Ropewell, is the Hide-Kin's seat. Cut through its quillback towers and stitchers to reach the road to the Great Maw.`,
+    offer: [
+      "Hidehall. Walls of hide stretched on root, and two Hide-Chieftains over a garrison of stitchers and spine-throwers. It is the Hide-Kin's seat, and the way to the Maw runs beneath it.",
+      "My brother's girls were taken there. Past it, they say, is the Maw-Father, and he is what the Rite is for.",
+      "Take the walls first. Bring me back whoever you can.",
+    ],
+    acceptText: "I'll take the Hall",
+    steps: [
+      { type: "kill", zone: "Hidehall", kinds: ["quillback"], goal: 6, text: "Kill 6 Quillbacks on Hidehall's towers", banner: ["New quest", "Hidehall"], obj: "Quillbacks slain: {n} / {goal}", nag: "{n} of {goal}. They hold the lookout towers. Close the distance quickly." },
+      { type: "kill", zone: "Hidehall", kinds: ["stitcher"], goal: 5, text: "Cut down 5 Hidehall Stitchers", banner: ["The garrison", "Cut down 5 Stitchers"], obj: "Stitchers slain: {n} / {goal}", nag: "{n} of {goal}. They keep to the inner yard. Do not let them mend." },
+    ],
+    outro: ["Past the last gate, a slope of packed earth runs down into the dark, and the air that comes up smells of old stone and wet fur.", "On the wall, scratched small, three names. Under them: \"We wait.\""],
+    reward: arcReward(41),
+    after: "We wait. Three winters they have waited. I will not have them wait a fourth.",
+  },
+  {
+    id: "mawfather", title: "The Maw-Father", giver: "ropewarden", zone: "The Great Maw", minLevel: 42, auto: true,
+    description: `The Maw-Father lies in the Great Maw, ${rdir("The Great Maw")} of Ropewell, awake by day and by night. Go down to his ledge and end the Rite.`,
+    offer: [
+      "The Maw-Father. The oldest of the Hide-Kin, and the biggest. They say he was a man once, and a trapper too, before the Rite made him a lord of the ground.",
+      "He sits on a ledge in the Great Maw and he does not sleep. Not by day, not by night.",
+      "The rim path keeps out of his sight. The ledge does not. Go down, and bring my family up.",
+    ],
+    acceptText: "I'll go down",
+    steps: [
+      { type: "reach", at: { ...at(GREAT_MAW.x, SR(GREAT_MAW.y), 14, "the rim of the Great Maw") }, zone: "The Great Maw", text: "Go to the rim of the Great Maw", banner: ["New quest", "The Maw-Father"], obj: `Go to the rim of the Great Maw (${rdir("The Great Maw")} of Ropewell)`, nag: "Take the road past Hidehall and keep to the rim path. He is below you." },
+      { type: "kill", zone: "The Great Maw", kinds: ["mawfather"], goal: 1, own: true,
+        summon: { parts: ["mawfather"], level: 45, title: "The Maw-Father", hpMult: 2, ...spotIn("The Great Maw", 0.5, 0.5),
+          voice: { wake: ["Little rope-maker. I smelled your lodge on the wind before you left it.", "I have been here since the first sink opened. I was here before the word 'trapper'."], taunt: ["The ground is mine. Every hole in it. Every tooth.", "Come down. The Maw is hungry, and so am I.", "Kin! The deep is open! Come and watch him fall!"], half: ["You are still standing. It has been a long time since anyone was. Do not mistake me for tired."], death: ["The Rite... is broken... they will... come up... into the light..."] } },
+        text: "Defeat the Maw-Father", banner: ["THE MAW-FATHER", "Defeat the Maw-Father"], obj: "The Maw-Father defeated: {n} / {goal}", nag: "He burrows, drops rock from above and calls his kin. Keep moving and watch for the shadow on the ground." },
+    ],
+    outro: ["The Maw-Father goes down with a sound like a slope giving way, and the ledge shakes for a long moment after.", "From the dark behind him, three small figures come up the ramp, blinking. Ropewell will have its kin back. Of the Hide-Kin's war, there is still more to hear."],
+    reward: arcReward(45, true),
+    after: "They are home. Thin, and silent, and alive. I have no words for it. Drink at my fire any time, friend. The lodge is yours.",
+  },
+];
+
 /** Side arcs (QuestChain.local, after ZONE_ARCS in CHAINS): `needs` gates the first offer. */
 export const SIDE_ARCS: { id: string; name: string; quests: QuestDef[]; needs?: (p: Quester | undefined) => boolean }[] = [
   { id: "letters", name: "Two Letters", quests: LETTER_QUESTS, needs: (p) => chainDone(p, RED_CHAIN) },
   { id: "penance", name: "Penance", quests: PENANCE_QUESTS, needs: (p) => choiceOf(p, "bargain") === 1 && chainDone(p, BEAST_CHAIN) },
+  // Act 4: the Red Badlands, from the Rustwater Post (a side arc so no chain index moves; local giver, later quests `auto`)
+  { id: "badlands", name: "The Redfang Road", quests: BAD_QUESTS },
+  // Act 5: the Mawdeep Sinkholes, from Ropewell (a side arc, last, so no chain index moves)
+  { id: "sinkholes", name: "The Rope and the Maw", quests: SINK_QUESTS },
 ];
 const ARC_OBJECTS: QuestObject[] = [...ZONE_ARCS, ...SIDE_ARCS].flatMap((a) => a.quests.flatMap((d) => d.steps.flatMap(stepObjects)));
 
@@ -2382,7 +2867,7 @@ export const CHAINS: QuestChain[] = [
   { id: "sun", name: "The Second Sun", quests: SUN_QUESTS, keys: ["sunId", "sunStage", "sunCount"], version: 2, verKey: "sunVer", packed: "sun" },
   // the zone arcs (ZONE_ARCS), CHAINS[7..]: keyed by arc id
   ...ZONE_ARCS.map((a): QuestChain => ({ id: a.id, name: a.name, quests: a.quests, keys: [`${a.id}Id`, `${a.id}Stage`, `${a.id}Count`], version: 1, verKey: `${a.id}Ver`, packed: a.id, local: true, needs: a.needs })),
-  // the side arcs (SIDE_ARCS) after them, kept the same way (append-only: the client sends chain indices)
+  // the side arcs (SIDE_ARCS) after them, kept the same way. The client sends chain indices: add new arcs at the end of SIDE_ARCS, not ZONE_ARCS, so they never move
   ...SIDE_ARCS.map((a): QuestChain => ({ id: a.id, name: a.name, quests: a.quests, keys: [`${a.id}Id`, `${a.id}Stage`, `${a.id}Count`], version: 1, verKey: `${a.id}Ver`, packed: a.id, local: true, needs: a.needs })),
 ];
 // Two chains on one map key would share progress without a word: fail at load instead (an arc id equal to a story's key)
@@ -2518,6 +3003,9 @@ const IDLE: Record<string, string> = {
   mourner2: "Gran would've hated all this fuss. She'd have wanted the kettle on.",
   mourner3: "I build boats. Corin built better ones. I keep thinking he'll walk up the lane and say so.",
   ilka: "Don't look at me like that. Keep walking.",
+  rustmarshal: "Water's free, the roof's free, and nobody here pays the Redfang a copper. That's the Post's whole law. Fangrock doesn't like it, and now that you've been out there, neither do you.",
+  ropewarden: "Hold the rope and watch your footing. The ground round here gives way when it likes, and the Hide-Kin are no steadier. Every trapper at Ropewell has lost somebody to the Mawdeep, and none of us has stopped looking.",
+  cairncaptain: "Keep to the corpse roads, and if a barrow calls your name, don't answer. Four hundred years the Wardens have held these cairns shut. I mean to be the captain who doesn't lose them.",
   alewife: "Ale's cold, the gossip's warm. Pull up a barrel, love. Whatever happens in this valley, it comes past my cart sooner or later.",
 };
 /**

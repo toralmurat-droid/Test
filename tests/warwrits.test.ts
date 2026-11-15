@@ -77,7 +77,7 @@ test("war writs: rally pays the underdog more, never less than the base", () => 
   const big = CLAN_KEYS[counts.indexOf(Math.max(...counts))];
   assert.equal(writRally(w, big), 1 + WRIT.rally * Math.max(0, 1 - Math.max(...counts) / (w.owner.length / CLAN_KEYS.length)));
   const none = { owner: w.owner.map((o) => (o === "host" ? "wardens" : o)) as ClanKey[] };
-  assert.equal(writRally(none, "host"), 1 + WRIT.rally);
+  assert.equal(writRally(none, "host"), (1 + WRIT.rally) * WRIT.rallyClan, "no land at all: the full underdog bonus, and the war rallies for it");
   assert.ok(writPay(none, "host", 0).gold > writPay(w, big, 0).gold);
   for (const k of CLAN_KEYS) assert.ok(writRally(w, k) >= 1);
   assert.equal(writPay(w, big, 0).valor, WRIT.valor);

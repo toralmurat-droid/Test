@@ -78,7 +78,8 @@ export const RAIDERS: Raider[] = [
 export const raiderByKey = (k: string) => RAIDERS.find((r) => r.key === k);
 
 /** Never touched by the riders, and they never fight back against them: the dead. */
-export const RAIDER_SPARES: MobKind[] = ["skeleton", "skeletonmage", "necromancer", "crawler", "demon", "hollowking", "sanddead"];
+export const RAIDER_SPARES: MobKind[] = ["skeleton", "skeletonmage", "necromancer", "crawler", "demon", "hollowking", "sanddead",
+  "wight", "bonehound", "mistwraith", "legionary", "cairnlord", "barrowking"];
 /** Not living things (the Summoner's golems): the riders pass them by. */
 export const raiderIgnores = (kind: MobKind) => RAIDER_SPARES.includes(kind) || kind.startsWith("golem") || kind === "nightraider";
 
@@ -107,4 +108,7 @@ export const NIGHT_RAID = {
   charge: { min: 50, max: 160, ms: 800, speed: 2.1, mult: 1.6, cooldownMs: 3500 },
   /** Its massive weapon sweeps: everyone this close to the one it hits takes `mult` of the blow */
   cleave: { r: 30, mult: 0.6 },
+  /** While they hunt the war's leading clan (shared/war/rules.ts huntedClan): extra prey score for its sworn heroes and
+   *  its soldiers and carts (about a third of the sight range's worth of closeness) */
+  huntPrey: 0.35,
 };
