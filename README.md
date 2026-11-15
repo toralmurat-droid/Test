@@ -74,7 +74,7 @@ Only the classes in `ACTIVE_CLASSES` can be played. Archived classes keep their 
   A broken-poise monster can be **executed**.
 - **Elemental reactions** on monsters (`shared/elements.ts`) and **champion monsters** with affixes
   (`shared/champions.ts`, `server/champions.ts`).
-- **PvP:** heroes can fight each other anywhere except the **Market Square**, Kel Ashar's market, Cairnwatch's square, the Rustwater Post and Ropewell's square (safe zones). Newcomer protection is off
+- **PvP:** heroes can fight each other anywhere except the **Market Square**, Saltmere's harbour square, Kel Ashar's market, Cairnwatch's square, the Rustwater Post and Ropewell's square (safe zones). Newcomer protection is off
   (`PVP_PROTECT_LEVEL = 0` in `shared/combat.ts`).
 - **Night Raiders** (`shared/raiders.ts`): named level-50 riders who roam both acts at night.
 

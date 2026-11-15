@@ -4,6 +4,7 @@ import { buildDesert, D, inDesertRow, KEL_MARKET, WAYGATE_OAKVALE } from "./dese
 import { buildMoors, CAIRN_PORTAL, CAIRN_SQUARE, MOORSGATE_OAKVALE, MR } from "./moors";
 import { BR, buildBadlands, REDPASS_OAKVALE, RUSTWATER_PORTAL, RUSTWATER_SQUARE } from "./badlands";
 import { buildSinkholes, ROPEWELL_PORTAL, ROPEWELL_SQUARE, SINKWAY_OAKVALE, SR } from "./sinkholes";
+import { JETTY_RUNS, SALT_BUILDINGS, SALT_HARBOUR_STREET, SALT_LANE, SALT_PIERS, SALT_RACKS, SALT_SQUARE, SALT_TOWN, SALT_UPPER_LANE } from "./saltmere";
 
 /** Mirror Pond, in tiles (centre and radii of its water): the Songweaver's Mirror Pond Air is played on its shore (shared/songbook.ts). */
 export const MIRROR_POND = { x: 24, y: 94, rx: 9, ry: 6 };
@@ -119,6 +120,8 @@ export const MOORS_SAFE = { x: CAIRN_SQUARE.x, y: MR(CAIRN_SQUARE.y), w: CAIRN_S
 export const BADLANDS_SAFE = { x: RUSTWATER_SQUARE.x, y: BR(RUSTWATER_SQUARE.y), w: RUSTWATER_SQUARE.w, h: RUSTWATER_SQUARE.h };
 /** Act 5's safe zone: Ropewell's square (shared/sinkholes.ts), in map tiles. */
 export const SINKHOLES_SAFE = { x: ROPEWELL_SQUARE.x, y: SR(ROPEWELL_SQUARE.y), w: ROPEWELL_SQUARE.w, h: ROPEWELL_SQUARE.h };
+/** Act 1's second safe zone: Saltmere's harbour square (shared/saltmere.ts), in map tiles. */
+export const SALT_SAFE = { x: SALT_SQUARE.x, y: SALT_SQUARE.y, w: SALT_SQUARE.w, h: SALT_SQUARE.h };
 
 /** Column of the river's center for a given row (River Ashwell, east of the village). */
 /** Gullrock Cove: a fishers' smokehouse on a little bay east of Saltmere, burned and pillaged by Redfang raiders (Redfang quest chain). */
@@ -554,24 +557,44 @@ function buildWorld() {
     for (let y = cy - 8; y < cy - 4; y++) if (inMap(x, y) && (objects[y][x] === T.TREE || objects[y][x] === T.PINE) && hash(x, y, 183) < 0.7) setO(x, y, hash(x, y, 184) < 0.3 ? T.BUSH : EMPTY); // thin the trees near the beach
   }
 
-  // Saltmere: a small fishing village on the beach east of the river mouth, with two piers
-  const salt = { x: 126, y: 176, w: 34, h: 22 };
-  clearO(salt.x - 2, salt.y - 2, salt.w + 4, salt.h + 4);
-  each(salt.x, salt.y, salt.w, coastY(salt.x + 17) - salt.y - 3, (x, y) => { if (isGrass(ground[y][x]) && hash(x, y, 185) < 0.3) setG(x, y, T.GRASS); });
+  // Saltmere (shared/saltmere.ts): Act 1's second town, a fishing village on the beach east of the river mouth. The four
+  // old fishers' houses and the beach lane with its two piers; above them Upper Lane with the tavern, the chandlery and
+  // the smokehouse, Harbour Street from the waystone down to the east pier, and the flagstone harbour square (a safe
+  // zone) on the sand between the piers. Hedges and a few fences on the land edges, no stockade.
+  const ST = SALT_TOWN, lane = SALT_LANE; // lane: the lane along the beach
+  const laneW = ST.x, laneE = ST.x + ST.w - 1; // the lane's ends, where the Coast Road and the Smugglers' Path come in
+  const cx0 = ST.x - 1, cx1 = ST.x + ST.w; // the clearing's west and east edge columns
+  clearO(cx0, ST.y, cx1 - cx0 + 1, ST.h + 1); // the woods north of the old clearing give way too
+  each(ST.x, ST.y, ST.w, coastY(143) - ST.y - 3, (x, y) => { if (isGrass(ground[y][x]) && hash(x, y, 185) < 0.3) setG(x, y, T.GRASS); });
   const saltHouses: { x: number; y: number }[] = [];
   for (const [hx, hy, roof] of [[128, 178, T.ROOF_SLATE], [135, 177, T.ROOF_THATCH], [143, 178, T.ROOF_SLATE], [150, 177, T.ROOF_THATCH]] as const)
     saltHouses.push(house(hx, hy + 1, 4, 3, roof)); // narrow two-storey fishers' houses (client/src/houseLife.ts)
-  const lane = 186; // the lane along the beach
-  curve([[salt.x - 1, lane], [salt.x + 12, lane + 1], [salt.x + 24, lane], [salt.x + salt.w, lane + 1]], 1);
+  curve([[laneW, lane], [138, lane + 1], [150, lane], [laneE, lane + 1]], 1);
   for (const d of saltHouses) doorPath(d);
-  for (const px of [134, 147]) { // piers out over the water
+  const UL = SALT_UPPER_LANE, HS = SALT_HARBOUR_STREET;
+  road(UL.x0, UL.y, UL.x1 - UL.x0 + 1, 1);                   // Upper Lane
+  road(HS.x, HS.y0, 1, HS.y1 - HS.y0 + 1, T.COBBLE);         // Harbour Street: waystone → beach lane, beside the east pier
+  road(133, UL.y + 1, 1, lane - UL.y - 1);                   // Net Alley, between the old houses down to the beach
+  const ROOF = { thatch: T.ROOF_THATCH, red: T.ROOF_RED, slate: T.ROOF_SLATE } as const;
+  for (const b of SALT_BUILDINGS) { // doors onto Upper Lane (or a path down to a lane)
+    const stone = b.wall === "stone";
+    doorPath(building(b.x, b.y, b.w, b.h, ROOF[b.roof], stone ? T.WALL_STONE : T.WALL_TIMBER, stone ? T.WINDOW_STONE : T.WINDOW_TIMBER, b.w >= 7));
+  }
+  for (const px of SALT_PIERS) { // piers out over the water
     const cy = coastY(px);
     road(px, lane + 1, 1, cy - lane + 5);
     road(px - 1, cy + 4, 3, 1);
     setO(px + 1, cy - 1, T.BARREL); setO(px - 1, cy - 2, T.CRATE);
   }
-  for (const [fx, fy] of [[140, 189], [141, 189], [153, 189], [154, 189]]) setO(fx, fy, T.FENCE); // drying racks for the nets
-  setO(138, 183, T.WELL); setO(129, 189, T.CAMPFIRE); setO(131, 183, T.BARREL); setO(132, 183, T.CRATE); setO(157, 183, T.HAY);
+  const SSQ = SALT_SQUARE; // the harbour square: worn flagstones, open to the lane above and the piers either side
+  clearO(SSQ.x, SSQ.y, SSQ.w, SSQ.h); rectG(SSQ.x, SSQ.y, SSQ.w, SSQ.h, T.FLAGS);
+  setO(SSQ.x + SSQ.w - 1, SSQ.y + SSQ.h - 1, T.CRATE); setO(SSQ.x + 1, SSQ.y + SSQ.h - 1, T.BARREL);
+  for (const [fx, fy] of [[153, 189], [154, 189], ...SALT_RACKS]) setO(fx, fy, T.FENCE); // drying racks: nets on the beach, fish by the smokehouse
+  setO(138, 183, T.WELL); setO(129, 189, T.CAMPFIRE); setO(131, 183, T.BARREL); setO(132, 183, T.CRATE); setO(159, 183, T.HAY);
+  // the land edges: a hedge along the woods (open where the deer trail comes in), a fence and a hedge down the sides
+  for (let x = cx0; x <= cx1; x++) if (Math.abs(x - 147.5) > 2 && objects[ST.y][x] === EMPTY) setO(x, ST.y, T.BUSH);
+  for (let y = ST.y + 1; y < UL.y; y++) { setO(cx0, y, T.FENCE_V); setO(cx1, y, y < 172 ? T.BUSH : T.FENCE_V); }
+  for (let y = UL.y; y < 182; y++) setO(cx1, y, T.BUSH);
 
   // Redfang Hollow: a bandit settlement in a clearing deep in the eastern woods, behind a crude fence
   const band = REDFANG;
@@ -611,11 +634,14 @@ function buildWorld() {
     [cove.x + 13, cove.y + 8, T.BARREL], [cove.x + 19, cove.y + 7, T.STUMP], [cove.x + 12, cove.y + 6, T.STUMP], [cove.x + 21, cove.y + 3, T.HAY]] as const) setO(ox, oy, t);
   for (const fx of [cove.x + 4, cove.x + 5, cove.x + 22, cove.x + 23]) setO(fx, cove.y + 8, T.FENCE); // net racks, half pulled down
   curve([[191, 177], [192, 181], [cove.x + 14, cove.y + 5]], 1); // the fishers' track down from the Smugglers' Path
+  /** A short plank jetty out over the water (shared/saltmere.ts JETTY_RUNS), a T across its head like Saltmere's piers. */
+  const jetty = (j: (typeof JETTY_RUNS)[number]) => { road(j.x, j.y0, 1, j.y1 - j.y0 + 1); road(j.x - 1, j.y1 - 1, 3, 1); };
+  jetty(JETTY_RUNS[0]); // Gullrock Cove's, below the burned smokehouse
 
   // Roads to the new places
-  curve([[lake.x + 3, lake.y + lake.ry + 3], [104, 166], [110, 174], [rc(178) - 6, 178], [rc(178) + 6, 178], [salt.x - 1, lane]], 1); // Coast Road (lake → Saltmere)
+  curve([[lake.x + 3, lake.y + lake.ry + 3], [104, 166], [110, 174], [rc(178) - 6, 178], [rc(178) + 6, 178], [laneW, lane]], 1); // Coast Road (lake → Saltmere)
   curve([[keep.x + keep.w + 1, keep.y + 8], [216, 68], [228, 84], [band.x + band.w / 2, band.y - 2]], 1);                            // Bandit Trail (keep → Redfang)
-  curve([[band.x + band.w / 2, band.y + band.h + 1], [244, 140], [222, 162], [194, 176], [170, 184], [salt.x + salt.w, lane + 1]], 1); // Smugglers' Path (Redfang → Saltmere)
+  curve([[band.x + band.w / 2, band.y + band.h + 1], [244, 140], [222, 162], [194, 176], [170, 184], [laneE, lane + 1]], 1); // Smugglers' Path (Redfang → Saltmere)
 
   // Gravemoor Cemetery (deep south-eastern woods): the old valley's great burial ground, walled, with a mausoleum
   // in the middle and four crypts. The Pale Marshal raises his recruits here (skeleton quest chain, shared/quests.ts).
@@ -680,6 +706,7 @@ function buildWorld() {
     [WRECK.x + 6, WRECK.y - 2, T.CRATE], [WRECK.x - 9, WRECK.y - 1, T.BARREL], [WRECK.x + 12, WRECK.y - 2, T.CRATE], [WRECK.x - 14, WRECK.y - 3, T.STUMP]] as const)
     if (inMap(ox, oy) && ground[oy][ox] !== T.WATER) setO(ox, oy, t);
   curve([[mau.x + 4, mau.y + mau.h + 2], [42, 160], [34, 170], [30, 180], [WRECK.x, WRECK.y - 4]], 1); // Wreck Trail (barrows → Brinewood → the strand)
+  jetty(JETTY_RUNS[1]); // Heronwreck Strand's, east of the wreck
 
   // ---------- 12a4. The elemental wilds (ELEMENT_LANDS) ----------
   const LAND = Object.fromEntries(ELEMENT_LANDS.map((l) => [l.el, l])) as Record<ElementLand["el"], ElementLand>;
@@ -764,9 +791,9 @@ function buildWorld() {
   signpost(tower.x + 12, 20, ["Thornwood", "Old Watchtower", "Oakvale"]);                            // into the Thornwood
   signpost(202, 42, ["Greywatch Keep", "Thornwood"]);
   signpost(rc(144) + 8, 142, ["Sunken Lake", "Stonecrag Quarry"]);
-  signpost(salt.x - 2, lane - 1, ["Saltmere", "Sunken Lake"]);                                       // Saltmere's west end
+  signpost(laneW - 1, lane - 1, ["Saltmere", "Sunken Lake"]);                                     // Saltmere's west end
   signpost(band.x + 7, band.y - 6, ["Redfang Hollow", "Greywatch Keep"]);               // bandit trail
-  signpost(salt.x + salt.w + 1, lane - 1, ["Saltmere", "Redfang Hollow"]);                         // Saltmere's east end
+  signpost(laneE + 1, lane - 1, ["Saltmere", "Redfang Hollow"]);                       // Saltmere's east end
 
   // ---------- 12c. Small graveyards where skeletons live (they rise from, and hide in, the graves) ----------
   const graveyard = (cx: number, cy: number, r: number, seed: number) => each(cx - r, cy - r, 2 * r + 1, 2 * r + 1, (i, j) => {
@@ -972,7 +999,7 @@ function buildWorld() {
     { name: "Greywatch Keep", x: keep.x - 6, y: keep.y - 6, w: keep.w + 12, h: keep.h + 12, mobs: ["skeleton", "skeletonmage", "necromancer"] },
     { name: "Thornwood", ...thorn, mobs: ["slime"] },
     { name: "Gravemoor Cemetery", x: grave.x - 3, y: grave.y - 3, w: grave.w + 6, h: grave.h + 6, mobs: ["skeleton", "skeletonmage", "necromancer"] },
-    { name: "Saltmere", ...salt },
+    { name: "Saltmere", ...SALT_TOWN },
     { name: "Redfang Hollow", x: band.x - 4, y: band.y - 4, w: band.w + 8, h: band.h + 8, mobs: ["bandit"] },
     { name: "Brinewood", ...brine, mobs: ["slime"] },
     { name: "Heronwreck Strand", ...strand, mobs: ["slime"] },
@@ -1309,11 +1336,13 @@ export function randomSpawn(): { x: number; y: number } {
   return { x: (ROADS.RX + 1.5) * TILE, y: (ROADS.RY + 1.5) * TILE };
 }
 
-/** The market squares (Oakvale's, Kel Ashar's, Cairnwatch's, the Rustwater Post's, Ropewell's) are safe zones: no damage there, and monsters will not enter. */
+/** The market squares (Oakvale's, Saltmere's harbour square, Kel Ashar's, Cairnwatch's, the Rustwater Post's, Ropewell's) are safe zones: no damage there, and monsters will not enter. */
 export function isSafeZone(px: number, py: number): boolean {
   const tx = Math.floor(px / TILE), ty = Math.floor(py / TILE);
   const z = SAFE_ZONE;
   if (tx >= z.x && ty >= z.y && tx < z.x + z.w && ty < z.y + z.h) return true;
+  const h = SALT_SAFE; // Act 1: Saltmere's harbour square
+  if (tx >= h.x && ty >= h.y && tx < h.x + h.w && ty < h.y + h.h) return true;
   const k = DESERT_SAFE; // Act 2: Kel Ashar's market
   if (tx >= k.x && ty >= k.y && tx < k.x + k.w && ty < k.y + k.h) return true;
   const m = MOORS_SAFE; // Act 3: Cairnwatch's square
