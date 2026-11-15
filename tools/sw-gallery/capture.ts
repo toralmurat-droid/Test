@@ -864,7 +864,7 @@ async function groupLock(SLOW: number) {
       await wait(h.real(3000));
       await s.stage(); await wait(h.real(3000));
       const tmp = mkdtempSync(path.join(tmpdir(), "swlock-"));
-      const box = await h.page.evaluate(() => { const b = document.querySelector(".orb.mp")!.getBoundingClientRect(); return { x: Math.max(0, b.left - 14), y: Math.max(0, b.top - 80), width: Math.min(300, innerWidth - b.left + 14), height: b.height + 94 }; });
+      const box = await h.page.evaluate(() => { const b = document.querySelector(".orb.mp")!.getBoundingClientRect(); return { x: Math.max(0, b.right - 330), y: Math.max(0, b.top - 80), width: Math.min(350, innerWidth - b.right + 330), height: b.height + 94 }; });
       const frame = async (i: number) => { const info = await h.page.evaluate(() => { const S = (window as any).S, e = S.entities.get(S.me); return `${Math.round(Date.now())} fx=${String(e.state.fx).includes("chlock")} clock=${!document.querySelector(".lockclock")?.hasAttribute("hidden")}`; }); console.log(`lock still ${i}: game ${info}`); await h.page.screenshot({ path: path.join(tmp, `k${String(i).padStart(2, "0")}.png`), clip: box }); };
       await frame(0); // before: no clock
       await s.play(PROGS[0].notes, 950);
@@ -891,7 +891,7 @@ async function groupMode(SLOW: number) {
       await h.send("chat", "/max"); await h.send("chat", "/god");
       await wait(h.real(3000));
       await s.stage(); await wait(h.real(3000));
-      const box = await h.page.evaluate(() => { const b = document.querySelector(".orb.mp")!.getBoundingClientRect(); return { x: Math.max(0, b.left - 14), y: Math.max(0, b.top - 80), width: Math.min(300, innerWidth - b.left + 14), height: b.height + 94 }; });
+      const box = await h.page.evaluate(() => { const b = document.querySelector(".orb.mp")!.getBoundingClientRect(); return { x: Math.max(0, b.right - 330), y: Math.max(0, b.top - 80), width: Math.min(350, innerWidth - b.right + 330), height: b.height + 94 }; });
       const tmp = mkdtempSync(path.join(tmpdir(), "swmode-"));
       const seen: string[] = [];
       for (let i = 0; i < 5; i++) {

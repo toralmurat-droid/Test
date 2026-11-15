@@ -6,7 +6,7 @@ import { NOTES } from "../../shared/songs";
  * dark when NOTES.lockMs has passed. The server owns the lockout: the word going off hides the clock, whatever it shows.
  * The client has no owner-only remaining time (no field in Player.me), so the sweep starts when it first sees the word.
  */
-const PX = 16; // art pixels; drawn at 2 CSS px each (see orbs.css .lockclock)
+const PX = 16; // art pixels; drawn at 3 CSS px each (see orbs.css .lockclock)
 const STEPS = 48; // redraw only when the sweep moves one step
 const NOTE = [
   "...22..",

@@ -66,8 +66,8 @@ body.hud-tight.orbhud-on { --chat-bottom: calc(132px * var(--barzoom, 1)); --cha
 #orbhud .orb.song.full { animation: orb-song-full .7s steps(2) infinite; }
 @keyframes orb-song-full { 50% { filter: drop-shadow(0 0 8px #ffe27a) drop-shadow(0 4px 6px rgba(0,0,0,.75)) brightness(1.25); } }
 /* owner widgets above the Song orb (modeChip.ts, lockClock.ts): one row, the chip then the lockout clock */
-#orbhud .orb .sgside { position: absolute; left: 0; bottom: calc(100% - 4px); display: flex; align-items: flex-end; gap: 6px; width: max-content; pointer-events: none; }
-#orbhud .orb .lockclock { flex: none; width: 32px; height: 32px; image-rendering: pixelated; pointer-events: auto; box-shadow: 0 2px 4px rgba(0,0,0,.7); }
+#orbhud .orb .sgside { position: absolute; right: 0; bottom: calc(100% - 4px); display: flex; flex-direction: row-reverse; align-items: flex-end; gap: 6px; width: max-content; pointer-events: none; }
+#orbhud .orb .lockclock { flex: none; width: 48px; height: 48px; image-rendering: pixelated; pointer-events: auto; box-shadow: 0 2px 4px rgba(0,0,0,.7); }
 #orbhud .orb .lockclock[hidden], #orbhud .orb .modechip[hidden] { display: none; }
 #orbhud .orb .modechip { --mc: #ffd24d; display: flex; align-items: stretch; gap: 6px; padding: 3px 7px 3px 3px; pointer-events: auto; font-family: var(--pixel-font);
   background: linear-gradient(#211a14, #120e0b); border: 2px solid var(--mc); box-shadow: 0 0 0 2px #1a120b, 0 2px 4px rgba(0,0,0,.7); }
