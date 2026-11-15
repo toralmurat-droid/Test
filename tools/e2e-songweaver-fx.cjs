@@ -42,13 +42,11 @@ const SETUPS = [
       // the mouse is not over any monster in a headless run: pin the hovered monster (the top monster bar shows the ear icons)
       Object.defineProperty(S.pointer, "hoverId", { get: () => window.__hover });
       Object.defineProperty(S.pointer, "inspectId", { get: () => window.__hover });
-      // record the sfx events and chat hints the client handled
+      // record the sfx events the client handled (the sound hints are in the monster plate's Alt details, not in chat)
       const so = S.songEvent.bind(S);
       S.songEvent = (ev) => { window.log.push(ev); return so(ev); };
       const sy = S.npcs.say.bind(S.npcs);
       S.npcs.say = (id, t) => { const r = sy(id, t); window.log.push({ ev: "npcsay", id, text: t, shown: r }); return r; };
-      const cn = S.chatNote.bind(S);
-      S.chatNote = (t, c) => { window.log.push({ ev: "hint", text: t }); return cn(t, c); };
     });
     const send = (t, m) => page.evaluate(([t, m]) => window.S.room.send(t, m), [t, m]);
     const chat = (t) => send("chat", t);
@@ -131,7 +129,7 @@ const SETUPS = [
     result.skeleton = await fightAt(94, 100, "skeleton", "5-skeleton", ["sg_shrill", "sg_crack"]);
     result.events = await page.evaluate(() => {
       const c = {}; for (const e of window.log) c[e.ev === "soundhit" ? `soundhit:${e.tier}${e.match ? "+match" : ""}` : e.ev] = (c[e.ev === "soundhit" ? `soundhit:${e.tier}${e.match ? "+match" : ""}` : e.ev] ?? 0) + 1;
-      return { counts: c, hints: window.log.filter((e) => e.ev === "hint").map((e) => e.text), resonate: window.log.filter((e) => e.ev === "resonate").slice(0, 2), note: window.log.filter((e) => e.ev === "note").slice(0, 3).map((e) => e.s + ":" + e.deg) };
+      return { counts: c, resonate: window.log.filter((e) => e.ev === "resonate").slice(0, 2), note: window.log.filter((e) => e.ev === "note").slice(0, 3).map((e) => e.s + ":" + e.deg) };
     });
     result.errors = errors.slice(0, 8); // Colyseus `refId not found` / decode errors show up now and then (known, see CLAUDE.md gotchas)
     report[name] = result;

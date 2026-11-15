@@ -7,6 +7,7 @@ import { TIDE } from "../shared/tide";
 import { hintFor } from "../client/src/songTables";
 import { affinityText } from "../shared/elements";
 import { affinityLine, detailLines, extraLine, hpText, isMineOrGroup, levelTone, monsterInfo, plateRows, statusLine, RECENT_HIT_MS, showWorldBar, type InfoCtx, type MobLike } from "../client/src/monsterInfo";
+import { altBlocks } from "../client/src/monsterInfo";
 
 const ctx: InfoCtx = { myLevel: 10, playerName: (id) => ({ p1: "Aldo", p2: "Bera" } as Record<string, string>)[id] };
 const mob = (o: Partial<MobLike> & { kind: string }): MobLike => ({ level: 10, hp: 50, maxHp: 100, ...o });
@@ -87,7 +88,7 @@ test("icon lists for a skeleton and a blob", () => {
   assert.deepEqual(sk.states.map((s) => s.glyph), ["stun", "slow", "burn", "bleed", "mark", "mark"]);
   const blob = monsterInfo(mob({ kind: "slime" }), ctx);
   assert.deepEqual(blob.states, []);
-  assert.ok(blob.weak.length + blob.resist.length >= 0);
+  assert.ok(blob.weak.length > 0, "a blob has weaknesses to show");
 });
 
 test("Alt details: the full affinity line, weapon, extras, status, HP numbers, affix texts", () => {
@@ -177,4 +178,13 @@ test("isMineOrGroup: a missing 'by' is not mine", () => {
   assert.equal(isMineOrGroup("stranger", "me", group), false);
   assert.equal(isMineOrGroup(undefined, "me", group), false);
   assert.equal(isMineOrGroup("", "me", group), false);
+});
+
+test("altBlocks: while Alt is held, game keys stay away from the browser, but not Enter, Tab, F-keys or chat typing", () => {
+  const k = (key: string, o: Partial<{ altKey: boolean; ctrlKey: boolean; metaKey: boolean }> = {}) => ({ key, altKey: true, ctrlKey: false, metaKey: false, ...o });
+  for (const key of ["d", "D", "ArrowLeft", "f", "1", " ", "Home"]) assert.equal(altBlocks(k(key), null), true, key);
+  for (const key of ["Enter", "Tab", "Escape", "F4", "F11", "Alt", "AltGraph"]) assert.equal(altBlocks(k(key), null), false, key);
+  assert.equal(altBlocks(k("d", { altKey: false }), null), false, "no Alt");
+  assert.equal(altBlocks(k("d", { ctrlKey: true }), null), false, "Ctrl+Alt (AltGr on some layouts)");
+  assert.equal(altBlocks(k("d"), { tagName: "INPUT" }), false, "typing in chat");
 });

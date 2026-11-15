@@ -1,7 +1,7 @@
 import "./monsterBar.css";
 import { ELEMENT_COLORS, type Element } from "../../shared/elements";
 import { skillIcon } from "./skillIcons";
-import { BAR_HOLD_MS, TONE_COLOR, detailLines, hpText, plateRows, type MonsterInfo } from "./monsterInfo";
+import { BAR_HOLD_MS, TONE_COLOR, detailLines, hpText, plateRows, type MonsterInfo, altBlocks } from "./monsterInfo";
 import { FRAME_NAME_COLOR, glyphUrl, plateArt } from "./plateArt";
 
 /**
@@ -14,6 +14,7 @@ import { FRAME_NAME_COLOR, glyphUrl, plateArt } from "./plateArt";
  */
 /** A newly hovered monster shows its plate after this delay, so sweeping the mouse across a pack does not flicker. */
 export const APPEAR_DELAY_MS = 120;
+
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]!));
 const col = (n: number) => "#" + n.toString(16).padStart(6, "0");
@@ -38,10 +39,15 @@ export class MonsterBar {
     this.el.id = "monsterbar";
     this.el.hidden = true;
     hud.appendChild(this.el);
-    // Alt shows the details. Its keydown is cancelled so the browser does not move focus to its menu (Alt+Enter, the
-    // fullscreen shortcut in fullscreen.ts, is a keydown of Enter and unaffected).
+    // Alt shows the details. Its keydown is cancelled so the browser does not move focus to its menu. While Alt is held
+    // the game keys must not reach the browser either (Alt+D address bar, Alt+Left back, Alt+F menu): those keydowns
+    // are cancelled too, outside the chat box. Enter (Alt+Enter, fullscreen.ts), Tab and F-keys stay with the system.
+    // Registered after Phaser's own window listener (the scene is up), which drops events already cancelled.
     const set = (on: boolean) => { if (on !== this.alt) { this.alt = on; this.key = ""; } };
-    window.addEventListener("keydown", (ev: KeyboardEvent) => { if (ev.key === "Alt") { ev.preventDefault(); set(true); } });
+    window.addEventListener("keydown", (ev: KeyboardEvent) => {
+      if (ev.key === "Alt") { ev.preventDefault(); set(true); return; }
+      if (altBlocks(ev, document.activeElement)) ev.preventDefault();
+    });
     window.addEventListener("keyup", (ev: KeyboardEvent) => { if (ev.key === "Alt") { ev.preventDefault(); set(false); } });
     window.addEventListener("blur", () => set(false));
   }

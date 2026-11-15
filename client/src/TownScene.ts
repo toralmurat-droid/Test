@@ -500,7 +500,7 @@ export class TownScene extends Phaser.Scene {
       this.heldSlot = n; this.slotCastAt = this.time.now;
     };
     this.input.keyboard!.on("keydown", (ev: KeyboardEvent) => {
-      if (this.chatting() || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+      if (this.chatting() || ev.ctrlKey || ev.metaKey || (ev.altKey && ev.key === "Enter")) return; // Alt is allowed: you can hold it to read a monster and still fight
       if (ev.key.toUpperCase() === DROP_KEY && !ev.repeat && this.qcarry?.carrying(this.me)) { this.qcarry.drop(); return; } // put the lantern down
       const n = slotOfKey(ev);
       // Spell keys: E is a spell key, but when a prompt says "E: talk / open / use" right here, E does that instead

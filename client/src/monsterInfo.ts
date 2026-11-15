@@ -187,3 +187,12 @@ export interface DetailLines { affixes: { key: AffixKey; name: string; text: str
 export function detailLines(i: MonsterInfo): DetailLines {
   return { affixes: i.affixes.map((a) => ({ key: a.key, name: a.name, text: a.text, color: a.color })), hint: i.ear?.hint ?? "", affinity: affinityLine(i), status: statusLine(i), extra: extraLine(i), hp: hpText(i.hp, i.maxHp) };
 }
+
+/** Should this keydown be kept from the browser? Alt + a game key (letters, digits, arrows, Space, Home…) outside text
+ *  fields; never Enter (Alt+Enter is full screen), Tab, Escape or the F-keys, and never AltGr characters. */
+export function altBlocks(ev: { altKey: boolean; ctrlKey: boolean; metaKey: boolean; key: string }, focus: { tagName?: string } | null): boolean {
+  if (!ev.altKey || ev.ctrlKey || ev.metaKey || ev.key === "Alt" || ev.key === "AltGraph") return false;
+  const tag = focus?.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA") return false;
+  return !/^(Enter|Tab|Escape|F\d{1,2})$/.test(ev.key);
+}
