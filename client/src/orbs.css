@@ -69,9 +69,7 @@ body.hud-tight.orbhud-on { --chat-bottom: calc(132px * var(--barzoom, 1)); --cha
 #orbhud .orb .sgside { position: absolute; right: 0; bottom: calc(100% - 4px); display: flex; flex-direction: row-reverse; align-items: flex-end; gap: 6px; width: max-content; pointer-events: none; }
 #orbhud .orb .lockclock { flex: none; width: 48px; height: 48px; image-rendering: pixelated; pointer-events: auto; box-shadow: 0 2px 4px rgba(0,0,0,.7); }
 #orbhud .orb .lockclock[hidden], #orbhud .orb .modechip[hidden] { display: none; }
-#orbhud .orb .modechip { --mc: #ffd24d; display: flex; align-items: stretch; gap: 6px; padding: 3px 7px 3px 3px; pointer-events: auto; font-family: var(--pixel-font);
-  background: linear-gradient(#211a14, #120e0b); border: 2px solid var(--mc); box-shadow: 0 0 0 2px #1a120b, 0 2px 4px rgba(0,0,0,.7); }
-#orbhud .orb .modechip .mcsw { flex: none; width: 8px; background: var(--mc); box-shadow: inset -2px 0 0 rgba(0,0,0,.35), inset 2px 2px 0 rgba(255,255,255,.35); }
-#orbhud .orb .modechip .mctx { display: flex; flex-direction: column; gap: 1px; max-width: 190px; }
-#orbhud .orb .modechip .mcname { font-weight: normal; font-size: 15px; color: var(--mc); text-shadow: 1px 1px 0 #000; line-height: 1; }
-#orbhud .orb .modechip .mceff { font-style: normal; font-size: 11px; color: #e8dcc0; text-shadow: 1px 1px 0 #000; line-height: 1.1; }
+#orbhud .orb .modechip { --mc: #ffd24d; position: relative; flex: none; width: 48px; height: 48px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; pointer-events: auto;
+  background: linear-gradient(#211a14, #120e0b); border: 3px solid #b08a4a; border-color: #e0b25a #5c3f1c #5c3f1c #e0b25a; box-shadow: 0 0 0 2px #1a120b, 0 2px 4px rgba(0,0,0,.7); }
+#orbhud .orb .modechip .mcsw { position: absolute; left: 0; top: 0; bottom: 0; width: 6px; background: var(--mc); box-shadow: inset -2px 0 0 rgba(0,0,0,.35), inset 2px 2px 0 rgba(255,255,255,.35); }
+#orbhud .orb .modechip .mcab { margin-left: 6px; font-weight: normal; font-family: var(--pixel-font); font-size: 22px; line-height: 1; color: var(--mc); text-shadow: 2px 2px 0 #000; }

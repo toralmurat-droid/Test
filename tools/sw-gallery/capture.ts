@@ -895,7 +895,7 @@ async function groupMode(SLOW: number) {
       const tmp = mkdtempSync(path.join(tmpdir(), "swmode-"));
       const seen: string[] = [];
       for (let i = 0; i < 5; i++) {
-        const m = await h.page.evaluate(() => (document.querySelector(".modechip .mcname") as HTMLElement | null)?.textContent ?? "(none)");
+        const m = await h.page.evaluate(() => (document.querySelector(".modechip .mcab") as HTMLElement | null)?.textContent ?? "(none)");
         console.log(`mode still ${i}: ${m}`);
         seen.push(m);
         await h.page.screenshot({ path: path.join(tmp, `k${i}.png`), clip: box });
@@ -904,7 +904,15 @@ async function groupMode(SLOW: number) {
       }
       execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-framerate", "1", "-i", path.join(tmp, "k%d.png"), "-vf", "tile=1x5", "-frames:v", "1", path.join(OUT, `hud_mode_${W2}.png`)]);
       execFileSync("cp", [path.join(tmp, "k1.png"), path.join(OUT, `hud_mode_${W2}_crop.png`)]);
-      addItem({ id: `hud_mode_${W2}`, file: `hud_mode_${W2}.png`, kind: "still", group: "HUD effects", title: `Mode chip (${W2}x${H2})`, what: `Modes seen across Modulate casts: ${seen.join(", ")}.`, source: "client/src/modeChip.ts" });
+      addItem({ id: `hud_mode_${W2}`, file: `hud_mode_${W2}.png`, kind: "still", group: "HUD effects", title: `Mode chip (${W2}x${H2})`, what: `Modes seen across Modulate casts: ${seen.join(", ")}; hud_mode_hover shows the pop-out card over the chip.`, source: "client/src/modeChip.ts" });
+      // hover card: back to Major after the 5 casts, then 4 more Modulates reach Phrygian (the longest line); the mouse goes over the chip
+      for (let i = 0; i < 4; i++) { await h.send("cast", "sg_modulate"); await wait(h.real(1500)); }
+      const cb = await h.page.evaluate(() => { const b = document.querySelector(".modechip")!.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; });
+      await h.page.mouse.move(cb.x - 40, cb.y - 40); await h.page.mouse.move(cb.x, cb.y, { steps: 4 });
+      await wait(h.real(1200));
+      console.log("hover mode:", await h.page.evaluate(() => (document.querySelector(".modechip .mcab") as HTMLElement).textContent), "tip:", await h.page.evaluate(() => { const t = document.getElementById("tip")!; const r = t.getBoundingClientRect(); return `${t.style.display} ${Math.round(r.left)},${Math.round(r.top)} ${Math.round(r.right)},${Math.round(r.bottom)} of ${innerWidth}x${innerHeight}`; }));
+      await h.page.screenshot({ path: path.join(OUT, `hud_mode_hover_${W2}.png`) });
+      await h.page.screenshot({ path: path.join(OUT, `hud_mode_hover_${W2}_crop.png`), clip: { x: Math.max(0, cb.x - 330), y: Math.max(0, cb.y - 330), width: Math.min(W2 - Math.max(0, cb.x - 330), 420), height: 400 } });
       rmSync(tmp, { recursive: true, force: true });
     });
   }
