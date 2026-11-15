@@ -11,7 +11,7 @@ import { TILE, type Dir } from "../shared/constants";
 import { underground } from "../shared/dungeon";
 import { blocked } from "../shared/movement";
 import { CLANS, type ClanKey } from "../shared/war/clans";
-import { CARAVAN, caravanGold, caravanHp, caravanLand, caravanLevel, caravanLines, caravanOffLimits, caravanRoute, caravansOnRoad, caravanTripMs, routePos, type CaravanLine, type CaravanRoute } from "../shared/war/caravans";
+import { CARAVAN, caravanGold, caravanHp, caravanLand, caravanLevel, caravanLines, caravanOffLimits, caravanRoute, caravansOnRoad, caravanTripMs, roadKnown, routePos, type CaravanLine, type CaravanRoute } from "../shared/war/caravans";
 import { RENOWN_RANKS, rankOf } from "../shared/war/renown";
 import { targetsOf } from "../shared/war/rules";
 import { STANDARD } from "../shared/war/standards";
@@ -34,6 +34,8 @@ export interface CaravanHost {
   /** A Herald line to one hero. */
   tell(heroId: string, text: string): void;
   ranked(heroId: string, rank: string): void;
+  /** War writs (server/warWrits.ts caravan): a delivery this hero escorted, or a cart this hero felled in a raid. */
+  writ?(heroId: string, kind: "escort" | "raid", line: CaravanLine): void;
 }
 /** The soldier's moves the escorts borrow from the troops. */
 export type Soldiers = Pick<WarTroops, "think" | "fight" | "walk" | "speedOf" | "seen">;
@@ -87,6 +89,9 @@ export class WarCaravans {
     if (!v) { for (const l of [...this.live.values()]) this.drop(l); this.trips.clear(); return; }
     const owner = v.owner.map(clanOfIndex), key = owner.join();
     if (key !== this.linesKey) { this.linesKey = key; this.lines = caravanLines(owner); }
+    // warm one unbuilt road per tick, so a board read or a hero arriving never pays for several at once
+    const cold = this.lines.find((l) => !roadKnown(l.a, l.b));
+    if (cold) caravanRoute(cold.a, cold.b);
     const heroes: TroopHero[] = [];
     for (const [, p] of this.h.heroes()) if (!p.dead && !underground(p.y)) heroes.push(p);
     // escort time: a sworn hero of the cart's clan beside it
@@ -237,6 +242,7 @@ export class WarCaravans {
     const p = this.h.hero(killerId);
     if (!p || troopStance(clan, p) !== "enemy") { outcomes.set(tr.id, { kind: "lost", until }); return "lost"; }
     outcomes.set(tr.id, { kind: "raided", until });
+    this.h.writ?.(killerId, "raid", tr.line); // the killing blow counts for a raid writ, wherever the valor goes
     const raider = p.clan!, st = warState(), land = caravanLand(tr.line, m.x, m.y);
     this.h.dropGold(m.x, m.y, caravanGold(tr.level));
     const legal = !!st && (st.owner[land.id] === raider || targetsOf(st, raider).includes(land.id));
@@ -270,6 +276,7 @@ export class WarCaravans {
     for (const [hid, p] of this.h.heroes()) {
       if (!names.has(p.name) || p.clan !== clan) continue;
       this.renown(hid, p, CARAVAN.escortRenown);
+      this.h.writ?.(hid, "escort", tr.line);
       this.h.tell(hid, `The caravan reached ${TERRITORIES[b].name}: the ${CLANS[clan].name} thank you.`);
     }
     this.h.broadcast("sfx", { ev: "caravan_delivered", x: Math.round(end.x), y: Math.round(end.y), clan, t: b });

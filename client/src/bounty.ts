@@ -6,7 +6,7 @@ import type { MapMarker } from "./minimap";
 import { TEXT_FONT, TEXT_PX, WT } from "./pixelfont";
 import { hudSlot } from "./hudSlots";
 import { CLANS } from "../../shared/war/clans";
-import { WRIT, writProgress, writTitle, type Writ, type WritState } from "../../shared/war/writs";
+import { WRIT, writProgress, writTitle, writWhere, type Writ, type WritState } from "../../shared/war/writs";
 import { writFlavour } from "../../shared/war/writText";
 
 /**
@@ -122,9 +122,9 @@ export class BountyUI {
   }
 
   private writRow(w: Writ, right: string) {
-    const c = CLANS[w.holder], col = c ? hex(c.sigil) : "#e3bf6a", say = writFlavour(w.clan, w.kind, w.land, w.t);
+    const c = CLANS[w.holder], col = c ? hex(c.sigil) : "#e3bf6a", say = writFlavour(w.clan, w.kind, w.land, w.t, w.road);
     return `<div class="bt-row wr-row" style="border-left:4px solid ${c ? hex(c.trim === 0x1a1414 ? c.cloth : c.trim) : "#6b5a3a"}"><div><div class="bt-title">${esc(writTitle(w))}</div>` +
-      `<div class="bt-sub"><span style="color:${col}">${esc(w.land)}</span> · <span class="bt-gold">${w.gold} gold</span> · <span class="wr-renown">${w.renown} renown</span> · <span class="wr-valor">${WRIT.valor} valor</span></div>` +
+      `<div class="bt-sub"><span style="color:${col}">${esc(writWhere(w))}</span> · <span class="bt-gold">${w.gold} gold</span> · <span class="wr-renown">${w.renown} renown</span> · <span class="wr-valor">${WRIT.valor} valor</span></div>` +
       (say.text ? `<div class="wr-say">${esc(say.name)}: "${esc(say.text)}"</div>` : "") + `</div><div class="bt-right">${right}</div></div>`;
   }
 
@@ -145,7 +145,7 @@ export class BountyUI {
     const w = this.writ;
     if (!w) return "";
     return `<div class="qt-block"><div class="qt-title">War Writ</div><div class="qt-obj">• ${esc(writProgress(w))}</div>` +
-      `<div class="qt-bar"><div style="width:${(w.n / w.goal) * 100}%"></div></div><div class="qt-dir">${esc(w.land)}</div></div>`;
+      `<div class="qt-bar"><div style="width:${(w.n / w.goal) * 100}%"></div></div><div class="qt-dir">${esc(writWhere(w))}</div></div>`;
   }
 
   /** The boards on the minimap and world map. */
