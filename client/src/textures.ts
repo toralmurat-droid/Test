@@ -367,6 +367,7 @@ export const WAR_LEGACY: Record<string, string> = {
 /** The art key ("war_redfang_chief"...) a server trooper wears: its clan and rank ride in Mob.weapon (shared/war/troops.ts). */
 export function trooperArt(weapon: string): string {
   const t = parseTroop(weapon);
+  if (t?.cart) return `war_cart_${t.clan}`; // a supply cart: its own sheet (not a soldier's)
   return t ? troopLook(t.clan, 0, t.officer) : "war_warden";
 }
 /** A monster's look entry (size, label height): a trooper's comes from its clan's soldier sheet. */

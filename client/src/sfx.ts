@@ -1126,7 +1126,7 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
       // clan war supply caravans: heard near the cart (x, y, or the cart's id) and carrying far, the arrival horn most of all
       case "caravan_roll": pos("caravan_roll", 0.8, undefined, { key: "cr" + (ev.id ?? ""), minGap: 700 }); break;
       case "caravan_raided": pos("caravan_raided", 1, undefined, { key: "cx" + (ev.id ?? ""), minGap: 300, reach: 1.6 }); break;
-      case "caravan_arrived": pos("caravan_arrived", 1, undefined, { key: "ca" + (ev.id ?? ""), minGap: 500, reach: 2 }); break;
+      case "caravan_arrived": case "caravan_delivered": pos("caravan_arrived", 1, undefined, { key: "ca" + (ev.id ?? ev.clan ?? ""), minGap: 500, reach: 2 }); break;
       case "grimoire": if (ev.id === me()) pos("pageTurn", 1, ({ fire: "fire", cold: "frost", poison: "poison", shock: "lightning" } as Record<string, string>)[ev.el] ?? "arcane"); break;
     }
   });
