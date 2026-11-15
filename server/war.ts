@@ -119,8 +119,15 @@ export const PRE_MOORS_NAMES: readonly string[] = ["North Meadow", "Goldenreach 
  */
 export const PRE_BADLANDS_NAMES: readonly string[] = [...PRE_MOORS_NAMES, "The Grey Ring", "Sorrow Mire", "Thane's Rest", "The Cairnfield",
   "Blackwater Fen", "The Hollow Mounds", "The Drowned Hollow", "The Nine Widows", "The Weeping Stones", "Kingsbarrow", "The Host's Muster"];
+/**
+ * The war map before the Mawdeep Sinkholes joined it (2026-11-15), with the badlands, in id order: PRE_BADLANDS_NAMES
+ * and the 10 badlands territories. Saves on this map are named, so this only reads an unnamed save of its size. Frozen:
+ * never edit it.
+ */
+export const PRE_SINKHOLES_NAMES: readonly string[] = [...PRE_BADLANDS_NAMES, "The Saltlick Flats", "Drovers' Draw", "The Hanging Arches",
+  "The Cinnabar Pits", "Bloodstone Mesa", "Talon Fort", "Vulture's Roost", "Rattlesnake Gulch", "Gallows Canyon", "Fangrock"];
 /** Older maps an unnamed save may have been written on, told apart by size (a size is never reused). */
-const OLD_MAPS = [PRE_MOORS_NAMES, PRE_BADLANDS_NAMES];
+const OLD_MAPS = [PRE_MOORS_NAMES, PRE_BADLANDS_NAMES, PRE_SINKHOLES_NAMES];
 
 /** The names an unnamed save of `n` territories was written with: today's map, else an older map of that size. */
 const unnamed = (n: number, names: readonly string[]) => (n === names.length ? names : OLD_MAPS.find((m) => m.length === n));

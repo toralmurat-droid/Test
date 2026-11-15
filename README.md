@@ -96,7 +96,8 @@ Only the classes in `ACTIVE_CLASSES` can be played. Archived classes keep their 
   sinkholes, collapsed slopes and burrow-warrens (levels 30-45), reached down the Sinkway, a cave on the beach south of
   Sunken Lake, once a hero reaches level 30. Ropewell, the trappers' lodge round a tame sinkhole, holds a portal stone,
   a bounty board and shops; Hidehall is the Hide-Kin's seat. Lodge-Warden Brannoc Tull's chain climbs the zones
-  through a Hide-Chieftain at Tunneltop and Hidehall to the Maw-Father in the Great Maw. The war land is still to come.
+  through a Hide-Chieftain at Tunneltop and Hidehall to the Maw-Father in the Great Maw. The sinkholes are a land of the
+  clan war, joined to Oakvale by the Sinkway, with Hidehall as the Hide-Kin seat.
 - **Dungeons** (`shared/dungeon.ts`): the Mawdeep, the Lantern Crypt and the Undercity.
 - **Quests** (`shared/quests.ts`): zone quest arcs in both acts, quest bosses (some only at night).
 - **Bounty boards** (`shared/bounty.ts`): pick a hunt for your level, paid when the last kill lands.

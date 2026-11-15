@@ -2,14 +2,16 @@
  * The lands of the Riven Marches (design: play.fmtpa.ch/design/riven-marches/, Murat 2026-11-14: one continent, the
  * acts are regions of it). Each land groups its territories on the war map: borders are drawn inside a land, and lands
  * meet only through REGION_LINKS (a waygate or a road). A land is built when at least one war territory lies in it.
- * The homelands of the Host, Redfang and Hide-Kin are planned: until one is built, its clan holds forward capitals in
- * the built lands, which turn into ordinary territories once the homeland (with its own capital) is built.
+ * The homelands of the Host, Redfang and Hide-Kin were planned before they were built: until one was, its clan held
+ * forward capitals in the built lands, which turned into ordinary territories once the homeland (with its own capital)
+ * was built. All three are built now, so no forward capital is held; the mechanism stays for the lands to come.
  * Pure data, deterministic: territories.ts builds the war map from it.
  */
 import { actOfTile } from "../constants";
 import { WAYGATE_DESERT, WAYGATE_OAKVALE } from "../desert";
 import { MOORSGATE_MOORS, MOORSGATE_OAKVALE } from "../moors";
 import { REDPASS_BADLANDS, REDPASS_OAKVALE } from "../badlands";
+import { SINKWAY_OAKVALE, SINKWAY_SINKHOLES } from "../sinkholes";
 import type { ClanKey } from "./clans";
 
 export type RegionKey = "oakvale" | "sunscar" | "moors" | "badlands" | "sinkholes" | "crown";
@@ -39,6 +41,11 @@ export const REGIONS: Region[] = [
     { clan: "host", zone: "Greywatch Keep", forward: true },
     { clan: "hidekin", zone: "Thornwood", forward: true },
     { clan: "veiled", zone: "Cinder Scar" },
+    // Footholds (not forward: they stay with all the homelands built), like the Wardens' Grey Ring in the moors. With
+    // every forward capital stepped down Oakvale was the Wardens' and the Veiled's alone, and the Veiled grew to 27% of
+    // the war (docs/clan-war-progress.md NL-7): the Host's storm-watch on the crags and Redfang's landing on the strand.
+    { clan: "host", zone: "Stormbreak Crags" },
+    { clan: "redfang", zone: "Heronwreck Strand" },
   ] },
   { key: "sunscar", name: "The Sunscar", compass: "SE", home: "veiled", contains: (x, y) => actOfTile(x, y) === 2, capitals: [
     { clan: "wardens", zone: "Palmshade Oasis" },
@@ -60,8 +67,13 @@ export const REGIONS: Region[] = [
   { key: "badlands", name: "The Red Badlands", compass: "W", home: "redfang", contains: (x, y) => actOfTile(x, y) === 4, capitals: [
     { clan: "redfang", zone: "Fangrock" },
   ] },
-  // Planned: no map yet (a homeland's capitals come with its zones)
-  { key: "sinkholes", name: "The Mawdeep Sinkholes", compass: "S", home: "hidekin", capitals: [] },
+  // The Hide-Kin's homeland (Act 5): their seat is Hidehall, the warren town in the far south-east (the Maw-Father's
+  // ledge in the Great Maw is a lair, not a territory). Built, so Thornwood and the Humpback Mesas step down to ordinary
+  // territories (capitalsOf): no forward capitals are left. Ropewell lies outside every zone: a safe hub, out of the war.
+  { key: "sinkholes", name: "The Mawdeep Sinkholes", compass: "S", home: "hidekin", contains: (x, y) => actOfTile(x, y) === 5, capitals: [
+    { clan: "hidekin", zone: "Hidehall" },
+  ] },
+  // Planned: no map yet
   { key: "crown", name: "The Crown of the Marches", compass: "C", capitals: [] },
 ];
 
@@ -70,6 +82,7 @@ export const REGION_LINKS: RegionLink[] = [
   { a: "oakvale", b: "sunscar", name: "The Waygate", pa: WAYGATE_OAKVALE, pb: WAYGATE_DESERT },
   { a: "oakvale", b: "moors", name: "The Barrowgate", pa: MOORSGATE_OAKVALE, pb: MOORSGATE_MOORS },
   { a: "oakvale", b: "badlands", name: "The Red Pass", pa: REDPASS_OAKVALE, pb: REDPASS_BADLANDS },
+  { a: "oakvale", b: "sinkholes", name: "The Sinkway", pa: SINKWAY_OAKVALE, pb: SINKWAY_SINKHOLES },
 ];
 
 /** The land a tile lies in (built lands only). */

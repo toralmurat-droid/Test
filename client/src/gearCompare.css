@@ -1,0 +1,21 @@
+/* The item compare card (gearCard.ts): details of the hovered item beside the side panel, bronze frame like the
+   monster plate. Fonts per pixelfont.css: 18 px text, tiny only for the numbers in .glvl-like spots. */
+#itemcard { position: fixed; z-index: 9; width: 320px; box-sizing: border-box; border: 12px solid transparent; padding: 0 4px 2px; pointer-events: none;
+  image-rendering: pixelated; color: #eadfc8; font: 18px/22px var(--pixel-font); text-shadow: 2px 2px #050302;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, .7)); }
+#itemcard[hidden] { display: none; }
+#itemcard b { font-weight: normal; }
+#itemcard .ic-name { display: block; font-size: 18px; }
+#itemcard .ic-type, #itemcard .ic-dim, #itemcard .ic-foot { color: #9c8e72; }
+#itemcard .ic-foot { margin-top: 4px; }
+#itemcard .ic-sep { height: 2px; background: #45331e; margin: 6px 0 4px; }
+#itemcard .ic-head { color: #d8ccb4; }
+#itemcard .ic-row { display: flex; justify-content: space-between; gap: 12px; }
+#itemcard .ic-good { color: #6fdc7a; }
+#itemcard .ic-bad { color: #ff6b5e; }
+#itemcard .gbad { color: #ff6b5e; }
+#itemcard .gok { color: #6fdc7a; }
+#itemcard .glvl { color: #e3bf6a; }
+#itemcard small { color: #9c8e72; }
+/* The reserved details area of the Inventory tab is retired: the card replaces it */
+body #gearinfo { display: none !important; }

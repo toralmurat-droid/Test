@@ -5,7 +5,7 @@ import { childrenOf } from "../shared/skills";
 import { slabWidth, TILE, treeLayout } from "../client/src/treeLayout";
 
 // Skill tree slab (talents.ts): tiles, their rank box (5 px out at the bottom right) and the arrows never overlap
-const H = 520;
+const H = 470;
 for (const cls of CLASS_KINDS) test(`skill tree tiles of the ${cls} never overlap`, () => {
   const W = slabWidth(cls);
   assert.ok(W <= 700, `${cls}: slab too wide for the screen`);

@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startRoom, wait } from "./helpers/room";
 import { SAFE_ZONE } from "../shared/map";
+import { TILE } from "../shared/constants";
 import { CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import { newMinds } from "../shared/war/doctrine";
 import { patrolOf } from "../shared/war/patrols";
@@ -25,6 +26,16 @@ const PICK = (() => {
 })();
 const LAND = PICK.land, DEF: ClanKey = PICK.def, THIRD: ClanKey = CLAN_KEYS.find((k) => k !== HOST && k !== DEF)!;
 const FRONTS = siegeFronts(LAND.id), GATE = FRONTS.find((f) => f.gate)!;
+
+/** A spot in LAND (px) outside every front's ring, nearest halfway between a standard and the gate. */
+function offRings() {
+  const std = FRONTS.find((f) => !f.gate)!, mid = { x: (std.x + GATE.x) / 2, y: (std.y + GATE.y) / 2 }, out: { x: number; y: number }[] = [];
+  for (let ty = LAND.y; ty < LAND.y + LAND.h; ty++) for (let tx = LAND.x; tx < LAND.x + LAND.w; tx++) {
+    const q = { x: (tx + 0.5) * TILE, y: (ty + 0.5) * TILE };
+    if (FRONTS.every((f) => Math.hypot(f.x - q.x, f.y - q.y) > SIEGE_BATTLE.frontRadiusPx + TILE)) out.push(q);
+  }
+  return out.sort((a, b) => Math.hypot(a.x - mid.x, a.y - mid.y) - Math.hypot(b.x - mid.x, b.y - mid.y))[0];
+}
 
 function siegeWar(by: ClanKey = HOST) {
   const state = newWar();
@@ -188,9 +199,9 @@ test("works (room): the ram at the gate weighs ramWeight for the attacker, enoug
   try {
     SIEGE_BATTLE.reinforceMs = 1e9;
     const { room, p, at, ram, ramMob, strip, sent } = await setup(srv, THIRD);
-    // the hero stands in the land, outside every front's ring
-    const std = FRONTS.find((f) => !f.gate)!;
-    at({ x: (std.x + GATE.x) / 2, y: (std.y + GATE.y) / 2 });
+    // the hero stands in the land, outside every front's ring (the spot nearest halfway from a standard to the gate:
+    // halfway itself lies in a ring on some lands)
+    at(offRings());
     assert.ok(FRONTS.every((f) => Math.hypot(f.x - p.x, f.y - p.y) > SIEGE_BATTLE.frontRadiusPx), "hero outside the rings");
     let T = Date.now() + 1_000_000;
     room.sieges.tick(T);

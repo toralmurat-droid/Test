@@ -15,7 +15,7 @@ import { GROUND, areaAt, isSafeZone } from "../../shared/map";
 import { heroPoise, meleeReach, mobBody, POISE, pvpProtected } from "../../shared/combat";
 import { respecCost } from "../../shared/upkeep";
 import { ESSENCE, isSummonKind } from "../../shared/summons";
-import { FEAST, FEAST_MAX, type Family } from "../../shared/devour";
+import { FEAST, FEAST_MAX, feastLines, type Family } from "../../shared/devour";
 import { moveStep } from "../../shared/movement";
 import { SPAWN_ZONES, zoneAt } from "../../shared/spawns";
 import { musicCombat, setMusicZone } from "./music";
@@ -80,7 +80,8 @@ import type { WarView } from "../../shared/war/view";
 import { ART_K, CHAR_GROW, CHAR_SCALE, CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, ensureCharSheet, HD_CHARS, playCharAnim, preloadArt } from "./artAssets";
 import { Ambient } from "./ambient";
 import { Details, dayPhase, dayTime } from "./details";
-import { activeOf, GearLayer, reqInfoOf, statsOf, GearMenu, iconCanvas, itemColor, preloadGear, RARITY_HEX } from "./gear";
+import { activeOf, GearLayer, reqInfoOf, statsOf, GearMenu, iconCanvas, itemColor, preloadGear, RARITY_HEX, showItemCard } from "./gear";
+import { hideCard } from "./gearCard";
 /** pickSlot value while the slot list is choosing the left-click action. */
 const LEFT_PICK = -2;
 /** pickSlot value while the slot list is choosing the right-click (and Space) action. */
@@ -90,7 +91,7 @@ type ClickSide = "left" | "right";
 const costWords = (s: { cost?: number; mana?: number; blood?: number }) => [s.mana ? `${s.mana} mana` : "", s.cost ? `${s.cost} heat` : "", s.blood ? `${s.blood}% HP` : ""].filter(Boolean).join(" · ") || "free";
 import { GearFx } from "./gearfx";
 import { Element, ELEMENT_COLORS } from "../../shared/elements";
-import { baseId, canWear, gearName, gearDef, reqProblem, gearReachMult, gearSpeedMult, gearStats, itemRarity, WEAPON_TYPE_NAMES } from "../../shared/gear";
+import { baseId, canWear, GEAR_SLOTS, gearName, gearDef, reqProblem, gearReachMult, gearSpeedMult, gearStats, itemRarity, WEAPON_TYPE_NAMES } from "../../shared/gear";
 import { attackProfile, ATTACK_WORDS, isWeaponType, poseSheet, profileOf, weaponAttackMult, weaponOk } from "../../shared/weapons";
 import { talentMult, talentPoints, spentPoints } from "../../shared/talents";
 import { activeSkills, skillLearned } from "../../shared/slots";
@@ -99,7 +100,8 @@ import { DROP_KEY, LOCK_TIP, QuestCarry } from "./questCarry";
 import { actionKey, actionOfKey, type KeyAction, keyMode, keyModeName, onKeyMode, setKeyMode, slotCount, slotKey, slotOfKey, wasdWalks } from "./keymode";
 import { iconImg } from "./skillIcons";
 import { TalentMenu } from "./talents";
-import { setMyFeast, SidePanel, SideTab, wornOf } from "./sidepanel";
+import { feastOf, reactionHelp, setMyFeast, SidePanel, SideTab, wornOf } from "./sidepanel";
+import { heroPanelParts } from "./heroPanelView";
 import { lootFilter, onLootFilter } from "./lootfilter";
 import { passesFilter, wearing } from "../../shared/heroSheet";
 import { IdeaBoard } from "./ideas";
@@ -411,6 +413,7 @@ export class TownScene extends Phaser.Scene {
   private lastRanged = -Infinity;
   private heroFrom?: number;
   private heroSig = "";
+  private heroSigL = "";
   /** Titles this hero may pick (TITLES indices, server "title"). */
   private titlesOwned: number[] = [];
   private levelFrom?: number; // level before the level-ups the player hasn't looked at yet
@@ -583,7 +586,7 @@ export class TownScene extends Phaser.Scene {
       else if (b?.id === "statreset") this.room?.send("resetstats");
       else if (b?.dataset.title !== undefined) this.room?.send("title", { i: Number(b.dataset.title) }); // the server answers "title"; the label follows Player.cosm
     });
-    // Hovering a + shows in the side panel's stats block what that point would change
+    // Hovering a + shows on the Character tab what that point would change
     heroEl.addEventListener("mouseover", (ev) => {
       const k = ((ev.target as HTMLElement).closest("button") as HTMLElement | null)?.dataset.stat as StatKind | undefined;
       const mine = this.entities.get(this.me)?.state;
@@ -593,9 +596,9 @@ export class TownScene extends Phaser.Scene {
       this.side?.setPreview({ label: `add a point to ${STAT_NAMES[k]}`, pts });
     });
     heroEl.addEventListener("mouseleave", () => this.side?.setPreview());
-    // Character / Inventory / Skills share one side panel with tabs and a live stats block (sidepanel.ts)
+    // Character / Inventory / Skills share one side panel with tabs (sidepanel.ts)
     this.side = new SidePanel((tab) => this.openSide(tab, false), () => this.side?.close());
-    this.gearMenu = new GearMenu(this, (type, msg) => this.room?.send(type, msg), (p) => this.side?.setPreview(p));
+    this.gearMenu = new GearMenu(this, (type, msg) => this.room?.send(type, msg));
     const toggleGear = () => this.openSide("gear");
     this.bagKey = toggleGear;
     // Always reachable with the mouse too (even while typing in chat, in combat or while dead)
@@ -621,7 +624,7 @@ export class TownScene extends Phaser.Scene {
       this.closeMenus();
       if (!escHadOpen && !typing) this.gameMenu?.show();
     });
-    this.talentMenu = new TalentMenu((type, msg) => this.room?.send(type, msg), (p) => this.side?.setPreview(p));
+    this.talentMenu = new TalentMenu((type, msg) => this.room?.send(type, msg));
     this.ideaBoard = new IdeaBoard((type, msg) => this.room?.send(type, msg));
     const toggleIdeas = () => { if (!this.ideaBoard!.open) this.closeMenus(); this.ideaBoard!.toggle(); };
     this.input.keyboard!.on("keydown-I", () => { if (!this.chatting()) toggleIdeas(); });
@@ -691,7 +694,7 @@ export class TownScene extends Phaser.Scene {
     document.getElementById("hud")!.hidden = false;
     this.minimap = new Minimap(document.getElementById("minimap") as HTMLCanvasElement, this.opts.name);
     this.npcs = new NpcLayer(this, (type, msg) => this.room.send(type, msg));
-    // A shop opens the bag beside it (Murat 2026-11-08): the stats block shows what a piece for sale would change
+    // A shop opens the bag beside it (Murat 2026-11-08): hovering a piece for sale shows its item card with what it would change
     let bagByShop = false;
     this.npcs.onShopOpen = (open) => {
       const side = this.side;
@@ -701,12 +704,10 @@ export class TownScene extends Phaser.Scene {
       else if (!open && bagByShop) { side.close(); bagByShop = false; }
       document.body.classList.toggle("shopping", open);
     };
-    this.npcs.onPreview = (id) => {
+    this.npcs.onPreview = (id, row) => {
       const st = this.entities.get(this.me)?.state;
-      if (!id || !st) return this.side?.setPreview();
-      const cls = st.cls as string;
-      const why = reqProblem(id, reqInfoOf(st));
-      this.side?.setPreview(canWear(cls, id) ? { label: `wear ${gearName(id, cls)}${why ? ` (${why})` : ""}`, eq: wearing(wornOf(st), id), ignoreReq: true } : undefined);
+      if (!id || !st || !row) return hideCard();
+      showItemCard(st, id, row, "For sale"); // the compare card, level with the row in the shop dialog
     };
     this.npcs.objects.setLight((x, y, lift, color = 0x7ff3ff, scale = 1.5) => this.details?.addLight(x, y, color, scale, 0.55, 0.06, lift)); // lit spirit lanterns and watch-fires shine at night
     // Morwen's camp and Brann's forge after dusk: coal glow under her brew, lantern light in the tent doorway
@@ -735,7 +736,7 @@ export class TownScene extends Phaser.Scene {
     this.room.onMessage("mentor", (m) => this.npcs?.onMentor(m)); // Hale's mentoring (client/src/npcs.ts)
     this.room.onMessage("title", (m: { i?: number; owned?: number[] }) => { // owned titles for the picker in the hero panel
       if (Array.isArray(m?.owned)) this.titlesOwned = m.owned.filter((i) => Number.isInteger(i) && i > 0 && i < TITLES.length);
-      this.heroSig = "";
+      this.heroSig = ""; this.heroSigL = "";
     });
     this.room.send("title", {}); // fetch the owned titles once
     this.room.onMessage("shop", (msg) => this.npcs?.onShop(msg));
@@ -2521,7 +2522,7 @@ export class TownScene extends Phaser.Scene {
     side.show(tab);
     const mine = this.entities.get(this.me)?.state;
     if (tab === "hero") {
-      this.heroSig = "";
+      this.heroSig = ""; this.heroSigL = "";
       this.showHeroMenu(this.levelFrom);
       this.levelFrom = undefined;
       document.getElementById("lvlnote")!.hidden = true;
@@ -2576,7 +2577,7 @@ export class TownScene extends Phaser.Scene {
     return `<div id="titlepick"><span>Title</span>${b(0, "None")}${this.titlesOwned.map((i) => b(i, TITLES[i])).join("")}</div>`;
   }
 
-  /** Opens the hero menu. After level-ups (`from` = level before them) it highlights the gains. */
+  /** Opens the hero menu. After level-ups (`from` = level before them) it highlights the stat points. */
   private showHeroMenu(from?: number) {
     const mine = this.entities.get(this.me)?.state;
     if (!mine) return;
@@ -2585,63 +2586,45 @@ export class TownScene extends Phaser.Scene {
     const st = statsOf(mine); // includes gear bonuses
     const o = own(mine); // owner-only numbers, in `me` (server/player.ts)
     const free = statPoints(lvl) - (o.ptSta + o.ptStr + o.ptMag + o.ptDex);
-    // Rebuild only when something shown changed (called every frame while open)
-    const sig = [this.titlesOwned.join(), unpackCosmetics(metaOf(mine, META.cosm)).title, lvl, o.xp, Math.ceil(mine.hp), mine.maxHp, o.mp, st.sta, st.str, st.mag, st.dex, free, o.kills, o.gold, from].join("|");
+    // Rebuild only when something shown changed (called every frame while open); the right column also follows the hover preview
+    const sig = [this.titlesOwned.join(), unpackCosmetics(metaOf(mine, META.cosm)).title, lvl, o.xp, st.sta, st.str, st.mag, st.dex, free, from, mine.name].join("|");
+    // the right column shows the sheet (defense, resistances, derived numbers) and the gauge size: key it on what the sheet is made of
+    // (all six worn slots, talents, points), not on current hp/mana, so it neither rebuilds every regen tick nor goes stale after a gear change
+    const sigR = [sig, o.spd, mine.maxHp, unpackMana(o.mp).maxMana, o.kills, o.gold, GEAR_SLOTS.map((g) => mine[g]).join(","), JSON.stringify(Array.from(o.talents.entries())), o.ptSta, o.ptStr, o.ptMag, o.ptDex, this.side?.previewSig ?? "", feastLines(feastOf()).join()].join("|");
     const el = document.getElementById("hero")!;
-    if (!el.hidden && sig === this.heroSig) return;
-    this.heroSig = sig;
-    const levelUp = from !== undefined ? `⬆ Level ${lvl}! ` : "";
-    document.getElementById("herobanner")!.textContent = free > 0
-      ? `${levelUp}${free} stat point${free > 1 ? "s" : ""} to assign: click + below.`
-      : levelUp;
-    document.getElementById("herotitle")!.innerHTML = `<span class="hname">${mine.name}</span><span class="hlvl"><small>LEVEL</small>${lvl}</span><span class="hcls">${CLASSES[cls].name}</span>`;
-    const notes: Record<StatKind, string> = {
-      sta: `${mine.maxHp} max HP, regen ${regenFromStamina(st.sta)[1].toFixed(1)} HP/s`,
-      str: STATS[cls].attackStat === "str" ? `attack ×${attackMult(cls, st).toFixed(2)}, +${HP_PER_STR} HP each` : `+${HP_PER_STR} HP per point`,
-      mag: `${STATS[cls].attackStat === "mag" ? `attack ×${attackMult(cls, st).toFixed(2)}, +${HP_PER_STR} HP each, ` : ""}skills ×${magicMult(cls, st).toFixed(2)}, ` +
-        `cooldowns −${Math.round((1 - cooldownMult(cls, st, o.talents)) * 100)}%, ${maxManaFor(st, lvl)} max mana`,
-      dex: `${Math.round(critChance(st, talentBonus(cls, o.talents, "crit")) * 100)}% critical hits (double damage), skills too`,
-    };
-    const pts: Record<StatKind, number> = { sta: o.ptSta, str: o.ptStr, mag: o.ptMag, dex: o.ptDex };
-    // attribute cards (Murat 2026-11-08 redesign): badge, name and total, where it comes from, what it does, a big +
-    const fromGear = gearStats(cls, activeOf(mine));
-    const BADGE: Record<StatKind, string> = { str: "STR", sta: "STA", mag: "MAG", dex: "DEX" };
-    const main = STATS[cls].attackStat;
-    document.getElementById("herostats")!.innerHTML = (["str", "sta", "mag", "dex"] as StatKind[]).map((k) => {
-      const plus = `<button class="statplus" data-stat="${k}" aria-label="Add a point to ${STAT_NAMES[k]}"${free > 0 ? "" : " disabled"}>+</button>`;
-      const src = [pts[k] ? `<span class="gain">+${pts[k]} placed</span>` : "", fromGear[k] ? `+${fromGear[k]} from gear` : ""].filter(Boolean).join(" · ");
-      return `<div class="attr attr-${k}${k === main ? " main" : ""}"><span class="abadge">${BADGE[k]}</span>` +
-        `<div class="ainfo"><div class="aname">${STAT_NAMES[k]}<b>${st[k]}</b></div>${src ? `<small class="asrc">${src}</small>` : ""}<small class="anote">${notes[k]}</small></div>${plus}</div>`;
-    }).join("");
+    if (!el.hidden && sigR === this.heroSig) return;
+    const leftSame = !el.hidden && sig === this.heroSigL;
+    this.heroSig = sigR;
+    this.heroSigL = sig;
     const wp = attackProfile(cls, activeOf(mine));
     const next = xpForLevel(lvl + 1), cur = xpForLevel(lvl);
-    const dmg = Math.round(wp.damage * weaponAttackMult(cls, st, wp.type) * talentMult(cls, o.talents, "dmg"));
-    const speed = Math.round(heroSpeed(cls, false, o.spd) * gearSpeedMult(activeOf(mine)));
-    const rows: [string, string][] = [
-      ["Level", lvl >= MAX_LEVEL ? `${MAX_LEVEL} (max)` : `${lvl} · XP ${o.xp - cur}/${next - cur}`],
-      ["Health", `${Math.ceil(mine.hp)} / ${mine.maxHp}`],
-      ["HP regen", `${regenFromStamina(st.sta)[1].toFixed(1)}/s resting · ${regenFromStamina(st.sta)[0].toFixed(1)}/s in a fight`],
-      usesGauge(cls) ? ["Song gauge", `${unpackMana(o.mp).mana} / ${unpackMana(o.mp).maxMana} · no regen`]
-        : ["Mana", `${unpackMana(o.mp).mana} / ${unpackMana(o.mp).maxMana} · ${manaRegen(st, false, talentBonus(cls, o.talents, "mana")).toFixed(1)}/s (×${MANA.restMult} resting)`],
-      ["Attack", `${dmg} damage · ${WEAPON_TYPE_NAMES[wp.type]}: ${ATTACK_WORDS[wp.type]}`],
-      ["Attack speed", `${(1000 / wp.attackCooldownMs).toFixed(1)} hits/s`],
-      ["Critical hits", `${Math.round(critChance(st, talentBonus(cls, o.talents, "crit")) * 100)}% chance, double damage`],
-      ["Initiative", `${heroPoise(cls, lvl)} · dizzy at 0`],
-      ["Move speed", `${speed}`],
-      ["Kills · Gold", `${o.kills} · ${o.gold}`],
-    ];
-    // health, mana and experience as bars over the detail list
+    const fromGear = gearStats(cls, activeOf(mine));
+    const pts: Record<StatKind, number> = { sta: o.ptSta, str: o.ptStr, mag: o.ptMag, dex: o.ptDex };
+    const sh0 = this.side!.sheets(mine);
+    // Move speed as the game moves you: the skill-passive multiplier (own.spd) is not in the sheet; a preview scales by the sheet's own ratio
+    const live = Math.round(heroSpeed(cls, false, o.spd) * gearSpeedMult(activeOf(mine)));
+    const sh = { ...sh0, now: { ...sh0.now, speed: live }, next: sh0.next && { ...sh0.next, speed: sh0.now.speed ? Math.round(live * sh0.next.speed / sh0.now.speed) : live } };
     const mp = unpackMana(o.mp);
-    const xpFrac = lvl >= MAX_LEVEL ? 1 : Math.max(0, Math.min(1, (o.xp - cur) / Math.max(1, next - cur)));
-    const bar = (cls2: string, label: string, val: string, f: number) =>
-      `<div class="hbar ${cls2}"><div class="hbar-l"><span>${label}</span><b>${val}</b></div><div class="hbar-t"><i style="width:${Math.round(f * 100)}%"></i></div></div>`;
-    document.getElementById("herochar")!.innerHTML = this.titlePickerHtml(mine) +
-      `<div class="hbars">${bar("hp", "Health", `${Math.ceil(mine.hp)} / ${mine.maxHp}`, mine.hp / Math.max(1, mine.maxHp))}` +
-      bar("mp", "Mana", `${mp.mana} / ${mp.maxMana}`, mp.mana / Math.max(1, mp.maxMana)) +
-      bar("xp", "Experience", lvl >= MAX_LEVEL ? "Max level" : `${o.xp - cur} / ${next - cur}`, xpFrac) + `</div>` +
-      `<div class="hrows">${rows.filter(([k]) => k !== "Level" && k !== "Health").map(([k, v]) => `<span>${k}</span><b>${v}</b>`).join("")}</div>`;
-    const rc = respecCost(lvl), rcEl = document.getElementById("statresetcost");
-    if (rcEl) rcEl.textContent = rc ? `${rc} gold` : "free (up to level 5)";
+    const rest = regenFromStamina(st.sta);
+    const parts = heroPanelParts({
+      name: mine.name, cls, className: CLASSES[cls].name, level: lvl, maxLevel: MAX_LEVEL, xp: o.xp - cur, xpNeed: next - cur,
+      free, levelUp: from !== undefined ? lvl : undefined,
+      attrs: (["str", "sta", "mag", "dex"] as StatKind[]).map((k) => ({ k, name: STAT_NAMES[k], value: st[k], placed: pts[k], gear: fromGear[k] })),
+      main: STATS[cls].attackStat, sheet: sh.now, next: sh.next, previewLabel: sh.label,
+      attackWords: `${WEAPON_TYPE_NAMES[wp.type]}: ${ATTACK_WORDS[wp.type]}`, hitsPerSec: 1000 / wp.attackCooldownMs, poise: heroPoise(cls, lvl),
+      hpRegenRest: rest[1], hpRegenFight: rest[0],
+      gauge: usesGauge(cls), manaRegen: manaRegen(st, false, talentBonus(cls, o.talents, "mana")), manaRestMult: MANA.restMult, mana: mp.mana, maxMana: mp.maxMana,
+      kills: o.kills, gold: o.gold, devoured: feastLines(feastOf()), titlesHtml: this.titlePickerHtml(mine), reactions: reactionHelp(),
+    });
+    if (!leftSame) {
+      document.getElementById("herotitle")!.innerHTML = parts.title;
+      document.getElementById("heroxp")!.innerHTML = parts.xp;
+      document.getElementById("herostatpts")!.innerHTML = parts.pts;
+      document.getElementById("herostats")!.innerHTML = parts.attrs;
+      const rc = respecCost(lvl), rcEl = document.getElementById("statresetcost");
+      if (rcEl) rcEl.textContent = rc ? `${rc} gold · out of combat` : "free up to level 5 · out of combat";
+    }
+    document.getElementById("herochar")!.innerHTML = parts.right;
     el.hidden = false;
   }
 
@@ -3602,6 +3585,7 @@ export class TownScene extends Phaser.Scene {
       const hb = document.getElementById("herobadge")!;
       hb.hidden = freeStats <= 0;
       hb.textContent = String(freeStats);
+      this.side?.setBadges(freeStats, freePts);
       if (!showLevelNote(freeStats) && performance.now() - this.noteAt > 1500) { // (a moment of grace: the stat points sync a tick after the message)
          const ln = document.getElementById("lvlnote")!; if (!ln.hidden) ln.hidden = true; } // nothing left to assign
       // Zone under the hero drives the music
