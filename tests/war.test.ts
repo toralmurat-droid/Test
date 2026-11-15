@@ -11,8 +11,9 @@ function rng(seed: number) { return () => { seed = (seed * 1103515245 + 12345) &
 
 test("war map: every capital is a territory, borders are two-way, and every territory is reachable", () => {
   for (const [n, c] of capitalsOf(builtRegions(TERRITORIES))) assert.equal(territoryByName(n)?.capitalOf, c.clan, `${c.clan} capital ${n}`);
-  // one capital per built land, but the Host: at home in the moors only (its forward capitals stepped down)
-  for (const k of CLAN_KEYS) assert.deepEqual(TERRITORIES.filter((t) => t.capitalOf === k).map((t) => t.region).sort(), k === "host" ? ["moors"] : ["oakvale", "sunscar"], k);
+  // one capital per built land, but the Host (at home in the moors only: its forward capitals stepped down) and the
+  // Wardens (also the Cairnwatch garrison's Grey Ring)
+  for (const k of CLAN_KEYS) assert.deepEqual(TERRITORIES.filter((t) => t.capitalOf === k).map((t) => t.region).sort(), k === "host" ? ["moors"] : k === "wardens" ? ["moors", "oakvale", "sunscar"] : ["oakvale", "sunscar"], k);
   for (const t of TERRITORIES) {
     assert.ok(t.near.length > 0, `${t.name} has no neighbour`);
     for (const n of t.near) assert.ok(TERRITORIES[n].near.includes(t.id), `${t.name} <-> ${TERRITORIES[n].name}`);

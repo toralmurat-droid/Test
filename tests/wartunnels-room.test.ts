@@ -276,7 +276,7 @@ test("tunnels (war): the strikes are read on the state the war tick started from
     const state = newWar(), t0 = Date.now();
     _resetWar({ v: 1, state, minds: newMinds(), next: t0, log: [] });
     let checked = 0;
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 120; i++) { // (on the moors map the Hide-Kin's first tunnels come after ~45 ticks)
       const before = JSON.parse(JSON.stringify(warState()));
       await step(t0 + i * 600_000);
       assert.equal(warState()!.tick, before.tick + 1);

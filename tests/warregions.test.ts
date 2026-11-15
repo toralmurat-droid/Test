@@ -16,9 +16,9 @@ import type { Kv } from "../server/store";
 /**
  * The war map's fingerprint (ids, names, borders, capitals, starting owners). Refreshed on purpose when the Grey Barrow
  * Moors joined the war (2026-11-15): 11 moors territories (ids 31-41), the Barrowgate border, the Host's forward capitals
- * stepped down. Acts 1 and 2 keep their ids (PRE_MOORS_NAMES). Any other change to it must be on purpose too.
+ * stepped down, the Wardens' Grey Ring capital. Acts 1 and 2 keep their ids (PRE_MOORS_NAMES). Any other change to it must be on purpose too.
  */
-const GOLDEN = "4b78fa3d5c3ecd03de546cafbe3949966de06943405dc68722d418a4828307a2";
+const GOLDEN = "52f1b72d5ab6639df0d01748a6507850e854fc6bc418e30cd892b2c7ff8a21c4";
 
 const names = () => TERRITORIES.map((t) => t.name);
 
@@ -44,8 +44,9 @@ test("regions: every territory lies in exactly one built land (Oakvale 21, Sunsc
   assert.equal(TERRITORIES.filter((t) => t.region === "moors").length, 11);
   // the old lands keep their ids: a save's unnamed ids and the frozen pre-moors list still line up
   assert.deepEqual(TERRITORIES.slice(0, PRE_MOORS_NAMES.length).map((t) => t.name), [...PRE_MOORS_NAMES]);
-  // a capital per built land for the clans whose homeland is elsewhere or unbuilt; the Host is at home only
-  for (const k of CLAN_KEYS) assert.deepEqual(TERRITORIES.filter((t) => t.capitalOf === k).map((t) => t.region).sort(), k === "host" ? ["moors"] : ["oakvale", "sunscar"], k);
+  // a capital per built land for the clans whose homeland is elsewhere or unbuilt; the Host is at home only; the
+  // Wardens also hold the Grey Ring (the Cairnwatch garrison, like Palmshade Oasis in the Sunscar)
+  for (const k of CLAN_KEYS) assert.deepEqual(TERRITORIES.filter((t) => t.capitalOf === k).map((t) => t.region).sort(), k === "host" ? ["moors"] : k === "wardens" ? ["moors", "oakvale", "sunscar"] : ["oakvale", "sunscar"], k);
   assert.deepEqual(TERRITORIES.filter((t) => t.forward).map((t) => t.name).sort(), ["Dustrider Camp", "Redfang Hollow", "The Humpback Mesas", "Thornwood"]);
 });
 
@@ -58,14 +59,16 @@ test("regions: two borders cross lands, the Waygate's and the Barrowgate's", () 
     [["Stonecrag Quarry", "The Glasswind Flats"], ["Rimewater Hollow", "Sorrow Mire"]]);
 });
 
-test("regions: the Grey Barrow Moors are the Host's homeland (seat at the Muster, forward capitals step down)", () => {
+test("regions: the Grey Barrow Moors are the Host's homeland (seat at the Muster, the Wardens' Grey Ring, forward capitals step down)", () => {
   const by = (n: string) => territoryByName(n)!;
   assert.equal(by("The Host's Muster").capitalOf, "host");
   assert.equal(by("The Host's Muster").region, "moors");
   assert.equal(by("Greywatch Keep").capitalOf, undefined, "the Host's forward capital becomes an ordinary territory");
   assert.equal(by("Kharsun, the Buried City").capitalOf, undefined);
   assert.equal(by("Thornwood").capitalOf, "hidekin", "other forward capitals stay while their homeland is unbuilt");
-  assert.equal(capitalsOf(builtRegions(TERRITORIES)).size, 9);
+  assert.equal(by("The Grey Ring").capitalOf, "wardens", "the Cairnwatch garrison's ring");
+  assert.equal(by("The Grey Ring").forward, undefined);
+  assert.equal(capitalsOf(builtRegions(TERRITORIES)).size, 10);
   // Cairnwatch is outside every zone; the King's mound (his alone) and the open moor are sanctuaries
   for (const n of ["The Barrow-King's Mound", "The Grey Barrow Moors"]) {
     assert.ok(isSanctuary(SPAWN_ZONES.find((z) => z.name === n)!), n);
@@ -79,7 +82,7 @@ test("regions: the Grey Barrow Moors are the Host's homeland (seat at the Muster
   while (todo.length) for (const n of TERRITORIES[todo.pop()!].near) if (!seen.has(n)) { seen.add(n); todo.push(n); }
   assert.equal(seen.size, TERRITORIES.length, "every territory reachable");
   const owner = initialOwners();
-  for (const t of TERRITORIES.filter((x) => x.region === "moors")) assert.equal(owner[t.id], "host", `${t.name} starts with the Host`);
+  for (const t of TERRITORIES.filter((x) => x.region === "moors")) assert.equal(owner[t.id], t.name === "The Grey Ring" ? "wardens" : "host", `${t.name} starts with its clan`);
   assert.ok(TERRITORIES.filter((x) => x.region !== "moors").every((t) => owner[t.id] !== "host"), "a new war: the Host starts at home only");
 });
 
@@ -134,7 +137,7 @@ function livePreMoors(named: boolean): SavedWar {
   return { v: 1, state: { tick: 810, owner, control, fort, siege, pressure, army }, minds, next: 5_000_000_000_000, log, ...(named ? { names: LIVE_PRE_MOORS.map(([x]) => x) } : {}) };
 }
 
-/** Checks a pre-moors war carried onto today's map: by name the same everywhere, the moors all the Host's at Control 100. */
+/** Checks a pre-moors war carried onto today's map: by name the same everywhere; in the moors the Grey Ring the Wardens' (a capital), the rest the Host's, all at Control 100. */
 function assertCarried(m: SavedWar, w: SavedWar) {
   const all = names();
   assert.deepEqual(m.names, all);
@@ -155,7 +158,7 @@ function assertCarried(m: SavedWar, w: SavedWar) {
   const moors = TERRITORIES.filter((t) => t.region === "moors");
   assert.equal(moors.length, 11);
   for (const t of moors) {
-    assert.equal(m.state.owner[t.id], "host", `${t.name}: the Host's`); assert.equal(m.state.control[t.id], 100, t.name);
+    assert.equal(m.state.owner[t.id], t.name === "The Grey Ring" ? "wardens" : "host", `${t.name}: its clan's`); assert.equal(m.state.control[t.id], 100, t.name);
     assert.equal(m.state.fort[t.id], 0); assert.equal(m.state.siege[t.id], null); assert.equal(m.state.pressure[t.id], 0);
   }
   assert.equal(m.state.tick, w.state.tick);
@@ -165,7 +168,7 @@ function assertCarried(m: SavedWar, w: SavedWar) {
   assert.deepEqual(m.log, [{ ...w.log[0], t: gk }]);
 }
 
-test("migrateWar: the live pre-moors war goes on (holders unchanged elsewhere, the moors the Host's at Control 100)", () => {
+test("migrateWar: the live pre-moors war goes on (holders unchanged elsewhere; the Grey Ring the Wardens', the other moors the Host's, Control 100)", () => {
   assert.deepEqual(LIVE_PRE_MOORS.map(([n]) => n), [...PRE_MOORS_NAMES], "the server's frozen list is the live one");
   const w = livePreMoors(true);
   assertCarried(migrateWar(w, w.names!, names()), w);

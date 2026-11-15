@@ -98,7 +98,7 @@ export const territoryByName = (name: string) => TERRITORIES.find((t) => t.name 
 
 /**
  * Who holds what at the very start: clans take turns (the one with the least land first) claiming an unclaimed
- * territory next to their land in the same land (region), so every clan starts with a connected share around its capitals (as even as the map allows; a homeland only its clan starts in goes wholly to it: 11/9/8/8/6 today).
+ * territory next to their land in the same land (region), so every clan starts with a connected share around its capitals (as even as the map allows: 10/9/9/8/6 today).
  */
 export function initialOwners(ts: readonly Territory[] = TERRITORIES): ClanKey[] {
   const owner: (ClanKey | undefined)[] = ts.map((t) => t.capitalOf);
