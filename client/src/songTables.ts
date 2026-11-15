@@ -25,8 +25,10 @@ export const modeColor = (m: string | undefined) => MODE_COLOR[m ?? ""] ?? MODE_
  * field gives the party a buff (Anthem). Built from the real skill table; a buff's id is its skill's id.
  */
 export const SONG_BUFFS: ReadonlySet<string> = new Set(SONG_SKILLS.filter((s) => s.song || s.field?.party).map((s) => s.id));
-/** Buff ids that are a shield bubble: any Songweaver skill whose buff has `shield` (Pedal Point, Amen, ...). */
-export const SHIELD_BUFFS: ReadonlySet<string> = new Set(SONG_SKILLS.filter((s) => s.buff?.shield || s.field?.party?.shield).map((s) => s.id));
+/** Lydian's overheal shield: a buff the engine adds under the passive's id (overShield in shared/skillEngine.ts), so no skill table entry flags it. */
+export const LYDIAN_SHIELD_BUFF = "sg_lydian";
+/** Buff ids that are an absorb shield: any Songweaver skill whose buff has `shield` (Pedal Point, Amen, ...), plus Lydian's overheal shield. */
+export const SHIELD_BUFFS: ReadonlySet<string> = new Set([...SONG_SKILLS.filter((s) => s.buff?.shield || s.field?.party?.shield).map((s) => s.id), LYDIAN_SHIELD_BUFF]);
 
 /**
  * Colour of a note by its scale step (SkillDef.degree), so a progression reads as a run of colours: tonic red, then up the

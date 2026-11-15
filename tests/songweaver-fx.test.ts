@@ -56,8 +56,9 @@ test("degreeColor: unknown or missing degree falls back to gold", () => {
 test("hasSongShield / isSongShieldWord: true exactly for shield skills", () => {
   const shields = SONG.filter((s) => s.buff?.shield || s.field?.party?.shield).map((s) => s.id).sort();
   assert.deepEqual(shields, ["sg_f_amen", "sg_g_bless", "sg_pedal"]);
-  for (const s of SONG) assert.equal(isSongShieldWord(s.id), shields.includes(s.id), s.id);
-  for (const id of shields) assert.ok(hasSongShield(id));
+  const words = [...shields, "sg_lydian"]; // + Lydian's overheal shield buff (overShield in shared/skillEngine.ts)
+  for (const s of SONG) assert.equal(isSongShieldWord(s.id), words.includes(s.id), s.id);
+  for (const id of words) assert.ok(hasSongShield(id));
   assert.ok(hasSongShield("mode:major,sg_pedal,x"));
   assert.ok(!hasSongShield(undefined));
   assert.ok(!hasSongShield(""));
