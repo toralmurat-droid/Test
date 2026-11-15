@@ -2955,6 +2955,7 @@ const PRESENCE: Record<string, (p: Quester | undefined) => boolean> = {
   ilka: (p) => chainDone(p, RED_CHAIN) && !chainDone(p, chainIx("letters")), // gone once her letter is delivered either way
   quartermaster: (p) => chainDone(p, chainIx("letters")) && choiceOf(p, "letters") === 1,
   smuggler: (p) => chainDone(p, chainIx("letters")) && choiceOf(p, "letters") === 2,
+  pell: (p) => chainDone(p, RED_CHAIN), // Garrick's grandson is back at his boat once the Redfang chief is down
 };
 /** Is this NPC standing there for this player? */
 export function npcPresent(id: string, p: Quester | undefined): boolean {
@@ -3006,6 +3007,10 @@ const IDLE: Record<string, string> = {
   rustmarshal: "Water's free, the roof's free, and nobody here pays the Redfang a copper. That's the Post's whole law. Fangrock doesn't like it, and now that you've been out there, neither do you.",
   ropewarden: "Hold the rope and watch your footing. The ground round here gives way when it likes, and the Hide-Kin are no steadier. Every trapper at Ropewell has lost somebody to the Mawdeep, and none of us has stopped looking.",
   cairncaptain: "Keep to the corpse roads, and if a barrow calls your name, don't answer. Four hundred years the Wardens have held these cairns shut. I mean to be the captain who doesn't lose them.",
+  smoker: "Cod on the left, herring on the right, and don't lean on the racks. Alder smoke gets into everything, your coat included. You'll smell like Saltmere for a week. Folk say it suits you.",
+  agna: "Mind the nets. I mend them, but I can't mend the sea. My Ilka used to hold the other end for me.",
+  pell: "She's taken on more water than a gull's belly, but she'll float. Once she's mended I might carry folk along the coast. Don't ask me when. The planks have their own mind.",
+  marta: "The stores are near empty. I water the broth and tell the boys it's the cold. Garrick says there is hope. I hope he's right.",
   alewife: "Ale's cold, the gossip's warm. Pull up a barrel, love. Whatever happens in this valley, it comes past my cart sooner or later.",
 };
 /**
@@ -3014,9 +3019,25 @@ const IDLE: Record<string, string> = {
  */
 const IDLE_BY: Record<string, { flag: ChoiceId; lines: Record<number, string> }> = {
   captain: { flag: "bargain", lines: { 1: "Quiet on the walls. The men keep upwind of you. I don't stop them." } },
+  // Ilka's mother, after the Two Letters (CHOICES.letters: 1 law, 2 mercy); before the choice she says her plain IDLE line
+  agna: { flag: "letters", lines: {
+    1: "The watch took my girl. I know why. I mend nets and hold my tongue, and I don't look up when the road gets loud. Thank you for not coming to tell me yourself.",
+    2: "A boat came for her in the night, and I never saw it. No word since, and I don't ask. If you ever meet her, tell her the net is still on its peg.",
+  } },
 };
+/**
+ * Idle lines by how far the hero is in a chain (first entry whose `when` holds wins; no match = the plain IDLE line).
+ * Worked out from the hero's own quest state wherever idleFor runs, never sent to other heroes.
+ */
+const IDLE_WHEN: Record<string, { when: (p: Quester | undefined) => boolean; line: string }[]> = {
+  marta: [
+    { when: (p) => chainDone(p, RED_CHAIN), line: "There's the Redfang's bane! First round is mine, and I'll hear no argument. Garrick has told it all week and he grows bigger with every telling. Sit, and tell it right." },
+    { when: (p) => (chainState(p, RED_CHAIN)?.questId ?? 0) >= 2, line: "Cod on the racks again, and a barrel of it in my cellar. I could weep. Whatever you did at the cove, the Anchor owes you a bed and a bowl." },
+  ],
+};
+const whenFor = (id: string, p: Quester | undefined) => IDLE_WHEN[id]?.find((e) => e.when(p))?.line;
 const moodFor = (id: string, p: Quester | undefined) => { const b = IDLE_BY[id]; return b && b.lines[choiceOf(p, b.flag)]; };
-const idleFor = (id: string, p: Quester | undefined) => moodFor(id, p) || IDLE[id];
+const idleFor = (id: string, p: Quester | undefined) => whenFor(id, p) || moodFor(id, p) || IDLE[id];
 /** A finished quest's `after` line for this hero (QuestDef.afterBy; then, at the end of its chain, the giver's mood). */
 const afterFor = (d: QuestDef, p: Quester | undefined, id?: string) => (d.afterBy && d.afterBy.lines[choiceOf(p, d.afterBy.flag)]) || (id && moodFor(id, p)) || d.after;
 

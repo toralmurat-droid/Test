@@ -50,3 +50,12 @@ Work branch: `claude/wizardly-franklin-nedywr`. Shipped in two PRs:
   siege and war code never place a hero in a town). Stash: `STASHES` (Oakvale's `STASH` first, then `SALT_STASH`) and
   `stashNear` in `shared/trade.ts`; the room's `nearStash` accepts any chest, and the client draws one chest per entry.
   The chest is not a map tile (like Oakvale's), so the map is unchanged. Tests: `tests/saltmere-home.test.ts`.
+- 2026-11-15: phase 5, NPCs and shop done (fisherfolk routines are the other agent's, in the client). Five people in
+  `shared/npcs.ts`, placeholder sheets: Bess Tanner (`smoker`, smokehouse door; side arc comes in phase 6), Hob Wick
+  (`chandler`, chandlery door, shop `chandler`: Minor and Medium flasks at Morwen's prices, buys and fuses runes), Marta
+  (`marta`, tavern door), Agna (`agna`, net racks on the beach), Pell (`pell`, east of the Harbour Street pier root).
+  Pell uses `PRESENCE` in `shared/quests.ts` (`chainDone(RED_CHAIN)`). Lines: new `IDLE_WHEN` table beside `IDLE_BY`
+  (chain progress; Marta: worried / after "Salt and Steel" / after "The Redfang Chief"), Agna uses `IDLE_BY` on the
+  `letters` choice (law / mercy; plain line before). `idleFor` order: `whenFor`, `moodFor`, `IDLE`. All per hero from
+  their own quest state, nothing broadcast. Busking lines for Marta, Bess, Hob and Agna (not Pell: busking ignores
+  presence). Tests: `tests/saltmere-people.test.ts`. Not done: fisherfolk routines, Bess's quests (phase 6), the ferry.
