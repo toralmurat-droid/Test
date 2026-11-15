@@ -114,6 +114,8 @@ export function flushWar() { if (saved && kv?.setSync) try { kv.setSync(KEY, sav
 
 /** Tests: start from a given state without a store or a clock. */
 export function _resetWar(s?: Saved, store?: Kv) { stopWar(); saved = s ?? fresh(Date.now()); kv = store; valor = TERRITORIES.map(() => ({})); }
+/** Tests: valor clan `k` has gathered in territory `t` so far this war tick. */
+export const _valorOf = (t: number, k: ClanKey): number => valor[t]?.[k] ?? 0;
 export type { Saved as SavedWar };
 
 /** What a room needs: the war snapshot to every client after each tick, and the herald's news in the chat. */

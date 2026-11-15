@@ -5,7 +5,7 @@
  * from the "war" snapshot and the wall clock, nothing goes to the server, and the soldiers are plain sprites (no HP
  * bar, no name, never in the way). Only lands with a stop near the hero have sprites. With WAR_TROOPS.live the server's real
  * troops (server/warTroops.ts, drawn by TownScene as "trooper" monsters) replace the column and the guards: only the siege
- * battles are still drawn here.
+ * battles are still drawn here, and not on the land whose siege the server fields for real ("siege" message, server/warSieges.ts).
  */
 import Phaser from "phaser";
 import { CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
@@ -14,7 +14,7 @@ import { HOLDS, STANDARDS } from "../../shared/war/standards";
 import type { WarView } from "../../shared/war/view";
 import { underground } from "../../shared/dungeon";
 import { isSolidAt } from "../../shared/map";
-import { TERRITORIES } from "../../shared/war/territories";
+import { attackAxis } from "../../shared/war/siege";
 import { WAR_TROOPS } from "../../shared/war/troops";
 import { CHAR_ORIGIN, CHAR_SCALE, ensureCharSheet, playCharAnim } from "./artAssets";
 import { ISO, screenDir, setBaseDepth } from "./iso";
@@ -99,11 +99,16 @@ export class WarTroops {
   private dirty = false;
   private lastNow = 0;
   private sheetAsked = false;
+  /** The land whose siege the server fights with real troopers (-1 none): no painted battle there. */
+  private liveSiege = -1;
 
   constructor(private scene: Phaser.Scene) {}
 
   /** The war snapshot: owners and sieges decide who walks where. Squads that no longer match fade out at the next check. */
   setWar(v: WarView) { this.view = v; this.dirty = true; }
+
+  /** The server's live siege battle ("siege" message): its land gets no painted battle lines. */
+  setSiege(t: number) { if (t !== this.liveSiege) { this.liveSiege = t; this.dirty = true; } }
 
   /** Sprites alive now (for the perf check). */
   get sprites(): number { let n = 0; for (const s of this.squads.values()) n += s.men.length; for (const s of this.dying) n += s.men.length; return n; }
@@ -112,7 +117,7 @@ export class WarTroops {
   private sigOf(t: number): string {
     const v = this.view!, c = v.control?.[t] ?? 100, n = STANDARDS.filter((s) => s.t === t).length;
     const sg = v.sieges.find((s) => s[0] === t);
-    return `${v.owner[t]}|${sg ? sg[1] : ""}|${patrolCount(c)}|${garrisonCount(c)}|${siegeCounts(n, c).def}`;
+    return `${v.owner[t]}|${sg ? sg[1] : ""}|${sg && this.liveSiege === t ? "live" : ""}|${patrolCount(c)}|${garrisonCount(c)}|${siegeCounts(n, c).def}`;
   }
 
   update(me: { x: number; y: number } | undefined, _now: number) {
@@ -183,15 +188,7 @@ export class WarTroops {
 
   /** The unit world vector from land `t` toward the nearest land `atk` holds (the battle's attacker side), else a screen-horizontal one. */
   private attackAxis(t: number, atk: number): Pt {
-    const v = this.view!, me = TERRITORIES[t];
-    let best: Pt | undefined, bd = Infinity;
-    for (const u of TERRITORIES) {
-      if (u.id === t || v.owner[u.id] !== atk) continue;
-      const d = Math.hypot(u.cx - me.cx, u.cy - me.cy);
-      if (d < bd) { bd = d; best = { x: u.cx - me.cx, y: u.cy - me.cy }; }
-    }
-    if (best && bd > 0) return { x: best.x / bd, y: best.y / bd };
-    return ISO ? { x: -Math.SQRT1_2, y: Math.SQRT1_2 } : { x: -1, y: 0 }; // attackers on the left of the screen
+    return attackAxis(this.view!.owner, t, atk) ?? (ISO ? { x: -Math.SQRT1_2, y: Math.SQRT1_2 } : { x: -1, y: 0 }); // attackers on the left of the screen
   }
 
   private build(t: number): Squad | undefined {
@@ -199,6 +196,7 @@ export class WarTroops {
     if (!clan || !p) return undefined;
     const sg = v.sieges.find((s) => s[0] === t), atk = sg ? CLAN_KEYS[sg[1]] : undefined;
     const sq: Squad = { t, sig: this.sigOf(t), men: [], cycle: 0, phase: 0, alpha: 0, target: 1 };
+    if (atk && this.liveSiege === t) return sq; // the server's real siege troopers fight here (server/warSieges.ts)
     if (atk) { this.buildSiege(sq, t, clan, atk, sg![1], c); return sq; }
     // the server fields real troops (server/warTroops.ts) on every land this close to a hero: no painted column or guards over them
     if (WAR_TROOPS.live) return sq;

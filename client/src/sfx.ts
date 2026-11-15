@@ -36,7 +36,7 @@ let voices = 0;
 const MAX_VOICES = 28;
 const lastPlay = new Map<string, number>();
 /** Sounds that ring for seconds (kept connected longer). */
-const LONG = new Set(["lootRare", "lootLegendary", "horn", "ritual", "ritualCall", "demonRise", "demonRoar", "shrine", "portalTravel", "portalWake", "necroWind", "heroDie", "levelup", "owl", "chime", "warcry", "motherInflate", "demonFire", "skelDie", "lutePluck", "swResonate", "swShatter", "swBounce", "swSnap", "swSwell", "caravan_raided", "caravan_arrived"]);
+const LONG = new Set(["lootRare", "lootLegendary", "horn", "ritual", "ritualCall", "demonRise", "demonRoar", "shrine", "portalTravel", "portalWake", "necroWind", "heroDie", "levelup", "owl", "chime", "warcry", "motherInflate", "demonFire", "skelDie", "lutePluck", "swResonate", "swShatter", "swBounce", "swSnap", "swSwell", "caravan_raided", "caravan_arrived", "siege_front"]);
 const AMBIENT = new Set(["crackle", "bird", "cricket", "chime", "owl", "step", "skelIdle", "blobGurgle", "crawl"]);
 
 const TOWNS = ["Oakvale", "Market Square", "Chapel of the Dawn", "The Rusty Tankard", "The Smithy", "Saltmere", "Hunter's Camp"];
@@ -645,6 +645,13 @@ const R: Record<string, Recipe> = {
     for (let i = 0; i < 9; i++) bell(o, t + 0.3 + i * 0.055 + rnd(0, 0.04), rnd(2200, 3600), 0.22, rnd(0.04, 0.08) * v);
     rattle(o, t + 0.3, 6, 0.5, 0.1 * v, 3200);
   },
+  // Siege battles (server broadcast("sfx", { ev: "siege_front", x, y, clan })): a front changes hands. The war horn's
+  // brass, one long rising blast with a drum hit under it
+  siege_front: (o, t, v) => {
+    [1, 2, 3].forEach((m, i) => tone(o, t, { type: "sawtooth", f: 110 * m, f2: 131 * m, dur: 1.1, vol: (0.26 / (1 + i)) * v, att: 0.1, vib: 1.2 * m, vibHz: 5 }));
+    noise(o, t, { type: "bandpass", f: 600, q: 2, dur: 1.0, vol: 0.06 * v, att: 0.1 });
+    thud(o, t, 65, 0.5 * v, 0.3); thud(o, t + 0.45, 75, 0.35 * v, 0.2);
+  },
   // Arrived: a short two-note horn over a bell, the caravan is home
   caravan_arrived: (o, t, v) => {
     [[0, 0.28, 1], [0.3, 0.55, 1.5]].forEach(([s, d, m]) => [1, 2, 3].forEach((k, i) => tone(o, t + s, { type: "sawtooth", f: 196 * m * k, f2: 198 * m * k, dur: d, vol: (0.2 / (1 + i)) * v, att: 0.04, vib: 0.8 * k, vibHz: 5 })));
@@ -1126,6 +1133,7 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
       // clan war supply caravans: heard near the cart (x, y, or the cart's id) and carrying far, the arrival horn most of all
       case "caravan_roll": pos("caravan_roll", 0.8, undefined, { key: "cr" + (ev.id ?? ""), minGap: 700 }); break;
       case "caravan_raided": pos("caravan_raided", 1, undefined, { key: "cx" + (ev.id ?? ""), minGap: 300, reach: 1.6 }); break;
+      case "siege_front": pos("siege_front", 1, undefined, { key: "sf" + (ev.x ?? "") + ":" + (ev.y ?? ""), minGap: 1500, reach: 2 }); break;
       case "caravan_arrived": case "caravan_delivered": pos("caravan_arrived", 1, undefined, { key: "ca" + (ev.id ?? ev.clan ?? ""), minGap: 500, reach: 2 }); break;
       case "grimoire": if (ev.id === me()) pos("pageTurn", 1, ({ fire: "fire", cold: "frost", poison: "poison", shock: "lightning" } as Record<string, string>)[ev.el] ?? "arcane"); break;
     }

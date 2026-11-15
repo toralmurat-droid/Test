@@ -9,6 +9,7 @@
 //     totals in this mode are INFLATED (more for the hot, tiny ones); use it to see shares, not absolute ms. PHASES=fine adds the hot per-mob helpers.
 //   BENCH_PORT=2656: listen on another port (default 2599), e.g. when two benches run on one machine
 //   WAR=1: a fresh clan war is running (server/war.ts), so clan troops march and fight near the bots (server/warTroops.ts)
+//   SIEGE=1 (with WAR=1): a siege is called on an Act 1 land and the first bot stands at its gate, so a siege battle runs (server/warSieges.ts)
 //   CAST=1 SPREAD=1: the Summoner bots cast wisps, blades, black holes and the Void Arsenal non-stop (tools/perf/bots.ts)
 //   TIDE=1: a Gloam Tide march is out the whole time, its last wave all at once (TIDE.maxAlive marchers, server/tide.ts)
 //   SONGWEAVER=1 (PARTY=1): Songweaver bots too; PARTY=1 groups them
@@ -80,6 +81,20 @@ async function main() {
     for (let i = 0; i < 500; i++) { const x = Math.random() * MAP_W * TILE, y = Math.random() * MAP_H * TILE; if (!isSolidAt(x, y)) { p.x = x; p.y = y; break; } }
   });
   if (process.env.TIDE) room.tide.start(Date.now(), true);
+  let siegeLand = -1;
+  if (process.env.SIEGE && process.env.WAR) {
+    const { warState } = await import("../../server/war"), { siegeFronts } = await import("../../shared/war/siege");
+    const { TERRITORIES } = await import("../../shared/war/territories"), { targetsOf } = await import("../../shared/war/rules"), { CLAN_KEYS } = await import("../../shared/war/clans");
+    const st = warState()!;
+    for (const t of TERRITORIES) {
+      const atk = CLAN_KEYS.find((k) => k !== st.owner[t.id] && targetsOf(st, k).includes(t.id));
+      if (t.act !== 1 || t.capitalOf || !atk || siegeFronts(t.id).length < 3) continue;
+      st.siege[t.id] = { by: atk, at: st.tick + 6 }; st.control[t.id] = 30; siegeLand = t.id;
+      const g = siegeFronts(t.id).find((f) => f.gate)!, p0 = [...room.state.players.values()][0];
+      if (p0) { p0.x = g.x; p0.y = g.y; }
+      break;
+    }
+  }
   await new Promise((r) => setTimeout(r, 3000));
   ticks.length = 0; patches.length = 0; bytes = 0; wire = 0; backlog = 0; for (const r of ph.values()) r.n = r.incl = r.self = 0;
   const cpu0 = process.cpuUsage(), t0 = performance.now();
@@ -97,6 +112,7 @@ async function main() {
     sendBacklogKbMax: +(backlog / 1024).toFixed(0), botsDropped: dropped,
     ...(process.env.TIDE ? { tide: true, tideMarchers: marchers } : {}),
     ...(process.env.WAR ? { war: true, troopers } : {}),
+    ...(siegeLand >= 0 ? { siege: siegeLand, siegeTroopers: room.sieges.count } : {}),
   }));
   if (dropped) console.error(`BENCH INVALID: ${dropped} of ${BOTS} bots lost their connection during the run, so the numbers above are not a measurement`);
   if (PH) {

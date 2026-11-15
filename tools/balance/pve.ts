@@ -1,6 +1,7 @@
 /**
  * PvE balance simulator: bot heroes play the first zone (Lv 1-30) against its monsters and bosses.
- * Run: npx tsx tools/balance/pve.ts [runsPerCase] [--bosses] [--zones] [--act2] [--champions] [--troops] [--caravan] [--class=vampire] [--build=0|1|2] [--boss=king] [--no-execute] [--songweaver]
+ * Run: npx tsx tools/balance/pve.ts [runsPerCase] [--bosses] [--zones] [--act2] [--champions] [--troops] [--caravan] [--siege] [--class=vampire] [--build=0|1|2] [--boss=king] [--no-execute] [--songweaver]
+ * --siege: a siege front (shared/war/siege.ts): the hero and SIEGE_BATTLE.perFront allied soldiers vs as many attackers, Lv 15 / 30 / 45 (and the soldiers alone).
  * --caravan: the hero alone raids a supply cart (shared/war/caravans.ts) with its 3 escorts at Lv 15 / 30 / 45: win = the cart falls.
  * --troops: the hero alone against a clan soldier, a captain and 3 soldiers of its level (shared/war/troops.ts), at Lv 8 / 20 / 45 (--clans: each clan at Lv 20).
  * --champions: one fight against each champion (shared/champions.ts, a 1D version of its affixes) beside the same plain monster.
@@ -32,6 +33,7 @@ import { addHeat } from "../../shared/overload";
 import { CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
 import { TROOP_OFFICER, troopStats, WAR_TROOPS } from "../../shared/war/troops";
 import { CARAVAN, caravanHp } from "../../shared/war/caravans";
+import { SIEGE_BATTLE } from "../../shared/war/siege";
 
 type Build = 0 | 1 | 2;
 
@@ -520,6 +522,44 @@ function caravanRun(cls: ClassKind, level: number, build: Build, seed: number, p
   return { won: w === h, kills, hpLostPerKill: Math.max(0, hp0 - h.hp) / h.maxHp, secPerKill: d.now / 1000, heals: pack.healUsed, manas: pack.manaUsed };
 }
 
+/** A trooper of `clan` at `level` as a sim monster (rush and javelin like the server's). */
+function soldierF(clan: ClanKey, level: number, id: string): MobF {
+  const R = WAR_TROOPS.rush, J = WAR_TROOPS.javelin, sp = mobSpec("trooper", level), st = troopStats(clan, level);
+  Object.assign(sp, { hp: st.hp, dmg: st.dmg, speed: st.speed, cd: st.cd, lunge: { min: R.min, max: R.max, every: R.everyMs, mult: R.dmgMult } });
+  sp.specials.push({ name: "Javelin", every: J.everyMs, windup: J.windupMs, min: J.min, max: J.max, radius: J.radius + 4, mult: J.dmgMult, at: "target", shot: { speed: J.speed, radius: J.radius } });
+  return new MobF(sp, id);
+}
+/** A siege front: the hero (optional) and allied soldiers against the attackers; each soldier goes for its nearest foe. */
+class SiegeDuel extends PveDuel {
+  constructor(hero: F, mobs: MobF[], pack: Pack, public allies: MobF[], public solo: boolean) {
+    super(hero, mobs, pack, 0);
+    allies.forEach((a, i) => { a.x = Math.max(0, Math.min(480, hero.x + 12 + i * 8)); a.face = 1; });
+    if (solo) { hero.dead = true; hero.x = -1e6; }
+  }
+  units(): F[] { return [...(this.solo ? [] : [this.hero]), ...this.allies, ...this.mobs, ...this.summons.filter((g) => !g.dead)]; }
+  foes(f: F): F[] { return this.allies.includes(f as MobF) ? this.mobs : this.mobs.includes(f as MobF) ? [...(this.solo ? [] : [this.hero, ...this.golemsOf(this.hero)]), ...this.allies] : super.foes(f); }
+  mobTarget(m: MobF): F {
+    const pool = this.foes(m).filter((u) => !u.dead);
+    let best = pool[0] ?? this.hero, bd = Infinity;
+    for (const u of pool) { const d = Math.abs(u.x - m.x) - (u === this.hero ? 20 : 0); if (d < bd) { bd = d; best = u; } } // (a soldier goes for the enemy hero first)
+    return best;
+  }
+  outcome(): F | null | undefined {
+    if (this.mobs.every((m) => m.dead)) return this.hero;
+    return (this.solo || this.hero.dead) && this.allies.every((a) => a.dead) ? this.mobs[0] : !this.solo && this.hero.dead ? this.mobs[0] : undefined;
+  }
+}
+/** One front: the hero (unless solo) with SIEGE_BATTLE.perFront allied soldiers vs as many attackers, all of its level; win = every attacker falls. */
+function siegeRun(cls: ClassKind, level: number, build: Build, seed: number, solo = false, potions = 5): RunResult & { alliesLost: number } {
+  const h = make("h", cls, level, build), atk = CLAN_KEYS[seed % CLAN_KEYS.length], def = CLAN_KEYS[(seed + 2) % CLAN_KEYS.length], n = SIEGE_BATTLE.perFront;
+  const pack: Pack = { heal: potions, mana: potions, healUsed: 0, manaUsed: 0, size: potionSize(level), lastDrink: -1e9 };
+  const foes = Array.from({ length: n }, (_, k) => soldierF(atk, level, "a" + k)), allies = Array.from({ length: n }, (_, k) => soldierF(def, level, "d" + k));
+  const d = new SiegeDuel(h, foes, pack, allies, solo), hp0 = h.hp;
+  let w: F | null | undefined;
+  while (d.now < 120000 && (w = d.step()) === undefined) { /* fight */ }
+  return { won: w === h, kills: foes.filter((m) => m.dead).length, hpLostPerKill: solo ? 0 : Math.max(0, hp0 - h.hp) / h.maxHp, secPerKill: d.now / 1000, heals: pack.healUsed, manas: pack.manaUsed, alliesLost: allies.filter((a) => a.dead).length };
+}
+
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 /** Try other numbers without editing the game: --hp=0.4 --dmg=0.15 (MOB_LEVEL per-level growth). */
 for (const a of process.argv) {
@@ -545,7 +585,22 @@ if (process.argv[1]?.includes("pve")) {
   const CHAMPS = process.argv.includes("--champions");
   const TROOPS = process.argv.includes("--troops");
   const CARAVANS = process.argv.includes("--caravan");
-  const doBosses = !CHAMPS && !TROOPS && !CARAVANS && !process.argv.includes("--zones"), doZones = !CHAMPS && !TROOPS && !CARAVANS && !process.argv.includes("--bosses");
+  const SIEGE = process.argv.includes("--siege");
+  const doBosses = !CHAMPS && !TROOPS && !CARAVANS && !SIEGE && !process.argv.includes("--zones"), doZones = !CHAMPS && !TROOPS && !CARAVANS && !SIEGE && !process.argv.includes("--bosses");
+  if (SIEGE) {
+    const k = SIEGE_BATTLE.perFront;
+    console.log(`Siege front: the hero + ${k} allied soldiers vs ${k} attacking soldiers, all of its level (clans in turn), 5 heal + 5 mana potions. Cell = win% (attackers all down) / hero HP lost / fight s / allies lost`);
+    console.log("".padEnd(10) + ["soldiers alone", ...CLASSES].map((c) => c.padEnd(22)).join(""));
+    for (const L of [15, 30, 45]) {
+      let line = `Lv${L}`.padEnd(10);
+      for (const c of ["solo", ...CLASSES] as (ClassKind | "solo")[]) {
+        let won = 0, hp = 0, sec = 0, lost = 0;
+        for (let i = 0; i < n; i++) { const r = siegeRun(c === "solo" ? "wizard" : c, L, buildOf(i), i, c === "solo"); won += r.won ? 1 : 0; hp += r.hpLostPerKill; sec += r.secPerKill; lost += r.alliesLost; }
+        line += `${pct(won / n)}/${c === "solo" ? "-" : pct(hp / n)}/${(sec / n).toFixed(1)}s/${(lost / n).toFixed(1)}`.padEnd(22);
+      }
+      console.log(line);
+    }
+  }
   if (CARAVANS) {
     console.log(`Caravan raid: the hero alone vs a supply cart (x${CARAVAN.hpMult} soldier HP, no attack) and ${CARAVAN.escorts} escort soldiers of its level (clans in turn), 5 heal + 5 mana potions. Cell = win% (cart felled) / HP lost / fight s`);
     console.log("".padEnd(10) + CLASSES.map((c) => c.padEnd(20)).join(""));
