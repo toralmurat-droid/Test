@@ -3,8 +3,8 @@
 export interface OrbShown { hp: number; mp: number; at: number; hpTxt: string; mpTxt: string }
 
 /** The "hp / max" and "mp / max" strings written inside the orbs. */
-export function orbTexts(hp: number, maxHp: number, mp: number, maxMp: number) {
-  return { hpTxt: `${Math.ceil(hp)} / ${Math.round(maxHp)}`, mpTxt: `${Math.floor(mp)} / ${Math.round(maxMp)}` };
+export function orbTexts(hp: number, maxHp: number, mp: number, maxMp: number, shieldAmt = 0) {
+  return { hpTxt: `${Math.ceil(hp)} / ${Math.round(maxHp)}${shieldAmt > 0 ? ` +${shieldAmt}` : ""}`, mpTxt: `${Math.floor(mp)} / ${Math.round(maxMp)}` };
 }
 
 /**

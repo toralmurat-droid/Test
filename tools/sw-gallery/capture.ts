@@ -816,6 +816,21 @@ async function groupHud(SLOW: number) {
       await shot(h, `hud_orb_shield_${tag}_crop.png`, await rect(h, ".orb.hp"));
       await wait(h.real(300));
       await shot(h, `hud_orb_shield_${tag}_crop2.png`, await rect(h, ".orb.hp"));
+      // shield amount on the orb: the server field (Player.me.shield) may not exist yet, so the page sets it (and hp) directly on the
+      // synced state object; the next frame draws from it. Frames: 10%, 40%, overflow, and a full-hp orb with a shield (all overflow).
+      {
+        const tmpS = mkdtempSync(path.join(tmpdir(), "shamt-"));
+        const cases: [number, number][] = [[0.7, 0.1], [0.5, 0.4], [0.7, 0.6], [1, 0.19]]; // [hp fraction, shield / maxHp]
+        const box = await rect(h, ".orb.hp");
+        for (let i = 0; i < cases.length; i++) {
+          await h.page.evaluate(([hf, sf]: number[]) => { const S = (window as any).S, p = S.room.state.players.get(S.me); p.hp = Math.round(p.maxHp * hf); p.me.shield = Math.round(p.maxHp * sf); }, cases[i]);
+          await wait(h.real(1200));
+          await h.page.screenshot({ path: path.join(tmpS, `k${i}.png`), clip: box });
+        }
+        execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-framerate", "1", "-i", path.join(tmpS, "k%d.png"), "-vf", "tile=4x1", "-frames:v", "1", path.join(OUT, `hud_orb_shieldamt_${tag}.png`)]);
+        await h.page.evaluate(() => { const S = (window as any).S, p = S.room.state.players.get(S.me); p.me.shield = 0; });
+        addItem({ id: `hud_orb_shieldamt_${tag}`, file: `hud_orb_shieldamt_${tag}.png`, kind: "still", group: "HUD effects", title: `Health orb with a shield amount (${W2}x${H2})`, what: "Left to right: 70% hp + 10% shield, 50% hp + 40% shield, 70% hp + 60% shield (overflows, glowing top edge), full hp + 19% shield (overflow). The pale band stacks on the red fill; the text reads 'hp / max +shield'.", source: "client/src/orbs.ts drawOrb (amt) + update" });
+      }
       // the viewer sees her nameplate mark
       await still(v, { id: `hud_nameplate_shield_${tag}`, group: "HUD effects", title: `Another hero's shield mark (${W2}x${H2})`, what: "A second player sees the Songweaver with a Pedal Point shield: no bubble, a pale rim round the health bar under her feet.", source: "client/src/skillfx.ts songStatus (shield)" });
       const cx = { x: W2 / 2 + 95, y: H2 / 2 - 90 }; // the caster stands up and to the right of the viewer, whose camera is centred on it
