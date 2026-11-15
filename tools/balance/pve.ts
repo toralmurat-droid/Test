@@ -1,8 +1,9 @@
 /**
  * PvE balance simulator: bot heroes play the first zone (Lv 1-30) against its monsters and bosses.
- * Run: npx tsx tools/balance/pve.ts [runsPerCase] [--bosses] [--zones] [--act2] [--moors] [--badlands] [--champions] [--troops] [--caravan] [--siege] [--tunnel] [--class=vampire] [--build=0|1|2] [--boss=king] [--no-execute] [--songweaver]
+ * Run: npx tsx tools/balance/pve.ts [runsPerCase] [--bosses] [--zones] [--act2] [--moors] [--badlands] [--sinkholes] [--champions] [--troops] [--caravan] [--siege] [--tunnel] [--class=vampire] [--build=0|1|2] [--boss=king] [--no-execute] [--songweaver]
  * --moors: zone runs against Act 3's monsters (the Grey Barrow Moors, Lv 20-33) instead of Act 1's, heroes Lv 20-34.
  * --badlands: zone runs against Act 4's monsters (the Red Badlands, Lv 25-38) instead of Act 1's, heroes Lv 26-40.
+ * --sinkholes: zone runs against Act 5's monsters (the Mawdeep Sinkholes, Lv 30-43) instead of Act 1's, heroes Lv 30-44.
  * --siege: a siege front (shared/war/siege.ts): the hero and SIEGE_BATTLE.perFront allied soldiers vs as many attackers, Lv 15 / 30 / 45 (and the soldiers alone);
  *   then the Host's siege ram (shared/war/works.ts): the hero alone vs the ram and its crew.
  * --tunnel: the hero alone collapses a Hide-Kin tunnel mouth (shared/war/tunnels.ts) while its waves come out: win = the mouth falls.
@@ -23,7 +24,7 @@
 import { NIGHT_RAID } from "../../shared/raiders";
 import { ACTIVE_CLASSES, ClassKind } from "../../shared/classes";
 import { BANDIT_AI, BANDIT_ROLES, CHIEF } from "../../shared/bandits";
-import { BEAST, BEAST_RIDER, BLOB_AI, DEMON, ELITE, HOLLOW_KING, MOB_ATTACK_RANGE, MOB_LEVEL, MOBS, MobKind, mobScale, MOORS_AI, MOORS_KINDS, BADLANDS_AI, BADLANDS_KINDS, MOTHER, SKELETON_AI, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, SUNWRIGHT, REGEN_DELAY_MS, REGEN_PER_STA } from "../../shared/constants";
+import { BEAST, BEAST_RIDER, BLOB_AI, DEMON, ELITE, HOLLOW_KING, MOB_ATTACK_RANGE, MOB_LEVEL, MOBS, MobKind, mobScale, MOORS_AI, MOORS_KINDS, BADLANDS_AI, BADLANDS_KINDS, SINKHOLES_AI, SINKHOLES_KINDS, MOTHER, SKELETON_AI, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, SUNWRIGHT, REGEN_DELAY_MS, REGEN_PER_STA } from "../../shared/constants";
 import { MOB_COMBAT, mobBody, mobSound, POISE, poiseSpeed } from "../../shared/combat";
 import { POTION_COOLDOWN_MS, POTION_SIZES } from "../../shared/potions";
 import { activeSkills, SKILLS } from "../../shared/skills";
@@ -121,6 +122,30 @@ export function mobSpec(kind: MobKind, level: number, opt: { weapon?: string; hp
     if (kind === "rourke") {
       spec.specials.push({ name: "Leap", every: P.cooldownMs, windup: P.windupMs, min: P.min, max: P.max, radius: P.radius, mult: P.dmgMult, at: "target", kb: P.knockback, leap: true });
       spec.specials.push({ name: "Roar", every: Ro.cooldownMs, windup: Ro.windupMs, min: 0, max: Ro.range, radius: Ro.radius, mult: Ro.dmgMult, at: "self", slowMs: Ro.slowMs });
+    }
+  }
+  // Act 5 (server/TownRoom.ts RANGED: SINKHOLES_AI quills / hex; BEAST_MOVES stampede / gore / howl / maul / roar / rockfall;
+  // server/hidekin.ts burrow / stitch / burst). A rider lands on every blow; a war cry rallies the Chieftain himself half
+  // the time. The burrow is a marked leap onto the hero (untouchable under the ground meanwhile: not modelled); a
+  // Quillback's fan of quills counted as more damage per throw (the side quills mostly miss); a Stitcher's stitch as
+  // more HP of its own (it mends the most hurt kinsman, often itself); a Gullet Worm's burst out of its pit opens the fight
+  if (SINKHOLES_KINDS.includes(kind)) {
+    const R = BEAST_RIDER[kind], Q = SINKHOLES_AI.quills, Hx = SINKHOLES_AI.hex, St = SINKHOLES_AI.stitch, Bu = SINKHOLES_AI.burrow[kind], Wl = SINKHOLES_AI.warlords[kind];
+    const Sp = BEAST.stampede, G = BEAST.gore, M = BEAST.maul, Ro = BEAST.roar, Fa = BEAST.rockfall, Bs = SINKHOLES_AI.burst;
+    if (R) spec.dmg *= 1 + BEAST[R].ticks * BEAST[R].dmgMult;
+    if (Wl) spec.dmg *= 1 + (CHIEF.warCry.dmg - 1) * Wl.buffMs / Wl.cooldownMs;
+    if (kind === "quillback") ranged(Q.range, Q.keepAway, Q.shotSpeed, Q.shotRadius, Q.mult * (1 + (Q.volley.arrows - 1) * 0.3 * spec.cd / Q.volley.everyMs));
+    if (kind === "stitcher") { ranged(Hx.range, Hx.keepAway, Hx.shotSpeed, Hx.shotRadius, Hx.mult); spec.hp *= 1 + St.heal * 0.6; }
+    if (Bu) spec.specials.push({ name: "Burrow", every: Bu.everyMs, windup: Bu.underMs + Bu.markMs, min: Bu.minDist, max: Bu.maxDist, radius: Bu.radius, mult: Bu.dmgMult, at: "target", kb: 1.2, stunMs: Bu.stunMs, leap: true, first: Bu.firstMs });
+    if (kind === "stagkin") {
+      spec.lunge = { min: Sp.min, max: Sp.max, every: Sp.cooldownMs, mult: Sp.dmgMult };
+      spec.specials.push({ name: "Gore", every: G.cooldownMs, windup: G.windupMs + G.rushMs / 2, min: G.min, max: G.max, radius: G.width / 2 + 6, mult: G.dmgMult, at: "target", kb: G.knockback });
+    }
+    if (kind === "sinkworm") spec.specials.push({ name: "Gullet Burst", every: 1e9, windup: 150, min: 0, max: Bs.radius, radius: Bs.radius, mult: Bs.dmgMult, at: "self", kb: Bs.knockback, stunMs: Bs.stunMs, first: 0 });
+    if (kind === "hidechief" || kind === "mawfather") spec.specials.push({ name: "Maul", every: M.cooldownMs, windup: M.windupMs, min: 0, max: M.range, radius: M.reach, mult: M.dmgMult, at: "self", kb: M.knockback });
+    if (kind === "mawfather") {
+      spec.specials.push({ name: "Roar", every: Ro.cooldownMs, windup: Ro.windupMs, min: 0, max: Ro.range, radius: Ro.radius, mult: Ro.dmgMult, at: "self", slowMs: Ro.slowMs });
+      spec.specials.push({ name: "Falling Stones", every: Fa.cooldownMs, windup: Fa.windupMs, min: 0, max: Fa.range, radius: Fa.radius, mult: Fa.dmgMult, at: "target", stunMs: 400, hpBelow: Fa.hpFrac, first: 0 });
     }
   }
   if (kind === "camelfolk") { const S = BEAST.stomp; spec.specials.push({ name: "Stomp", every: S.cooldownMs, windup: S.windupMs, min: 0, max: S.range, radius: S.radius, mult: S.dmgMult, at: "self", kb: S.knockback, stunMs: S.stunMs }); }
@@ -416,6 +441,9 @@ export const CHAMP_CASES: { kind: MobKind; affixes: AffixKey[]; level: number; w
   // Act 4: the Redfang's men come with a gang of cutthroats like their Hollow kin
   { kind: "outrider", affixes: ["gang"], level: 30 }, { kind: "crossbowman", affixes: ["gang"], level: 34 }, { kind: "firebrand", affixes: ["gang"], level: 36 },
   { kind: "warhound", affixes: ["gang"], level: 28 }, { kind: "rattler", affixes: ["deepvenom"], level: 33 },
+  // Act 5: the Hide-Kin come Hide-Stitched like their Mawdeep kin
+  { kind: "delver", affixes: ["stitched"], level: 34 }, { kind: "cackler", affixes: ["stitched"], level: 32 }, { kind: "stagkin", affixes: ["stitched"], level: 36 },
+  { kind: "quillback", affixes: ["stitched"], level: 38 }, { kind: "stitcher", affixes: ["stitched"], level: 40 },
 ];
 function champRun(cls: ClassKind, c: (typeof CHAMP_CASES)[number], champ: boolean, build: Build, potions = 3): RunResult {
   const h = make("h", cls, c.level, build);
@@ -474,6 +502,15 @@ function badlandsMob(level: number): MobSpec {
   return mobSpec(pick(pool), L);
 }
 let BADLANDS = false;
+/** Act 5 (the Mawdeep Sinkholes, shared/spawns.ts): its monsters at Lv 30-43, cacklers in pairs, the throwers, sewers and worms further on. */
+function sinkholesMob(level: number): MobSpec {
+  const L = Math.min(43, Math.max(30, level));
+  const pool: MobKind[] = ["cackler", "cackler", "delver", "stagkin"];
+  if (L >= 32) pool.push("quillback", "stitcher", "delver");
+  if (L >= 36) pool.push("sinkworm", "quillback", "stagkin");
+  return mobSpec(pick(pool), L);
+}
+let SINKHOLES = false;
 
 const CHAIN = 6; // encounters per zone run: 1 monster (55%), 2 (35%) or 3 (10%)
 const potionSize = (level: number) => (level >= 20 ? 2 : level >= 10 ? 1 : 0);
@@ -487,7 +524,7 @@ function zoneRun(cls: ClassKind, level: number, build: Build, mobLevel: (i: numb
   let t = 0, kills = 0, lost = 0, fightMs = 0;
   for (let i = 0; i < CHAIN; i++) {
     const r = Math.random(), size = r < 0.55 ? 1 : r < 0.9 ? 2 : 3;
-    const ms = Array.from({ length: size }, (_, k) => new MobF((ACT2 ? desertMob : MOORS ? moorsMob : BADLANDS ? badlandsMob : zoneMob)(mobLevel(i)), "m" + k));
+    const ms = Array.from({ length: size }, (_, k) => new MobF((ACT2 ? desertMob : MOORS ? moorsMob : BADLANDS ? badlandsMob : SINKHOLES ? sinkholesMob : zoneMob)(mobLevel(i)), "m" + k));
     const d = new PveDuel(h, ms, pack, t);
     const hp0 = h.hp, t0 = d.now;
     let w: F | null | undefined;
@@ -528,6 +565,9 @@ export const BOSSES: BossDef[] = [
   // Act 4, the badlands: a Redfang Captain (zone elite) and Old Rourke in Fangrock's keep (a zone boss: no quest title)
   { name: "Redfang Captain Lv34", kind: "redcaptain", level: 34, hero: 33, plain: true },
   { name: "Old Rourke Lv40", kind: "rourke", level: 40, hero: 39, plain: true },
+  // Act 5, the sinkholes: a Hide-Chieftain (zone elite) and the Maw-Father on his ledge in the Great Maw (a zone boss)
+  { name: "Hide-Chieftain Lv38", kind: "hidechief", level: 38, hero: 37, plain: true },
+  { name: "Maw-Father Lv45", kind: "mawfather", level: 45, hero: 44, plain: true },
   // quest summons from the quest concepts (shared/quests.ts): the wrong-grave ambush and the Crown in the Sand finale
   { name: "Disturbed Dead Lv17", kind: "skeleton", level: 17, hero: 15, hpMult: 3 },
   { name: "Ostrevar's Envoy Lv39", kind: "sanddead", level: 39, hero: 38, hpMult: 7 },
@@ -787,8 +827,9 @@ if (process.argv[1]?.includes("pve")) {
     ACT2 = process.argv.includes("--act2"); // the desert's monsters, heroes Lv 30-48
     MOORS = !ACT2 && process.argv.includes("--moors"); // the moors' monsters, heroes Lv 20-34
     BADLANDS = !ACT2 && !MOORS && process.argv.includes("--badlands"); // the badlands' monsters, heroes Lv 26-40
-    const levels = ACT2 ? [30, 33, 36, 39, 42, 45, 48] : MOORS ? [20, 22, 24, 26, 28, 30, 32, 34] : BADLANDS ? [26, 28, 30, 32, 34, 36, 38, 40] : [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30];
-    console.log(`Zone runs: ${CHAIN} encounters (1-3 monsters) in a row vs monsters of the hero's level to +2 (capped ${ACT2 ? 47 : MOORS ? 33 : BADLANDS ? 38 : 25}), 3 heal + 3 mana potions.`);
+    SINKHOLES = !ACT2 && !MOORS && !BADLANDS && process.argv.includes("--sinkholes"); // the sinkholes' monsters, heroes Lv 30-44
+    const levels = ACT2 ? [30, 33, 36, 39, 42, 45, 48] : MOORS ? [20, 22, 24, 26, 28, 30, 32, 34] : BADLANDS ? [26, 28, 30, 32, 34, 36, 38, 40] : SINKHOLES ? [30, 32, 34, 36, 38, 40, 42, 44] : [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30];
+    console.log(`Zone runs: ${CHAIN} encounters (1-3 monsters) in a row vs monsters of the hero's level to +2 (capped ${ACT2 ? 47 : MOORS ? 33 : BADLANDS ? 38 : SINKHOLES ? 43 : 25}), 3 heal + 3 mana potions.`);
     console.log("Cell = cleared% / HP lost per kill / seconds per kill / potions drunk per run");
     console.log("Lv".padEnd(5) + CLASSES.map((c) => c.padEnd(22)).join(""));
     const tot: Record<string, { w: number; n: number }> = {};

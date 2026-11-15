@@ -569,6 +569,15 @@ const R: Record<string, Recipe> = {
   },
   demonRoar: (o, t, v) => voice(o, t, { f: 85, f2: 55, dur: 1.0, vol: 0.5 * v, vowel: [550, 950], vowel2: [400, 750], att: 0.08, rough: 0.25 }),
   // Act 4: a hound's snarl (arg = pitch), its howl (the pack is called), a vulture's screech, a clay pot bursting into flame
+  cacklerLaugh: (o, t, v, p = 1) => { for (let i = 0; i < 4; i++) voice(o, t + i * 0.11, { f: (330 - i * 18) * p, f2: (390 - i * 22) * p, dur: 0.09, vol: 0.14 * v, vowel: [700, 1500], att: 0.01, rough: 0.3 }); },
+  stagBellow: (o, t, v, p = 1) => voice(o, t, { f: 95 * p, f2: 75 * p, dur: 0.6, vol: 0.28 * v, vowel: [450, 800], vowel2: [600, 900], att: 0.06, rough: 0.35 }),
+  wormGurgle: (o, t, v, p = 1) => { noise(o, t, { type: "bandpass", f: 300 * p, f2: 140 * p, q: 3, dur: 0.35, vol: 0.2 * v, att: 0.04 }); tone(o, t, { f: 90 * p, f2: 55 * p, dur: 0.3, vol: 0.1 * v, vib: 30, vibHz: 18 }); },
+  beastGrowl: (o, t, v, p = 1) => voice(o, t, { f: 110 * p, f2: 80 * p, dur: 0.35, vol: 0.2 * v, vowel: [500, 700], att: 0.03, rough: 0.55 }),
+  hkDig: (o, t, v) => { noise(o, t, { type: "lowpass", f: 900, f2: 300, dur: 0.5, vol: 0.2 * v, att: 0.03 }); tone(o, t, { f: 70, f2: 40, dur: 0.4, vol: 0.12 * v }); },
+  hkMark: (o, t, v, ms = 800) => { for (let i = 0; i < 4; i++) noise(o, t + i * (ms / 1000) / 5, { type: "highpass", f: 1500 + i * 400, dur: 0.06, vol: 0.1 * v }); },
+  hkUp: (o, t, v, big = 1) => { noise(o, t, { type: "lowpass", f: 1400, f2: 200, dur: 0.5, vol: 0.3 * v, att: 0.01 }); tone(o, t, { f: 120, f2: 45, dur: 0.35, vol: 0.22 * v * (big ? 1 : 0.5) }); },
+  hkSew: (o, t, v) => { for (let i = 0; i < 3; i++) tone(o, t + i * 0.16, { f: 900 + i * 150, f2: 1300 + i * 150, dur: 0.07, vol: 0.05 * v }); },
+  hkStitch: (o, t, v) => { tone(o, t, { f: 520, f2: 780, dur: 0.18, vol: 0.09 * v, att: 0.01 }); tone(o, t + 0.1, { f: 780, f2: 1040, dur: 0.22, vol: 0.08 * v, att: 0.01 }); },
   houndSnarl: (o, t, v, p = 1) => voice(o, t, { f: 150 * p, f2: 110 * p, dur: 0.25, vol: 0.16 * v, vowel: [600, 900], att: 0.02, rough: 0.6 }),
   houndHowl: (o, t, v) => voice(o, t, { f: 260, f2: 420, dur: 1.1, vol: 0.14 * v, vowel: [500, 800], att: 0.25, rough: 0.15 }),
   vultureScreech: (o, t, v, p = 1) => tone(o, t, { f: 1900 * p, f2: 1100 * p, dur: 0.3, vol: 0.06 * v, att: 0.02 }),
@@ -1071,6 +1080,9 @@ interface Ent { sprite: { x: number; y: number }; state: any; mob?: boolean; her
 const UNDEAD = new Set(["skeleton", "skeletonmage", "necromancer", "crawler", "sanddead", "wight", "bonehound", "mistwraith", "legionary", "cairnlord", "barrowking"]);
 /** Act 4 people (Redfang raiders) use the bandit voices; the beasts below snarl and screech. */
 const RAIDER = new Set(["outrider", "crossbowman", "firebrand", "redcaptain", "rourke"]);
+/** Act 5 Hide-Kin: each voice family (the rest growl like beasts). */
+const HIDEKIN = new Set(["delver", "cackler", "stagkin", "quillback", "stitcher", "sinkworm", "hidechief", "mawfather"]);
+function hkVoice(k: string): [string, number] { return k === "cackler" ? ["cacklerLaugh", 1] : k === "stagkin" ? ["stagBellow", 1] : k === "sinkworm" ? ["wormGurgle", 1] : k === "mawfather" ? ["stagBellow", 0.7] : k === "hidechief" ? ["beastGrowl", 0.8] : ["beastGrowl", 1]; }
 const isBlob = (k: string) => k === "slime" || k === "blobling" || k.endsWith("blob");
 const blobPitch = (st: any) => (st.kind === "motherblob" ? 0.55 : st.kind === "blobling" ? 1.5 : 1) / Math.sqrt(st.merged || 1);
 const HERO_PITCH: Record<string, number> = { ninja: 1.1, wizard: 0.95, knight: 0.85, archer: 1.15, barbarian: 0.75, vampire: 0.9, summoner: 1.0, songweaver: 1.05 };
@@ -1106,6 +1118,7 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
       if (isBlob(k)) P("blobLunge", id, 0.8, blobPitch(e.state), { key: "ml" + id });
       else if (UNDEAD.has(k)) P(k === "skeletonmage" || k === "necromancer" ? "shotMagic" : "skelSwing", id, 0.8);
       else if (RAIDER.has(k)) { P("swing", id, 0.8, k === "redcaptain" || k === "rourke"); if (Math.random() < 0.3) P("grunt", id, 0.7, idPitch(id)); }
+      else if (HIDEKIN.has(k)) { const [n, p] = hkVoice(k); P(n, id, 0.7, p * idPitch(id), { key: "hv" + id, minGap: 600 }); }
       else if (k === "warhound") P("houndSnarl", id, 0.7, idPitch(id));
       else if (k === "vulture") P("vultureScreech", id, 0.6, idPitch(id));
       else if (k === "bandit") { P("swing", id, 0.8, e.state.weapon === "brute"); if (Math.random() < 0.3) P("grunt", id, 0.7, idPitch(id)); }
@@ -1135,6 +1148,7 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
       else if (k === "demon") P("demonHurt", id, 1, undefined, { key: "dh" + id, minGap: 300 });
       else if (UNDEAD.has(k)) P("skelHurt", id, 1, undefined, { key: "sh" + id, minGap: 100 });
       else if (RAIDER.has(k) && Math.random() < 0.6) P("grunt", id, 0.8, idPitch(id, 1.1), { key: "bg" + id, minGap: 250 });
+      else if (HIDEKIN.has(k) && Math.random() < 0.5) { const [n, p] = hkVoice(k); P(n, id, 0.6, p * idPitch(id, 1.2), { key: "hh2" + id, minGap: 400 }); }
       else if (k === "warhound") P("houndSnarl", id, 0.6, idPitch(id, 1.2), { key: "bh" + id, minGap: 250 });
       else if (k === "bandit" && Math.random() < 0.6) P("grunt", id, 0.8, idPitch(id, 1.1), { key: "bg" + id, minGap: 250 });
     } else if (!blocked) P("heroHurt", id, id === me() ? 1 : 0.7, hpitch(e.state), { key: "hh" + id, minGap: 250 });
@@ -1242,6 +1256,16 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
   on("bshout", ({ id }) => P(Math.random() < 0.5 ? "shout" : "shout2", id, 1, idPitch(id), { reach: 1.3 }));
   on("bdash", ({ id }) => P("dash", id));
   on("volley", ({ id }) => P("volley", id));
+  // Act 5 Hide-Kin moves (server/hidekin.ts); the pictures are in client/src/hidekinFx.ts
+  on("hidekin", ({ ev, id, x, y, to, ms, r }) => {
+    const e = id ? at(id) : undefined, ex = e?.sprite.x ?? x, ey = e?.sprite.y ?? y;
+    if (ev === "burrow") play("hkDig", ex, ey);
+    else if (ev === "mark") play("hkMark", x, y, 0.8, ms);
+    else if (ev === "up") play("hkUp", x, y, 1, r ? 1 : 0);
+    else if (ev === "burst") { play("hkUp", x, y, 1, 1); P("wormGurgle", id, 0.9); }
+    else if (ev === "sew") P("hkSew", id, 0.8);
+    else if (ev === "stitch") P("hkStitch", to ?? id, 0.9);
+  });
   on("bwind", ({ id, ms, kind }) => P(kind === "leap" ? "leap" : "windup", id, 1, ms));
   on("bhit", ({ kind, x, y }) => play("bashGround", x, y, 1, kind === "leap"));
   on("warcry", ({ id }) => P("warcry", id, 1, undefined, { reach: 1.5 }));
@@ -1276,7 +1300,7 @@ function groundKind(x: number, y: number): string {
   if (g === T.COBBLE) return "stone";
   if (g === T.WATER) return "water";
   if (g === T.SAND) return "sand";
-  return "grass";
+  return "grass"; // incl. MOSS (the sinkholes): soft damp earth, the grass step
 }
 
 /** Once per frame from TownScene.update: our hero's place (the ears), deaths, footsteps, idle monster noises. */
@@ -1299,6 +1323,7 @@ export function sfxFrame(meId: string, ents: Map<string, Ent>) {
         else if (k === "demon") { play("demonRoar", e.sprite.x, e.sprite.y, 1, undefined, { reach: 2 }); play("skelDie", e.sprite.x, e.sprite.y, 1, undefined, { delay: 0.6 }); }
         else if (UNDEAD.has(k)) play("skelDie", e.sprite.x, e.sprite.y);
         else if (RAIDER.has(k)) play("heroDie", e.sprite.x, e.sprite.y, 0.7);
+        else if (HIDEKIN.has(k)) { const [n, p] = hkVoice(k); play(n, e.sprite.x, e.sprite.y, 0.9, p * 0.75); }
         else if (k === "warhound") play("houndSnarl", e.sprite.x, e.sprite.y, 0.8, 0.7);
         else if (k === "vulture") play("vultureScreech", e.sprite.x, e.sprite.y, 0.7, 0.8);
         else if (k === "bandit") play("heroDie", e.sprite.x, e.sprite.y, 0.7);

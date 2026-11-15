@@ -1376,5 +1376,53 @@
   "h": 40,
   "scale": 1.5,
   "frames": 12
+ },
+ "mob_delver": {
+  "w": 24,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_cackler": {
+  "w": 22,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_stagkin": {
+  "w": 28,
+  "h": 38,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_quillback": {
+  "w": 26,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_stitcher": {
+  "w": 24,
+  "h": 34,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_hidechief": {
+  "w": 34,
+  "h": 38,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_mawfather": {
+  "w": 46,
+  "h": 50,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_sinkworm": {
+  "w": 32,
+  "h": 28,
+  "scale": 1.5,
+  "frames": 12
  }
 }

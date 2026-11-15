@@ -312,6 +312,16 @@ export const GEAR_DROP: Record<MobKind, { chance: number; tiers: [number, number
   rattler: { chance: 0.12, tiers: [0.3, 0.45, 0.25] },
   redcaptain: { chance: 0.9, tiers: [0, 0.45, 0.55] },
   rourke: { chance: 1, tiers: [0, 0.25, 0.75] },
+  // Act 5, the sinkholes (Lv 30-45): like the badlands' regulars (packs and worms a little less); the Chieftain and the
+  // Maw-Father like the badlands' elite and boss
+  delver: { chance: 0.18, tiers: [0.25, 0.45, 0.3] },
+  cackler: { chance: 0.12, tiers: [0.3, 0.45, 0.25] },
+  stagkin: { chance: 0.18, tiers: [0.25, 0.45, 0.3] },
+  quillback: { chance: 0.18, tiers: [0.25, 0.45, 0.3] },
+  stitcher: { chance: 0.18, tiers: [0.25, 0.45, 0.3] },
+  sinkworm: { chance: 0.12, tiers: [0.3, 0.45, 0.25] },
+  hidechief: { chance: 0.9, tiers: [0, 0.45, 0.55] },
+  mawfather: { chance: 1, tiers: [0, 0.25, 0.75] },
 };
 
 export function isGearId(v: unknown): v is string {

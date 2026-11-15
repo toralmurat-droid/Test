@@ -103,6 +103,15 @@ export const MOB_COMBAT: Record<MobKind, { poise: number; windupMs: number; soun
   rattler: { poise: 25, windupMs: 260, sound: { tier: "keen", pitch: "H", mode: "minor" } },
   redcaptain: { poise: 300, windupMs: 440, sound: { tier: "dull", pitch: "L", mode: "minor" } },
   rourke: { poise: 460, windupMs: 460, sound: { tier: "dull", pitch: "L", mode: "minor" } },
+  // Act 5, the sinkholes: the Hide-Kin in sewn hides and bone (the chargers and chiefs dull under theirs), the worms ring wet and low
+  delver: { poise: 70, windupMs: 340, sound: { tier: "normal", pitch: "M", mode: "minor" } },
+  cackler: { poise: 35, windupMs: 240, sound: { tier: "fragile", pitch: "H", mode: "minor" } },
+  stagkin: { poise: 110, windupMs: 420, sound: { tier: "dull", pitch: "L", mode: "minor" } },
+  quillback: { poise: 55, windupMs: 480, sound: { tier: "keen", pitch: "M", mode: "minor" } },
+  stitcher: { poise: 45, windupMs: 460, sound: { tier: "normal", pitch: "M", mode: "minor" } },
+  sinkworm: { poise: 60, windupMs: 320, sound: { tier: "normal", pitch: "L", mode: "minor" } },
+  hidechief: { poise: 310, windupMs: 440, sound: { tier: "dull", pitch: "L", mode: "minor" } },
+  mawfather: { poise: 480, windupMs: 470, sound: { tier: "dull", pitch: "L", mode: "minor" } },
 };
 
 /**

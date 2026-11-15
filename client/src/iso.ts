@@ -30,9 +30,10 @@ import { hiResTexture } from "./smooth";
 import { uprightTexture, UPRIGHT_OY } from "./smoothProps";
 import { ADOBE_PAD, ADOBE_WALL_H, adobeHead, adobeTexture, adobeWallTexture, bonesTexture, CLIFF_DEPTH, cliffDistance, cliffHeight, cliffTexture, cliffVariant, deadTreeTexture, desertRockTexture, sunStoneTexture, tentTexture } from "./desertArt";
 import { D, FURNACE, SUNSTONE } from "../../shared/desert";
-import { BADLANDS_H, BADLANDS_Y0, DESERT_H, DESERT_Y0, MOORS_H, MOORS_Y0 } from "../../shared/constants";
+import { BADLANDS_H, BADLANDS_Y0, DESERT_H, DESERT_Y0, MOORS_H, MOORS_Y0, SINKHOLES_H, SINKHOLES_Y0 } from "../../shared/constants";
 import { ARCHES, BR } from "../../shared/badlands";
 import { barrowTexture, birchTexture, boneHeapTexture, graniteCliffTexture, origin, standingStoneTexture } from "./moorsArt";
+import { burrowTexture, caveMouthTexture, origin as skOrigin, pitTexture, sinkCliffTexture } from "./sinkholesArt";
 import { archTexture, bleachedBonesTexture, boulderTexture, cactusTexture, origin as blOrigin, redCliffTexture, snagTexture } from "./badlandsArt";
 
 export const isoX = (x: number, y: number) => x - y;
@@ -118,6 +119,8 @@ const BAKE_FROM: Partial<Record<number, number>> = { [T.FLOWERS]: T.GRASS, [T.FI
  * The tilemap uses them as separate tilesets (the second starts at gid ISO_PER * TILE_COUNT), so tile indices are
  * unchanged. Only the rows the two layers really use are baked (`isoRows`): the high rows are palisade and signpost
  * variants, which the iso view draws as sprites, so the ground and object layers never show them.
+ * Width is TILE_COUNT * 66 px (4224 at 64 tiles): over 4096 but well under the 8192+ every desktop WebGL GPU offers;
+ * the game is desktop only. Split the columns too if TILE_COUNT ever passes ~124.
  */
 const ISO_PER = 64;
 const ISO_KEYS = ["tiles_iso", "tiles_iso_b"];
@@ -711,12 +714,18 @@ export function isoStanding(scene: Phaser.Scene, objects: number[][]): number[][
   const mdist = cliffDistance(objects.map((r) => r.map(id)), T.CLIFF, MAP_W, M0, MAP_H, CLIFF_DEPTH + 1);
   const md = (x: number, y: number) => (x < 0 || x >= MAP_W || y < M0 || y >= MAP_H ? 9 : mdist[(y - M0) * MAP_W + x]);
   const B0 = BADLANDS_Y0 - 4; // Act 4's band (shared/badlands.ts): the rows from here down are never the moors'
-  const bdist = cliffDistance(objects.map((r) => r.map(id)), T.CLIFF, MAP_W, B0, MAP_H, CLIFF_DEPTH + 1);
-  const bd = (x: number, y: number) => (x < 0 || x >= MAP_W || y < B0 || y >= MAP_H ? 9 : bdist[(y - B0) * MAP_W + x]);
+  const S0 = SINKHOLES_Y0 - 4; // Act 5's band (shared/sinkholes.ts): the rows from here down; the badlands end above
+  const bdist = cliffDistance(objects.map((r) => r.map(id)), T.CLIFF, MAP_W, B0, S0, CLIFF_DEPTH + 1);
+  const bd = (x: number, y: number) => (x < 0 || x >= MAP_W || y < B0 || y >= S0 ? 9 : bdist[(y - B0) * MAP_W + x]);
+  const sdist = cliffDistance(objects.map((r) => r.map(id)), T.CLIFF, MAP_W, S0, MAP_H, CLIFF_DEPTH + 1);
+  const sd = (x: number, y: number) => (x < 0 || x >= MAP_W || y < S0 || y >= MAP_H ? 9 : sdist[(y - S0) * MAP_W + x]);
   for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
     const index = objects[ty][tx], t = id(index);
     if (t < 0) continue;
-    if (ty >= B0) { // the badlands band
+    if (ty >= S0) { // the sinkholes band
+      if (ty < SINKHOLES_Y0 || ty >= SINKHOLES_Y0 + SINKHOLES_H) { out[ty][tx] = -1; continue; } // the solid rock strips round the sinkholes: ground paints them
+      if (isoSinkholes(scene, t, tx, ty, at, sd)) { out[ty][tx] = -1; continue; }
+    } else if (ty >= B0) { // the badlands band
       if (ty < BADLANDS_Y0 || ty >= BADLANDS_Y0 + BADLANDS_H) { out[ty][tx] = -1; continue; } // the solid rock strips round the badlands: ground paints them
       if (isoBadlands(scene, t, tx, ty, at, bd)) { out[ty][tx] = -1; continue; }
     } else if (ty >= M0 && (ty < MOORS_Y0 || ty >= MOORS_Y0 + MOORS_H)) { out[ty][tx] = -1; continue; } // the solid rock strips round the moors: ground paints them
@@ -915,6 +924,34 @@ function isoBadlands(scene: Phaser.Scene, t: number, tx: number, ty: number, at:
   if (t === T.BONES) return place(bleachedBonesTexture(scene, 1 + (v % 3)));
   if (t === T.STUMP) return place(snagTexture(scene, [0, 1, 2, 0][v], 1 + v));
   if (t === T.CACTUS) { const k = hashXY(tx * 5 + 3, ty * 7 + 1); return place(cactusTexture(scene, k < 0.3 ? 2 : k < 0.7 ? 0 : 1, 1 + v)); }
+  return false;
+}
+
+// ---------- Act 5: the Mawdeep Sinkholes (shared/sinkholes.ts, art in sinkholesArt.ts) ----------
+
+/**
+ * Sinkholes objects that stand up: loam cliffs, overgrown pits (PIT; flooded ones are water ground), burrow mounds and
+ * cave mouths (three CAVE tiles side by side; the middle one draws the whole mouth). Willows (TREE) and ferns (BUSH) are
+ * tree-like sprites drawn by ambient.ts. Returns false for anything drawn the usual way.
+ */
+function isoSinkholes(scene: Phaser.Scene, t: number, tx: number, ty: number, at: (x: number, y: number) => number, cd: (x: number, y: number) => number): boolean {
+  const cx = (tx + 0.5) * TILE, cy = (ty + 0.5) * TILE, v = Math.floor(hashXY(tx, ty) * 4);
+  if (t === T.CLIFF) {
+    const d = cd(tx, ty);
+    if (d > CLIFF_DEPTH) return true; // deep inside the massif: the ground paints the rock top
+    const H = (x: number, y: number) => (id(at(x, y)) !== T.CLIFF ? 0 : cliffHeight(Math.min(cd(x, y), CLIFF_DEPTH + 1), x, y));
+    const h = H(tx, ty), deep = (x: number, y: number) => id(at(x, y)) === T.CLIFF && cd(x, y) > CLIFF_DEPTH;
+    const key = sinkCliffTexture(scene, h, (deep(tx, ty + 1) ? 0 : 1) | (deep(tx + 1, ty) ? 0 : 2), cliffVariant(tx, ty));
+    staticObj(scene, scene.add.image(cx, cy, key).setOrigin(0.5, (IH / 2 + h) / (IH + h)).setDepth(cy + d * 0.5));
+    return true;
+  }
+  const place = (s: Parameters<typeof skOrigin>[0] & { key: string }, depth = cy) => { const o = skOrigin(s); staticObj(scene, scene.add.image(cx, cy, s.key).setOrigin(o.x, o.y).setDepth(depth)); return true; };
+  if (t === T.PIT) return place(pitTexture(scene, false, v), cy - 2);
+  if (t === T.BURROW) return place(burrowTexture(scene, 1 + (v % 3)));
+  if (t === T.CAVE) {
+    if (id(at(tx - 1, ty)) !== T.CAVE || id(at(tx + 1, ty)) !== T.CAVE) return true; // drawn once, from the mouth's middle tile
+    return place(caveMouthTexture(scene, 1 + (v % 3)), cy - 1);
+  }
   return false;
 }
 

@@ -2,13 +2,14 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
-  ACT_LEVEL, actMobLevel, actOfTile, actSpecialLevel, BADLANDS_H, BADLANDS_LEVEL, BADLANDS_Y0, DEEP_END, MAP_H, MAP_W, MOORS_H, MOORS_Y0, TILE, WORLD_H,
+  ACT_LEVEL, actMobLevel, actOfTile, actSpecialLevel, BADLANDS_H, BADLANDS_LEVEL, BADLANDS_Y0, DEEP_END, MAP_H, MAP_W, MOORS_H, MOORS_Y0, SINKHOLES_Y0, TILE, WORLD_H,
 } from "../shared/constants";
 import { EMPTY, GROUND, isSafeZone, isSolidAt, isSolidTile, MIRROR_POND, OBJECTS, randomSpawn, T, TILE_COUNT } from "../shared/map";
 import {
   ARCHES, BR, buildBadlands, FANGROCK, inBadlandsRow, REDPASS, REDPASS_BADLANDS, REDPASS_OAKVALE, RUSTWATER_POST, RUSTWATER_SQUARE, TALON_FORT,
 } from "../shared/badlands";
 import { MOORSGATE_MOORS } from "../shared/moors";
+import { SINKWAY_BOX } from "../shared/sinkholes";
 import { KEL_MARKET, D } from "../shared/desert";
 import {
   actAt, actOpen, actSpawn, badlandsOpen, badlandsSpawn, gateColdNote, gateOpen, HOMELAND_GATES, isBadlandsGate, isMoorsGate, waygateArrival, waygateById,
@@ -38,10 +39,9 @@ const NEW_TILES = [T.CLAY, T.GRAVEL, T.ARCH, T.CACTUS];
 test("badlands: a band of its own under the moors, built the same every time", () => {
   assert.equal(BADLANDS_Y0, MOORS_Y0 + MOORS_H + 8);
   assert.equal(BADLANDS_Y0, 780);
-  assert.equal(MAP_H, BADLANDS_Y0 + BADLANDS_H + 4);
-  assert.equal(MAP_H, 960);
+  assert.equal(SINKHOLES_Y0, BADLANDS_Y0 + BADLANDS_H + 8, "the sinkholes (Act 5) lie under the badlands' rock");
   assert.equal(GROUND.length, MAP_H);
-  assert.equal(TILE_COUNT, 60);
+  assert.ok(TILE_COUNT >= 60);
   assert.deepEqual(NEW_TILES, [56, 57, 58, 59]);
   const fresh = () => {
     const g = Array.from({ length: MAP_H }, () => Array<number>(MAP_W).fill(T.DIRT)), o = Array.from({ length: MAP_H }, () => Array<number>(MAP_W).fill(T.ROCK));
@@ -81,7 +81,8 @@ test("badlands: actOfTile knows all four acts, the rock strips split between the
   for (let y = MOORS_Y0 + MOORS_H; y < BADLANDS_Y0; y++) assert.equal(actOfTile(140, y), y < BADLANDS_Y0 - 4 ? 3 : 4, `rock strip row ${y}`);
   assert.equal(actOfTile(REDPASS_BADLANDS.x, REDPASS_BADLANDS.y), 4, "the Red Pass's badlands side");
   assert.equal(actOfTile(0, B0), 4);
-  assert.equal(actOfTile(287, MAP_H - 1), 4, "the last row (rock under the badlands)");
+  assert.equal(actOfTile(287, B1 + 3), 4, "the rock under the badlands, its upper half");
+  assert.equal(actOfTile(287, B1 + 4), 5, "its lower half is the sinkholes'");
   assert.equal(actAt(REDPASS_BADLANDS.y * TILE, REDPASS_BADLANDS.x * TILE), 4);
   assert.ok(inBadlandsRow(BR(0)) && inBadlandsRow(BR(BADLANDS_H - 1)) && !inBadlandsRow(BR(-1)) && !inBadlandsRow(BR(BADLANDS_H)));
 });
@@ -100,7 +101,7 @@ test("badlands: sealed in rock, every walkable tile reachable from the Red Pass,
   }
   assert.ok(walk > MAP_W * BADLANDS_H * 0.5, "mostly open land");
   for (let y = MOORS_Y0 + MOORS_H; y < B0; y++) for (let x = 0; x < MAP_W; x++) assert.ok(isSolidTile(x, y), `rock at ${x},${y}`);
-  for (let y = B1; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) assert.ok(isSolidTile(x, y), `rock at ${x},${y}`);
+  for (let y = B1; y < SINKHOLES_Y0; y++) for (let x = 0; x < MAP_W; x++) assert.ok(isSolidTile(x, y), `rock at ${x},${y}`);
   // the Rustwater Post, Fangrock and Talon Fort (raised in tests/badlands-zones.test.ts): mostly open ground inside their
   // walls, every bit of it reachable through the gates
   for (const r of [RUSTWATER_POST, FANGROCK, TALON_FORT]) {
@@ -125,13 +126,15 @@ test("badlands: sealed in rock, every walkable tile reachable from the Red Pass,
   assert.ok(REDPASS_OAKVALE.x < 6 && REDPASS_OAKVALE.y > MIRROR_POND.y && REDPASS_OAKVALE.y < 145, "west edge, south of Mirror Pond, north of Barrow Downs");
 });
 
-test("badlands: the Red Pass leaves the rest of Act 1 exactly as it was", () => {
-  // the overworld's tiles outside the gate's carve box (x <= 14, rows 113-123), hashed before the band was added.
-  // A deliberate change to the overworld map must update this hash.
-  const box = (x: number, y: number) => x <= 14 && y >= 113 && y <= 123;
+test("badlands: the Red Pass (and the Sinkway) leave the rest of Act 1 exactly as it was", () => {
+  // the overworld's tiles outside the gates' carve boxes (the Red Pass: x <= 14, rows 113-123; the Sinkway, Act 5:
+  // shared/sinkholes.ts SINKWAY_BOX), hashed before either band was added. A deliberate change to the overworld map
+  // must update this hash.
+  const S = SINKWAY_BOX;
+  const box = (x: number, y: number) => (x <= 14 && y >= 113 && y <= 123) || (x >= S.x0 && x <= S.x1 && y >= S.y0 && y <= S.y1);
   const h = createHash("sha256");
   for (let y = 0; y < WORLD_H; y++) h.update(GROUND[y].map((g, x) => (box(x, y) ? -9 : g)).join(",") + "|" + OBJECTS[y].map((o, x) => (box(x, y) ? -9 : o)).join(",") + "\n");
-  assert.equal(h.digest("hex"), "cd632f8234d253511383dcce66d0f24010c5a0cabb197e48b8d244c9c2dd1c80");
+  assert.equal(h.digest("hex"), "95619df710b7c29eaadcaa08c27b7843157091bf3f87d3cf7e7f0d88fdd9993f");
 });
 
 test("badlands: Lv 25-40 climbing west, the Red Pass opens at Lv 25, a war land of their own", () => {
@@ -145,7 +148,7 @@ test("badlands: Lv 25-40 climbing west, the Red Pass opens at Lv 25, a war land 
   assert.deepEqual([actMobLevel(1, 0), actMobLevel(1, 40), actSpecialLevel(1, 40)], [1, 25, 30]);
   assert.deepEqual([actMobLevel(2, 5), actMobLevel(2, 60), actSpecialLevel(2, 60)], [30, 47, 50]);
   assert.deepEqual([actMobLevel(3, 5), actMobLevel(3, 60), actSpecialLevel(3, 60)], [20, 33, 35]);
-  assert.deepEqual(Object.keys(ACT_LEVEL), ["1", "2", "3", "4"]);
+  assert.deepEqual(Object.keys(ACT_LEVEL), ["1", "2", "3", "4", "5"]);
   // the gate pair
   const g = waygateById("redpass")!, b = waygateById("badlands")!;
   assert.equal(g.to, "badlands"); assert.equal(b.to, "redpass");
@@ -155,8 +158,8 @@ test("badlands: Lv 25-40 climbing west, the Red Pass opens at Lv 25, a war land 
   assert.equal(gateOpen(b, { level: 25 } as never), true);
   assert.equal(gateColdNote(g, undefined), "The pass is held shut. Return at level 25.");
   assert.equal(gateColdNote(waygateById("moorsgate")!, undefined), "The gate is cold. Return at level 20.");
-  assert.deepEqual(HOMELAND_GATES.map((h) => [h.act, h.level]), [[3, 20], [4, 25]]);
-  assert.ok(actOpen(1, undefined) && actOpen(4, { level: 25 } as never) && !actOpen(4, { level: 24 } as never) && !actOpen(5, { level: 50 } as never));
+  assert.deepEqual(HOMELAND_GATES.slice(0, 2).map((h) => [h.act, h.level]), [[3, 20], [4, 25]]);
+  assert.ok(actOpen(1, undefined) && actOpen(4, { level: 25 } as never) && !actOpen(4, { level: 24 } as never) && !actOpen(6, { level: 50 } as never));
   for (const act of [1, 2, 3, 4]) { const q = actSpawn(act, randomSpawn); assert.equal(actAt(q.y, q.x), act, `act ${act} spawn`); }
   // the war reaches the badlands as a land of their own (shared/war/regions.ts): every Act 4 territory is in it, none elsewhere
   assert.equal(regionOf(REDPASS.x, BR(REDPASS.y))?.key, "badlands");

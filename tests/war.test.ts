@@ -11,24 +11,26 @@ function rng(seed: number) { return () => { seed = (seed * 1103515245 + 12345) &
 
 test("war map: every capital is a territory, borders are two-way, and every territory is reachable", () => {
   for (const [n, c] of capitalsOf(builtRegions(TERRITORIES))) assert.equal(territoryByName(n)?.capitalOf, c.clan, `${c.clan} capital ${n}`);
-  // one capital per built land, but the Host and Redfang (at home in the moors / the badlands only: their forward
-  // capitals stepped down) and the Wardens (also the Cairnwatch garrison's Grey Ring)
-  const caps: Partial<Record<string, string[]>> = { host: ["moors"], redfang: ["badlands"], wardens: ["moors", "oakvale", "sunscar"] };
-  for (const k of CLAN_KEYS) assert.deepEqual(TERRITORIES.filter((t) => t.capitalOf === k).map((t) => t.region).sort(), caps[k] ?? ["oakvale", "sunscar"], k);
+  // every homeland built, so no forward capital is left: the Host, Redfang and the Hide-Kin hold their seats at home,
+  // the Host and Redfang also an Oakvale foothold; the Wardens also the Cairnwatch garrison's Grey Ring
+  const caps: Record<string, string[]> = { wardens: ["moors", "oakvale", "sunscar"], redfang: ["badlands", "oakvale"], host: ["moors", "oakvale"], hidekin: ["sinkholes"], veiled: ["oakvale", "sunscar"] };
+  for (const k of CLAN_KEYS) assert.deepEqual(TERRITORIES.filter((t) => t.capitalOf === k).map((t) => t.region).sort(), caps[k], k);
+  assert.ok(!TERRITORIES.some((t) => t.forward), "no forward capitals remain");
   for (const t of TERRITORIES) {
     assert.ok(t.near.length > 0, `${t.name} has no neighbour`);
     for (const n of t.near) assert.ok(TERRITORIES[n].near.includes(t.id), `${t.name} <-> ${TERRITORIES[n].name}`);
   }
   const seen = new Set([0]), todo = [0];
   while (todo.length) for (const n of TERRITORIES[todo.pop()!].near) if (!seen.has(n)) { seen.add(n); todo.push(n); }
-  assert.equal(seen.size, TERRITORIES.length, "all four acts form one connected war map");
-  for (const a of [1, 2, 3, 4]) assert.ok(TERRITORIES.some((t) => t.act === a), `Act ${a} is at war`);
+  assert.equal(seen.size, TERRITORIES.length, "all five acts form one connected war map");
+  for (const a of [1, 2, 3, 4, 5]) assert.ok(TERRITORIES.some((t) => t.act === a), `Act ${a} is at war`);
 });
 
 test("sanctuaries stay out of the war: dungeons, boss lairs and wild zones", () => {
   // (zones of a land that is not built yet stay out too)
   for (const z of SPAWN_ZONES) assert.equal(!!territoryByName(z.name), !isSanctuary(z) && !!regionOf(z.x + (z.w >> 1), z.y + (z.h >> 1)), z.name);
-  for (const n of ["The Gnawing Halls", "Gorehowl's Lair", "The Sun Furnace", "Oakvale Countryside", "The Sunscar", "The Barrow-King's Mound", "The Grey Barrow Moors"]) assert.equal(territoryByName(n), undefined, n);
+  for (const n of ["The Gnawing Halls", "Gorehowl's Lair", "The Sun Furnace", "Oakvale Countryside", "The Sunscar", "The Barrow-King's Mound", "The Grey Barrow Moors",
+    "Fangrock Keep", "The Red Badlands", "The Great Maw", "The Mawdeep Sinkholes"]) assert.equal(territoryByName(n), undefined, n);
 });
 
 test("every clan starts with land around its capitals", () => {
@@ -76,9 +78,17 @@ test("a siege takes a territory when the attack still out-fights the defence", (
 
 test("tunnels: a Hide-Kin strike two borders away is fed from where the tunnel starts", async () => {
   const { targetsOf, newWar, warTick, WAR } = await import("../shared/war/rules");
-  const s = newWar();
-  const far = targetsOf(s, "hidekin").find((t) => !TERRITORIES[t].near.some((n) => s.owner[n] === "hidekin") && !TERRITORIES[t].capitalOf);
-  assert.ok(far !== undefined, "today's map has a tunnel target");
-  const out = warTick(newWar(), { hidekin: { defend: 0, attack: [{ t: far!, share: 1 }] } }, { phase: 0 });
-  assert.ok(out.pressure[far!] > out.army.hidekin * WAR.cutOff * 1.5, `well above a cut-off strike (${out.pressure[far!]})`);
+  // Since the sinkholes joined (no forward capitals left) the Hide-Kin's land on a new war is their homeland, and its
+  // only way out (Hollowbrook Dells, the Sinkway) lies far from Hidehall: a tunnel from there is fed little more than a
+  // cut-off strike. So the Wardens take Tunneltop and the three lands round it, and the Hide-Kin tunnel back in from
+  // Hidehall's side, two borders away.
+  const war = () => {
+    const s = newWar();
+    for (const n of ["Tunneltop", "Rootfall Slopes", "The Pitfields", "Rushmere Hollows"]) s.owner[territoryByName(n)!.id] = "wardens";
+    return s;
+  };
+  const s = war(), far = territoryByName("Tunneltop")!.id;
+  assert.ok(targetsOf(s, "hidekin").includes(far) && !TERRITORIES[far].near.some((n) => s.owner[n] === "hidekin"), "a tunnel target");
+  const out = warTick(war(), { hidekin: { defend: 0, attack: [{ t: far, share: 1 }] } }, { phase: 0 });
+  assert.ok(out.pressure[far] > out.army.hidekin * WAR.cutOff * 1.5, `well above a cut-off strike (${out.pressure[far]})`);
 });

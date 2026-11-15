@@ -546,6 +546,7 @@ function tabard(c: C2, r: Rig) {
 function backItem(c: C2, r: Rig, front: boolean) {
   const L = r.L, { cx, sy, hipY } = r;
   if ((r.dir === "up") === front) beastParts(c, r);
+  if (front) fetishes(c, r);
   coatTails(c, r, front);
   if (L.scarf) scarfEnds(c, r, front);
   if (L.back === "cape") {
@@ -603,6 +604,18 @@ function backItem(c: C2, r: Rig, front: boolean) {
  */
 function beastParts(c: C2, r: Rig) {
   const L = r.L, { cx, sy, hipY } = r, t = r.p.t, R = r.R, up = r.dir === "up";
+  if (L.quills !== undefined) {
+    // a porcupine's back: banded quills fanning out of the spine; behind the body from the front, over it from behind
+    const dark = C(L.quills), n = up ? 26 : 16;
+    for (let k = 0; k < n; k++) {
+      const u = (k + 0.5) / n, rs = (k * 7919 % 13) / 13;
+      let a: P, b: P;
+      if (up) { const bx = cx + (u - 0.5) * 7, by = sy + 1 + ((k * 5) % 6) * 1.5; a = [bx, by]; b = [bx + (u - 0.5) * 5, by - 2.6 - rs * 2.2]; }
+      else if (R) { const ang = -2.6 + u * 1.9; a = [cx - 1.4 + Math.cos(ang) * 1.0, sy + 2.2 + Math.sin(ang) * 1.0 + u * 2]; b = [a[0] + Math.cos(ang) * (4 + rs * 2.4), a[1] + Math.sin(ang) * (4 + rs * 2.4)]; }
+      else { const ang = -Math.PI + u * Math.PI, side = Math.cos(ang); a = [cx + side * 3.0, sy + 0.8 + Math.sin(ang) * -0.5]; b = [a[0] + side * (2.6 + rs * 1.8), a[1] - 3.4 - rs * 2.4 + Math.abs(side) * 1.2]; }
+      line(c, [a, b], sh(0x2a2220, 0.6), 0.62, 1); line(c, [a, lerpP(a, b, 0.62)], dark, 0.4, 1); line(c, [lerpP(a, b, 0.55), b], 0xe8dfc4, 0.36, 1);
+    }
+  }
   if (L.tail !== undefined) {
     const col = C(L.tail), sw = Math.sin(t * 1.3) * 0.8;
     const pts: P[] = R ? [[cx - 1.2, hipY], [cx - 4.5, hipY + 3.5], [cx - 7.5 + sw, 28.6]] : [[cx + 0.6, hipY + 0.4], [cx + 3.2 + sw, hipY + 4.5], [cx + 5.5 + sw, 28.8]];
@@ -651,6 +664,20 @@ function beastParts(c: C2, r: Rig) {
   }
 }
 
+/** Bone and charm fetishes hanging on cords from the belt (the Hide-Kin shamans, the trappers' lodge charms). */
+function fetishes(c: C2, r: Rig) {
+  const L = r.L; if (L.fetishes === undefined) return;
+  const col = C(L.fetishes), { cx, hipY } = r, t = r.p.t, R = r.R;
+  const spots: [number, number][] = R ? [[-0.8, 0], [0.6, 0.4], [-2.0, 0.6]] : r.dir === "up" ? [[-2.4, 0], [2.4, 0.3]] : [[-2.8, 0.2], [-1.3, 0.7], [2.6, 0.2], [1.2, 0.6]];
+  spots.forEach(([dx, dy], i) => {
+    const x = cx + dx, y = hipY - 1.6 + dy, sw = Math.sin(t * 1.3 + i * 1.7) * 0.3, len = 2.2 + (i % 2) * 1.2;
+    line(c, [[x, y], [x + sw, y + len]], 0x2a1c12, 0.14, 0.9);
+    if (i % 3 === 0) fillShape(c, poly([[x + sw - 0.6, y + len], [x + sw + 0.6, y + len], [x + sw + 0.35, y + len + 1.6], [x + sw - 0.35, y + len + 1.6]]), css(col)); // a bone
+    else if (i % 3 === 1) { fillShape(c, ellipseP(x + sw, y + len + 0.5, 0.65, 0.75), css(col)); fillShape(c, ellipseP(x + sw - 0.2, y + len + 0.4, 0.14, 0.14), css(0x1a1008)); fillShape(c, ellipseP(x + sw + 0.2, y + len + 0.4, 0.14, 0.14), css(0x1a1008)); } // a tiny skull
+    else { fillShape(c, ellipseP(x + sw, y + len + 0.4, 0.6, 0.6), css(0x7a2a1a)); fillShape(c, ellipseP(x + sw, y + len + 0.4, 0.28, 0.28), css(0xd8a040)); } // a clay charm
+  });
+}
+
 // ---------------------------------------------------------------- arms
 function arm(c: C2, r: Rig, which: "near" | "far") {
   const L = r.L, isNear = which === "near";
@@ -685,6 +712,11 @@ function arm(c: C2, r: Rig, which: "near" | "far") {
   const hs = ellipseP(h[0], h[1], 0.85, 0.8);
   if (plate) metal(c, hs, hc, [h[0] - 0.8, h[1] - 0.8], [h[0] + 0.8, h[1] + 0.8], 0.4); else vol(c, hs, hc, [h[0] - 0.9, h[1] - 0.9, 1.8, 1.8], { ao: 0.2 });
   void skin;
+  if (L.claws !== undefined) { // great digging claws: three long curved nails past the knuckles
+    const dx = h[0] - e[0], dy = h[1] - e[1], l = Math.hypot(dx, dy) || 1, ux = dx / l, uy = dy / l, cc = C(L.claws);
+    for (const o of [-0.8, 0, 0.8]) { const bx = h[0] - uy * o * 0.9, by = h[1] + ux * o * 0.9, tx = bx + ux * 2.4 - uy * o * 0.7, ty = by + uy * 2.4 + ux * o * 0.7;
+      limb(c, [bx, by], [tx, ty], 0.55, 0.12, sh(cc, 0.5)); limb(c, [bx, by], [tx, ty], 0.4, 0.06, cc); }
+  }
   // pauldron
   if (plate || armoured) {
     const pc = C(armoured ? gear!.color : L.sleeve);
@@ -941,6 +973,10 @@ const BEAST: Record<NonNullable<Look["beast"]>, { fur: number; muz: number; nose
   crow: { fur: 0x1e1a24, muz: 0x4a4650, nose: 0x2a2830, rx: 2.15, ry: 2.15 },
   camel: { fur: 0xb88a58, muz: 0xd0aa78, nose: 0x5a3a24, rx: 1.9, ry: 2.0 },
   lion: { fur: 0xc8923a, muz: 0xe2c690, nose: 0x3a2018, rx: 2.15, ry: 2.15 },
+  mole: { fur: 0x54483e, muz: 0xb89a8a, nose: 0xd89a98, rx: 2.2, ry: 2.05 },
+  hyena: { fur: 0x9a7a4a, muz: 0x3e2e22, nose: 0x120c0a, rx: 2.3, ry: 2.1 },
+  stag: { fur: 0x6a4a34, muz: 0xc0a080, nose: 0x1a1210, rx: 2.1, ry: 2.25 },
+  quill: { fur: 0x3e3228, muz: 0x8a7a68, nose: 0x1a1210, rx: 2.3, ry: 2.15 },
 };
 function beastHead(c: C2, r: Rig, hood = false) {
   const L = r.L, kind = L.beast!, B = BEAST[kind], [hx, hy] = r.head, dir = r.dir, R = r.R, fo = r.fo, qx = hx + fo;
@@ -967,6 +1003,22 @@ function beastHead(c: C2, r: Rig, hood = false) {
   if (kind === "bat") for (const sx of sides) ear(earAt(sx, 1.5, 0), hy - 2.6, 0.9, 2.1, sx * 0.25, false, 0x7a4a4a);
   if (kind === "wolf") for (const sx of sides) ear(earAt(sx, 1.4, 0), hy - 2.4, 0.8, 1.6, sx * 0.15, false, 0x5a4a44);
   if (kind === "bear") for (const sx of sides) ear(earAt(sx, 2.0, 0), hy - 2.0, 0.85, 0.8, 0, true, 0x2e2018);
+  if (kind === "mole") for (const sx of sides) ear(earAt(sx, 1.9, 0.2), hy - 1.2, 0.5, 0.5, 0, true, 0x8a6a5c);
+  if (kind === "hyena") for (const sx of sides) ear(earAt(sx, 2.0, 0), hy - 2.0, 1.15, 1.15, 0, true, 0x2a1a14);
+  if (kind === "quill") for (const sx of sides) ear(earAt(sx, 1.9, 0), hy - 1.5, 0.7, 0.7, 0, true, 0x6a5a48);
+  if (kind === "stag") {
+    for (const sx of sides) ear(earAt(sx, 2.0, 0), hy - 1.1, 0.5, 1.3, sx * 1.1, false, 0x8a5a44);
+    // antlers: a main beam rising and curving, tines branching forward and out; bone, darkening toward the tips
+    const AN = 0xd8cdae, shaft = (a: P, b: P, w: number) => { limb(c, a, b, w, w * 0.6, C(sh(AN, 0.55))); limb(c, a, b, w * 0.7, w * 0.4, C(AN)); };
+    for (const sx of sides) {
+      const b0: P = R ? [hx - 0.6, hy - 2.0] : [hx + sx * 1.2, hy - 2.0], b1: P = R ? [hx - 1.4, hy - 4.6] : [hx + sx * 2.3, hy - 4.5], b2: P = R ? [hx - 0.2, hy - 7.2] : [hx + sx * 1.8, hy - 7.4];
+      shaft(b0, b1, 0.9); shaft(b1, b2, 0.7);
+      shaft(b1, R ? [hx + 1.2, hy - 5.8] : [hx + sx * 4.1, hy - 5.8], 0.45);
+      shaft(lerpP(b0, b1, 0.55), R ? [hx + 0.8, hy - 3.9] : [hx + sx * 3.9, hy - 3.2], 0.4);
+      shaft(b2, R ? [hx + 1.4, hy - 8.6] : [hx + sx * 3.0, hy - 8.8], 0.4);
+      shaft(b2, R ? [hx - 1.6, hy - 8.8] : [hx + sx * 0.6, hy - 9.2], 0.36);
+    }
+  }
   if (kind === "camel") {
     // a long neck rising out of the shoulders, then little round ears
     if (!hood) limb(c, [r.cx + (R ? -0.4 : 0), r.sy - 0.6], [hx - (R ? 0.6 : 0), hy + 1.2], 2.0, 1.5, sh(fur, 0.85));
@@ -1030,6 +1082,13 @@ function beastHead(c: C2, r: Rig, hood = false) {
   }
   if (kind === "crow") { // ragged feathers sticking up off the crown and the nape
     for (let k = -2; k <= 2; k++) { const x = hx + k * 0.6 + (R ? -1 : 0), y = hy - B.ry + 0.2; line(c, [[x, y + 0.6], [x + (R ? -0.9 : k * 0.25), y - 0.9 - (k % 2 ? 0.3 : 0)]], sh(fur, 0.7), 0.3, 0.95); }
+  }
+  if (kind === "quill") { // quills sprouting off the crown and the nape, banded
+    for (let k = -3; k <= 3; k++) { const x = hx + k * 0.55 + (R ? -0.8 : 0), y = hy - B.ry + 0.3 + Math.abs(k) * 0.15; line(c, [[x, y + 0.5], [x + (R ? -0.8 : k * 0.28), y - 1.9 + Math.abs(k) * 0.25]], 0x2a2220, 0.26, 0.95); line(c, [[x + (R ? -0.5 : k * 0.17), y - 0.9], [x + (R ? -0.8 : k * 0.28), y - 1.9 + Math.abs(k) * 0.25]], 0xe8dfc4, 0.2, 0.95); }
+  }
+  if (kind === "hyena") { // a dark ragged crest and spots on the crown
+    for (let k = -3; k <= 3; k++) { const x = hx + k * 0.5 + (R ? -0.8 : 0), y = hy - B.ry - 0.1 + Math.abs(k) * 0.15; line(c, [[x, y + 0.6], [x + (R ? -0.6 : k * 0.1), y - 0.9 - (k % 2 ? 0.3 : 0)]], 0x2a1a12, 0.24, 0.95); }
+    for (const [dx, dy] of dir === "up" ? [[-1, -1], [0.8, -0.2], [-0.4, 0.8], [1.2, 1]] : [[-1.4, -1.4], [1.3, -1.2], [-0.2, -1.9]]) fillShape(c, ellipseP((R ? hx - 0.6 : qx) + dx, hy + dy, 0.3, 0.26), css(0x3a2616));
   }
   if (kind === "boar" || kind === "wolf") { // bristle mane along the crown
     for (let k = -3; k <= 3; k++) { const x = hx + k * 0.45 + (R ? -0.8 : 0), y = hy - B.ry - 0.1 + Math.abs(k) * 0.12; line(c, [[x, y + 0.6], [x + (R ? -0.4 : k * 0.08), y - 0.5]], sh(fur, 0.6), 0.22, 0.9); }
@@ -1144,6 +1203,50 @@ function beastHead(c: C2, r: Rig, hood = false) {
     const kohl = (x: number, y: number, sg: number) => line(c, [[x - sg * 0.45, y - 0.3], [x + sg * 0.8, y - 0.3], [x + sg * 1.2, y + 0.15]], 0x1a1210, 0.2, 0.95);
     if (R) { eye(hx + 0.7, hy - 0.3, 0.36); kohl(hx + 0.7, hy - 0.3, -1); }
     else for (const sg of [-1, 1]) { eye(qx + sg * 1.0, hy - 0.2, 0.36); kohl(qx + sg * 1.0, hy - 0.2, sg); }
+  } else if (kind === "mole") {
+    // a long pale snout ending in a pink star of feelers; eyes are specks buried in the fur
+    muzzle(3.0, 1.0, 1.2, 0.6);
+    const t = tip(3.0, 0.6);
+    const sx0 = R ? t[0] + 0.5 : qx, sy0 = R ? t[1] - 0.1 : hy + 1.8;
+    for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2; line(c, [[sx0, sy0], [sx0 + Math.cos(a) * (R ? 0.9 : 1.2), sy0 + Math.sin(a) * 0.9]], 0xe8aaa4, 0.2, 0.95); }
+    fillShape(c, ellipseP(sx0, sy0, 0.45, 0.4), css(C(B.nose)));
+    // two chisel incisors under it
+    if (!R) for (const sg of [-1, 1]) fillShape(c, poly([[qx + sg * 0.4 - 0.25, hy + 3.2], [qx + sg * 0.4 + 0.25, hy + 3.2], [qx + sg * 0.4, hy + 4.0]]), css(C(ivory)));
+    else fillShape(c, poly([[t[0] - 0.6, t[1] + 0.9], [t[0] - 0.1, t[1] + 0.9], [t[0] - 0.3, t[1] + 1.7]]), css(C(ivory)));
+    const sp = (x: number, y: number) => { fillShape(c, ellipseP(x, y, 0.2, 0.2), css(0x0c0806)); fillShape(c, ellipseP(x + 0.05, y - 0.05, 0.07, 0.07), css(C(eyeC))); };
+    if (R) sp(hx + 0.9, hy - 0.4); else { sp(qx - 1.0, hy - 0.3); sp(qx + 1.0, hy - 0.3); }
+  } else if (kind === "hyena") {
+    // a heavy, dark muzzle drawn back in a wide grin, big teeth, a pale chin, bright amber eyes
+    muzzle(2.2, 1.3, 1.25, 0.4);
+    const t = tip(2.2, 0.4);
+    nose(t[0] + (R ? 0.2 : 0), t[1] - (R ? 0.35 : 0.55), R ? 0.45 : 0.6, 0.4);
+    if (R) {
+      line(c, [[hx + 0.2, t[1] + 0.6], [t[0], t[1] + 0.5]], 0x1a0c08, 0.26);
+      for (const x of [t[0] - 0.4, t[0] - 1.2, hx + 0.8]) fillShape(c, poly([[x - 0.18, t[1] + 0.5], [x + 0.18, t[1] + 0.5], [x, t[1] + 1.3]]), css(C(0xf0e8d8)));
+    } else {
+      curve(c, [qx - 1.4, hy + 1.9], [qx, hy + 3.0], [qx + 1.4, hy + 1.9], 0x1a0c08, 0.26);
+      for (const sg of [-1, 0, 1]) fillShape(c, poly([[qx + sg * 0.75 - 0.17, hy + 2.45 - Math.abs(sg) * 0.35], [qx + sg * 0.75 + 0.17, hy + 2.45 - Math.abs(sg) * 0.35], [qx + sg * 0.75, hy + 3.2 - Math.abs(sg) * 0.3]]), css(C(0xf0e8d8)));
+    }
+    if (R) eye(hx + 0.7, hy - 0.6, 0.3); else { eye(qx - 0.95, hy - 0.5, 0.3); eye(qx + 0.95, hy - 0.5, 0.3); }
+  } else if (kind === "stag") {
+    // a long, narrow muzzle with a dark wet nose, large dark eyes set wide
+    muzzle(2.8, 1.0, 1.3, 0.7);
+    const t = tip(2.8, 0.7);
+    nose(t[0] + (R ? 0.2 : 0), t[1] - (R ? 0.2 : 0.3), R ? 0.45 : 0.65, 0.42);
+    if (R) line(c, [[hx + 1.2, t[1] + 0.6], [t[0], t[1] + 0.5]], 0x2a1a12, 0.16);
+    else line(c, [[qx, hy + 2.4], [qx, hy + 3.2]], 0x2a1a12, 0.14);
+    if (R) eye(hx + 0.4, hy - 0.5, 0.3); else { eye(qx - 1.15, hy - 0.4, 0.3); eye(qx + 1.15, hy - 0.4, 0.3); }
+    line(c, R ? [[hx + 0.1, hy + 0.9], [hx + 1.3, hy + 0.7]] : [[qx - 1.6, hy + 0.7], [qx - 0.8, hy + 0.9]], 0x2a1a12, 0.12, 0.6); // tear-track
+  } else if (kind === "quill") {
+    // a blunt, bulbous snout with a big dark nose, whiskers, small bright eyes under a bristling brow
+    muzzle(1.4, 1.15, 1.0, 0.4);
+    const t = tip(1.4, 0.4);
+    if (R) fillShape(c, ellipseP(t[0] + 0.1, t[1] - 0.1, 0.5, 0.55), css(C(B.nose)));
+    else nose(qx, hy + 1.5, 0.8, 0.55);
+    if (R) fillShape(c, poly([[t[0] - 0.5, t[1] + 0.6], [t[0] - 0.1, t[1] + 0.6], [t[0] - 0.3, t[1] + 1.6]]), css(C(0xe8d070)));
+    else for (const sg of [-1, 1]) fillShape(c, poly([[qx + sg * 0.3 - 0.25, hy + 2.4], [qx + sg * 0.3 + 0.25, hy + 2.4], [qx + sg * 0.3, hy + 3.4]]), css(C(0xe8d070)));
+    for (const sg of R ? [1] : [-1, 1]) for (let k = 0; k < 3; k++) line(c, [[(R ? t[0] : qx) + sg * 0.5, hy + 1.6], [(R ? t[0] : qx) + sg * 2.2, hy + 0.9 + k * 0.7]], 0xe8dfc4, 0.06, 0.7);
+    if (R) eye(hx + 0.6, hy - 0.5, 0.28); else { eye(qx - 0.95, hy - 0.4, 0.27); eye(qx + 0.95, hy - 0.4, 0.27); }
   } else if (kind === "bear") {
     muzzle(1.7, 1.4, 1.15, 0.45);
     const t = tip(1.7, 0.45);
@@ -1172,7 +1275,7 @@ function head(c: C2, r: Rig) {
   const covered = hg === "greathelm" || hg === "ninjahood";
   if (L.skull) { skull(c, r); if (worn !== "none") hat(c, r, worn); if ((L.boneArmour ?? 0) >= 4) boneCrown(c, r); return; }
   if (L.beast && !L.beastHood) { // the animal head reads bigger than a man's: it is what you see of them
-    const k = L.beast === "bull" || L.beast === "bear" || L.beast === "lion" ? 1.4 : 1.3;
+    const k = L.beast === "bull" || L.beast === "bear" || L.beast === "lion" ? 1.4 : L.beast === "stag" ? 1.15 : 1.3;
     c.save(); c.translate(r.head[0], r.head[1] + 1.4); c.scale(k, k); c.translate(-r.head[0], -r.head[1] - 1.4);
     beastHead(c, r); c.restore(); return;
   }
