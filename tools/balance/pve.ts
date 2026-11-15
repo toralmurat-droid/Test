@@ -1,7 +1,8 @@
 /**
  * PvE balance simulator: bot heroes play the first zone (Lv 1-30) against its monsters and bosses.
- * Run: npx tsx tools/balance/pve.ts [runsPerCase] [--bosses] [--zones] [--act2] [--moors] [--champions] [--troops] [--caravan] [--siege] [--tunnel] [--class=vampire] [--build=0|1|2] [--boss=king] [--no-execute] [--songweaver]
+ * Run: npx tsx tools/balance/pve.ts [runsPerCase] [--bosses] [--zones] [--act2] [--moors] [--badlands] [--champions] [--troops] [--caravan] [--siege] [--tunnel] [--class=vampire] [--build=0|1|2] [--boss=king] [--no-execute] [--songweaver]
  * --moors: zone runs against Act 3's monsters (the Grey Barrow Moors, Lv 20-33) instead of Act 1's, heroes Lv 20-34.
+ * --badlands: zone runs against Act 4's monsters (the Red Badlands, Lv 25-38) instead of Act 1's, heroes Lv 26-40.
  * --siege: a siege front (shared/war/siege.ts): the hero and SIEGE_BATTLE.perFront allied soldiers vs as many attackers, Lv 15 / 30 / 45 (and the soldiers alone);
  *   then the Host's siege ram (shared/war/works.ts): the hero alone vs the ram and its crew.
  * --tunnel: the hero alone collapses a Hide-Kin tunnel mouth (shared/war/tunnels.ts) while its waves come out: win = the mouth falls.
@@ -22,7 +23,7 @@
 import { NIGHT_RAID } from "../../shared/raiders";
 import { ACTIVE_CLASSES, ClassKind } from "../../shared/classes";
 import { BANDIT_AI, BANDIT_ROLES, CHIEF } from "../../shared/bandits";
-import { BEAST, BEAST_RIDER, BLOB_AI, DEMON, ELITE, HOLLOW_KING, MOB_ATTACK_RANGE, MOB_LEVEL, MOBS, MobKind, mobScale, MOORS_AI, MOORS_KINDS, MOTHER, SKELETON_AI, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, SUNWRIGHT, REGEN_DELAY_MS, REGEN_PER_STA } from "../../shared/constants";
+import { BEAST, BEAST_RIDER, BLOB_AI, DEMON, ELITE, HOLLOW_KING, MOB_ATTACK_RANGE, MOB_LEVEL, MOBS, MobKind, mobScale, MOORS_AI, MOORS_KINDS, BADLANDS_AI, BADLANDS_KINDS, MOTHER, SKELETON_AI, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, SUNWRIGHT, REGEN_DELAY_MS, REGEN_PER_STA } from "../../shared/constants";
 import { MOB_COMBAT, mobBody, mobSound, POISE, poiseSpeed } from "../../shared/combat";
 import { POTION_COOLDOWN_MS, POTION_SIZES } from "../../shared/potions";
 import { activeSkills, SKILLS } from "../../shared/skills";
@@ -97,6 +98,29 @@ export function mobSpec(kind: MobKind, level: number, opt: { weapon?: string; hp
     if (kind === "barrowking") {
       spec.specials.push({ name: "Roar", every: Ro.cooldownMs, windup: Ro.windupMs, min: 0, max: Ro.range, radius: Ro.radius, mult: Ro.dmgMult, at: "self", slowMs: Ro.slowMs });
       spec.specials.push({ name: "Falling Stones", every: F.cooldownMs, windup: F.windupMs, min: 0, max: F.range, radius: F.radius, mult: F.dmgMult, at: "target", stunMs: 400, hpBelow: F.hpFrac, first: 0 });
+    }
+  }
+  // Act 4 (server/TownRoom.ts RANGED: BADLANDS_AI crossbow / firepot; BEAST_MOVES pounce / swoop / stomp / maul / roar).
+  // A rider (bleed, venom) lands on every blow: more damage per blow. The fire pot is a marked throw every few seconds
+  // (its burning ground counted at a third: heroes step out of it); a warlord's war cry rallies himself half the time
+  if (BADLANDS_KINDS.includes(kind)) {
+    const R = BEAST_RIDER[kind], C = BADLANDS_AI.crossbow, Fp = BADLANDS_AI.firepot, Wl = BADLANDS_AI.warlords[kind];
+    const P = BEAST.pounce, Sw = BEAST.swoop, S = BEAST.stomp, M = BEAST.maul, Ro = BEAST.roar;
+    if (R) spec.dmg *= 1 + BEAST[R].ticks * BEAST[R].dmgMult;
+    if (Wl) spec.dmg *= 1 + (CHIEF.warCry.dmg - 1) * Wl.buffMs / Wl.cooldownMs;
+    if (kind === "crossbowman") ranged(C.range, C.keepAway, C.shotSpeed, C.shotRadius, C.mult);
+    if (kind === "firebrand") {
+      spec.cd = Fp.cooldownMs;
+      ranged(Fp.range, Fp.keepAway, Fp.range / (Fp.flightMs / 1000), Fp.burn.radius * 0.6, Fp.dmgMult + (Fp.burn.ms / Fp.burn.tickMs) * Fp.burn.dmgMult / 3);
+    }
+    if (kind === "outrider") spec.lunge = { min: BANDIT_AI.dash.min, max: BANDIT_AI.dash.max, every: BANDIT_AI.dash.cooldownMs, mult: BANDIT_AI.dash.dmgMult };
+    if (kind === "warhound") spec.lunge = { min: P.min, max: P.max, every: P.cooldownMs, mult: P.dmgMult };
+    if (kind === "vulture") spec.lunge = { min: Sw.min, max: Sw.max, every: Sw.cooldownMs, mult: Sw.dmgMult };
+    if (kind === "redcaptain" || kind === "rourke") spec.specials.push({ name: "Maul", every: M.cooldownMs, windup: M.windupMs, min: 0, max: M.range, radius: M.reach, mult: M.dmgMult, at: "self", kb: M.knockback });
+    if (kind === "redcaptain") spec.specials.push({ name: "Stomp", every: S.cooldownMs, windup: S.windupMs, min: 0, max: S.range, radius: S.radius, mult: S.dmgMult, at: "self", kb: S.knockback, stunMs: S.stunMs });
+    if (kind === "rourke") {
+      spec.specials.push({ name: "Leap", every: P.cooldownMs, windup: P.windupMs, min: P.min, max: P.max, radius: P.radius, mult: P.dmgMult, at: "target", kb: P.knockback, leap: true });
+      spec.specials.push({ name: "Roar", every: Ro.cooldownMs, windup: Ro.windupMs, min: 0, max: Ro.range, radius: Ro.radius, mult: Ro.dmgMult, at: "self", slowMs: Ro.slowMs });
     }
   }
   if (kind === "camelfolk") { const S = BEAST.stomp; spec.specials.push({ name: "Stomp", every: S.cooldownMs, windup: S.windupMs, min: 0, max: S.range, radius: S.radius, mult: S.dmgMult, at: "self", kb: S.knockback, stunMs: S.stunMs }); }
@@ -389,6 +413,9 @@ export const CHAMP_CASES: { kind: MobKind; affixes: AffixKey[]; level: number; w
   // Act 3: the Host's dead come as the necromancer's family for now (shared/champions.ts FAMILY_OF)
   { kind: "wight", affixes: ["risen"], level: 24 }, { kind: "bonehound", affixes: ["risen"], level: 26 }, { kind: "legionary", affixes: ["siege"], level: 30 },
   { kind: "mistwraith", affixes: ["risen"], level: 30 }, { kind: "boghag", affixes: [], level: 28 },
+  // Act 4: the Redfang's men come with a gang of cutthroats like their Hollow kin
+  { kind: "outrider", affixes: ["gang"], level: 30 }, { kind: "crossbowman", affixes: ["gang"], level: 34 }, { kind: "firebrand", affixes: ["gang"], level: 36 },
+  { kind: "warhound", affixes: ["gang"], level: 28 }, { kind: "rattler", affixes: ["deepvenom"], level: 33 },
 ];
 function champRun(cls: ClassKind, c: (typeof CHAMP_CASES)[number], champ: boolean, build: Build, potions = 3): RunResult {
   const h = make("h", cls, c.level, build);
@@ -438,6 +465,15 @@ function moorsMob(level: number): MobSpec {
   return mobSpec(pick(pool), L);
 }
 let MOORS = false;
+/** Act 4 (the Red Badlands, shared/spawns.ts): its monsters at Lv 25-38, warhounds in pairs, the Redfang's shooters further west. */
+function badlandsMob(level: number): MobSpec {
+  const L = Math.min(38, Math.max(25, level));
+  const pool: MobKind[] = ["outrider", "warhound", "warhound", "vulture", "rattler"];
+  if (L >= 28) pool.push("firebrand", "crossbowman");
+  if (L >= 33) pool.push("outrider", "crossbowman", "firebrand");
+  return mobSpec(pick(pool), L);
+}
+let BADLANDS = false;
 
 const CHAIN = 6; // encounters per zone run: 1 monster (55%), 2 (35%) or 3 (10%)
 const potionSize = (level: number) => (level >= 20 ? 2 : level >= 10 ? 1 : 0);
@@ -451,7 +487,7 @@ function zoneRun(cls: ClassKind, level: number, build: Build, mobLevel: (i: numb
   let t = 0, kills = 0, lost = 0, fightMs = 0;
   for (let i = 0; i < CHAIN; i++) {
     const r = Math.random(), size = r < 0.55 ? 1 : r < 0.9 ? 2 : 3;
-    const ms = Array.from({ length: size }, (_, k) => new MobF((ACT2 ? desertMob : MOORS ? moorsMob : zoneMob)(mobLevel(i)), "m" + k));
+    const ms = Array.from({ length: size }, (_, k) => new MobF((ACT2 ? desertMob : MOORS ? moorsMob : BADLANDS ? badlandsMob : zoneMob)(mobLevel(i)), "m" + k));
     const d = new PveDuel(h, ms, pack, t);
     const hp0 = h.hp, t0 = d.now;
     let w: F | null | undefined;
@@ -489,6 +525,9 @@ export const BOSSES: BossDef[] = [
   // Act 3, the moors: a Cairn-Lord (zone elite) and the Barrow-King in his mound (a plain zone boss: no quest title)
   { name: "Cairn-Lord Lv30", kind: "cairnlord", level: 30, hero: 29, plain: true },
   { name: "Barrow-King Lv35", kind: "barrowking", level: 35, hero: 34, plain: true },
+  // Act 4, the badlands: a Redfang Captain (zone elite) and Old Rourke in Fangrock's keep (a zone boss: no quest title)
+  { name: "Redfang Captain Lv34", kind: "redcaptain", level: 34, hero: 33, plain: true },
+  { name: "Old Rourke Lv40", kind: "rourke", level: 40, hero: 39, plain: true },
   // quest summons from the quest concepts (shared/quests.ts): the wrong-grave ambush and the Crown in the Sand finale
   { name: "Disturbed Dead Lv17", kind: "skeleton", level: 17, hero: 15, hpMult: 3 },
   { name: "Ostrevar's Envoy Lv39", kind: "sanddead", level: 39, hero: 38, hpMult: 7 },
@@ -747,8 +786,9 @@ if (process.argv[1]?.includes("pve")) {
   if (doZones) {
     ACT2 = process.argv.includes("--act2"); // the desert's monsters, heroes Lv 30-48
     MOORS = !ACT2 && process.argv.includes("--moors"); // the moors' monsters, heroes Lv 20-34
-    const levels = ACT2 ? [30, 33, 36, 39, 42, 45, 48] : MOORS ? [20, 22, 24, 26, 28, 30, 32, 34] : [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30];
-    console.log(`Zone runs: ${CHAIN} encounters (1-3 monsters) in a row vs monsters of the hero's level to +2 (capped ${ACT2 ? 47 : MOORS ? 33 : 25}), 3 heal + 3 mana potions.`);
+    BADLANDS = !ACT2 && !MOORS && process.argv.includes("--badlands"); // the badlands' monsters, heroes Lv 26-40
+    const levels = ACT2 ? [30, 33, 36, 39, 42, 45, 48] : MOORS ? [20, 22, 24, 26, 28, 30, 32, 34] : BADLANDS ? [26, 28, 30, 32, 34, 36, 38, 40] : [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30];
+    console.log(`Zone runs: ${CHAIN} encounters (1-3 monsters) in a row vs monsters of the hero's level to +2 (capped ${ACT2 ? 47 : MOORS ? 33 : BADLANDS ? 38 : 25}), 3 heal + 3 mana potions.`);
     console.log("Cell = cleared% / HP lost per kill / seconds per kill / potions drunk per run");
     console.log("Lv".padEnd(5) + CLASSES.map((c) => c.padEnd(22)).join(""));
     const tot: Record<string, { w: number; n: number }> = {};

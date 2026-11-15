@@ -395,7 +395,11 @@ export const mobLook = (kind: string, weapon = "") => MOB_LOOK[kind === "trooper
  * Act 3's monsters (shared/constants.ts MOORS_KINDS) until their own sheets are painted: each wears an existing
  * monster's look ([kind, weapon]). Once tools/art paints mob_<kind>, add it to PAINTED_MOBS / PAINTED_LOOK and drop it here.
  */
-const MOORS_STANDIN: Record<string, [string, string]> = {};
+const MOORS_STANDIN: Record<string, [string, string]> = {
+  // Act 4, the Red Badlands (shared/constants.ts BADLANDS_KINDS), until tools/art paints them
+  outrider: ["bandit", ""], crossbowman: ["bandit", "archer"], firebrand: ["veiled", ""], warhound: ["bonehound", ""],
+  vulture: ["duskwing", ""], rattler: ["scorpion", ""], redcaptain: ["bandit", "brute"], rourke: ["banditchief", ""],
+};
 /** The old pixel look (?pixel=1) of the moors monsters: no pixel sheets, so each wears an older monster's. */
 const MOORS_PIXEL: Record<string, string> = { wight: "skeleton", boghag: "nomad", bonehound: "gnawkin", mistwraith: "skeletonmage", legionary: "skeleton", cairnlord: "necromancer", barrowking: "necromancer" };
 /** The stand-in's size entry for a moors monster (MOB_LOOK, filled at load and again once the painted looks are in). */

@@ -2682,6 +2682,7 @@ const IDLE: Record<string, string> = {
   mourner2: "Gran would've hated all this fuss. She'd have wanted the kettle on.",
   mourner3: "I build boats. Corin built better ones. I keep thinking he'll walk up the lane and say so.",
   ilka: "Don't look at me like that. Keep walking.",
+  rustmarshal: "Water's free, the roof's free, and nobody here pays the Redfang a copper. That's the Post's whole law. Fangrock doesn't like it.", // placeholder until the badlands chain is written
   cairncaptain: "Keep to the corpse roads, and if a barrow calls your name, don't answer. Four hundred years the Wardens have held these cairns shut. I mean to be the captain who doesn't lose them.",
   alewife: "Ale's cold, the gossip's warm. Pull up a barrel, love. Whatever happens in this valley, it comes past my cart sooner or later.",
 };

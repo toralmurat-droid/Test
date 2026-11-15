@@ -302,6 +302,16 @@ export const GEAR_DROP: Record<MobKind, { chance: number; tiers: [number, number
   legionary: { chance: 0.2, tiers: [0.2, 0.45, 0.35] },
   cairnlord: { chance: 0.9, tiers: [0, 0.45, 0.55] },
   barrowking: { chance: 1, tiers: [0, 0.25, 0.75] },
+  // Act 4, the badlands (Lv 25-40): like the moors' regulars (beasts a little less); the captain and Old Rourke like the
+  // moors' elite and boss
+  outrider: { chance: 0.18, tiers: [0.25, 0.45, 0.3] },
+  crossbowman: { chance: 0.18, tiers: [0.25, 0.45, 0.3] },
+  firebrand: { chance: 0.18, tiers: [0.25, 0.45, 0.3] },
+  warhound: { chance: 0.12, tiers: [0.3, 0.45, 0.25] },
+  vulture: { chance: 0.12, tiers: [0.3, 0.45, 0.25] },
+  rattler: { chance: 0.12, tiers: [0.3, 0.45, 0.25] },
+  redcaptain: { chance: 0.9, tiers: [0, 0.45, 0.55] },
+  rourke: { chance: 1, tiers: [0, 0.25, 0.75] },
 };
 
 export function isGearId(v: unknown): v is string {

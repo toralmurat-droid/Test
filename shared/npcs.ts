@@ -2,6 +2,7 @@ import { TILE } from "./constants";
 import { isSafeZone, isSolidAt, ROADS, WRECK } from "./map";
 import { D } from "./desert";
 import { MR } from "./moors";
+import { BR } from "./badlands";
 
 /** Village NPCs: where they stand (feet, in pixels) and which sprite sheet they use. Server and client share this. */
 export interface Npc {
@@ -64,6 +65,12 @@ export const NPCS: Npc[] = [
   { id: "cairncaptain", name: "Warden-Captain Edra Vane", title: "Captain of the Cairn Wardens", sprite: "cairncaptain", x: 68.5 * TILE, y: MR(106.75) * TILE, dir: "down", where: "Cairnwatch (Act 3 moors), before the Wardens' Hall" },
   { id: "moorherbalist", name: "Mother Ysolde", title: "Herbwife", sprite: "moorherbalist", x: 77.5 * TILE, y: MR(106.75) * TILE, dir: "down", shop: "moorherbalist", where: "Cairnwatch (Act 3 moors), at her stall on the square" },
   { id: "moorarmourer", name: "Gorm", title: "Armour merchant", sprite: "moorarmourer", x: 84.5 * TILE, y: MR(111.6) * TILE, dir: "left", shop: "moorarmourer", where: "Cairnwatch (Act 3 moors), by the armoury" },
+  // ---- The Rustwater Post, the drovers' and salt-miners' waystation in the Red Badlands (Act 4, shared/badlands.ts): round its
+  // square (placeholder names; sprites: existing sheets until tools/art paints rustmarshal / rustarmourer / rusthealer).
+  // The Post's marshal stands before his hall: the badlands' quest chain starts with him
+  { id: "rustmarshal", name: "Marshal Hesk Varro", title: "Marshal of the Rustwater Post", sprite: "guard", x: 226.5 * TILE, y: BR(87.75) * TILE, dir: "down", where: "the Rustwater Post (Act 4 badlands), before the marshal's hall" },
+  { id: "rustarmourer", name: "Corra Flint", title: "Armour merchant", sprite: "sandarmourer", x: 232.5 * TILE, y: BR(87.75) * TILE, dir: "down", shop: "rustarmourer", where: "the Rustwater Post (Act 4 badlands), before the armoury" },
+  { id: "rusthealer", name: "Old Sal", title: "Healer", sprite: "spicetrader", x: 236.5 * TILE, y: BR(87.75) * TILE, dir: "down", shop: "rusthealer", where: "the Rustwater Post (Act 4 badlands), at her stall on the square" },
   // ---- Zone quest givers (Murat 2026-11-10: "more zone quests, real exploration arcs"): each lives out in their zone and
   // starts a short arc there that moves on through it and ends out in the field (shared/quests.ts ZONE_ARCS)
   { id: "huntsman", name: "Huntmaster Bryn", title: "Hunter", sprite: "huntsman", ...standNear(28, 18), dir: "left", where: "the Hunter's Camp, north-west of Oakvale" },

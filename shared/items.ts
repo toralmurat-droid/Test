@@ -70,4 +70,13 @@ export const LOOT: Record<MobKind, LootDef> = {
   legionary: { gold: [12, 26], potionChance: 0.35, mats: mat("bone", 0.12) },
   cairnlord: { gold: [80, 150], potionChance: 1, mats: mat("bone", 1, 3, 5) },
   barrowking: { gold: [350, 550], potionChance: 1, mats: mat("bone", 1, 4, 6) },
+  // Act 4, the badlands (Lv 25-40): the Redfang carry coin (their captains and lord a fat purse); vultures leave bone
+  outrider: { gold: [12, 26], potionChance: 0.32 },
+  crossbowman: { gold: [12, 26], potionChance: 0.32 },
+  firebrand: { gold: [12, 28], potionChance: 0.35 },
+  warhound: { gold: [4, 10], potionChance: 0.22 },
+  vulture: { gold: [4, 10], potionChance: 0.25, mats: mat("bone", 0.08) },
+  rattler: { gold: [4, 10], potionChance: 0.25 },
+  redcaptain: { gold: [90, 160], potionChance: 1 },
+  rourke: { gold: [380, 600], potionChance: 1 },
 };

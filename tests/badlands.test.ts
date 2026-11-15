@@ -86,7 +86,7 @@ test("badlands: actOfTile knows all four acts, the rock strips split between the
   assert.ok(inBadlandsRow(BR(0)) && inBadlandsRow(BR(BADLANDS_H - 1)) && !inBadlandsRow(BR(-1)) && !inBadlandsRow(BR(BADLANDS_H)));
 });
 
-test("badlands: sealed in rock, every walkable tile reachable from the Red Pass, the reserved places bare", () => {
+test("badlands: sealed in rock, every walkable tile reachable from the Red Pass, the Post and the forts open to walk in", () => {
   const gate = waygateById("badlands")!, home = waygateById("redpass")!;
   const [ax, ay] = tileOf(waygateArrival(gate));
   assert.ok(!isSolidTile(ax, ay), "the badlands arrival spot is free");
@@ -101,10 +101,16 @@ test("badlands: sealed in rock, every walkable tile reachable from the Red Pass,
   assert.ok(walk > MAP_W * BADLANDS_H * 0.5, "mostly open land");
   for (let y = MOORS_Y0 + MOORS_H; y < B0; y++) for (let x = 0; x < MAP_W; x++) assert.ok(isSolidTile(x, y), `rock at ${x},${y}`);
   for (let y = B1; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) assert.ok(isSolidTile(x, y), `rock at ${x},${y}`);
-  // the Rustwater Post, Fangrock and Talon Fort: empty open ground, all of it reachable
-  for (const r of [RUSTWATER_POST, FANGROCK, TALON_FORT]) for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) {
-    assert.equal(OBJECTS[BR(y)][x], EMPTY, `nothing stands at ${x},${BR(y)}`);
-    assert.ok(GROUND[BR(y)][x] !== T.WATER && seen[BR(y) * MAP_W + x], `reserved tile ${x},${BR(y)} open and reachable`);
+  // the Rustwater Post, Fangrock and Talon Fort (raised in tests/badlands-zones.test.ts): mostly open ground inside their
+  // walls, every bit of it reachable through the gates
+  for (const r of [RUSTWATER_POST, FANGROCK, TALON_FORT]) {
+    let open = 0;
+    for (let y = r.y + 1; y < r.y + r.h - 1; y++) for (let x = r.x + 1; x < r.x + r.w - 1; x++) {
+      if (isSolidTile(x, BR(y))) continue;
+      open++;
+      assert.ok(seen[BR(y) * MAP_W + x], `tile ${x},${BR(y)} inside the walls reachable`);
+    }
+    assert.ok(open > (r.w - 2) * (r.h - 2) * 0.6, `${open} open tiles inside`);
   }
   assert.ok(RUSTWATER_POST.x + RUSTWATER_POST.w < REDPASS.x && REDPASS.x - RUSTWATER_POST.x < 50, "the Post is just west of the arrival");
   assert.ok(FANGROCK.x + FANGROCK.w < 60, "Fangrock in the far west");
@@ -156,7 +162,7 @@ test("badlands: Lv 25-40 climbing west, the Red Pass opens at Lv 25, no war ther
   assert.equal(regionOf(REDPASS.x, BR(REDPASS.y)), undefined);
   assert.equal(REGIONS.find((r) => r.key === "badlands")!.contains, undefined);
   assert.ok(!TERRITORIES.some((t) => t.act === 4));
-  assert.ok(!SPAWN_ZONES.some((z) => actOfTile(z.x, z.y) === 4), "no monster zones yet");
+  assert.ok(SPAWN_ZONES.some((z) => actOfTile(z.x, z.y) === 4), "its own monster zones (tests/badlands-zones.test.ts)");
 });
 
 /** onJoin as an account through a fake client (test rooms skip onAuth), like tests/moors.test.ts. */

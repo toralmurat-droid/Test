@@ -7,7 +7,7 @@ import {
   AGGRO, aggroLevelFactor, BLOB_AI, BONES, DEMON, BROOD, Dir, FACTION, FEUD, MERGE, MobDef, MOTHER, SKELETON_AI, HIT_RADIUS, mobScale, regionMobLevel, regionSpecialLevel, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, rollSkeletonWeapon, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
   RESPAWN_MS, TICK_RATE, TILE,
   HOLLOW_KING, ELEM_BLOB, ELEM_MOVE, inputDir, ELITE, BOSS, URSK, SUNWRIGHT, act2MobLevel, act2SpecialLevel, BEAST, BEAST_BROOD, BEAST_FOLK, BEAST_KINDS, BEAST_MOVES, BEAST_RIDER, type BeastMove,
-  MAP_W, MAP_H, WORLD_H, inDeepRow, actOfTile, actMobLevel, actSpecialLevel, MOORS_AI,
+  MAP_W, MAP_H, WORLD_H, inDeepRow, actOfTile, actMobLevel, actSpecialLevel, MOORS_AI, BADLANDS_AI, REDFANG_KINDS,
 } from "../shared/constants";
 import { ambushRoomAt, arrivalAt, CRACK_OPEN_MS, LINK_RANGE, linkById, LINKS, SHORTCUT_OPEN_MS, underground } from "../shared/dungeon";
 import {
@@ -53,7 +53,7 @@ import { blocked, moveStep } from "../shared/movement";
 import { NIGHT_RAID, raiderByKey, raiderIgnores, RAIDERS } from "../shared/raiders";
 import { SLOTS_BY_ZONE, WORK_SLOTS } from "../shared/siege";
 import { DAY_CYCLE_MS, dayFrac, isUndeadNight, NIGHT_BOSSES, UNDEAD_NIGHT } from "../shared/daynight";
-import { AMBUSH, BANDIT_AI, BANDIT_ROLES, CAMP_POSTS, CHIEF, clearWalk, findPath, postPos, roleOf } from "../shared/bandits";
+import { AMBUSH, BANDIT_AI, BANDIT_ROLES, CAMPS, campOfZone, CHIEF, clearWalk, findPath, POSTS, postKind, postPos, roleOf } from "../shared/bandits";
 import { flush, flushFinal, HeroSave, loadHero, loadStash, login, markChest, openedChests, resetChests, saveHero, saveStash, type Stash } from "./accounts";
 import { offerFrom, Offer, settle, STASH, STASH_GOLD_MAX, STASH_RANGE, STASH_SIZE, TRADE } from "../shared/trade";
 import { arrivalOf, cleanPortals, PORTAL_COMBAT_MS, PORTAL_RANGE, PORTAL_WAKE_RANGE, portalById, PORTALS } from "../shared/portals";
@@ -175,7 +175,7 @@ export class Mob extends Schema {
   // Beast-folk of the Mawdeep (BEAST): each move's next use, and a rush in progress (gore, stampede, swoop, pounce)
   bcd: Partial<Record<BeastMove, number>> = {};
   rushUntil = 0; rushVX = 0; rushVY = 0; rushTurn = 0; rushKind = ""; rushHit: string[] = []; rushDone = false;
-  // Redfang Hollow bandits (shared/bandits.ts): camp member, its post (CAMP_POSTS index), patrol progress, horn alert
+  // Redfang camps (shared/bandits.ts: the Hollow, Fangrock, Talon Fort): camp member, its post (POSTS index), patrol progress, horn alert
   camp = false; post = -1; perch = false; pLeg = 0; pDir = 1; stuckSince = 0; detourUntil = 0;
   alertUntil = 0; alertHero = ""; nextHorn = 0; nextVolley = 0; rallyUntil = 0; chargeMult = 1; dashHit = false; reinforced = false;
   nextSweep = 0; nextLeap = 0; nextCry = 0;
@@ -506,6 +506,9 @@ const RANGED: Partial<Record<MobKind, RangedCfg>> = {
   // Act 3: the bog hags' rot and the mist wraiths' grave-cold (MOORS_AI)
   boghag: { ...MOORS_AI.hag, far: MOORS_AI.hag.range * 0.85, shot: "shadowbolt" },
   mistwraith: { ...MOORS_AI.wraith, far: MOORS_AI.wraith.range * 0.85, shot: "magicbolt" },
+  // Act 4: the Redfang crossbowmen's heavy bolts; the firebrands lob fire pots (elemSpecial "firepot"), no plain shot
+  crossbowman: { ...BADLANDS_AI.crossbow, far: BADLANDS_AI.crossbow.range * 0.85, shot: "arrow" },
+  firebrand: { keepAway: BADLANDS_AI.firepot.keepAway, far: BADLANDS_AI.firepot.range * 0.85, range: BADLANDS_AI.firepot.range, shot: "", shotSpeed: 0, shotRadius: 0 },
 };
 /** Dustrider archers (the nomads' other half, BEAST_FOLK "folk"): short desert bows. */
 const NOMAD_BOW: RangedCfg = { range: 125, keepAway: 60, far: 125 * 0.85, shot: "arrow", shotSpeed: 175, shotRadius: 3, mult: 0.85 };
@@ -515,8 +518,11 @@ const BONE_SLING: RangedCfg = { range: 115, keepAway: 55, far: 115 * 0.85, shot:
 const BOW_SKELETON: RangedCfg = { ...SKELETON_BOW, range: SKELETON_WEAPONS.bow.range, far: SKELETON_WEAPONS.bow.range * 0.85, shot: "arrow", mult: SKELETON_WEAPONS.bow.dmg };
 const BANDIT_BOW: RangedCfg = { ...BANDIT_AI.bow, far: BANDIT_AI.bow.range * 0.85, shot: "arrow" };
 const LOOKOUT_BOW: RangedCfg = { ...BANDIT_AI.lookoutBow, keepAway: 0, far: 1e9, shot: "arrow" }; // never leaves its tower
+/** A Redfang crossbowman on a fort's tower (shared/bandits.ts CAMPS): a lookout's sight and reach, a crossbow's bolt. */
+const LOOKOUT_CROSSBOW: RangedCfg = { ...BADLANDS_AI.crossbow, range: BANDIT_AI.lookoutBow.range, keepAway: 0, far: 1e9, shot: "arrow" };
 const rangedOf = (m: Mob): RangedCfg | undefined =>
   m.kind === "skeleton" && m.weapon === "bow" ? BOW_SKELETON
+  : m.kind === "crossbowman" && m.perch ? LOOKOUT_CROSSBOW
   : m.kind === "bandit" ? (m.weapon === "archer" ? BANDIT_BOW : m.weapon === "lookout" ? LOOKOUT_BOW : undefined)
   : m.kind === "gnawkin" && m.weapon === "folk" ? BONE_SLING
   : m.kind === "nomad" ? (m.weapon === "folk" ? NOMAD_BOW : undefined)
@@ -540,11 +546,12 @@ function mobDefOf(m: Mob, now: number): MobDef {
   if (m.kind === "sunwright" && m.uPhase >= 3) return { ...base, speed: base.speed * SUNWRIGHT.sun.speed, attackCooldownMs: base.attackCooldownMs * SUNWRIGHT.sun.cooldown };
   if (m.kind === "hidemother" && m.hp < m.maxHp * BEAST.rockfall.hpFrac) return { ...base, speed: base.speed * BEAST.rockfall.speed, attackCooldownMs: base.attackCooldownMs * BEAST.rockfall.cooldown };
   if (BEAST_KINDS.includes(m.kind)) return now < m.rallyUntil ? { ...base, speed: base.speed * BEAST.howl.rallySpeed, damage: base.damage * BEAST.howl.rallyDmg } : base;
-  if (m.kind !== "bandit" && m.kind !== "banditchief") return base;
+  // the Redfang: a Hollow bandit's role, war cries (the Chief's, a badlands captain's) and the horn alert; a fort's lookout sees far
+  if (m.kind !== "bandit" && m.kind !== "banditchief" && !REDFANG_KINDS.includes(m.kind)) return base;
   const r = m.kind === "bandit" ? BANDIT_ROLES[roleOf(m.weapon)] : undefined;
   const rally = now < m.rallyUntil;
   const alert = now < m.alertUntil;
-  const H = BANDIT_AI.horn;
+  const H = BANDIT_AI.horn, look = m.weapon === "lookout" || m.perch;
   return {
     ...base,
     name: r?.name ?? base.name,
@@ -553,8 +560,8 @@ function mobDefOf(m: Mob, now: number): MobDef {
     speed: base.speed * (r?.speed ?? 1) * (rally ? CHIEF.warCry.speed : 1),
     attackCooldownMs: base.attackCooldownMs * (r?.cooldown ?? 1),
     xp: base.xp * (r?.xp ?? 1),
-    aggroRange: m.weapon === "lookout" ? H.sight : alert ? Math.max(base.aggroRange, H.alertAggro) : base.aggroRange,
-    leash: m.weapon === "lookout" ? 1e9 : alert ? Math.max(base.leash, H.alertLeash) : base.leash,
+    aggroRange: look ? H.sight : alert ? Math.max(base.aggroRange, H.alertAggro) : base.aggroRange,
+    leash: look ? 1e9 : alert ? Math.max(base.leash, H.alertLeash) : base.leash,
   };
 }
 /** Melee reach, damage, cooldown and wind-up of a monster (skeletons depend on their weapon). */
@@ -1319,10 +1326,11 @@ export class TownRoom extends Room<TownState> {
 
   /** A spawn spot in the zone away from every hero, or null if none turned up (the hero stands in a small zone). */
   private freeSpawnPoint(zi: number, kind: MobKind) {
-    if (kind === "bandit" && SPAWN_ZONES[zi].name === "Redfang Hollow") {
-      const post = this.freePost("");
+    const camp = campOfZone(SPAWN_ZONES[zi].name);
+    if (camp >= 0) {
+      const post = this.freePost("", camp, kind);
       if (post < 0) return null;
-      const at = postPos(CAMP_POSTS[post]);
+      const at = postPos(POSTS[post]);
       return this.playerNear(at.x, at.y, NO_SPAWN_RANGE) ? null : { ...at, level: spawnPoint(SPAWN_ZONES[zi], kind).level };
     }
     for (let i = 0; i < 12; i++) {
@@ -1343,14 +1351,19 @@ export class TownRoom extends Room<TownState> {
     m.nextSweep = 0; m.nextLeap = 0; m.nextCry = 0;
     m.ambusher = false; m.ambushAt = 0; m.ambushHero = ""; m.flyUntil = 0;
     m.nextSplurt = 0; m.nextNova = 0; m.nextBreath = 0; m.nextSparks = 0;
-    if (kind === "bandit" && SPAWN_ZONES[zi]?.name === "Redfang Hollow") {
-      // The camp: every bandit takes the first free post (its role, spot and patrol route)
-      const post = this.freePost(id);
+    const camp = zi >= 0 ? campOfZone(SPAWN_ZONES[zi]?.name) : -1;
+    if (camp >= 0) {
+      // The camp: every bandit takes the first free post of its kind (its role, spot and patrol route). A Hollow bandit
+      // wears its role in Mob.weapon; the badlands' Redfang kinds keep theirs in the flags (a lookout's "lookout" too, so
+      // the client draws it up on its tower)
+      const post = this.freePost(id, camp, kind);
       if (post >= 0) {
-        const P = CAMP_POSTS[post];
-        m.camp = true; m.post = post; m.weapon = P.role; m.perch = P.role === "lookout"; m.ambusher = P.role === "ambusher";
+        const P = POSTS[post];
+        m.camp = true; m.post = post; m.weapon = kind === "bandit" || P.role === "lookout" ? P.role : ""; m.perch = P.role === "lookout"; m.ambusher = P.role === "ambusher";
         home = { ...postPos(P), level: home.level };
       }
+    } else if (kind === "rourke") {
+      m.camp = true; m.post = -1; // Old Rourke leads Fangrock: hears its horn, rallies his men
     } else if (kind === "bandit" && SPAWN_ZONES[zi]?.name === "Gullrock Cove") {
       m.weapon = (["cutthroat", "brute", "archer", "cutthroat"] as const)[this.mobSeq % 4]; // the raiding party: a mix of roles
     }
@@ -1447,11 +1460,11 @@ export class TownRoom extends Room<TownState> {
     }
   }
 
-  /** First camp post nobody alive holds (-1 if all are taken). */
-  private freePost(self: string): number {
+  /** First post of the camp (CAMPS index) for this kind that nobody alive holds (a POSTS index; -1 if all are taken). */
+  private freePost(self: string, camp: number, kind: MobKind): number {
     const held = new Set<number>();
     this.state.mobs.forEach((o, oid) => { if (oid !== self && o.camp && !o.dead && o.post >= 0) held.add(o.post); });
-    return CAMP_POSTS.findIndex((_, i) => !held.has(i));
+    return POSTS.findIndex((p, i) => p.camp === camp && postKind(p) === kind && !held.has(i));
   }
 
   // ---- Special blobs --------------------------------------------------------
@@ -1556,7 +1569,7 @@ export class TownRoom extends Room<TownState> {
   /** An ambusher picks a free tree near its post to climb (walks to it, hides on arrival). False if none is free. */
   private treeFor(m: Mob, now: number): boolean {
     if (now < m.spotRetry) return false; // it looked a moment ago and found no free tree
-    const s = findHideSpot(m.kind, m.homeX, m.homeY, AMBUSH.treeRadius, this.takenSpots(m), HIDE.spots.slime);
+    const s = findHideSpot(m.kind, m.homeX, m.homeY, AMBUSH.treeRadius, this.takenSpots(m), CAMPS[POSTS[m.post]?.camp ?? 0].hide); // the Hollow's trees, the badlands' rocks
     if (!s) { m.spotRetry = now + HIDE.retryMs; return false; }
     this.takeSpot(m, s);
     m.seekUntil = now + AMBUSH.seekMs; m.fleeing = false;
@@ -1729,7 +1742,7 @@ export class TownRoom extends Room<TownState> {
    */
   private elemSpecial(m: Mob, id: string, t: Player | undefined, dist: number, now: number): boolean {
     const E = ELEM_BLOB;
-    if (m.specialAt && (m.specialKind === "splurt" || m.specialKind === "nova" || m.specialKind === "breath")) {
+    if (m.specialAt && (m.specialKind === "splurt" || m.specialKind === "nova" || m.specialKind === "breath" || m.specialKind === "firepot")) {
       if (now < m.specialAt) return true;
       const kind = m.specialKind;
       m.specialAt = 0; m.specialKind = ""; m.winding = false; m.lastAttack = now;
@@ -1745,6 +1758,18 @@ export class TownRoom extends Room<TownState> {
             this.damagePlayer(pid, dmg, `${name}'s venom`, [0, 0], 0, { mobEl: "poison", atkLevel: level, from: id });
           });
           this.addHazard(m, id, tx, ty, S.puddle.radius, S.puddle.ms, S.puddle.tickMs, tick, "poison", Date.now());
+        });
+      } else if (kind === "firepot") {
+        // a Firebrand's pot flies to where the hero stands NOW, bursts, and the ground burns a while (BADLANDS_AI.firepot)
+        const tx = t ? t.x : m.castX, ty = t ? t.y : m.castY, F = BADLANDS_AI.firepot;
+        this.broadcast("firepot", { id, x0: Math.round(m.x), y0: Math.round(m.y - 8), x: Math.round(tx), y: Math.round(ty), ms: F.flightMs, r: F.burn.radius, burnMs: F.burn.ms });
+        const dmg = this.elemDmg(m, F.dmgMult), tick = this.elemDmg(m, F.burn.dmgMult), level = m.level;
+        this.host.later(F.flightMs, () => {
+          this.state.players.forEach((p, pid) => {
+            if (p.dead || Math.hypot(p.x - tx, p.y - ty) > F.burn.radius) return;
+            this.damagePlayer(pid, dmg, `${name}'s fire pot`, [0, 0], 0, { mobEl: "fire", atkLevel: level, from: id });
+          });
+          this.addHazard(m, id, tx, ty, F.burn.radius, F.burn.ms, F.burn.tickMs, tick, "fire", Date.now());
         });
       } else if (kind === "nova") {
         const N = E.nova, dmg = this.elemDmg(m, N.dmgMult);
@@ -1778,6 +1803,11 @@ export class TownRoom extends Room<TownState> {
       m.aimX = (t.x - m.x) / d; m.aimY = (t.y - m.y) / d;
       m.specialKind = "breath"; m.specialAt = now + E.breath.windupMs; m.nextBreath = now + E.breath.cooldownMs;
       this.broadcast("elemwind", { id, kind: "breath", ms: E.breath.windupMs, x: Math.round(m.x), y: Math.round(m.y), ax: m.aimX, ay: m.aimY, reach: E.breath.reach, half: E.breath.halfAngle });
+    } else if (moves.includes("firepot") && now >= m.nextSplurt && dist <= BADLANDS_AI.firepot.range && dist > 20) {
+      const F = BADLANDS_AI.firepot;
+      m.castX = t.x; m.castY = t.y;
+      m.specialKind = "firepot"; m.specialAt = now + F.windupMs; m.nextSplurt = now + F.cooldownMs;
+      this.broadcast("elemwind", { id, kind: "firepot", ms: F.windupMs, x: Math.round(t.x), y: Math.round(t.y), r: F.burn.radius });
     } else if (moves.includes("splurt") && now >= m.nextSplurt && dist <= E.splurt.range && dist > 20) {
       m.castX = t.x; m.castY = t.y;
       m.specialKind = "splurt"; m.specialAt = now + E.splurt.windupMs; m.nextSplurt = now + E.splurt.cooldownMs;
@@ -1861,7 +1891,7 @@ export class TownRoom extends Room<TownState> {
       }
     } else this.state.players.forEach(hero);
     const side = m.perch ? undefined : FACTION[m.kind]; // lookouts stay up on their tower
-    const fr = m.camp && CAMP_POSTS[m.post]?.route ? BANDIT_AI.patrolFeud : FEUD.range; // patrols go looking for trouble
+    const fr = m.camp && POSTS[m.post]?.route ? BANDIT_AI.patrolFeud : FEUD.range; // patrols go looking for trouble
     if (side && !m.mergeInto && !m.summonFor && Math.hypot(m.x - m.homeX, m.y - m.homeY) <= def.leash) {
       const cx = Math.floor(m.x / FEUD_CELL), cy = Math.floor(m.y / FEUD_CELL);
       for (let gy = cy - 1; gy <= cy + 1; gy++) for (let gx = cx - 1; gx <= cx + 1; gx++) {
@@ -3399,7 +3429,8 @@ export class TownRoom extends Room<TownState> {
     if (m.work && (t || foe || m.spot)) this.dropWork(m, id, now);
     // Redfang Hollow: lookouts blow the horn, the chief rallies his camp and calls for more men
     if (t && m.perch && now >= m.nextHorn) this.blowHorn(m, id, now);
-    if (t && m.kind === "banditchief") this.chiefOrders(m, id, now);
+    if (t && (m.kind === "banditchief" || BADLANDS_AI.warlords[m.kind])) this.chiefOrders(m, id, now);
+    if (t && m.kind === "warhound" && now >= m.nextCall) this.packCall(m, id, m.target, now); // its pack runs in
 
     // Dizzy: run for the nearest grave/tree if there is one
     if (t && m.broken && !m.spot && HIDE.spots[m.kind]) this.claimSpot(m, m.x, m.y, HIDE.fleeRadius, now, true);
@@ -3473,9 +3504,9 @@ export class TownRoom extends Room<TownState> {
         m.chargeUntil = now + BLOB_AI.warrior.chargeMs; m.nextCharge = now + BLOB_AI.warrior.cooldownMs; m.chargeMult = BLOB_AI.warrior.chargeMult;
         this.broadcast("blobcharge", { id });
       }
-      // Cutthroat: darts in and stabs on arrival
+      // Cutthroat (and a badlands outrider): darts in and stabs on arrival
       const D = BANDIT_AI.dash;
-      if (m.kind === "bandit" && m.weapon === "cutthroat" && !m.broken && !m.windUntil && now >= m.nextCharge && dist >= D.min && dist <= D.max) {
+      if (((m.kind === "bandit" && m.weapon === "cutthroat") || m.kind === "outrider") && !m.broken && !m.windUntil && now >= m.nextCharge && dist >= D.min && dist <= D.max) {
         m.chargeUntil = now + D.ms; m.nextCharge = now + D.cooldownMs; m.chargeMult = D.mult; m.dashHit = true;
         this.broadcast("bdash", { id });
       }
@@ -3546,7 +3577,7 @@ export class TownRoom extends Room<TownState> {
       input = this.work(m, now); // back to the siege works
     } else if (m.ambusher && !m.broken && this.treeFor(m, now)) {
       input = STILL; // nothing left to fight: back up into a tree (walks there next tick)
-    } else if (m.camp && CAMP_POSTS[m.post]?.route) {
+    } else if (m.camp && POSTS[m.post]?.route) {
       input = this.patrolStep(m, now); // walk the trail, back and forth
     } else if (Math.hypot(m.x - m.homeX, m.y - m.homeY) > 40) {
       input = this.go(m, m.homeX, m.homeY, now); // walk back home
@@ -3809,7 +3840,7 @@ export class TownRoom extends Room<TownState> {
   /** Patrol: walk to the next point of the route; at the end turn round. Home follows, so after a fight it carries on. */
   private patrolStep(m: Mob, now: number): InputState {
     if (now < m.detourUntil) return m.wander;
-    const route = CAMP_POSTS[m.post].route!;
+    const route = POSTS[m.post].route!;
     m.pLeg = Math.max(0, Math.min(route.length - 1, m.pLeg));
     const [tx, ty] = route[m.pLeg], x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE;
     m.homeX = x; m.homeY = y;
@@ -3880,19 +3911,38 @@ export class TownRoom extends Room<TownState> {
     this.broadcast("volley", { id });
   }
 
-  /** The chief: War Cry (rallies everyone around him) and, once badly hurt, two more cutthroats out of the huts. */
+  /**
+   * The chief: War Cry (rallies everyone around him) and, once badly hurt, two more cutthroats out of the huts. The
+   * badlands' warlords (BADLANDS_AI.warlords: a Redfang Captain, Old Rourke) cry war the same way, rallying the clan's
+   * own round them (camp or not); Old Rourke calls outriders out of his keep once badly hurt.
+   */
   private chiefOrders(m: Mob, id: string, now: number) {
-    const W = CHIEF.warCry;
+    const lord = m.kind === "banditchief" ? undefined : BADLANDS_AI.warlords[m.kind];
+    const W = lord ?? CHIEF.warCry;
     if (now >= m.nextCry && !m.broken) {
       m.nextCry = now + W.cooldownMs;
       const ids: string[] = [id];
       m.rallyUntil = now + W.buffMs;
       for (const [oid, o] of this.state.mobs.inBox(m.x, m.y, W.range)) {
-        if (oid === id || o.dead || !o.camp || Math.hypot(o.x - m.x, o.y - m.y) > W.range) continue;
+        if (oid === id || o.dead || !(o.camp || (lord && REDFANG_KINDS.includes(o.kind) && !o.owner)) || Math.hypot(o.x - m.x, o.y - m.y) > W.range) continue;
         o.rallyUntil = now + W.buffMs; ids.push(oid);
       }
       this.broadcast("warcry", { id, ids, ms: W.buffMs });
       this.alertCamp(m.x, m.y, W.range, m.target, now);
+    }
+    if (lord) {
+      const R = lord.reinforce;
+      if (!R || m.reinforced || m.hp >= m.maxHp * R.hpFrac) return;
+      m.reinforced = true;
+      let mine = 0; // his men still alive from an earlier fight count too
+      this.state.mobs.forEach((o) => { if (!o.dead && o.mother === id) mine++; });
+      const pts: [number, number][] = [];
+      for (let i = mine; i < R.count; i++) {
+        const c = this.callReinforcement(m, id, R.kind, "");
+        if (c) pts.push([Math.round(c.x), Math.round(c.y)]);
+      }
+      this.broadcast("reinforce", { id, pts });
+      return;
     }
     if (!m.reinforced && m.hp < m.maxHp * CHIEF.reinforce.hpFrac) {
       m.reinforced = true;
@@ -3907,15 +3957,34 @@ export class TownRoom extends Room<TownState> {
     }
   }
 
-  /** One extra cutthroat runs out next to the chief (his own man: no post, never respawns). */
-  private callReinforcement(chief: Mob, chiefId: string): Mob | undefined {
+  /**
+   * A Warhound bays (BADLANDS_AI.pack): every warhound of its pack within range that has nobody to chase comes for its
+   * prey too. Each hound bays at most once per cooldown.
+   */
+  private packCall(m: Mob, id: string, heroId: string, now: number) {
+    const P = BADLANDS_AI.pack;
+    m.nextCall = now + P.cooldownMs;
+    if (!this.state.players.has(heroId)) return;
+    const ids: string[] = [];
+    for (const [oid, o] of this.state.mobs.inBox(m.x, m.y, P.range)) {
+      if (oid === id || o.kind !== "warhound" || o.dead || o.hidden || o.owner || o.target || Math.hypot(o.x - m.x, o.y - m.y) > P.range) continue;
+      o.target = heroId; o.foe = ""; o.nextAggro = now + AGGRO.everyMs; o.nextCall = now + P.cooldownMs; // (they don't bay on in a chain)
+      this.addHate(o, heroId, 0);
+      ids.push(oid);
+    }
+    this.broadcast("bay", { id, ids });
+  }
+
+  /** One extra cutthroat (or a lord's `kind`) runs out next to the chief (his own man: no post, never respawns). */
+  private callReinforcement(chief: Mob, chiefId: string, kind: MobKind = "bandit", weapon = "cutthroat"): Mob | undefined {
     for (let i = 0; i < 12; i++) {
       const a = Math.random() * Math.PI * 2, r = 30 + Math.random() * 30;
       const x = chief.x + Math.cos(a) * r, y = chief.y + Math.sin(a) * r;
       if (isSolidAt(x, y) || isSafeZone(x, y) || noMobsAt(x, y)) continue;
       const c = new Mob();
-      c.kind = "bandit"; c.weapon = "cutthroat"; c.zone = -1; c.mother = chiefId; c.camp = true; c.post = -1;
-      c.x = c.homeX = x; c.y = c.homeY = y; c.level = chief.level;
+      c.kind = kind; c.weapon = weapon; c.zone = -1; c.mother = chiefId; c.camp = true; c.post = -1;
+      c.x = c.homeX = x; c.y = c.homeY = y;
+      c.level = kind === "bandit" ? chief.level : actMobLevel(actOfTile(Math.floor(x / TILE), Math.floor(y / TILE)), chief.level); // a lord's men: his land's regular ceiling
       c.hp = c.maxHp = Math.round(mobDef(c).maxHp * mobScale(c.level, "hp"));
       c.target = chief.target; c.alertUntil = Date.now() + BANDIT_AI.horn.alertMs; c.rallyUntil = chief.rallyUntil;
       c.stunUntil = Date.now() + 350;

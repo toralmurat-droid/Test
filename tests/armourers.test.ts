@@ -5,7 +5,7 @@ import { NPCS, isDecorSolidAt } from "../shared/npcs";
 import { gearDef, itemLevel } from "../shared/gear";
 import { TILE } from "../shared/constants";
 
-const RANGES: Record<string, [number, number]> = { armourer: [1, 16], saltarmourer: [16, 30], sandarmourer: [30, 50], moorarmourer: [20, 35] };
+const RANGES: Record<string, [number, number]> = { armourer: [1, 16], saltarmourer: [16, 30], sandarmourer: [30, 50], moorarmourer: [20, 35], rustarmourer: [25, 40] };
 
 test("each village armourer sells only armour at its area's levels", () => {
   for (const [id, [lo, hi]] of Object.entries(RANGES)) {

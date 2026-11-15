@@ -1,5 +1,6 @@
-import { TILE } from "./constants";
-import { isSolidAt, isSolidTile, REDFANG, REDFANG_TOWERS } from "./map";
+import { TILE, type MobKind } from "./constants";
+import { isSolidAt, isSolidTile, REDFANG, REDFANG_TOWERS, T } from "./map";
+import { BR, FANGROCK, FANGROCK_KEEP, FANGROCK_TOWERS, LEDGES, TALON_FORT, TALON_TOWERS } from "./badlands";
 
 /**
  * Redfang Hollow (Murat 2026-11-03): a small, organised outlaw camp instead of a crowd of bandits.
@@ -17,6 +18,12 @@ import { isSolidAt, isSolidTile, REDFANG, REDFANG_TOWERS } from "./map";
  *   stab, and the rest of their group follows. Once the fight is over they climb back up into a tree.
  *
  * Bandits are MobKind "bandit" with a role kept in Mob.weapon (synced, so the client picks the matching sheet).
+ *
+ * Act 4 (the Red Badlands, the Redfang homeland): Fangrock and Talon Fort are camps like the Hollow (CAMPS), manned by the
+ * clan's own kinds (BanditPost.kind): Redfang crossbowmen keep watch on the towers and blow the horn, outriders and
+ * warhounds patrol the roads, outriders crouch on rock ledges by the roads (ambushers), captains, firebrands and the rest
+ * hold posts inside. A post of another kind than "bandit" keeps its role in the Mob's flags (perch, ambusher), not in
+ * Mob.weapon, which stays "" for them (a lookout's is "lookout" too: the client draws every lookout up on its tower).
  */
 export type BanditRole = "cutthroat" | "brute" | "archer" | "lookout" | "ambusher";
 
@@ -67,6 +74,8 @@ export const CHIEF = {
 
 export interface BanditPost {
   role: BanditRole;
+  /** Who holds it (default a "bandit" in this role). */
+  kind?: MobKind;
   /** Tile it stands on (lookouts: their tower). */
   at: [number, number];
   /** Patrols: tiles they walk along, back and forth (from the gate out into the woods). */
@@ -74,7 +83,7 @@ export interface BanditPost {
 }
 
 const B = REDFANG;
-/** Every bandit of the camp, in the order the posts are filled (lookouts first, patrols last). */
+/** Every bandit of Redfang Hollow, in the order the posts are filled (lookouts first, patrols last). */
 export const CAMP_POSTS: BanditPost[] = [
   ...REDFANG_TOWERS.map(([x, y]): BanditPost => ({ role: "lookout", at: [x, y] })),
   { role: "brute", at: [B.x + 11, B.y + 8] }, // on the lane, facing the north gate
@@ -91,6 +100,66 @@ export const CAMP_POSTS: BanditPost[] = [
   ...([[236, 94], [256, 94], [234, 106], [244, 127], [271, 113]] as [number, number][])
     .flatMap((at): BanditPost[] => [{ role: "ambusher", at }, { role: "ambusher", at }]),
 ];
+
+/** A Fangrock / Talon Fort post (local badlands tiles) held by one of the clan's kinds. */
+const bp = (kind: MobKind, role: BanditRole, x: number, y: number, route?: [number, number][]): BanditPost =>
+  ({ kind, role, at: [x, BR(y)], ...(route ? { route: route.map(([rx, ry]): [number, number] => [rx, BR(ry)]) } : {}) });
+const FK = FANGROCK_KEEP, F = FANGROCK, TF = TALON_FORT;
+/** Fangrock's garrison (the Redfang seat, Lv 36-38): crossbowmen on the towers, two captains, the clan's men and dogs. */
+export const FANGROCK_POSTS: BanditPost[] = [
+  ...FANGROCK_TOWERS.map(([x, y]) => bp("crossbowman", "lookout", x, y)),
+  bp("redcaptain", "brute", 37, 78),                  // on the main lane inside the east gate
+  bp("redcaptain", "brute", FK.x + FK.w + 2, FK.y + 6), // before the keep's gate
+  bp("firebrand", "archer", 38, 73), bp("firebrand", "archer", 35, 84), bp("firebrand", "archer", 27, 83),
+  bp("crossbowman", "archer", 33, 75), bp("crossbowman", "archer", 40, 87),
+  bp("outrider", "cutthroat", 40, 79), bp("outrider", "cutthroat", 31, 78), bp("outrider", "cutthroat", 23, 89),
+  bp("warhound", "cutthroat", 38, 81), bp("warhound", "cutthroat", 31, 73), bp("warhound", "cutthroat", 26, 87),
+  // patrols: out of the east gate along the Fang Road, out of the back gate toward the gulch road
+  bp("outrider", "cutthroat", F.x + F.w + 1, 78, [[F.x + F.w + 1, 78], [56, 76], [68, 70], [80, 74]]),
+  bp("warhound", "cutthroat", F.x + F.w + 1, 79, [[F.x + F.w + 1, 79], [57, 77], [69, 71], [81, 75]]),
+  bp("outrider", "cutthroat", 28, F.y + F.h + 1, [[28, F.y + F.h + 1], [34, 100], [48, 99], [60, 93]]),
+  bp("warhound", "cutthroat", 29, F.y + F.h + 1, [[29, F.y + F.h + 1], [35, 100], [49, 99], [60, 94]]),
+  // ambushers: two on each ledge-pair by the roads (shared/badlands.ts LEDGES)
+  ...LEDGES.filter(([x]) => x < 100).map(([x, y]) => bp("outrider", "ambusher", x, y + 1)),
+];
+/** Talon Fort's garrison (Lv 32-35): a captain, three lookouts, a patrol down the river road, two ambushers on its ledges. */
+export const TALON_POSTS: BanditPost[] = [
+  ...TALON_TOWERS.map(([x, y]) => bp("crossbowman", "lookout", x, y)),
+  bp("redcaptain", "brute", TF.x + 9, TF.y + 7),
+  bp("firebrand", "archer", 122, 26), bp("crossbowman", "archer", 127, 23), bp("outrider", "cutthroat", 131, 26),
+  bp("warhound", "cutthroat", 125, 28), bp("warhound", "cutthroat", 129, 28),
+  bp("outrider", "cutthroat", 127, TF.y + TF.h + 1, [[127, TF.y + TF.h + 1], [136, 44], [146, 62]]),
+  bp("warhound", "cutthroat", 128, TF.y + TF.h + 1, [[128, TF.y + TF.h + 1], [137, 44], [147, 62]]),
+  ...LEDGES.filter(([x]) => x > 100).map(([x, y]) => bp("outrider", "ambusher", x, y + 1)),
+];
+
+/**
+ * The organised camps (Murat 2026-11-03's Redfang Hollow and the badlands' forts): the spawn zone they belong to, their
+ * posts, and where their ambushers hide (`hide`: tile ids, trees in the Hollow's woods, rocks and crags in the badlands).
+ */
+export interface BanditCamp { zone: string; posts: BanditPost[]; towers: [number, number][]; hide: number[] }
+/** Where the Hollow's ambushers hide: up in the woods' trees (the same trees as the slimes', shared/spawns.ts HIDE). */
+export const REDFANG_HOLLOW_HIDE = [T.TREE, T.PINE];
+export const CAMPS: BanditCamp[] = [
+  { zone: "Redfang Hollow", posts: CAMP_POSTS, towers: REDFANG_TOWERS, hide: REDFANG_HOLLOW_HIDE }, // first: its post indices stay what they were
+  { zone: "Fangrock", posts: FANGROCK_POSTS, towers: FANGROCK_TOWERS.map(([x, y]): [number, number] => [x, BR(y)]), hide: [T.ROCK, T.CLIFF] },
+  { zone: "Talon Fort", posts: TALON_POSTS, towers: TALON_TOWERS.map(([x, y]): [number, number] => [x, BR(y)]), hide: [T.ROCK, T.CLIFF] },
+];
+/** Every post of every camp, one index space (Mob.post): Redfang Hollow's come first, as before. `camp` = its CAMPS index. */
+export const POSTS: (BanditPost & { camp: number })[] = CAMPS.flatMap((c, ci) => c.posts.map((p) => ({ ...p, camp: ci })));
+/** Every camp's watchtowers (map tiles): the client draws a tower on each. */
+export const CAMP_TOWERS: [number, number][] = CAMPS.flatMap((c) => c.towers);
+/** The camp a spawn zone is (CAMPS index), or -1. */
+export const campOfZone = (zone: string | undefined) => CAMPS.findIndex((c) => c.zone === zone);
+/** Who holds a post. */
+export const postKind = (p: BanditPost): MobKind => p.kind ?? "bandit";
+/** A camp's spawn-zone count per kind (shared/spawns.ts): one monster per post. */
+export function campMobs(zone: string): Partial<Record<MobKind, number>> {
+  const out: Partial<Record<MobKind, number>> = {};
+  for (const p of CAMPS[campOfZone(zone)].posts) out[postKind(p)] = (out[postKind(p)] ?? 0) + 1;
+  return out;
+}
+
 /** Lookouts stand a hair in front of their tower so they are drawn on its platform. */
 export const PERCH_DY = 2;
 /** How high the tower platform is (world px): the client draws the lookout up there. */
