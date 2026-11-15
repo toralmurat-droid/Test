@@ -57,7 +57,7 @@ body.orbhud-on #sidepanel { max-height: calc(100% - 205px); z-index: 11; } /* ab
 body #stats { text-align: right; }
 /* little room left of the health orb (orbs.ts sets hud-tight): the statues go and chat moves up above the bar */
 body.hud-tight #orbhud .garg { display: none; }
-body.hud-tight.orbhud-on { --chat-bottom: calc(132px * var(--barzoom, 1)); --chat-w: min(300px, 30vw); }
+body.hud-tight.orbhud-on { --chat-bottom: calc((var(--slot) * 0.9 + 118px) * var(--barzoom, 1)); /* above the status row (hudSlots.css #statusrow: 62 + 48 px over the plate) */ --chat-w: min(300px, 30vw); }
 
 /* Songweaver: the right orb is the song gauge (gold, labelled "Song", pulses when nearly full) */
 #orbhud .orb .olabel { display: none; position: absolute; left: 0; right: 0; top: 18%; text-align: center; font-style: normal; color: #ffe27a;
@@ -65,3 +65,9 @@ body.hud-tight.orbhud-on { --chat-bottom: calc(132px * var(--barzoom, 1)); --cha
 #orbhud .orb.song .olabel { display: block; }
 #orbhud .orb.song.full { animation: orb-song-full .7s steps(2) infinite; }
 @keyframes orb-song-full { 50% { filter: drop-shadow(0 0 8px #ffe27a) drop-shadow(0 4px 6px rgba(0,0,0,.75)) brightness(1.25); } }
+/* the mode chip and the lockout clock live in #statusrow (hudSlots.css); only what is specific to them is here */
+body #statusrow .lockclock { width: 48px; height: 48px; image-rendering: pixelated; pointer-events: auto; box-shadow: 0 2px 4px rgba(0,0,0,.7); }
+body #statusrow .lockclock[hidden], body #statusrow .modechip[hidden] { display: none; }
+body #statusrow .modechip { --mc: #ffd24d; display: flex; align-items: center; justify-content: center; }
+body #statusrow .modechip .mcsw { position: absolute; left: 0; top: 0; bottom: 0; width: 6px; background: var(--mc); box-shadow: inset -2px 0 0 rgba(0,0,0,.35), inset 2px 2px 0 rgba(255,255,255,.35); }
+body #statusrow .modechip .mcab { margin-left: 6px; font-weight: normal; font-family: var(--pixel-font); font-size: 22px; line-height: 1; color: var(--mc); text-shadow: 2px 2px 0 #000; }
