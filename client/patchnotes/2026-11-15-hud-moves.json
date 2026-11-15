@@ -1,5 +1,6 @@
 {
   "date": "2026-11-15",
+  "patch": 244,
   "title": "Tidier screen corners",
   "changes": [
     "The war plaque and war news now sit at the top left of the screen, above your group frame, so they no longer hide behind the monster bar.",
