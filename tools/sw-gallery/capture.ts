@@ -922,13 +922,13 @@ async function groupMode(SLOW: number) {
 
 async function groupChips(SLOW: number) {
   for (const [W2, H2] of [[1920, 1080], [1366, 768]]) {
-    for (const cls of ["songweaver", "vampire"]) {
+    for (const cls of ["songweaver", "vampire", "summoner"]) {
       await run(SLOW, async (r) => {
         const h = await r.heroes("SwChip" + Date.now().toString(36).slice(-5), cls, { w: W2, h: H2, hide: false });
         const s = new Singer(h);
         await h.send("chat", "/max"); await h.send("chat", "/god");
         await wait(h.real(3000));
-        const tag = cls === "songweaver" ? "" : "_vampire";
+        const tag = cls === "songweaver" ? "" : `_${cls}`;
         const rowBox = () => h.page.evaluate(() => { const b = document.querySelector("#statusrow")!.getBoundingClientRect(), z = document.querySelector("#hotbar")!.getBoundingClientRect(); return { x: Math.max(0, b.left - 20), y: Math.max(0, b.top - 130), width: Math.min(innerWidth, 760), height: Math.min(innerHeight - Math.max(0, b.top - 130), z.bottom - b.top + 150) }; });
         if (cls === "songweaver") {
           await s.stage(); await wait(h.real(3000));
@@ -936,11 +936,23 @@ async function groupChips(SLOW: number) {
           await s.play(["sg_march", "sg_call"], 700);
           await s.play(PROGS[0].notes, 900);
           await wait(h.real(1200));
-        } else {
+        } else if (cls === "vampire") {
           await h.send("cast", "v_ward"); await wait(h.real(1500));
+        } else {
+          await wait(h.real(1500));
         }
         const info = await h.page.evaluate(() => ({ buffs: document.querySelectorAll("#statusrow .buff").length, chips: Array.from(document.querySelectorAll("#statusrow > *")).filter((e) => (e as HTMLElement).offsetWidth > 0 && !e.hasAttribute("hidden")).map((e) => `${e.className}:${Math.round(e.getBoundingClientRect().left)}-${Math.round(e.getBoundingClientRect().right)}`) }));
         console.log(`chips ${cls} ${W2}:`, JSON.stringify(info));
+        // measure: the chat input, the chips actually shown, the grimoire and the prompt stack, in screen px
+        const measure = () => h.page.evaluate(`(() => {
+          var R = function (e) { if (!e) return null; var b = e.getBoundingClientRect(); return b.width ? [Math.round(b.left), Math.round(b.top), Math.round(b.right), Math.round(b.bottom)] : null; };
+          var chips = Array.from(document.querySelectorAll("#statusrow .chip, #statusrow .lockclock, #statusrow .buff")).map(R).filter(Boolean);
+          var row = chips.length ? [Math.min.apply(null, chips.map(function (c) { return c[0]; })), Math.min.apply(null, chips.map(function (c) { return c[1]; })), Math.max.apply(null, chips.map(function (c) { return c[2]; })), Math.max.apply(null, chips.map(function (c) { return c[3]; }))] : null;
+          var hit = function (a, b) { return !!a && !!b && a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]; };
+          var chat = R(document.getElementById("chat")), log = R(document.getElementById("chatlog")), gri = R(document.getElementById("grimoire")), mid = R(document.getElementById("midstack"));
+          return { chips: chips.length, row: row, chat: chat, chatlog: log, grimoire: gri, midstack: mid, rowHitsChat: hit(row, chat), rowHitsLog: hit(row, log), rowHitsGrimoire: hit(row, gri), rowHitsMid: hit(row, mid) };
+        })()`);
+        console.log(`measure ${cls} ${W2}:`, JSON.stringify(await measure()));
         await h.page.screenshot({ path: path.join(OUT, `hud_chips${tag}_${W2}_full.png`) });
         await h.page.screenshot({ path: path.join(OUT, `hud_chips${tag}_${W2}.png`), clip: await rowBox() });
         // hover the first buff chip: its tooltip card
@@ -952,11 +964,11 @@ async function groupChips(SLOW: number) {
           await h.page.screenshot({ path: path.join(OUT, `hud_chips_hover${tag}_${W2}.png`), clip: await rowBox() });
           await h.page.mouse.move(W2 / 2, 100);
         }
-        if (cls === "songweaver") {
-          // layout stress: clone the buff chip until there are 10, to see the row wrap instead of overlapping
-          await h.page.evaluate(() => { const row = document.getElementById("buffs")!, f = row.firstElementChild as HTMLElement; for (let i = row.children.length; i < 10 && f; i++) row.appendChild(f.cloneNode(true)); });
+        {
+          // layout stress: clone the buff chip until there are 14, to see the row wrap instead of overlapping
+          await h.page.evaluate(() => { const row = document.getElementById("buffs")!, f = row.firstElementChild as HTMLElement | null; let f2 = f; if (!f2) { f2 = document.createElement("div"); f2.className = "buff"; f2.innerHTML = "<i>?</i><span>9s</span>"; row.appendChild(f2); } for (let i = row.children.length; i < 14; i++) row.appendChild(f2.cloneNode(true)); });
           await wait(h.real(300));
-          await h.page.screenshot({ path: path.join(OUT, `hud_chips_many_${W2}.png`), clip: await rowBox() });
+          await h.page.screenshot({ path: path.join(OUT, `hud_chips_many${tag}_${W2}.png`), clip: await rowBox() }); console.log(`measure-many ${cls} ${W2}:`, JSON.stringify(await measure()));
         }
         addItem({ id: `hud_chips${tag}_${W2}`, file: `hud_chips${tag}_${W2}_full.png`, kind: "still", group: "HUD effects", title: `Status row (${cls}, ${W2}x${H2})`, what: "Mode chip, lockout clock and buffs as one row of 48 px chips above the XP bar.", source: "client/src/hudSlots.css #statusrow" });
       });

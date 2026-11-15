@@ -57,7 +57,7 @@ body.orbhud-on #sidepanel { max-height: calc(100% - 205px); z-index: 11; } /* ab
 body #stats { text-align: right; }
 /* little room left of the health orb (orbs.ts sets hud-tight): the statues go and chat moves up above the bar */
 body.hud-tight #orbhud .garg { display: none; }
-body.hud-tight.orbhud-on { --chat-bottom: calc(132px * var(--barzoom, 1)); --chat-w: min(300px, 30vw); }
+body.hud-tight.orbhud-on { --chat-bottom: calc((var(--slot) * 0.9 + 118px) * var(--barzoom, 1)); /* above the status row (hudSlots.css #statusrow: 62 + 48 px over the plate) */ --chat-w: min(300px, 30vw); }
 
 /* Songweaver: the right orb is the song gauge (gold, labelled "Song", pulses when nearly full) */
 #orbhud .orb .olabel { display: none; position: absolute; left: 0; right: 0; top: 18%; text-align: center; font-style: normal; color: #ffe27a;

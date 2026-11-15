@@ -28,7 +28,7 @@ Started 2026-11-15 from the effects gallery (https://claude.ai/artifact/6F9jaqDb
    so it changes the moment Modulate lands. Songweaver only. The clock's "Chords locked" tip uses the same card.
 7. **One status row of 48 px chips (every class).** The buff and debuff icons (`buffbar.ts`, from `ow.timers`), the mode chip and the
    lockout clock share one row at the left end of the plate, just above the XP bar (`#statusrow`, `client/src/hudSlots.css`;
-   it left `#midstack`, which moved up 68 px to stay clear). Order left to right: mode chip, lockout clock (when shown), then
+   it left `#midstack`, which moved up 68 px to stay clear; in the tight layout the chat and its log sit above the row, `--chat-bottom` in orbs.css). Order left to right: mode chip, lockout clock (when shown), then
    buffs (good first, then debuffs). Same bronze bevel frame for all; a buff keeps its icon, its seconds label (bottom of the tile),
    the dark sweep from the top and the blink when ending, and its tooltip card (`tooltip.ts`). The row is as wide as the skill bar
    and wraps upward when many chips are up. The old row above the Song orb is gone.
