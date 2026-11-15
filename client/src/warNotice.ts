@@ -8,6 +8,7 @@ import { WAR } from "../../shared/war/rules";
 import { territoryAt } from "../../shared/war/view";
 import { TILE } from "../../shared/constants";
 import { play } from "./sfx";
+import { hudSlot } from "./hudSlots";
 import "./warPlaque.css";
 
 export interface WarEv { kind: "siege" | "flip" | "held"; t: number; by: ClanKey; from: ClanKey }
@@ -19,7 +20,7 @@ export class WarNotice {
   constructor(parent: HTMLElement) {
     this.el.id = "warnotice";
     this.el.hidden = true;
-    parent.appendChild(this.el);
+    hudSlot("topleft").append(this.el); // under the plaque (hudSlots.css)
   }
 
   /** Text of the notice for an event (exported for tests and the wiki). */

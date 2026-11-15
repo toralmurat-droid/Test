@@ -3,11 +3,12 @@ import { onWorldScale, uiScale } from "./worldscale";
 /**
  * HUD places (PR B of the HUD rework): every HUD element has its own spot, so nothing overlaps.
  * - `#topright`: a flex column (online pill, minimap + dial, location, quest tracker, feed).
+ * - `#topleft`: a flex column (war plaque, war news notice, party frame).
  * - `#midstack`: bottom centre above the bar: `#promptstack` (interact prompt, level-up note) over `#statusrow` (chord widget, buffs).
  * - The bottom bar (orbs, skill bar, XP bar) is never drawn below 100%: `--barzoom` (see `barScale`).
  */
 
-export type HudSlotName = "topright" | "promptstack" | "statusrow";
+export type HudSlotName = "topright" | "topleft" | "promptstack" | "statusrow";
 
 /** The container a HUD widget mounts in (static in index.html; made on the spot if a page lacks it). */
 export function hudSlot(name: HudSlotName): HTMLElement {
@@ -54,7 +55,7 @@ export function boxesHit(boxes: readonly Box[], x: number, y: number, pad = 0): 
 }
 
 // The HUD parts world labels hide under: measured on resize and every 250 ms, not once per label
-const OCCLUDERS = ["topright"];
+const OCCLUDERS = ["topright", "topleft"];
 let boxes: Box[] = [];
 let measuredAt = -1e9;
 /** Measure the boxes now (screen px). */

@@ -1,14 +1,15 @@
-/* The Gloam Tide (client/src/tide.ts): meter left of the minimap, banner, end summary */
-#tidebox { position: absolute; top: 58px; right: 244px; width: 190px; padding: 4px 8px 5px; z-index: 6; pointer-events: none; font-family: var(--pixel-font); font-size: 16px; line-height: 1.15;
-  color: #d8d0ff; background: rgba(15, 10, 20, .8); border: 2px solid #5a4a8a; box-shadow: 0 0 0 1px #080504; text-shadow: 2px 2px #000; -webkit-font-smoothing: none; }
+/* The Gloam Tide (client/src/tide.ts): a card in the top-right column above the quest tracker (looks like a .qt-block), banner, end summary */
+#tidebox { width: 240px; box-sizing: border-box; padding: 3px 6px 4px; z-index: 6; pointer-events: none; font: 18px var(--pixel-font); line-height: 1.15;
+  background: rgba(15, 10, 6, .42); border: 1px solid rgba(168,130,58,.35); border-left: 3px solid #7a62d0; text-shadow: 2px 2px #000; -webkit-font-smoothing: none; }
 #tidebox[hidden] { display: none; }
-#tidebox .tbar { height: 6px; margin: 3px 0; background: #0f0a14; box-shadow: 0 0 0 1px #3a2f5a; }
-#tidebox .tbar div { height: 100%; width: 0; background: #7a62d0; transition: width .4s; }
-#tidebox.full { border-color: #b79cff; color: #fff; } #tidebox.full .tbar div { background: #b79cff; }
-#tidebox.march { border-color: #d8603a; color: #ffd8c0; } #tidebox.march .tbar div { background: #d8603a; }
-#tidebox > div:last-child { color: #a89cc8; font-size: 14px; }
+#tidebox .qt-title { color: #ffd166; }
+#tidebox .qt-obj { color: #fff; }
+#tidebox .qt-bar { position: relative; height: 8px; margin-top: 3px; background: #222; border-radius: 2px; overflow: hidden; }
+#tidebox .qt-bar div { height: 100%; width: 0; background: #7a62d0; transition: width .4s; }
+#tidebox.full { border-left-color: #b79cff; } #tidebox.full .qt-bar div { background: #b79cff; }
+#tidebox.march { border-left-color: #d8603a; } #tidebox.march .qt-bar div { background: #d8603a; } #tidebox.march .qt-title { color: #ff9d7a; }
 #tidebox.flash { animation: tide-flash 1.2s ease-out; }
-@keyframes tide-flash { 0% { box-shadow: 0 0 0 1px #080504, 0 0 22px 6px #b79cff; } 100% { box-shadow: 0 0 0 1px #080504, 0 0 0 0 transparent; } }
+@keyframes tide-flash { 0% { box-shadow: 0 0 22px 6px #b79cff; } 100% { box-shadow: 0 0 0 0 transparent; } }
 #tidebanner { position: absolute; top: 24%; left: 16px; right: 16px; text-align: center; opacity: 0; transition: opacity .5s; pointer-events: none; font-family: var(--pixel-font); text-shadow: 2px 2px #000, 0 0 10px #000; }
 #tidebanner.show { opacity: 1; }
 #tidebanner canvas { display: block; margin: 0 auto; max-width: calc(100vw - 32px); }
@@ -18,8 +19,4 @@
 #tideresult .tr-title { color: #ffd166; margin-bottom: 4px; }
 #tideresult .tr-you { margin-top: 6px; padding-top: 4px; border-top: 1px solid #45331e; color: #b9f27c; }
 #tideresult .tr-hint { margin-top: 4px; font-size: 14px; color: #8a7a5a; }
-@media (max-width: 600px) {
-  #tidebox { top: 42px; right: 148px; width: 150px; font-size: 13px; padding: 3px 6px 4px; }
-  #tidebox > div:last-child { font-size: 12px; }
-  #tidebanner { top: 14%; } #tideresult { font-size: 15px; top: 42%; }
-}
+@media (max-width: 600px) { #tidebanner { top: 14%; } #tideresult { font-size: 15px; top: 42%; } }

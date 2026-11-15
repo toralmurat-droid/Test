@@ -149,6 +149,19 @@ const MAPS: Record<string, string[]> = {
     "oGo....oGo",
     "oo......oo",
   ],
+  // Chat: speech bubble with three dots
+  chat: [
+    ".oooooooo.",
+    "owwwwwwwSo",
+    "owsgsgsgSo",
+    "owwwwwwwSo",
+    "owwwwwwwSo",
+    ".oSSSSSSo.",
+    "..ooosSo..",
+    "....ooo...",
+    "..........",
+    "..........",
+  ],
   coin: [
     "..oooooo..",
     ".oyyyggGo.",

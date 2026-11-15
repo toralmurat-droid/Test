@@ -3,6 +3,7 @@ import { msUntilDusk, TIDE, TIDE_GATE, TIDE_GOAL } from "../../shared/tide";
 import { actOfTile, TILE } from "../../shared/constants";
 import { dayTime } from "./details";
 import { pixelText } from "./pixeltext";
+import { hudSlot } from "./hudSlots";
 import type { MapMarker } from "./minimap";
 
 interface Share { name: string; share: number }
@@ -13,7 +14,7 @@ const pct = (s: number) => `${Math.round(s * 100)}%`;
 const mmss = (ms: number) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
 
 /**
- * Client side of The Gloam Tide (shared/tide.ts, server/tide.ts): the meter beside the minimap, the banners, the end
+ * Client side of The Gloam Tide (shared/tide.ts, server/tide.ts): the meter card in the top-right column, the banners, the end
  * summary and the gate marker. It only draws what the server's "tide" and "sfx" messages say.
  */
 export class TideHud {
@@ -33,12 +34,14 @@ export class TideHud {
 
   constructor(hud: HTMLElement) {
     this.box.id = "tidebox"; this.box.hidden = true;
-    this.bar.className = "tbar"; this.bar.append(this.fill);
-    this.box.append(this.title, this.bar, this.sub);
+    this.title.className = "qt-title"; this.sub.className = "qt-obj";
+    this.bar.className = "qt-bar"; this.bar.append(this.fill);
+    this.box.append(this.title, this.sub, this.bar);
     this.panel.id = "tideresult"; this.panel.hidden = true;
     this.panel.onclick = (ev) => { ev.stopPropagation(); this.panel.hidden = true; };
     this.banner.id = "tidebanner";
-    hud.append(this.box, this.panel, this.banner);
+    hudSlot("topright").append(this.box); // a card above the quest tracker (flex order, hudSlots.css)
+    hud.append(this.panel, this.banner);
   }
 
   /** "tide" from the server. */

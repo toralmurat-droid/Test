@@ -25,6 +25,7 @@ import { fontsReady } from "./pixelfont";
 import { attachWorldScale, initWorldScale, worldCanvasSize } from "./worldscale";
 import { perfHud } from "./perfHud";
 import "./hudSlots.css"; // HUD places and the slot text style: after every other stylesheet
+import "./chatToggle.css";
 
 const COLORS = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf1c40f, 0x9b59b6, 0xe67e22, 0x1abc9c, 0xecf0f1];
 let color = COLORS[Math.floor(Math.random() * COLORS.length)];

@@ -1,5 +1,5 @@
-/* Front plaque (warPlaque.ts): small weathered frame at the top centre, clear of the minimap and the bars */
-body #warplaque { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px;
+/* Front plaque (warPlaque.ts): small weathered frame, first in the top-left column (#topleft, hudSlots.css) */
+body #warplaque { position: relative; display: flex; align-items: center; gap: 8px;
   border: 18px solid transparent; border-image: var(--wf-bronze) 9 fill / 18px / 0 repeat; image-rendering: pixelated; padding: 0 6px;
   color: #eadfc8; text-shadow: 2px 2px #050302; font: 18px var(--pixel-font); -webkit-font-smoothing: none; pointer-events: none; white-space: nowrap; }
 body #warplaque[hidden] { display: none; }
@@ -26,7 +26,7 @@ body #warpanel { width: min(600px, calc(100% - 32px)); max-height: calc(100vh - 
 #warplaque .wp-me { color: #9fe07a; }
 #warplaque .wp-me.no { color: #a8977a; }
 /* War news notice under the plaque (warNotice.ts) */
-body #warnotice { position: absolute; top: 182px; left: 50%; transform: translateX(-50%); max-width: min(640px, 90vw); text-align: center;
+body #warnotice { position: relative; box-sizing: border-box; max-width: 100%; text-align: left;
   border: 18px solid transparent; border-image: var(--wf-gold) 9 fill / 18px / 0 repeat; image-rendering: pixelated; padding: 0 8px;
   color: #ffd98a; text-shadow: 2px 2px #050302; font: 18px var(--pixel-font); -webkit-font-smoothing: none; pointer-events: none; }
 body #warnotice.siege { border-image-source: var(--wf-blood); color: #ffb08a; }

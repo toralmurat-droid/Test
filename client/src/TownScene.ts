@@ -108,6 +108,7 @@ import { WaygateLayer } from "./waygate";
 import { WAYGATE_RANGE, WAYGATES } from "../../shared/act2";
 import { ISO, IsoView, isoAnchor, isoInput, isoX, isoY, screenDir, screenDir8, screenOf, setBaseDepth } from "./iso";
 import { hudOccludes, hudSlot } from "./hudSlots";
+import { setupChatToggle } from "./chatToggle";
 import { SMOOTH } from "./isoflag";
 import { addPixelGrid } from "./pixelgrid";
 import { paintSmoothProps } from "./smoothProps";
@@ -1810,6 +1811,7 @@ export class TownScene extends Phaser.Scene {
   private chatting() { return document.activeElement === this.chatEl || !!this.ideaBoard?.typing(); }
 
   private setupChat() {
+    setupChatToggle(document.getElementById("hud")!, document.getElementById("chatlog")!, this.chatEl);
     window.addEventListener("keydown", (ev) => {
       if (ev.key !== "Enter") return;
       if (this.ideaBoard?.typing()) return; // the idea box handles its own Enter
