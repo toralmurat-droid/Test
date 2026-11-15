@@ -291,7 +291,8 @@ function tick() {
  * Where the hero stands: the monster zone (name + its `mobs`, or undefined outside any) and the area
  * name. Cheap to call every frame.
  */
-export function setMusicZone(zone: string | undefined, mobs: Partial<Record<string, number>> | undefined, area: string, actNow: 1 | 2 = 1) {
+export function setMusicZone(zone: string | undefined, mobs: Partial<Record<string, number>> | undefined, area: string, actNowRaw: 1 | 2 | 3 = 1) {
+  const actNow: 1 | 2 = actNowRaw === 2 ? 2 : 1; // Act 3 borrows the valley's calm country track until the moors have their own music
   if (!inWorld) {
     // In the world now: the opening song plays on to its end instead of looping
     inWorld = true;

@@ -485,7 +485,7 @@ export class TownScene extends Phaser.Scene {
       // Gloomy and dark (Murat 2026-11-07: "too cute"): colour drained, darker overall, heavy vignette
       const cm = cam.postFX.addColorMatrix();
       this.grade = cm;
-      this.setGrade(false);
+      this.setGrade(1);
       cam.postFX.addVignette(0.5, 0.5, 0.82, 0.55);
       addPixelGrid(cam); // one pixel density for everything in the world
     }
@@ -788,9 +788,9 @@ export class TownScene extends Phaser.Scene {
       e.sprite.setPosition(x, y); e.tx = x; e.ty = y; e.lastX = x; e.lastY = y;
       if (id !== this.me) return;
       this.jumped(); this.snapCamera();
-      showLoading(to === "desert" ? "Crossing into the Sunscar…" : "Crossing home to Oakvale…");
+      showLoading(to === "desert" ? "Crossing into the Sunscar…" : to === "moors" ? "Crossing into the Grey Barrow Moors…" : "Crossing home to Oakvale…");
       this.settled = 0;
-      this.cameras.main.fadeIn(1200, 60, 30, 8);
+      if (to === "moors") this.cameras.main.fadeIn(1200, 30, 36, 44); else this.cameras.main.fadeIn(1200, 60, 30, 8);
     });
     // Down a rope or a stair in the Mawdeep (shared/dungeon.ts LINKS): a jump to the other end, a fade through the dark
     this.room.onMessage("descend", ({ id, x, y }) => {
@@ -3198,23 +3198,25 @@ export class TownScene extends Phaser.Scene {
     cam.resetFX();
     cam.fadeIn(c.ms, c.r, c.g, c.b);
   }
-  /** The camera's colour grade (SMOOTH only): Oakvale drained and gloomy; the desert (Act 2) keeps a little more of its warm colour. */
+  /** The camera's colour grade (SMOOTH only): Oakvale drained and gloomy; the desert (Act 2) keeps a little more of its warm colour; the moors (Act 3) go cool grey. */
   private grade?: Phaser.FX.ColorMatrix;
-  private gradeDesert?: boolean;
-  private setGrade(desert: boolean) {
-    if (!this.grade || this.gradeDesert === desert) return;
-    this.gradeDesert = desert;
+  private gradeAct?: 1 | 2 | 3;
+  private setGrade(act: 1 | 2 | 3) {
+    if (!this.grade || this.gradeAct === act) return;
+    this.gradeAct = act;
+    const desert = act === 2, moors = act === 3;
     this.grade.reset();
-    this.grade.saturate(desert ? -0.22 : -0.4);
+    this.grade.saturate(moors ? -0.5 : desert ? -0.22 : -0.4);
     this.grade.contrast(desert ? 0.12 : 0.16, true);
-    this.grade.brightness(desert ? 0.92 : 0.86, true);
+    this.grade.brightness(moors ? 0.9 : desert ? 0.92 : 0.86, true);
+    if (moors) this.grade.multiply([0.93, 0, 0, 0, 0, 0, 0.98, 0, 0, 0, 0, 0, 1.08, 0, 0, 0, 0, 0, 1, 0], true); // the moors' cool grey cast (Act 3)
   }
 
   update(_t: number, dtMs: number) {
     if (this.camSnap > 0 && --this.camSnap === 0) this.cameras.main.setLerp(CAM_LERP, CAM_LERP);
     this.iso?.update(dtMs);
     this.updateCover();
-    { const me = this.entities?.get(this.me)?.state; if (me) this.setGrade(me.y >= DESERT_Y0 * TILE && me.y < (DESERT_Y0 + DESERT_H) * TILE); }
+    { const me = this.entities?.get(this.me)?.state; if (me) this.setGrade(actOfTile(me.x / TILE, me.y / TILE) === 3 ? 3 : me.y >= DESERT_Y0 * TILE && me.y < (DESERT_Y0 + DESERT_H) * TILE ? 2 : 1); }
     if (loadingActive()) this.checkLoaded();
     this.ambient?.update(this.time.now, dtMs);
     if (this.dungeon) { this.dungeon.torch = this.torch && !this.entities?.get(this.me)?.state?.dead; this.dungeon.night = this.details?.darkNow ?? 0; }
@@ -3574,6 +3576,7 @@ export class TownScene extends Phaser.Scene {
       const tx = meEnt.sprite.x / TILE, ty = meEnt.sprite.y / TILE;
       const zdef = zoneAt(Math.floor(tx), Math.floor(ty));
       setMusicZone(zdef?.name, zdef?.mobs, this.areaName, actOfTile(tx, ty));
+      this.ambient?.setHero(tx, ty); // the moors' mist thickens in its hollows
       this.warStd?.update(meEnt.state.dead ? undefined : meEnt.sprite, !!this.npcs?.isOpen || !!this.npcs?.busy || !!this.chests?.near || !!this.stash?.near || !!this.bounty?.near || !!this.portals?.near || !!this.shrine?.near || !!this.waygates?.near || !!this.dungeon?.nearDoor, now);
       this.warTroops?.update(meEnt.state.dead ? undefined : meEnt.sprite, now);
       this.warRituals?.update(meEnt.state.dead ? undefined : meEnt.sprite); // the Veiled ritual circle (warRituals.ts)

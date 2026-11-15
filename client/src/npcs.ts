@@ -23,7 +23,7 @@ import { conceptTextures } from "./questConceptArt";
 import { TILE } from "../../shared/constants";
 import { ISO } from "./isoflag";
 import { routeVia } from "../../shared/dungeon";
-import { actAt, WAYGATES } from "../../shared/act2";
+import { actAt, waygateById, WAYGATES } from "../../shared/act2";
 import type { MapMarker } from "./minimap";
 import { QuestLog } from "./questlog";
 import { MASTER_LEVELS, SHOPS, sellPrice, shopBuys, shopFuses } from "../../shared/shops";
@@ -75,10 +75,18 @@ function pageFor(id: string, q: QuestState): DialogPage | undefined {
  * a dialog panel and the quest tracker. The server checks distance and owns quest progress.
  */
 /** Where the way to the other act starts, for the tracker (shared/desert.ts WAYGATE_OAKVALE / WAYGATE_DESERT). */
-const GATE_HINT: Record<1 | 2, string> = {
+const GATE_HINT: Record<1 | 2 | 3, string> = {
   1: "Step through the waygate, just outside Oakvale's south gate",
   2: "Step through the waygate in the Sunstone Circle, south-west of Kel Ashar",
+  3: "Step through the moorgate at the moors' south-west edge, or head back to Oakvale",
 };
+
+/** This act's gate whose twin lies in the target's act (else any gate of this act): where to head for another act's target. */
+function gateToward(me: { x: number; y: number }, target: { x: number; y: number }) {
+  const here = actAt(me.y, me.x), there = actAt(target.y, target.x);
+  const mine = WAYGATES.filter((g) => actAt(g.y, g.x) === here);
+  return mine.find((g) => { const t = waygateById(g.to); return !!t && actAt(t.y, t.x) === there; }) ?? mine[0];
+}
 
 /** Who gives a zone arc (shared/quests.ts ZONE_ARCS), and the first quest's level of each of their arcs (some give two). */
 const ZONE_GIVERS = new Map<string, number[]>();
@@ -834,7 +842,7 @@ export class NpcLayer {
     const via = target && me ? routeVia(target.x, target.y, me.x, me.y) : undefined;
     if (via) target = { x: via.x, y: via.y, kind: "object", label: via.label };
     // In the other act: point at this side's waygate
-    const gate = target && me && actAt(target.y, target.x) !== actAt(me.y, me.x) ? WAYGATES.find((g) => actAt(g.y, g.x) === actAt(me.y, me.x)) : undefined;
+    const gate = target && me && actAt(target.y, target.x) !== actAt(me.y, me.x) ? gateToward(me, target) : undefined;
     if (gate) target = { x: gate.x, y: gate.y, kind: "object", label: gate.label };
     if (follow && target && me) {
       const dx = target.x - me.x, dy = target.y - me.y, d = Math.hypot(dx, dy) - (target.r ?? 0);
