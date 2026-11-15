@@ -1,5 +1,6 @@
 {
   "date": "2026-11-15",
+  "patch": 251,
   "title": "Hide-Kin Tunnels",
   "changes": [
     "When the Hide-Kin strike a land two borders away, their tunnel now breaks out at that land's edge. Come near and its mouth opens, with Hide-Kin soldiers pouring out in waves.",
