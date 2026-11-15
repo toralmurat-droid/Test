@@ -1,5 +1,6 @@
 {
   "date": "2026-11-15",
+  "patch": 274,
   "title": "The map joins the war",
   "changes": [
     "The world map and the minimap show the war camps you have found, with Control, guards and patrols when you point at one.",
