@@ -1,34 +1,49 @@
-/* The monster bar at the top centre of the screen (monsterBar.ts). Slim weathered frame (--wf-thin-*, weathered.ts):
-   bronze for normal monsters, gold for elite / champion / quest, blood for bosses. Only the 12 / 18 px pixel fonts.
-   Width leaves the top-right column (264 px + margins) and the group frame free; pointer-events none. */
-#monsterbar { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); width: min(640px, calc(100% - 580px));
-  box-sizing: border-box; border: 10px solid transparent; border-image: var(--wf-thin-bronze) 5 fill / 10px repeat; image-rendering: pixelated;
-  padding: 0 2px; pointer-events: none; z-index: 7; color: #eadfc8; font: 18px/18px var(--pixel-font); text-shadow: 2px 2px #050302; }
+/* The monster plate at the top centre of the screen (monsterBar.ts, frames and ornaments from plateArt.ts).
+   A: level tile, name, icons, thin HP bar. B (.mb-wide): + a row of affix names. C (.mb-alt, Alt held): sentence details.
+   Only the 12 / 18 px pixel fonts (the tiny one for the level number). The frame is a per-tier border-image set inline;
+   the top offset too (room for crests and statues). pointer-events none; narrow enough to clear the top-right column. */
+#monsterbar { position: absolute; left: 50%; transform: translateX(-50%); width: 360px; box-sizing: border-box; border: 12px solid transparent;
+  image-rendering: pixelated; padding: 0 4px 2px; pointer-events: none; z-index: 7; color: #eadfc8; font: 18px/18px var(--pixel-font); text-shadow: 2px 2px #050302;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, .7)) drop-shadow(0 0 6px var(--mb-glow, transparent)); }
 #monsterbar[hidden] { display: none; }
-#monsterbar.mb-gold { border-image-source: var(--wf-thin-gold); }
-#monsterbar.mb-blood { border-image-source: var(--wf-thin-blood); }
-#monsterbar .mb-head { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; min-width: 0; }
-#monsterbar .mb-name { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-#monsterbar .mb-sub { font: 12px/18px var(--tiny-font); color: #a8977a; flex: none; }
-#monsterbar .mb-lv { margin-left: auto; flex: none; }
-#monsterbar .mb-badge { font: 12px/16px var(--tiny-font); flex: none; padding: 0 4px; background: #0f0a06; box-shadow: 0 0 0 2px #6a5232; color: #e3bf6a; }
-#monsterbar .mb-badge.mb-champion, #monsterbar .mb-badge.mb-elite, #monsterbar .mb-badge.mb-quest { box-shadow: 0 0 0 2px #a8823a; color: #ffd98a; }
-#monsterbar .mb-badge.mb-boss { box-shadow: 0 0 0 2px #9a4632; color: #ff9d7a; }
-#monsterbar .mb-hp { position: relative; height: 14px; margin: 1px 0 2px; background: #2a0e08; box-shadow: 0 0 0 2px #080504, 0 0 0 4px #6a5232; }
-#monsterbar .mb-hp i { position: absolute; left: 0; top: 0; bottom: 0; background: #b8322a; box-shadow: inset 0 2px #e05a40; }
-#monsterbar .mb-hp b { position: absolute; inset: 0; text-align: center; font: 12px/14px var(--tiny-font); color: #fff; text-shadow: 2px 2px #050302; font-weight: normal; }
-#monsterbar .mb-line { font: 12px/14px var(--tiny-font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#monsterbar .mb-main { display: flex; align-items: center; gap: 8px; }
-#monsterbar .mb-info { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-#monsterbar .mb-states { flex: none; display: flex; gap: 4px; }
-#monsterbar .mb-chip { padding: 0 3px; border: 2px solid; background: rgba(15, 10, 6, .8); line-height: 10px; }
-#monsterbar .mb-k { color: #a8977a; }
-#monsterbar .mb-el i { display: inline-block; width: 6px; height: 6px; margin-right: 3px; vertical-align: 1px; }
-#monsterbar .mb-sep { display: inline-block; width: 10px; }
-#monsterbar .mb-affix { display: flex; align-items: center; gap: 6px; }
-#monsterbar .mb-affix canvas { width: 10px; height: 10px; flex: none; image-rendering: pixelated; background: #000; box-shadow: 0 0 0 2px #000; }
-#monsterbar .mb-affix b { font-weight: normal; flex: none; }
-#monsterbar .mb-affix span { color: #cdbfa2; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-#monsterbar .mb-ear { display: flex; align-items: center; gap: 4px; color: #ffe9a8; }
-#monsterbar .mb-ear img { width: 16px; height: 16px; image-rendering: pixelated; flex: none; }
-#monsterbar .mb-ear span { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+#monsterbar.mb-wide { width: 480px; }
+#monsterbar.mb-alt { width: 600px; }
+#monsterbar .mb-r1 { display: flex; align-items: center; gap: 6px; white-space: nowrap; min-width: 0; height: 20px; }
+#monsterbar .mb-lv { flex: none; font: 12px/16px var(--tiny-font); padding: 0 3px; color: #050302; text-shadow: none; }
+#monsterbar .mb-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#monsterbar .mb-ics { flex: none; display: flex; align-items: center; gap: 3px; }
+#monsterbar .mb-gl { width: 14px; height: 14px; image-rendering: pixelated; flex: none; }
+#monsterbar .mb-gl.dim { opacity: .4; }
+#monsterbar .mb-sep { display: inline-block; flex: none; width: 2px; height: 14px; background: #45331e; margin: 0 3px; }
+#monsterbar .mb-hprow { display: flex; align-items: center; gap: 8px; margin: 4px 1px 2px; }
+#monsterbar .mb-hp { position: relative; flex: 1; height: 6px; background: #120c06; box-shadow: 0 0 0 1px #080504, 0 0 0 2px #4a3a22; }
+#monsterbar .mb-hp i { position: absolute; left: 0; top: 0; bottom: 0; background: #c0392b; }
+#monsterbar .mb-hpn { display: none; flex: none; font-weight: normal; color: #c9b89a; line-height: 18px; margin: -6px 0; }
+#monsterbar.mb-alt .mb-hpn { display: block; margin: 0; }
+#monsterbar .mb-r2 { display: flex; align-items: center; gap: 6px; margin-top: 3px; white-space: nowrap; min-width: 0; }
+#monsterbar .mb-af { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+#monsterbar .mb-af b, #monsterbar .mb-d b { font-weight: normal; flex: none; }
+#monsterbar canvas { width: 10px; height: 10px; flex: none; image-rendering: pixelated; background: #000; box-shadow: 0 0 0 2px #000; }
+#monsterbar .mb-sp { flex: 1; }
+#monsterbar .mb-ear { width: 16px; height: 16px; image-rendering: pixelated; flex: none; }
+#monsterbar .mb-d { display: flex; align-items: flex-start; gap: 6px; margin-top: 3px; line-height: 18px; white-space: normal; }
+#monsterbar .mb-d canvas { margin: 4px 2px 0; }
+#monsterbar .mb-d span { flex: 1; min-width: 0; color: #cdbfa2; }
+#monsterbar .mb-d.mb-dim span { color: #a8977a; }
+#monsterbar .mb-d.mb-hint { color: #ffe9a8; }
+#monsterbar .mb-d.mb-hint span { color: #ffe9a8; }
+#monsterbar .mb-d .mb-ear { margin-top: 1px; }
+
+/* Ornaments outside the frame (plateArt.ts): crest on top, statue halves / fins / scroll ends at the sides, corner glints */
+#monsterbar .mb-orn { position: absolute; pointer-events: none; image-rendering: pixelated; background-size: 100% 100%; background-repeat: no-repeat; }
+#monsterbar .mb-crest { left: 50%; }
+#monsterbar .mb-statue { aspect-ratio: 22 / 60; z-index: -1; max-height: 150px; } /* the tall Alt details do not blow the angel up */
+#monsterbar .mb-fin.r { transform: scaleX(-1); }
+#monsterbar .mb-gem { position: absolute; width: 4px; height: 4px; background: #fff; opacity: 0; pointer-events: none; animation: mb-glint 3.6s steps(1) infinite; }
+#monsterbar.mb-champion .mb-crest, #monsterbar.mb-named .mb-crest, #monsterbar.mb-named .mb-fin { animation: mb-shimmer 4s ease-in-out infinite; }
+/* boss ember: a glow layer behind the plate that only fades (opacity animates on the compositor; no filter repaint) */
+#monsterbar.mb-boss::after { content: ""; position: absolute; inset: -20px; z-index: -1; pointer-events: none; box-shadow: 0 0 14px 4px rgba(255, 70, 30, .6); animation: mb-ember 2.4s ease-in-out infinite alternate; }
+@keyframes mb-glint { 0%, 86%, 100% { opacity: 0; } 90% { opacity: .9; } 95% { opacity: .4; } }
+@keyframes mb-shimmer { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.35); } }
+@keyframes mb-ember { from { opacity: .35; } to { opacity: 1; } }
+

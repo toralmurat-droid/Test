@@ -154,7 +154,7 @@ export class NpcLayer {
     this.prompt.onclick = () => this.interact();
     // 1-3 press the option buttons of an open dialog; the capture listener runs before the skill hotbar sees the key
     window.addEventListener("keydown", (ev) => {
-      if (!this.optKeys.length || ev.repeat || ev.ctrlKey || ev.metaKey || ev.altKey || !this.isOpen) return;
+      if (!this.optKeys.length || ev.repeat || ev.ctrlKey || ev.metaKey || !this.isOpen) return; // (Alt held to read a monster: still picks)
       const a = document.activeElement;
       if (a instanceof HTMLInputElement || a instanceof HTMLTextAreaElement) return;
       const i = /^(?:Digit|Numpad)([1-3])$/.exec(ev.code)?.[1];

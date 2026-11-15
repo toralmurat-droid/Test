@@ -152,7 +152,7 @@ export class Minimap {
     // Map keys while the map is open: caught before the game (capture phase) so I/J/K/L/C/+/- don't open menus
     // or cast; the arrows and WASD still reach the game, so the hero keeps walking. Key-ups always go through.
     window.addEventListener("keydown", (ev) => {
-      if (!this.isOpen || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+      if (!this.isOpen || ev.ctrlKey || ev.metaKey) return; // (Alt may be held: the hotbar takes Alt too)
       if (document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement) return;
       const k = this.mapKey(ev);
       if (!k) return;
