@@ -1,15 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CLAN_KEYS, CLANS } from "../shared/war/clans";
+import { CLAN_KEYS } from "../shared/war/clans";
 import { newMinds, scriptedOrders } from "../shared/war/doctrine";
 import { landOf, newWar, WAR, warTick } from "../shared/war/rules";
-import { initialOwners, isSanctuary, TERRITORIES, territoryByName } from "../shared/war/territories";
+import { builtRegions, initialOwners, isSanctuary, TERRITORIES, territoryByName } from "../shared/war/territories";
+import { capitalsOf } from "../shared/war/regions";
 import { SPAWN_ZONES } from "../shared/spawns";
 
 function rng(seed: number) { return () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; }; }
 
 test("war map: every capital is a territory, borders are two-way, and every territory is reachable", () => {
-  for (const k of CLAN_KEYS) for (const n of Object.values(CLANS[k].capitals)) assert.equal(territoryByName(n)?.capitalOf, k, `${k} capital ${n}`);
+  for (const [n, c] of capitalsOf(builtRegions(TERRITORIES))) assert.equal(territoryByName(n)?.capitalOf, c.clan, `${c.clan} capital ${n}`);
+  for (const k of CLAN_KEYS) assert.equal(TERRITORIES.filter((t) => t.capitalOf === k).length, 2, `${k}: a capital in each built land`);
   for (const t of TERRITORIES) {
     assert.ok(t.near.length > 0, `${t.name} has no neighbour`);
     for (const n of t.near) assert.ok(TERRITORIES[n].near.includes(t.id), `${t.name} <-> ${TERRITORIES[n].name}`);

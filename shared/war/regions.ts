@@ -1,0 +1,79 @@
+/**
+ * The lands of the Riven Marches (design: play.fmtpa.ch/design/riven-marches/, Murat 2026-11-14: one continent, the
+ * acts are regions of it). Each land groups its territories on the war map: borders are drawn inside a land, and lands
+ * meet only through REGION_LINKS (a waygate or a road). A land is built when at least one war territory lies in it.
+ * The homelands of the Host, Redfang and Hide-Kin are planned: until one is built, its clan holds forward capitals in
+ * the built lands, which turn into ordinary territories once the homeland (with its own capital) is built.
+ * Pure data, deterministic: territories.ts builds the war map from it.
+ */
+import { actOfTile } from "../constants";
+import { WAYGATE_DESERT, WAYGATE_OAKVALE } from "../desert";
+import type { ClanKey } from "./clans";
+
+export type RegionKey = "oakvale" | "sunscar" | "moors" | "badlands" | "sinkholes" | "crown";
+
+/** A capital zone (a SPAWN_ZONES name). `forward`: held only while the clan's home region is unbuilt. */
+export interface Capital { clan: ClanKey; zone: string; forward?: boolean }
+
+export interface Region {
+  key: string;
+  name: string;
+  /** Where the land lies on the continent (the design page's sketch). */
+  compass: "N" | "NE" | "E" | "SE" | "S" | "SW" | "W" | "NW" | "C";
+  /** The clan whose homeland this is. */
+  home?: ClanKey;
+  /** Is this tile in the land? Unset while the land is not built. Checked in REGIONS order: the first match wins. */
+  contains?: (tx: number, ty: number) => boolean;
+  capitals: Capital[];
+}
+
+/** A way between two lands; pa / pb are its ends in each land (tiles): the territories nearest them border each other. */
+export interface RegionLink { a: string; b: string; name: string; pa: { x: number; y: number }; pb: { x: number; y: number } }
+
+export const REGIONS: Region[] = [
+  { key: "oakvale", name: "The Oakvale Lands", compass: "NW", home: "wardens", contains: (x, y) => actOfTile(x, y) === 1, capitals: [
+    { clan: "wardens", zone: "Goldenreach Farms" },
+    { clan: "redfang", zone: "Redfang Hollow", forward: true },
+    { clan: "host", zone: "Greywatch Keep", forward: true },
+    { clan: "hidekin", zone: "Thornwood", forward: true },
+    { clan: "veiled", zone: "Cinder Scar" },
+  ] },
+  { key: "sunscar", name: "The Sunscar", compass: "SE", home: "veiled", contains: (x, y) => actOfTile(x, y) === 2, capitals: [
+    { clan: "wardens", zone: "Palmshade Oasis" },
+    { clan: "redfang", zone: "Dustrider Camp", forward: true },
+    { clan: "host", zone: "Kharsun, the Buried City", forward: true },
+    { clan: "hidekin", zone: "The Humpback Mesas", forward: true },
+    { clan: "veiled", zone: "The Veiled Sanctum" },
+  ] },
+  // Planned: no map yet (a homeland's capitals come with its zones)
+  { key: "moors", name: "The Grey Barrow Moors", compass: "NE", home: "host", capitals: [] },
+  { key: "badlands", name: "The Red Badlands", compass: "W", home: "redfang", capitals: [] },
+  { key: "sinkholes", name: "The Mawdeep Sinkholes", compass: "S", home: "hidekin", capitals: [] },
+  { key: "crown", name: "The Crown of the Marches", compass: "C", capitals: [] },
+];
+
+/** Ways between lands. A link is live only while both of its lands are built. The waygate comes first. */
+export const REGION_LINKS: RegionLink[] = [
+  { a: "oakvale", b: "sunscar", name: "The Waygate", pa: WAYGATE_OAKVALE, pb: WAYGATE_DESERT },
+];
+
+/** The land a tile lies in (built lands only). */
+export function regionOf(tx: number, ty: number, regions: readonly Region[] = REGIONS): Region | undefined {
+  return regions.find((r) => r.contains?.(tx, ty));
+}
+export const regionByKey = (key: string, regions: readonly Region[] = REGIONS) => regions.find((r) => r.key === key);
+export const regionName = (key: string) => regionByKey(key)?.name ?? key;
+
+/**
+ * Zone name -> its capital, for the built lands `built`: a forward capital drops out once its clan's homeland is built.
+ * A zone named twice keeps the first entry.
+ */
+export function capitalsOf(built: ReadonlySet<string>, regions: readonly Region[] = REGIONS): Map<string, Capital> {
+  const homeBuilt = (k: ClanKey) => regions.some((r) => r.home === k && built.has(r.key));
+  const out = new Map<string, Capital>();
+  for (const r of regions) {
+    if (!built.has(r.key)) continue;
+    for (const c of r.capitals) if (!(c.forward && homeBuilt(c.clan)) && !out.has(c.zone)) out.set(c.zone, c);
+  }
+  return out;
+}

@@ -52,7 +52,7 @@ export const CARAVAN = {
   marginTiles: 3, roadCost: 1, wildCost: 3,
 };
 
-/** One cart line: from Hold a to Hold b, both held by `clan`, neighbours in the same act. */
+/** One cart line: from Hold a to Hold b, both held by `clan`, neighbours in the same land (region). */
 export interface CaravanLine { a: number; b: number; clan: ClanKey }
 export interface CaravanRoute {
   a: number; b: number;
@@ -86,7 +86,7 @@ export function caravanLines(owner: readonly (ClanKey | undefined)[]): CaravanLi
       const p = parent[c], key = `${p}-${c}`;
       if (edges.has(key)) break; // the rest of the way home is marked already
       edges.add(key);
-      if (TERRITORIES[p].act === TERRITORIES[c].act) out.push({ a: p, b: c, clan: k }); // the waygate link carries no cart
+      if (TERRITORIES[p].region === TERRITORIES[c].region) out.push({ a: p, b: c, clan: k }); // the waygate link carries no cart
     }
   }
   return out.sort((x, y) => x.a - y.a || x.b - y.b);
@@ -202,7 +202,7 @@ function simplify(b: Box, path: [number, number][]): { x: number; y: number }[] 
 
 function build(a: number, b: number): CaravanRoute | undefined {
   const A = TERRITORIES[a], B = TERRITORIES[b], pa = patrolOf(a), pb = patrolOf(b);
-  if (!A || !B || A.act !== B.act || !pa || !pb) return undefined;
+  if (!A || !B || A.region !== B.region || !pa || !pb) return undefined;
   const tile = (p: { x: number; y: number }): [number, number] => [Math.floor(p.x / TILE), Math.floor(p.y / TILE)];
   // from Hold gate to Hold gate (the patrol loops' first stop), over both lands' box; a wider box if water or walls cut it
   for (const M of [CARAVAN.marginTiles, CARAVAN.marginTiles * 5]) {
