@@ -2,6 +2,8 @@ import { hotbarWidth } from "./hudcache";
 import "./orbs.css";
 import { orbNeedsRedraw, orbTexts } from "./hudLogic";
 import { uiScale } from "./worldscale";
+import { LockClock } from "./lockClock";
+import { ModeChip } from "./modeChip";
 
 /**
  * Bottom HUD in the Diablo style (Murat 2026-11-07, from his reference picture): a red health orb on the left and a
@@ -208,6 +210,27 @@ export class OrbHud {
   }
 
   private song = false;
+  private lock?: LockClock;
+  private chip?: ModeChip;
+  private side?: HTMLElement;
+
+  /** The owner's widgets above the Song orb (one row: mode chip, chord lockout clock). Made on first use. */
+  private group(): HTMLElement {
+    if (!this.side) { this.side = document.createElement("div"); this.side.className = "sgside"; this.mp.parentElement!.appendChild(this.side); }
+    return this.side;
+  }
+
+  /** The owner's chord lockout clock (lockClock.ts): `locked` = her chlock status word. */
+  setChordLock(locked: boolean) {
+    if (!locked && !this.lock) return;
+    (this.lock ??= new LockClock(this.group())).update(locked && this.song, performance.now());
+  }
+
+  /** The owner's mode chip (modeChip.ts): `mode` = her `mode:` status word, `rank` her skill ranks. Songweaver only. */
+  setMode(mode: string | undefined, rank: (id: string) => number) {
+    if (!this.song && !this.chip) return;
+    (this.chip ??= new ModeChip(this.group())).update(this.song ? mode : undefined, rank);
+  }
 
   /** Level to draw for the gauge: a sharp fall (a swell at full, a drain) eases down over DRAIN_MS; rises and slow falls follow at once. */
   private drainLevel(real: number, song: boolean, now: number): number {

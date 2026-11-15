@@ -65,3 +65,13 @@ body.hud-tight.orbhud-on { --chat-bottom: calc(132px * var(--barzoom, 1)); --cha
 #orbhud .orb.song .olabel { display: block; }
 #orbhud .orb.song.full { animation: orb-song-full .7s steps(2) infinite; }
 @keyframes orb-song-full { 50% { filter: drop-shadow(0 0 8px #ffe27a) drop-shadow(0 4px 6px rgba(0,0,0,.75)) brightness(1.25); } }
+/* owner widgets above the Song orb (modeChip.ts, lockClock.ts): one row, the chip then the lockout clock */
+#orbhud .orb .sgside { position: absolute; left: 0; bottom: calc(100% - 4px); display: flex; align-items: flex-end; gap: 6px; width: max-content; pointer-events: none; }
+#orbhud .orb .lockclock { flex: none; width: 32px; height: 32px; image-rendering: pixelated; pointer-events: auto; box-shadow: 0 2px 4px rgba(0,0,0,.7); }
+#orbhud .orb .lockclock[hidden], #orbhud .orb .modechip[hidden] { display: none; }
+#orbhud .orb .modechip { --mc: #ffd24d; display: flex; align-items: stretch; gap: 6px; padding: 3px 7px 3px 3px; pointer-events: auto; font-family: var(--pixel-font);
+  background: linear-gradient(#211a14, #120e0b); border: 2px solid var(--mc); box-shadow: 0 0 0 2px #1a120b, 0 2px 4px rgba(0,0,0,.7); }
+#orbhud .orb .modechip .mcsw { flex: none; width: 8px; background: var(--mc); box-shadow: inset -2px 0 0 rgba(0,0,0,.35), inset 2px 2px 0 rgba(255,255,255,.35); }
+#orbhud .orb .modechip .mctx { display: flex; flex-direction: column; gap: 1px; white-space: nowrap; }
+#orbhud .orb .modechip .mcname { font-weight: normal; font-size: 15px; color: var(--mc); text-shadow: 1px 1px 0 #000; line-height: 1; }
+#orbhud .orb .modechip .mceff { font-style: normal; font-size: 11px; color: #e8dcc0; text-shadow: 1px 1px 0 #000; line-height: 1.1; }

@@ -357,7 +357,7 @@ async function groupMain(SLOW: number) {
     await s.clean(true);
     await s.stage(); await camStage(h);
     await s.play(PROGS[0].notes, 950); s.lockUntil = (await h.gameNow()) + 12_000;
-    await clip(h, { id: "ring_lockout", group: "Chord rings", title: "Chord lockout ring (chlock)", what: "For 12 s after a chord a grey ring closes in under her feet (chords are locked); filmed right after Amen.", source: "client/src/skillfx.ts:tickRings (status word chlock)", tail: 11000, pre: 0, follow: "stage", act: async () => { /* just watch */ } });
+    await clip(h, { id: "ring_lockout", group: "Chord rings", title: "Chord lockout: no world ring (chlock)", what: "For 12 s after a chord the world shows NO ring any more (the lockout is a clock on the owner's Song orb, group lock); filmed right after Amen.", source: "client/src/skillfx.ts:tickRings (status word chlock)", tail: 11000, pre: 0, follow: "stage", act: async () => { /* just watch */ } });
     // locked: a full progression during the lockout does nothing
     await s.clean(false);
     await s.stage();
@@ -853,13 +853,70 @@ async function groupHud(SLOW: number) {
   }
 }
 
+// ---- the chord lockout clock on the Song orb: stills across the whole lockout, at both sizes ----
+
+async function groupLock(SLOW: number) {
+  for (const [W2, H2] of [[1920, 1080], [1366, 768]]) {
+    await run(SLOW, async (r) => {
+      const h = await r.heroes("SwLock" + Date.now().toString(36).slice(-5), "songweaver", { w: W2, h: H2, hide: false });
+      const s = new Singer(h);
+      await h.send("chat", "/max"); await h.send("chat", "/god");
+      await wait(h.real(3000));
+      await s.stage(); await wait(h.real(3000));
+      const tmp = mkdtempSync(path.join(tmpdir(), "swlock-"));
+      const box = await h.page.evaluate(() => { const b = document.querySelector(".orb.mp")!.getBoundingClientRect(); return { x: Math.max(0, b.left - 14), y: Math.max(0, b.top - 14), width: b.width + 46, height: b.height + 28 }; });
+      const frame = async (i: number) => { const info = await h.page.evaluate(() => { const S = (window as any).S, e = S.entities.get(S.me); return `${Math.round(Date.now())} fx=${String(e.state.fx).includes("chlock")} clock=${!document.querySelector(".lockclock")?.hasAttribute("hidden")}`; }); console.log(`lock still ${i}: game ${info}`); await h.page.screenshot({ path: path.join(tmp, `k${String(i).padStart(2, "0")}.png`), clip: box }); };
+      await frame(0); // before: no clock
+      await s.play(PROGS[0].notes, 950);
+      const t0 = await h.gameNow();
+      let n = 1;
+      for (let k = 0; k < 11; k++) { await frame(n++); if (k === 0) await h.page.screenshot({ path: path.join(OUT, `hud_lockclock_${W2}_full.png`) }); await wait(h.real(1200)); }
+      await wait(h.real(1500)); await frame(n++); // gone
+      console.log(`lock stills ${n}, first at game +${t0}`);
+      execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-framerate", "1", "-i", path.join(tmp, "k%02d.png"), "-vf", "tile=7x2", "-frames:v", "1", path.join(OUT, `hud_lockclock_${W2}.png`)]);
+      execFileSync("cp", [path.join(tmp, "k06.png"), path.join(OUT, `hud_lockclock_${W2}_crop.png`)]);
+      addItem({ id: `hud_lockclock_${W2}`, file: `hud_lockclock_${W2}.png`, kind: "still", group: "HUD effects", title: `Chord lockout clock (${W2}x${H2})`, what: "Contact strip of the Song orb: before, then across the 12 s lockout (a dark wedge sweeps clockwise over the little tile), then gone.", source: "client/src/lockClock.ts" });
+      rmSync(tmp, { recursive: true, force: true });
+    });
+  }
+}
+
+// ---- the mode chip beside the Song orb: stills of two or more modes, cast Modulate between them ----
+
+async function groupMode(SLOW: number) {
+  for (const [W2, H2] of [[1920, 1080], [1366, 768]]) {
+    await run(SLOW, async (r) => {
+      const h = await r.heroes("SwMode" + Date.now().toString(36).slice(-5), "songweaver", { w: W2, h: H2, hide: false });
+      const s = new Singer(h);
+      await h.send("chat", "/max"); await h.send("chat", "/god");
+      await wait(h.real(3000));
+      await s.stage(); await wait(h.real(3000));
+      const box = await h.page.evaluate(() => { const b = document.querySelector(".orb.mp")!.getBoundingClientRect(); return { x: Math.max(0, b.left - 14), y: Math.max(0, b.top - 80), width: Math.min(560, innerWidth - b.left + 14), height: b.height + 94 }; });
+      const tmp = mkdtempSync(path.join(tmpdir(), "swmode-"));
+      const seen: string[] = [];
+      for (let i = 0; i < 5; i++) {
+        const m = await h.page.evaluate(() => (document.querySelector(".modechip .mcname") as HTMLElement | null)?.textContent ?? "(none)");
+        console.log(`mode still ${i}: ${m}`);
+        seen.push(m);
+        await h.page.screenshot({ path: path.join(tmp, `k${i}.png`), clip: box });
+        if (i === 1) await h.page.screenshot({ path: path.join(OUT, `hud_mode_${W2}_full.png`) });
+        await h.send("cast", "sg_modulate"); await wait(h.real(1500));
+      }
+      execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-framerate", "1", "-i", path.join(tmp, "k%d.png"), "-vf", "tile=1x5", "-frames:v", "1", path.join(OUT, `hud_mode_${W2}.png`)]);
+      execFileSync("cp", [path.join(tmp, "k1.png"), path.join(OUT, `hud_mode_${W2}_crop.png`)]);
+      addItem({ id: `hud_mode_${W2}`, file: `hud_mode_${W2}.png`, kind: "still", group: "HUD effects", title: `Mode chip (${W2}x${H2})`, what: `Modes seen across Modulate casts: ${seen.join(", ")}.`, source: "client/src/modeChip.ts" });
+      rmSync(tmp, { recursive: true, force: true });
+    });
+  }
+}
+
 (async () => {
   console.log("output:", OUT);
   // SLOW (env) fixes the slow-down; otherwise it is measured: the browser should draw ~1.3 frames for every clip frame
   const fpsSmall = !process.env.SLOW && groups.some((g) => ["main", "sound", "wren", "other"].includes(g)) ? await measureFps(W, H) : 10;
   const SLOW = process.env.SLOW ? Number(process.env.SLOW) : Math.min(1, Math.max(0.03, fpsSmall / (FPS * 1.3)));
   console.log(`game slowed to x${SLOW.toFixed(3)} (browser drew ${fpsSmall.toFixed(1)} fps at ${W}x${H})`);
-  const fn: Record<string, (s: number) => Promise<void>> = { main: groupMain, sound: groupSound, wren: groupWren, other: (s) => groupOther(s * 0.7), graded: groupGraded, hud: async () => { const f = await measureFps(1366, 768); await groupHud(Math.max(0.05, Math.min(0.5, f / 8))); }, bar: async () => { const f = await measureFps(1920, 1080); await groupBar(Math.max(0.05, Math.min(0.5, f / 8))); }, swells: groupSwells, modes: groupModes, stills: async () => { const f = await measureFps(1920, 1080); await groupStills(Math.max(0.05, Math.min(0.5, f / 8))); } };
+  const fn: Record<string, (s: number) => Promise<void>> = { main: groupMain, sound: groupSound, wren: groupWren, other: (s) => groupOther(s * 0.7), graded: groupGraded, mode: async () => { const f = await measureFps(1366, 768); await groupMode(Math.max(0.05, Math.min(0.5, f / 8))); }, lock: async () => { const f = await measureFps(1366, 768); await groupLock(Math.max(0.05, Math.min(0.5, f / 8))); }, hud: async () => { const f = await measureFps(1366, 768); await groupHud(Math.max(0.05, Math.min(0.5, f / 8))); }, bar: async () => { const f = await measureFps(1920, 1080); await groupBar(Math.max(0.05, Math.min(0.5, f / 8))); }, swells: groupSwells, modes: groupModes, stills: async () => { const f = await measureFps(1920, 1080); await groupStills(Math.max(0.05, Math.min(0.5, f / 8))); } };
   for (const g of groups) { try { await fn[g](SLOW); } catch (e) { console.error(`GROUP ${g} FAILED`, e); } }
   process.exit(0);
 })().catch((e) => { console.error("CAPTURE FAILED", e); process.exit(1); });
