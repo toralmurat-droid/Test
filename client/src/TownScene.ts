@@ -62,7 +62,8 @@ import { CHESTS, CHEST_RANGE } from "../../shared/chests";
 import { SHRINE, SHRINE_RANGE } from "../../shared/shrine";
 import { PORTALS, PORTAL_RANGE } from "../../shared/portals";
 import { PointerControls, type ClickEnemy, type ClickSpot } from "./pointer";
-import { warmPaths } from "./pathfind";
+import { refreshWalk, warmPaths } from "./pathfind";
+import { holdTiles, setHoldOwners } from "../../shared/war/holdWalls";
 import { pixelText } from "./pixeltext";
 import { speechBubble } from "./weathered";
 import { hasTrait, TITLES, unpackCosmetics } from "../../shared/cosmetics";
@@ -1582,7 +1583,11 @@ export class TownScene extends Phaser.Scene {
     this.room.onMessage("hb", alive);
     this.warStd = new WarStandards(this, (type, msg) => this.room.send(type, msg)); // clan war standards and oaths
     this.warTroops = new WarTroops(this); // cosmetic clan patrols, derived from the war snapshot
-    this.room.onMessage("war", (v) => { this.warTroops?.setWar(v); (this.warPlaque ??= new WarPlaque(document.getElementById("hud")!)).set(v); this.warStd?.setWar(v); this.warLast = v; });
+    this.room.onMessage("war", (v) => {
+      // the Hold walls follow the holders (shared/war/holdWalls.ts): prediction and click-to-walk routes see the new forts
+      const flipped = setHoldOwners(Array.isArray(v?.owner) ? v.owner : []);
+      if (flipped.length) refreshWalk(flipped.flatMap(holdTiles));
+      this.warTroops?.setWar(v); (this.warPlaque ??= new WarPlaque(document.getElementById("hud")!)).set(v); this.warStd?.setWar(v); this.warLast = v; });
     this.room.onMessage("clan", (m) => this.warStd?.setClan(m));
     this.room.onMessage("oaths", (m) => (this.tabards ??= new WarTabards(this)).set(m)); // server/warOaths.ts
     this.room.onMessage("siege", (m) => { // the server's live siege battle (server/warSieges.ts): front holders on the rings and the plaque

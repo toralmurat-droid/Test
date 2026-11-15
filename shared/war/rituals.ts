@@ -18,7 +18,8 @@ import { patrolOf } from "./patrols";
 import { type ClanKey } from "./clans";
 import { LEADERS } from "./heralds";
 import { bordersOf, timeBonus, type WarState } from "./rules";
-import { HOLD_FORT_PX, HOLDS, STANDARD, STANDARDS } from "./standards";
+import { anyHoldWall, holdReachPx } from "./holdWalls";
+import { HOLDS, STANDARD, STANDARDS } from "./standards";
 import { TERRITORIES } from "./territories";
 import { warPhase } from "./view";
 
@@ -104,7 +105,7 @@ function reachOf(t: number): Set<number> | undefined {
   let out: Set<number> | undefined;
   if (T && p) {
     const M = 2, x0 = T.x - M, y0 = T.y - M, x1 = T.x + T.w - 1 + M, y1 = T.y + T.h - 1 + M;
-    const ok = (tx: number, ty: number) => tx >= x0 && ty >= y0 && tx <= x1 && ty <= y1 && !isSolidAt((tx + 0.5) * TILE, (ty + 0.5) * TILE) && !caravanOffLimits((tx + 0.5) * TILE, (ty + 0.5) * TILE);
+    const ok = (tx: number, ty: number) => tx >= x0 && ty >= y0 && tx <= x1 && ty <= y1 && !anyHoldWall(tx, ty) && !isSolidAt((tx + 0.5) * TILE, (ty + 0.5) * TILE) && !caravanOffLimits((tx + 0.5) * TILE, (ty + 0.5) * TILE);
     const sx = Math.floor(p.pts[0].x / TILE), sy = Math.floor(p.pts[0].y / TILE);
     if (ok(sx, sy)) {
       out = new Set([sy * MAP_W + sx]);
@@ -122,8 +123,11 @@ function reachOf(t: number): Set<number> | undefined {
   return out;
 }
 
-/** Distance (px) from (x, y) to the edge of a Hold's fort (a square HOLD_FORT_PX from its centre); 0 inside. */
-export const fortGap = (h: { x: number; y: number }, x: number, y: number) => Math.hypot(Math.max(0, Math.abs(h.x - x) - HOLD_FORT_PX), Math.max(0, Math.abs(h.y - y) - HOLD_FORT_PX));
+/** Distance (px) from (x, y) to the edge of a Hold's fort (the square holdReachPx round its centre, any clan's fort); 0 inside. */
+export const fortGap = (h: { t: number; x: number; y: number }, x: number, y: number) => {
+  const r = holdReachPx(h.t);
+  return Math.hypot(Math.max(0, Math.abs(h.x - x) - r), Math.max(0, Math.abs(h.y - y) - r));
+};
 /** Distance (px) from (x, y) to the edge of a standard's ring; negative inside. */
 export const ringGap = (s: { x: number; y: number }, x: number, y: number) => Math.hypot(s.x - x, s.y - y) - STANDARD.range;
 

@@ -1,9 +1,10 @@
-import { InputState, inputDir, PLAYER_RADIUS, PLAYER_SPEED } from "./constants";
+import { InputState, inputDir, PLAYER_RADIUS, PLAYER_SPEED, TILE } from "./constants";
 import { isSolidAt as mapSolidAt } from "./map";
 import { isDecorSolidAt } from "./npcs";
+import { holdWallPx } from "./war/holdWalls";
 
-/** Map tiles plus the props around the village traders (shared/npcs.ts). */
-const isSolidAt = (x: number, y: number) => mapSolidAt(x, y) || isDecorSolidAt(x, y);
+/** Map tiles, the props around the village traders (shared/npcs.ts) and the walls of the clan Holds as held now (shared/war/holdWalls.ts). */
+const isSolidAt = (x: number, y: number) => mapSolidAt(x, y) || isDecorSolidAt(x, y) || holdWallPx(x, y);
 
 /** True when a hero's feet box at (x, y) overlaps a wall, water or a solid prop. */
 export function blocked(x: number, y: number): boolean {
@@ -13,6 +14,25 @@ export function blocked(x: number, y: number): boolean {
     isSolidAt(x - r, y - r) || isSolidAt(x + r, y - r) ||
     isSolidAt(x - r, y + r) || isSolidAt(x + r, y + r)
   );
+}
+
+/**
+ * The nearest spot (px, a tile centre or the spot itself) within `maxTiles` where a hero's feet box is free, nearest
+ * first; undefined when there is none. The server moves people out of a Hold wall that rose under them with it.
+ */
+export function nearestFree(x: number, y: number, maxTiles = 6): { x: number; y: number } | undefined {
+  if (!blocked(x, y)) return { x, y };
+  const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
+  let best: { x: number; y: number } | undefined, bd = Infinity;
+  for (let r = 0; r <= maxTiles; r++) {
+    if (best && bd <= r * TILE - TILE) break; // nothing in a farther ring can be nearer
+    for (let j = ty - r; j <= ty + r; j++) for (let i = tx - r; i <= tx + r; i++) {
+      if (Math.max(Math.abs(i - tx), Math.abs(j - ty)) !== r) continue;
+      const cx = (i + 0.5) * TILE, cy = (j + 0.5) * TILE, d = Math.hypot(cx - x, cy - y);
+      if (d < bd && !blocked(cx, cy)) { bd = d; best = { x: cx, y: cy }; }
+    }
+  }
+  return best;
 }
 
 /** How far aside (px) a hero looks for a way round an edge it walks into: a stump's core plus the feet box. */

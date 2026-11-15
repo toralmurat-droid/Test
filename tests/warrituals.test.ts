@@ -10,7 +10,8 @@ import { NPC_DECOR, NPCS } from "../shared/npcs";
 import { noMobsAt } from "../shared/spawns";
 import { channelStep, pauseStep, RITUAL, RITUAL_ENTRANCES, RITUAL_MARKS, ritualClear, RITUAL_PHASE, ritualDay, ritualPay, ritualRate, ritualSite, ritualSpot, ritualTime, type RitualHold } from "../shared/war/rituals";
 import { bordersOf, newWar, timeBonus, WAR } from "../shared/war/rules";
-import { HOLD_FORT_PX, HOLDS, STANDARD, STANDARDS } from "../shared/war/standards";
+import { holdReachPx } from "../shared/war/holdWalls";
+import { HOLDS, STANDARD, STANDARDS } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
 import { warPhase } from "../shared/war/view";
 
@@ -36,7 +37,7 @@ test("rituals: every land has a deterministic, walkable, legal circle spot", () 
     // the whole counting ring (wider than the drawn circle) stays off every fort and every standard's ring, any land's
     assert.ok(RITUAL.ringPx >= 68, "the counting ring covers the drawn circle");
     for (const h of HOLDS) {
-      const gap = Math.hypot(Math.max(0, Math.abs(h.x - s.x) - HOLD_FORT_PX), Math.max(0, Math.abs(h.y - s.y) - HOLD_FORT_PX));
+      const r = holdReachPx(h.t), gap = Math.hypot(Math.max(0, Math.abs(h.x - s.x) - r), Math.max(0, Math.abs(h.y - s.y) - r));
       assert.ok(gap >= RITUAL.ringPx, `${T.name}: ${gap.toFixed(0)} px from the fort of land ${h.t}`);
     }
     for (const st of STANDARDS) {

@@ -106,6 +106,7 @@ import { ASK_BURST, ASK_PER_SEC, Bucket, CHAT_BURST, CHAT_PER_SEC, CRAFT_BURST, 
 import { Player } from "./player";
 import { byPart, hitBy } from "./hitBy";
 import { addValor, attachWar, onWar, rallyTell, warNow, warState } from "./war";
+import { HoldWalls } from "./holdWalls";
 import { clanView, cleanOath, Presence, swear } from "./warHeroes";
 import { WarTroops } from "./warTroops";
 import { WarCaravans } from "./warCaravans";
@@ -732,12 +733,16 @@ export class TownRoom extends Room<TownState> {
     save: (id) => { const p = this.state.players.get(id); if (p) saveHero(p.name, p.cls, this.snapshot(p)); },
   });
 
+  /** Hold walls (server/holdWalls.ts): the forts follow the war's holders; nobody is left standing in a wall. */
+  private holdWalls = new HoldWalls({ heroes: () => this.state.players.entries(), mobs: () => this.state.mobs.entries() });
+
   /** Tabards (server/warOaths.ts): every hero's clan and Renown rank, by message (the Player schema is full). */
   private oaths = new WarOaths({ heroes: () => this.state.players.entries(), broadcast: (msg) => this.broadcast("oaths", msg) });
 
   onCreate() {
     liveRooms.add(this);
     const offNews = attachWar(this), offTroops = onWar((v, _e, news) => {
+      this.holdWalls.sync(warState()?.owner); // a land that changed hands raises its new holder's fort at once
       this.sieges.tick(Date.now()); this.warTroops.onWar(v); this.writs.onWar(v);
       const r = news.rally?.clan; // the Rally came to a clan: its sworn heroes here hear what it means for them
       if (r) for (const [id, p] of this.state.players.entries()) if (p.clan === r) this.clients.getById(id)?.send("chat", { id: "", name: "Herald", text: rallyTell(r) });
@@ -806,6 +811,7 @@ export class TownRoom extends Room<TownState> {
         const c = this.clients.getById(id), p = this.state.players.get(id);
         if (c && p) { c.send("clan", clanView(p)); c.send("chat", { id: "", name: "Herald", text: `Your renown grows: you are now ${rank}.` }); }
       }
+      this.holdWalls.sync(warState()?.owner);
       this.caravans.tick(Date.now()); // (caravans claim their share of WAR_TROOPS.maxTroops first, then the sieges)
       this.sieges.tick(Date.now());
       this.tunnels.tick(Date.now());
