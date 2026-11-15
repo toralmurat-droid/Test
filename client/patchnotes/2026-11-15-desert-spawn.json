@@ -1,5 +1,6 @@
 {
   "date": "2026-11-15",
+  "patch": 269,
   "title": "Open ground in Kel Ashar",
   "changes": [
     "Coming back in the desert (after a reload or a death) now puts you on open ground in Kel Ashar's market, never between crates and barrels.",
