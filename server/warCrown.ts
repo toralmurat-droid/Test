@@ -149,7 +149,7 @@ export function crownCredit(t: number, by: string, k: ClanKey, v: number, now = 
   if (!cur || !isCrown(t) || !(v > 0) || now < cur.start || now >= cur.end) return;
   const h = cur.heroes[by];
   if (!h && Object.keys(cur.heroes).length >= RECKONING.heroesMax) return;
-  cur.heroes[by] = { k, v: (h?.v ?? 0) + v }; // (a hero who changed clans in the window counts for the last)
+  cur.heroes[by] = { k: h?.k ?? k, v: (h?.v ?? 0) + v }; // a hero counts for the clan they first fought for in the window (no oath-swap onto the winner's pay)
 }
 
 /** The key of a hero (account and class) as the war passes it to addValor; undefined without a class (a test double). */

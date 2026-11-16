@@ -265,9 +265,14 @@ export async function step(now: number) {
   await save(now);
 }
 
+/** War saves run one after another, each writing the war as it stands then: two writes in flight could land out of
+ * order (a Postgres pool, one tmp file) and an older one would bring back a Reckoning's pay already claimed. */
+let saving: Promise<void> = Promise.resolve();
 async function save(now: number) {
   dirtyAt = 0; lastSave = now;
-  await kv?.set(KEY, saved).catch((e) => console.error("War: could not save:", e));
+  const write = async () => { if (kv) await kv.set(KEY, saved).catch((e) => console.error("War: could not save:", e)); };
+  saving = saving.then(write, write);
+  await saving;
 }
 
 function tickOnce(at: number, news: WarNews): WarEvent[] {

@@ -159,14 +159,13 @@ crown in place of their lozenge.
 **War sim** (`tools/balance/war.ts`, the Reckoning on by default, `--no-reckoning` off, `--reckon-valor=<clan>:<v>` adds
 a clan's heroes): `200 30` gives exactly PR3's numbers (Wardens 19.3%, Redfang 22.7%, Host 18.3%, Hide-Kin 18.0%, Veiled
 21.7%; 7.93 flips a day; domination 0.0%): with no players the holder always keeps the Keep. `200 120` (800 Reckonings):
-Hide-Kin win 100%, the holder keeps it 100%. With heroes (`50 120`): Veiled +5 valor a tick win 21% (holder kept 94.5%,
-the last winner again 98.7%), Redfang +10 win 3.5% (kept 98.5%). Domination stays 0.0%. **The Keep is sticky**: its 3
-points a tick, on top of the holder's Crown land, decide most Reckonings, and a clan that takes it keeps it unless heroes
-fight hard against it. The armies' war is untouched (the Keep adds 1 income like any land). Owner's call whether the
-Keep should count less, or the holder's points less.
+Hide-Kin win 100%, the holder keeps it 100%. With heroes (`50 120`, `valorPts` 1): Veiled +2 valor a tick win 22%, Veiled +5 win 100% (holder kept 75%), Redfang +5
+win 99.5%. Domination stays 0.0%. At the first `valorPts` 0.25 the Keep was sticky (Veiled +5 won 21%, holder kept
+94.5%); at 1 the clan whose heroes turn up takes it. The armies' war is untouched (the Keep adds 1 income like any land).
 
 **Open:**
-- The Keep's stickiness (above): an owner decision on `RECKONING.keepPts` / `valorPts`.
+- Siege battles, tunnels, rituals, writs, siege works, column joins and town claims add Crown valor to the clan's
+  score but credit no hero for pay (they call addValor without a hero key).
 - The writ board's valor (`server/warWrits.ts`) and the standing minutes (no valor since W2c) credit no hero for a
   Reckoning; kills, battles, Hold sacks, caravans and feud bounties do.
 - The Hold banners baked in the hold atlases do not wear the crown (only the standards and pennants).
