@@ -9,6 +9,7 @@ import { CLANS, CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
 import { REGIONS } from "../../shared/war/regions";
 import { LAND_LINKS, TERRITORIES } from "../../shared/war/territories";
 import type { WarView } from "../../shared/war/view";
+import { viewTier } from "../../shared/war/intel";
 import { inPoly, layoutTerritories, SLOTS, WT_H, WT_W, type Pt } from "./warTableLayout";
 
 const KEY = "wartable";
@@ -167,7 +168,7 @@ export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, font: stri
   const near: { id: number; d: number }[] = [];
   for (const t of TERRITORIES) {
     const [x0, y0] = P(t.id), x = Math.round(x0), y = Math.round(y0), k = CLAN_KEYS[v.owner[t.id]], col = k ? MAP[k] : 0x888888;
-    const cap = !!t.capitalOf, s = cap ? Math.round(sz * 1.5) : sz, h = s >> 1;
+    const cap = !!t.capitalOf, s = cap ? Math.round(sz * 1.5) : Math.round(sz * [0.75, 1, 1.25][viewTier(v, t.id)]), h = s >> 1; // (a bigger marker for a bigger Hold)
     if (v.sieges.some((sg) => sg[0] === t.id)) { g.lineWidth = 2; g.strokeStyle = `rgba(255,80,40,${0.45 + 0.55 * pulse})`; g.strokeRect(x - h - 5, y - h - 5, s + 10, s + 10); }
     if (v.raided?.includes(t.id)) { g.lineWidth = 2; g.setLineDash([4, 3]); g.strokeStyle = `rgba(200,110,255,${0.7 + 0.3 * pulse})`; g.strokeRect(x - h - 3, y - h - 3, s + 6, s + 6); g.setLineDash([]); }
     g.fillStyle = "#0d0a07"; g.fillRect(x - h - 1, y - h - 1, s + 2, s + 2);

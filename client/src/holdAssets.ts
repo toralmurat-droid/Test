@@ -1,6 +1,8 @@
 import type Phaser from "phaser";
 import type { ClanKey } from "../../shared/war/clans";
 import { fortOf } from "../../shared/war/holdWalls";
+import type { HoldTier } from "../../shared/war/holdTiers";
+import { CLANS } from "../../shared/war/clans";
 import { TILE } from "../../shared/constants";
 import { atlasFile, type AtlasMeta, fortLayout, groundPlan } from "./holdArt";
 import { isoAnchor } from "./iso";
@@ -48,8 +50,8 @@ export function ensureHold(scene: Phaser.Scene, k: ClanKey, done?: () => void): 
 export class HoldDraw {
   private objs: Phaser.GameObjects.GameObject[] = [];
   private gkey = "";
-  constructor(private scene: Phaser.Scene, readonly t: number, readonly clan: ClanKey) {
-    const f = fortOf(t, clan), m = meta.get(clan);
+  constructor(private scene: Phaser.Scene, readonly t: number, readonly clan: ClanKey, readonly tier: HoldTier = 1) {
+    const f = fortOf(t, clan, tier), m = meta.get(clan);
     if (!f || !m) return;
     const akey = atlasKey(clan), src = scene.textures.get(akey).getSourceImage() as CanvasImageSource;
     const plan = groundPlan(f), cv = document.createElement("canvas");
@@ -57,7 +59,7 @@ export class HoldDraw {
     const g = cv.getContext("2d")!;
     g.imageSmoothingEnabled = false;
     for (const tl of plan.tiles) { const fr = m.frames[tl.key]; if (fr) g.drawImage(src, fr.x, fr.y, fr.w, fr.h, tl.x, tl.y, fr.w, fr.h); }
-    this.gkey = `holdg_${t}_${clan}`;
+    this.gkey = `holdg_${t}_${clan}_${tier}`;
     if (scene.textures.exists(this.gkey)) scene.textures.remove(this.gkey);
     scene.textures.addCanvas(this.gkey, cv)?.setFilter(1);
     const cx = (f.cx + 0.5) * TILE, cy = (f.cy + 0.5) * TILE;
@@ -69,8 +71,13 @@ export class HoldDraw {
     place(scene.add.image(cx, cy, this.gkey).setOrigin(plan.ox / plan.w, plan.oy / plan.h), cx, cy, -0.5);
     for (const i of fortLayout(f)) {
       const fr = m.frames[i.key];
-      if (!fr) continue; // not in the atlas (art out of date): that cell stays bare
       const x = cx + i.dx * TILE, y = cy + i.dy * TILE;
+      if (!fr) { // not in the atlas (a tier's art not baked yet): a flat block on that cell, so a solid cell is never bare
+        const g = scene.add.graphics().setDepth(-0.4);
+        g.fillStyle(CLANS[clan].trim, 0.9).fillRect(x - TILE / 2 + 1, y - TILE / 2 + 1, TILE - 2, TILE - 2);
+        this.objs.push(g);
+        continue;
+      }
       place(scene.add.image(x, y, akey, i.key).setOrigin(fr.ox / fr.w, fr.oy / fr.h), x, y, y + i.foot);
     }
   }
