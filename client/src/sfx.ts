@@ -36,7 +36,7 @@ let voices = 0;
 const MAX_VOICES = 28;
 const lastPlay = new Map<string, number>();
 /** Sounds that ring for seconds (kept connected longer). */
-const LONG = new Set(["lootRare", "lootLegendary", "horn", "ritual", "ritualCall", "demonRise", "demonRoar", "shrine", "portalTravel", "portalWake", "necroWind", "heroDie", "levelup", "owl", "chime", "warcry", "motherInflate", "demonFire", "skelDie", "lutePluck", "swResonate", "swShatter", "swBounce", "swSnap", "swSwell", "caravan_raided", "caravan_arrived", "siege_front", "ram_wrecked", "ram_at_gate", "tunnel_open", "tunnel_collapse", "ritual_broken", "ritual_done", "wanted_up", "bounty_claimed", "hold_sacked"]);
+const LONG = new Set(["lootRare", "lootLegendary", "horn", "ritual", "ritualCall", "demonRise", "demonRoar", "shrine", "portalTravel", "portalWake", "ferryOff", "ferryOn", "necroWind", "heroDie", "levelup", "owl", "chime", "warcry", "motherInflate", "demonFire", "skelDie", "lutePluck", "swResonate", "swShatter", "swBounce", "swSnap", "swSwell", "caravan_raided", "caravan_arrived", "siege_front", "ram_wrecked", "ram_at_gate", "tunnel_open", "tunnel_collapse", "ritual_broken", "ritual_done", "wanted_up", "bounty_claimed", "hold_sacked"]);
 const AMBIENT = new Set(["crackle", "bird", "cricket", "chime", "owl", "step", "skelIdle", "blobGurgle", "crawl"]);
 
 const TOWNS = ["Oakvale", "Market Square", "Chapel of the Dawn", "The Rusty Tankard", "The Smithy", "Saltmere", "Hunter's Camp"];
@@ -440,6 +440,16 @@ const R: Record<string, Recipe> = {
   gate: (o, t, v, down) => { for (let i = 0; i < 7; i++) noise(o, t + i * 0.07, { type: "bandpass", f: 1800 + (i % 3) * 400, q: 6, dur: 0.05, vol: 0.09 * v, att: 0.003 }); tone(o, t, { type: "sawtooth", f: 70, f2: 55, dur: 0.5, vol: 0.05 * v, att: 0.05 }); if (down) thud(o, t + 0.55, 110, 0.4 * v, 0.16); },
   chest: (o, t, v) => { tone(o, t, { type: "sawtooth", f: 95, f2: 140, dur: 0.45, vol: 0.12 * v, vib: 12, vibHz: 18, att: 0.05 }); noise(o, t, { type: "bandpass", f: 700, q: 4, dur: 0.4, vol: 0.12 * v, att: 0.1 }); thud(o, t + 0.45, 140, 0.3 * v, 0.12); },
   shrine: (o, t, v) => { [0, 7, 12, 19].forEach((s, i) => bell(o, t + i * 0.12, 392 * 2 ** (s / 12), 2.2, 0.12 * v)); },
+  // Pell's ferry (broadcast sfx ev "ferry"): oar strokes and a ship's bell leaving the jetty, a bump and a bell on landing
+  ferryOff: (o, t, v) => {
+    bell(o, t, 659, 1.0, 0.1 * v);
+    for (let i = 0; i < 4; i++) { noise(o, t + 0.25 + i * 0.32, { type: "bandpass", f: 700, f2: 300, q: 1.2, dur: 0.22, vol: 0.22 * v, att: 0.05 }); thud(o, t + 0.3 + i * 0.32, 150, 0.12 * v, 0.08); }
+  },
+  ferryOn: (o, t, v) => {
+    noise(o, t, { type: "bandpass", f: 500, f2: 250, q: 1, dur: 0.3, vol: 0.2 * v });
+    thud(o, t + 0.28, 90, 0.4 * v, 0.2);
+    bell(o, t + 0.4, 784, 1.2, 0.12 * v); bell(o, t + 0.75, 784, 1.0, 0.08 * v);
+  },
   portalTravel: (o, t, v) => { tone(o, t, { f: 120, f2: 900, dur: 0.9, vol: 0.2 * v, att: 0.3, vib: 20, vibHz: 9 }); whoosh(o, t, 200, 3000, 0.9, 0.4 * v); bell(o, t + 0.8, 784, 1.2, 0.12 * v); },
   portalWake: (o, t, v) => { [0, 5, 7, 12].forEach((s) => tone(o, t, { type: "triangle", f: 220 * 2 ** (s / 12), dur: 2, vol: 0.09 * v, att: 0.4, vib: 3 })); bell(o, t + 0.3, 880, 1.5, 0.1 * v); },
   step: (o, t, v, kind = "grass") => {
@@ -973,7 +983,7 @@ export function songweaverSfx(ev: any, me?: string, open = false): boolean {
 // Environment: beds that follow the hero
 
 interface Bed { g: GainNode; f?: BiquadFilterNode }
-let wind: Bed | null = null, water: Bed | null = null, fire: Bed | null = null, hum: Bed | null = null, portalHum: Bed | null = null;
+let wind: Bed | null = null, surf: Bed | null = null, water: Bed | null = null, fire: Bed | null = null, hum: Bed | null = null, portalHum: Bed | null = null;
 let bedTime = 0;
 const FIRES: [number, number][] = [];
 const BIG_FIRES = new Set<string>();
@@ -1007,6 +1017,7 @@ function loopTones(freqs: number[], type: OscillatorType, tremHz: number): Bed {
 function makeBeds() {
   wind = loopNoise("lowpass", 380, 0.5);
   water = loopNoise("lowpass", 650, 0.5);
+  surf = loopNoise("lowpass", 500, 0.4);
   fire = loopNoise("lowpass", 350, 0.7);
   hum = loopTones([196, 293.7, 392.5], "sine", 0.25);
   portalHum = loopTones([65.4, 130.8, 98.2], "triangle", 1.3);
@@ -1018,6 +1029,45 @@ function makeBeds() {
       FIRES.push([(x + 0.5) * TILE, (y + 0.5) * TILE]);
     }
   }
+}
+
+/** The open sea of Act 1: water south of this row (ponds, the river and the lake lie north of it). */
+const SEA_Y = 180;
+const SEA_END = 216; // WORLD_H: below it the underground band, no sea
+const COAST_AREA = "Saltmere";
+let seaK = 0; // 0..1 how much open sea is around the hero (cached by envTick)
+
+/** Coast: surf that follows the sea nearby, gulls by day, creaks and knocks at the Saltmere piers, a far bell buoy. */
+function coastTick(tx: number, ty: number, area: string, dark: number) {
+  let sea = 0, pier = 0;
+  if (ty >= SEA_Y - 14 && ty < SEA_END + 14) {
+    // Sparse sample (every 3rd tile, 9x9 grid, radius 12): cheap, enough for a smooth level
+    for (let y = ty - 12; y <= ty + 12; y += 3) for (let x = tx - 12; x <= tx + 12; x += 3) {
+      if (x < 0 || y < SEA_Y || x >= MAP_W || y >= SEA_END) continue;
+      if (GROUND[y][x] === T.WATER) sea += 1 / (1 + Math.hypot(x - tx, y - ty) * 0.25);
+    }
+    if (area === COAST_AREA) for (let y = ty - 6; y <= ty + 6; y += 2) for (let x = tx - 6; x <= tx + 6; x += 2) {
+      if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) continue;
+      if (GROUND[y][x] === T.BRIDGE && (GROUND[y + 1]?.[x] === T.WATER || GROUND[y - 1]?.[x] === T.WATER || GROUND[y][x + 1] === T.WATER || GROUND[y][x - 1] === T.WATER)) pier += 1 / (1 + Math.hypot(x - tx, y - ty) * 0.3);
+    }
+  }
+  seaK = Math.min(1, sea / 12);
+  // Surf: a slow swell, louder the more sea is near; fades away inland
+  const swell = 0.6 + 0.4 * Math.sin(bedTime * 0.8) * Math.sin(bedTime * 0.31 + 1);
+  set(surf, 0.075 * seaK * swell, 1.5);
+  if (surf?.f) surf.f.frequency.setTargetAtTime(380 + 420 * swell, ctx!.currentTime, 0.8);
+  if (seaK < 0.05) return;
+  const salt = area === COAST_AREA;
+  // Gulls by day only: more over the village, a few along the coast
+  if (dark < 0.5 && Math.random() < (salt ? 0.04 + 0.05 * seaK : 0.02 * seaK))
+    play("gull", lx + rnd(-300, 300), ly + rnd(-260, 120), (0.5 + 0.4 * seaK) * ENV, Math.floor(Math.random() * 2), { key: "gull", minGap: 1500 });
+  // Rigging creaks and hull knocks near the piers (Saltmere only)
+  if (pier > 0.4) {
+    if (Math.random() < 0.05) play("creak", lx + rnd(-120, 120), ly + rnd(-80, 120), 0.8 * ENV, undefined, { key: "creak", minGap: 1200 });
+    if (Math.random() < 0.04) play("hullKnock", lx + rnd(-160, 160), ly + rnd(20, 140), 0.8 * ENV, undefined, { key: "knock", minGap: 1000 });
+  }
+  // A bell buoy, far out on the water, now and then
+  if (Math.random() < 0.006 * seaK) play("buoy", lx + rnd(-200, 200), ly + 340, 0.5 * ENV, undefined, { key: "buoy", minGap: 8000 });
 }
 
 /** Level of the background one-shots (fire crackle, birds, crickets, owl, chime). */
@@ -1043,6 +1093,7 @@ function envTick() {
   const area = areaAt(lx, ly);
   const town = TOWNS.includes(area);
   const { dark } = dayPhase(dayTime(Date.now()));
+  coastTick(tx, ty, area, dark);
 
   // Water: a small stream, a soft low murmur (no hiss)
   const wv = Math.min(0.07, waterN * 0.008) * (0.85 + 0.15 * Math.sin(bedTime * 0.5));
@@ -1097,6 +1148,33 @@ R.bird = (o, t, v, kind = 0) => {
 R.cricket = (o, t, v) => {
   const f = rnd(4200, 4800);
   for (let i = 0; i < 4; i++) tone(o, t + i * 0.035, { type: "square", f, dur: 0.02, vol: 0.03 * v });
+};
+R.gull = (o, t, v, kind = 0) => {
+  // A drawn-out mewing cry (kind 1: a short double "kyow")
+  const n = kind ? 2 : 1, f = rnd(1500, 1900);
+  for (let i = 0; i < n; i++) {
+    const tt = t + i * 0.28;
+    tone(o, tt, { type: "sawtooth", f: f * 0.8, f2: f * 1.25, dur: kind ? 0.16 : 0.32, vol: 0.022 * v, att: 0.04, vib: 40, vibHz: 14 });
+    tone(o, tt + (kind ? 0.1 : 0.22), { type: "sawtooth", f: f * 1.2, f2: f * 0.7, dur: kind ? 0.14 : 0.26, vol: 0.018 * v, att: 0.03, vib: 30, vibHz: 12 });
+  }
+};
+R.creak = (o, t, v) => {
+  // Rope or timber under strain: a dry stick-slip groan
+  const f = rnd(110, 190), d = rnd(0.35, 0.7);
+  tone(o, t, { type: "sawtooth", f, f2: f * rnd(1.15, 1.5), dur: d, vol: 0.03 * v, att: 0.1, vib: 12, vibHz: 26 });
+  noise(o, t, { type: "bandpass", f: f * 6, q: 6, dur: d, vol: 0.03 * v, att: 0.1 });
+};
+R.hullKnock = (o, t, v) => {
+  // Wood on wood: a hollow thud, sometimes a second softer one
+  const f = rnd(110, 150);
+  tone(o, t, { f, f2: f * 0.6, dur: 0.12, vol: 0.12 * v, att: 0.002 });
+  noise(o, t, { type: "bandpass", f: 700, q: 3, dur: 0.05, vol: 0.05 * v });
+  if (Math.random() < 0.5) tone(o, t + rnd(0.18, 0.3), { f: f * 1.1, f2: f * 0.65, dur: 0.1, vol: 0.07 * v, att: 0.002 });
+};
+R.buoy = (o, t, v) => {
+  // A bell rocked by the swell: a few uneven, soft strokes
+  const f = rnd(420, 470);
+  for (let i = 0; i < 3; i++) bell(o, t + i * rnd(0.9, 1.4), f, 3, 0.04 * v * (1 - i * 0.2));
 };
 R.owl = (o, t, v) => {
   tone(o, t, { f: 400, f2: 360, dur: 0.35, vol: 0.06 * v, att: 0.08 });
@@ -1256,6 +1334,12 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
       case "hold_sacked": pos("hold_sacked", 1, undefined, { key: "hs" + (ev.t ?? ""), minGap: 1500, reach: 2 }); break;
       case "ritual_done": pos("ritual_done", 1, undefined, { key: "rd" + (ev.x ?? "") + ":" + (ev.y ?? ""), minGap: 1500, reach: 2 }); break;
       case "caravan_arrived": case "caravan_delivered": pos("caravan_arrived", 1, undefined, { key: "ca" + (ev.id ?? ev.clan ?? ""), minGap: 500, reach: 2 }); break;
+      case "ferry": { // off at the jetty it left, then the landing (the rider hears both; others only what is near them)
+        const mine = ev.id === me();
+        if (mine) { play("ferryOff"); play("ferryOn", undefined, undefined, 1, undefined, { delay: 1.8 }); }
+        else { if (ev.x1 !== undefined) play("ferryOff", ev.x1, ev.y1, 0.9, undefined, { key: "fo" + ev.id, minGap: 300 }); if (ev.x !== undefined) play("ferryOn", ev.x, ev.y, 0.9, undefined, { key: "fn" + ev.id, minGap: 300, delay: 1.8 }); }
+        break;
+      }
       case "grimoire": if (ev.id === me()) pos("pageTurn", 1, ({ fire: "fire", cold: "frost", poison: "poison", shock: "lightning" } as Record<string, string>)[ev.el] ?? "arcane"); break;
     }
   });

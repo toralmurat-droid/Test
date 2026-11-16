@@ -54,6 +54,8 @@ import { SignPanel } from "./signpanel";
 import { NpcLayer } from "./npcs";
 import { ANVIL_TOP, FORGE_FIRE } from "./smithy";
 import { Villagers } from "./villagers";
+import { keepOff, SALT_AREA, SALT_FOLK, saltmereSpots } from "./saltmereFolk";
+import { SALT_TOWN } from "../../shared/saltmere";
 import { WatchLayer } from "./watch";
 import { WrathBanner } from "./wrath";
 import { inVillage } from "../../shared/wrath";
@@ -81,7 +83,7 @@ import { WarNotice } from "./warNotice";
 import type { WarView } from "../../shared/war/view";
 import { ART_K, CHAR_GROW, CHAR_SCALE, CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, ensureCharSheet, HD_CHARS, playCharAnim, preloadArt } from "./artAssets";
 import { Ambient } from "./ambient";
-import { Details } from "./details";
+import { Details, dayPhase, dayTime } from "./details";
 import { activeOf, GearLayer, reqInfoOf, statsOf, GearMenu, iconCanvas, itemColor, preloadGear, RARITY_HEX, showItemCard } from "./gear";
 import { hideCard } from "./gearCard";
 /** pickSlot value while the slot list is choosing the left-click action. */
@@ -98,7 +100,7 @@ import { attackProfile, ATTACK_WORDS, isWeaponType, poseSheet, profileOf, weapon
 import { talentMult, talentPoints, spentPoints } from "../../shared/talents";
 import { activeSkills, skillLearned } from "../../shared/slots";
 import { TideHud } from "./tide";
-import { DROP_KEY, LANTERN_OBJECT, LOCK_TIP, QuestCarry } from "./questCarry";
+import { DROP_KEY, LOCK_TIP, QuestCarry } from "./questCarry";
 import { actionKey, actionOfKey, type KeyAction, keyMode, keyModeName, onKeyMode, setKeyMode, slotCount, slotKey, slotOfKey, wasdWalks } from "./keymode";
 import { iconImg } from "./skillIcons";
 import { TalentMenu } from "./talents";
@@ -110,9 +112,10 @@ import { IdeaBoard } from "./ideas";
 import { PatchNotesPanel } from "./patchnotes";
 import { PartyUI } from "./party";
 import { StashUI, TradeUI } from "./trade";
-import { STASH, STASH_RANGE } from "../../shared/trade";
+import { STASH_RANGE, STASHES } from "../../shared/trade";
 import { afterLoading, hideLoading, loadingActive, loadingFor, setLoading, showLoading } from "./loading";
 import { WaygateLayer } from "./waygate";
+import { FerryLayer, FERRY_NO } from "./ferry";
 import { WAYGATE_RANGE, WAYGATES } from "../../shared/act2";
 import { ISO, IsoView, isoAnchor, isoInput, isoX, isoY, screenDir, screenDir8, screenOf, setBaseDepth } from "./iso";
 import { hudOccludes, hudSlot } from "./hudSlots";
@@ -364,6 +367,7 @@ export class TownScene extends Phaser.Scene {
   private clickPick: Partial<Record<ClickSide, { hero: string; skill: string }>> = {};
   private npcs?: NpcLayer;
   private villagers?: Villagers;
+  private saltFolk?: Villagers;
   private watch?: WatchLayer;
   private wrathBanner?: WrathBanner;
   private torches?: GateTorches;
@@ -374,6 +378,7 @@ export class TownScene extends Phaser.Scene {
   private qcarry?: QuestCarry; // carried lantern and held mill (client/src/questCarry.ts)
   private portals?: PortalLayer;
   private waygates?: WaygateLayer;
+  private ferry?: FerryLayer;
   private chatEl = document.getElementById("chat") as HTMLInputElement;
   private onlineShown = -1; // online hero count last written next to the chat box
   private ideaBoard?: IdeaBoard;
@@ -559,6 +564,7 @@ export class TownScene extends Phaser.Scene {
       if (!this.npcs?.isOpen && this.shrine?.interact()) return; // then the forest shrine
       if (!this.npcs?.isOpen && this.portals?.interact()) return; // then a portal stone's travel list
       if (!this.npcs?.isOpen && this.waygates?.interact()) return; // then Act 2's waygate
+      if (!this.npcs?.isOpen && this.ferry?.interact()) return; // Pell's boat at a jetty (also closes its list)
       if (!this.npcs?.isOpen && !this.npcs?.busy && this.sack?.interact()) return; // raise a banner in a hostile Hold (warSack.ts)
       if (!this.npcs?.isOpen && !this.npcs?.busy && this.warStd?.interact()) return; // a clan war standard (anything else here comes first)
       this.npcs?.interact();
@@ -711,7 +717,7 @@ export class TownScene extends Phaser.Scene {
       if (!id || !st || !row) return hideCard();
       showItemCard(st, id, row, "For sale"); // the compare card, level with the row in the shop dialog
     };
-    this.npcs.objects.setLight((x, y, lift) => this.details?.addLight(x, y, 0x7ff3ff, 1.5, 0.55, 0.06, lift)); // lit spirit lanterns shine at night
+    this.npcs.objects.setLight((x, y, lift, color = 0x7ff3ff, scale = 1.5) => this.details?.addLight(x, y, color, scale, 0.55, 0.06, lift)); // lit spirit lanterns and watch-fires shine at night
     // Morwen's camp and Brann's forge after dusk: coal glow under her brew, lantern light in the tent doorway
     for (const d of NPC_DECOR) {
       if (d.prop === "wc_rig") this.details?.addLight(d.x * TILE, d.y * TILE, 0xff6a2a, 1.5, 0.6, 0.15, 9, -7);
@@ -721,6 +727,11 @@ export class TownScene extends Phaser.Scene {
       if (d.prop === "sm_anvil") this.details?.addLight(d.x * TILE, d.y * TILE, 0xff6a2a, 0.35, 0.3, 0.1, ANVIL_TOP, 2);
     }
     this.villagers = new Villagers(this); // townsfolk idling on the square
+    // Saltmere's fisherfolk: cosmetic like Oakvale's, no outlaw rule here, idle unless the hero is within 30 tiles
+    this.saltFolk = new Villagers(this, {
+      area: SALT_AREA, folk: SALT_FOLK, wrath: false, spots: saltmereSpots(), keepOff, dark: () => dayPhase(dayTime(Date.now())).dark,
+      active: { x: (SALT_TOWN.x + SALT_TOWN.w / 2) * TILE, y: (SALT_TOWN.y + SALT_TOWN.h / 2) * TILE, r: 30 * TILE },
+    });
     // Colyseus 0.16: change callbacks go through the state callback proxy (the state itself only holds data)
     const $ = getStateCallbacks(this.room) as (v: any) => any;
     this.watch = new WatchLayer(this, $(this.room.state).watch); // watchmen at the gates
@@ -790,7 +801,8 @@ export class TownScene extends Phaser.Scene {
       const e = this.entities.get(id);
       if (!e) return;
       e.sprite.setPosition(x, y); e.tx = x; e.ty = y; e.lastX = x; e.lastY = y; // a jump, not a walk
-      if (id === this.me && why) { this.jumped(); this.arrive(18, 4, 8, 650); } // seen, dragged back: a short dark-red fade
+      if (id === this.me && why === "ferry") { this.ferry?.close(); this.jumped(); this.arrive(8, 28, 44, 650); } // the boat: a short sea-blue fade
+      else if (id === this.me && why) { this.jumped(); this.arrive(18, 4, 8, 650); } // seen, dragged back: a short dark-red fade
       else if (id === this.me) { this.portals?.close(); this.jumped(); this.arrive(40, 14, 4, 700); } // warm glow, then the new place
     });
     // Act 2's waygate (shared/act2.ts): through to the other act; the loading screen stays up while that land is drawn
@@ -811,6 +823,13 @@ export class TownScene extends Phaser.Scene {
       if (!e) return;
       e.sprite.setPosition(x, y); e.tx = x; e.ty = y; e.lastX = x; e.lastY = y;
       if (id === this.me) { this.jumped(); this.arrive(6, 4, 3, 600); }
+    });
+    this.ferry = new FerryLayer((type, msg) => this.room?.send(type, msg));
+    this.npcs!.onFerry = () => this.ferry?.open();
+    this.room.onMessage("ferryno", ({ why }) => {
+      const e = this.entities.get(this.me);
+      const text = FERRY_NO[String(why)];
+      if (e && text) this.floatText(e.sprite.x, e.sprite.y - 22, text, "#ffa22e", PIXEL_FONT);
     });
     this.room.onMessage("travelno", () => {
       const e = this.entities.get(this.me);
@@ -1818,7 +1837,7 @@ export class TownScene extends Phaser.Scene {
         for (const c of CHESTS) out.push({ x: c.x, y: c.y, w: 22, h: 18, range: CHEST_RANGE, act: () => this.chests?.interact() });
         out.push({ x: SHRINE.x, y: SHRINE.y, w: 26, h: 36, range: SHRINE_RANGE, act: () => this.shrine?.interact() });
         for (const b of BOARDS) out.push({ x: b.x, y: b.y, w: BOARD_W, h: BOARD_H, range: BOARD_RANGE, act: () => { if (!this.bounty?.open) this.bounty?.interact(); } });
-        out.push({ x: STASH.x, y: STASH.y, w: 22, h: 18, range: STASH_RANGE, act: () => { if (!this.stash?.open) this.stash?.interact(); } });
+        for (const c of STASHES) out.push({ x: c.x, y: c.y, w: 22, h: 18, range: STASH_RANGE, act: () => { if (!this.stash?.open) this.stash?.interact(); } });
         for (const o of PORTALS) out.push({ x: o.x, y: o.y, w: 26, h: 40, range: PORTAL_RANGE, act: () => this.portals?.interact() });
         for (const g of WAYGATES) out.push({ x: g.x, y: g.y, w: 70, h: 96, range: WAYGATE_RANGE, act: () => this.waygates?.interact() });
         for (const { o } of usableObjects(p)) out.push({ x: o.x, y: o.y, w: 22, h: 22, range: USE_RANGE, act: () => this.room?.send("use", { id: o.id }) });
@@ -2552,6 +2571,7 @@ export class TownScene extends Phaser.Scene {
     this.warStd?.close();
     this.patchNotes?.close();
     this.portals?.close();
+    this.ferry?.close();
     this.gameMenu?.close();
     showMusicPanel(false);
   }
@@ -2572,7 +2592,7 @@ export class TownScene extends Phaser.Scene {
     const shown = (id: string) => { const e = document.getElementById(id); return !!e && !e.hidden; };
     return shown("hero") || shown("tree") || shown("slotpick") || musicPanelOpen() ||
       !!(this.npcs?.isOpen || this.npcs?.log.open || this.gearMenu?.open || this.ideaBoard?.open || this.party?.open ||
-        this.trade?.open || this.stash?.open || this.bounty?.open || this.warStd?.open || this.patchNotes?.open || this.portals?.isOpen || this.minimap?.isOpen ||
+        this.trade?.open || this.stash?.open || this.bounty?.open || this.warStd?.open || this.patchNotes?.open || this.portals?.isOpen || this.ferry?.isOpen || this.minimap?.isOpen ||
         this.gameMenu?.open || this.talentMenu?.open);
   }
 
@@ -2787,7 +2807,7 @@ export class TownScene extends Phaser.Scene {
   /** Something to talk to, open or use right here (one of the "E: ..." prompts is up, or a dialog is open)? */
   private canUse(): boolean {
     return !!this.npcs?.isOpen || !!this.bounty?.open || !!this.dungeon?.nearDoor ||
-      !!document.querySelector("#npcprompt.open, #chestprompt.open, #boardprompt.open, #portalprompt.open, #gateprompt.open, #shrineprompt.open, #stashprompt.open");
+      !!document.querySelector("#npcprompt.open, #chestprompt.open, #boardprompt.open, #portalprompt.open, #gateprompt.open, #ferryprompt.open, #shrineprompt.open, #stashprompt.open");
   }
 
   /** A game key of the current keyboard layout (client/src/keymode.ts) was pressed. */
@@ -3262,6 +3282,7 @@ export class TownScene extends Phaser.Scene {
     if (!this.room) return;
     const meSprite0 = this.entities.get(this.me)?.sprite;
     this.villagers?.update(dtMs, this.outlawSpots(), meSprite0);
+    this.saltFolk?.update(dtMs, [], meSprite0);
     this.party?.update();
     this.trade?.update();
     this.watch?.update(dtMs, meSprite0);
@@ -3555,10 +3576,11 @@ export class TownScene extends Phaser.Scene {
     this.shrine?.update(meEnt && !meEnt.state.dead && !this.chests?.near ? meEnt.sprite : undefined, !!this.npcs?.isOpen);
     this.stash?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near);
     this.bounty?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near || !!this.stash?.near);
-    if (this.npcs) { this.npcs.hidePrompt = !!this.chests?.near || !!this.shrine?.near || !!this.portals?.near || !!this.waygates?.near || !!this.stash?.near || !!this.bounty?.near; this.npcs.extraBlock = (this.bounty?.trackerBlock() ?? "") + (this.bounty?.writBlock() ?? "") + (this.qcarry?.trackerBlock(this.me, (id) => this.entities.get(id)?.state?.name ?? "A friend") ?? ""); }
-    this.npcs?.objects.setHidden(LANTERN_OBJECT, !!this.qcarry?.update(this.me, (id) => this.entities.get(id)));
+    if (this.npcs) { this.npcs.hidePrompt = !!this.chests?.near || !!this.shrine?.near || !!this.portals?.near || !!this.waygates?.near || !!this.ferry?.near || !!this.stash?.near || !!this.bounty?.near; this.npcs.extraBlock = (this.bounty?.trackerBlock() ?? "") + (this.bounty?.writBlock() ?? "") + (this.qcarry?.trackerBlock(this.me, (id) => this.entities.get(id)?.state?.name ?? "A friend") ?? ""); }
+    this.npcs?.objects.hideCarried(this.qcarry?.update(this.me, (id) => this.entities.get(id)));
     this.npcs?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, meEnt?.state);
     this.grimoire?.update(meEnt?.state?.cls);
+    this.ferry?.update(meEnt?.state, meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near || !!this.portals?.near);
     this.waygates?.update(meEnt?.state, meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near);
     this.portals?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near || !!this.shrine?.near);
     if (this.minimap) { this.minimap.war = this.warLast; this.minimap.clan = this.warStd?.clan || undefined; this.minimap.sacked = this.sack?.sacked; } // the war table layer (warTable.ts) and the war overlays (warMap.ts)

@@ -6,7 +6,7 @@ import { blocked } from "../shared/movement";
 import { isSafeZone, SAFE_ZONE } from "../shared/map";
 import { noMobsAt } from "../shared/spawns";
 import { RAIDERS } from "../shared/raiders";
-import { startRoom, wait } from "./helpers/room";
+import { startRoom, until, wait } from "./helpers/room";
 
 process.env.DAY_TIME = "night";
 
@@ -49,8 +49,7 @@ test("Night Raiders: ride by night at the act's top level, hunt the living, spar
     // it rides at a hero it sees and cuts him
     m.x = p.x + 70; m.y = p.y; m.nextAggro = 0;
     const hp0 = p.hp;
-    for (let i = 0; i < 40 && p.hp === hp0; i++) await wait(100);
-    assert.ok(p.hp < hp0, "the rider attacks the hero");
+    assert.ok(await until(() => p.hp < hp0), "the rider attacks the hero"); // wait for the blow, not a fixed time (the suite shares the CPU)
     m.stunUntil = m.slowUntil = Date.now() + 5000;
     await wait(200);
     assert.ok(!m.stunned && !m.slowed, "no stun or slow holds a rider");

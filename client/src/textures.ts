@@ -132,6 +132,9 @@ const ITEM_ART: Record<string, { rows: string[]; pal: Record<string, number> }> 
     pal: { K: 0x3a2410, Y: 0xd8a040, W: 0xfff0b0, O: 0xff6a1e, B: 0x6a4a2a } },
   q_key: { rows: ["..KKK...", ".KYOYK..", ".KOWOK..", ".KYOYK..", "..KYK...", "..KYKK..", "..KYYK..", "..KYKK.."],
     pal: { K: 0x3a2410, Y: 0xd8a040, O: 0xff8a2a, W: 0xfff0b0 } },
+  // Saltmere Ways: a bleached, sea-worn plank with a rusty nail
+  q_driftwood: { rows: ["........", "......KK", "..KKKKTK", ".KLLWWTK", "KTLWWTDK", "KDTTDDK.", ".KKKKK..", "........"],
+    pal: { K: 0x2e2418, T: 0x8a7a62, L: 0xc9bca0, W: 0xe8dfc8, D: 0x5a4a38 } },
   // Act 3, the Grey Barrow Moors: a mire hag's tallow candle with its cold green flame, and the Barrow-King's door key
   q_candle: { rows: ["...GL...", "..GLLG..", "...GG...", "...KK...", "..TTTD..", "..TTTD..", "..TTTD..", ".DDDDDD."],
     pal: { G: 0x4aff7a, L: 0xdcffe0, K: 0x2a2018, T: 0xe8dfc0, D: 0xa89c78 } },

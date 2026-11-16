@@ -1,5 +1,6 @@
 import { TILE } from "./constants";
 import { EMPTY, isSolidTile, OBJECTS, SAFE_ZONE } from "./map";
+import { SALT_STASH } from "./saltmere";
 import { NPCS } from "./npcs";
 import { BAG_SIZE, isBagItem, isBound } from "./gear";
 
@@ -8,7 +9,8 @@ import { BAG_SIZE, isBagItem, isBound } from "./gear";
  *  - Trade: two heroes close together open a trade window, each puts up bag items and gold.
  *    Any change to an offer takes back both "Ready" marks; the swap happens only when both are ready,
  *    and the server checks again that every item and coin is still there (no dupes, no bait and switch).
- *  - Stash: one chest in Oakvale, shared by every hero of an account, holds items and gold.
+ *  - Stash: shared by every hero of an account, holds items and gold. Its chests (Oakvale's square, Saltmere's
+ *    harbour square) all open the same stash.
  *    Saved with the account in the same file write as the hero, so an item is never in both places.
  */
 export const TRADE = {
@@ -45,6 +47,17 @@ export const STASH = (() => {
   const s = best ?? { tx: Z.x + 2, ty: Z.y + Z.h - 3 };
   return { x: (s.tx + 0.5) * TILE, y: (s.ty + 0.6) * TILE };
 })();
+/**
+ * Every stash chest, in px (Oakvale's first). They all open the one account stash, so a hero who banks at Saltmere
+ * can take it out again in Oakvale; the server accepts stash use next to any of them.
+ */
+export const STASHES: readonly { x: number; y: number }[] = [STASH, { x: (SALT_STASH.x + 0.5) * TILE, y: (SALT_STASH.y + 0.6) * TILE }];
+/** The nearest stash chest within `range` px of (x, y), if any. */
+export function stashNear(x: number, y: number, range = STASH_RANGE): { x: number; y: number } | undefined {
+  let best: { x: number; y: number } | undefined, bd = range;
+  for (const s of STASHES) { const d = Math.hypot(s.x - x, s.y - y); if (d <= bd) { bd = d; best = s; } }
+  return best;
+}
 
 export interface Offer { items: string[]; gold: number }
 export interface Side { bag: string[]; gold: number; offer: Offer; reserved?: number } // reserved: bag slots taken by potion stacks
