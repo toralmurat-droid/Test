@@ -1,9 +1,10 @@
 /**
  * The war map: every monster zone of every land becomes a territory (Murat 2026-11-14), built from SPAWN_ZONES and the
- * lands of regions.ts. Borders run between zones of one land; lands meet only through their links (the Waygate, the Barrowgate, the Red Pass, the Sinkway).
+ * lands of regions.ts. Borders run between zones of one land; lands meet only through their links (the Waygate, the Barrowgate, the Red Pass, the Sinkway,
+ * the five Crownways).
  * A future land needs a region entry (with `contains` and its capitals) and a link: buildTerritories does the rest.
  * Sanctuaries never change hands and are not territories: villages (already outside every zone), dungeon floors,
- * quest-boss lairs (zones with no spawns of their own, or only their boss) and the broad wild zones (countryside, open desert, open moor, open badlands, open sinkholes)
+ * quest-boss lairs (zones with no spawns of their own, or only their boss: the Throne Hall) and the broad wild zones (countryside, open desert, open moor, open badlands, open sinkholes, the open Crown)
  * where heroes level. Deterministic, like the map.
  */
 import { actOfTile, type Act, BOSS, inDeepRow, UNDER_END, WORLD_H } from "../constants";
@@ -25,6 +26,13 @@ export interface Territory {
   capitalOf?: ClanKey;
   /** A forward capital: the clan's homeland is not built yet (it becomes an ordinary territory when it is). */
   forward?: true;
+  /** A `wards` land's gate territory (regions.ts): the clan it starts with, the home clan behind its gate. */
+  wards?: ClanKey;
+  /**
+   * Never changes hands by war pressure: no clan may attack, besiege, sack or raid it (rules.ts targetsOf), so it is no
+   * border to defend either. Only a Reckoning (Crown PR4) hands it on. The Crown Keep.
+   */
+  reckoningOnly?: true;
   /** Ids of territories close enough to fight over (gap between the zones' rects <= WAR_MAP.adjacentTiles). */
   near: number[];
 }
@@ -76,6 +84,7 @@ export function buildTerritories(allZones: readonly SpawnZone[], regions: readon
       cx: z.x + z.w / 2, cy: z.y + z.h / 2, levels: z.levels, capitalOf: cap?.clan, near: [],
     };
     if (cap?.forward) t.forward = true;
+    if (regions.find((r) => r.key === t.region)?.reckoning?.includes(z.name)) t.reckoningOnly = true;
     return t;
   });
   const link = (a: number, b: number) => { if (a !== b && !out[a].near.includes(b)) { out[a].near.push(b); out[b].near.push(a); } };
@@ -87,7 +96,14 @@ export function buildTerritories(allZones: readonly SpawnZone[], regions: readon
     for (const o of by.slice(0, WAR_MAP.minNeighbours)) link(t.id, o.id);
   }
   // Lands meet through their links: the waygate joins the territory nearest Oakvale's south gate and the one nearest the Sunstone Circle
-  for (const p of linkPairs(out, links)) link(p.a, p.b);
+  for (const p of linkPairs(out, links)) {
+    link(p.a, p.b);
+    // a wards land's gate territory starts with the home clan of the land behind the gate (the first link wins)
+    for (const [mine, other, land] of [[p.b, p.a, p.link.a], [p.a, p.b, p.link.b]] as const) {
+      const r = regions.find((x) => x.key === out[mine].region), home = regions.find((x) => x.key === land)?.home;
+      if (r?.wards && home && !out[mine].wards && !out[mine].capitalOf && !out[mine].reckoningOnly && out[other].region !== r.key) out[mine].wards = home;
+    }
+  }
   return out;
 }
 
@@ -96,23 +112,45 @@ export const TERRITORIES: Territory[] = buildTerritories(SPAWN_ZONES);
 export const LAND_LINKS = linkPairs(TERRITORIES);
 export const territoryByName = (name: string) => TERRITORIES.find((t) => t.name === name);
 
+/** The territories of `wards` lands (the Crown): claimed after every homeland, so those lands start as before. */
+const inWardsLand = (ts: readonly Territory[], regions: readonly Region[] = REGIONS) => {
+  const wl = new Set(regions.filter((r) => r.wards).map((r) => r.key));
+  return ts.map((t) => wl.has(t.region));
+};
+/** The clan holding the least land (ties: CLAN_KEYS order), the holder a Reckoning-only territory starts with. */
+export function leastLanded(owner: readonly (ClanKey | undefined)[]): ClanKey {
+  const count = (k: ClanKey) => owner.filter((o) => o === k).length;
+  return CLAN_KEYS.reduce((a, b) => (count(b) < count(a) ? b : a));
+}
+
 /**
  * Who holds what at the very start: clans take turns (the one with the least land first) claiming an unclaimed
- * territory next to their land in the same land (region), so every clan starts with a connected share around its capitals (as even as the map allows: 12/15/15/10/10 today, Wardens to Veiled).
+ * territory next to their land in the same land (region), so every clan starts with a connected share around its capitals (as even as the map allows: 12/15/15/10/10 in the homelands today, Wardens to Veiled).
+ * The `wards` lands come after: their gate territories with their wardens, the rest claimed the same way (the clans with
+ * the least land first, so the Crown evens the shares out a little), and a Reckoning-only territory (the Crown Keep) last,
+ * with the clan holding the least land of all. `preset`: holders already known (a saved war on an older map,
+ * server/war.ts migrateWar); only the territories it leaves unset are claimed.
  */
-export function initialOwners(ts: readonly Territory[] = TERRITORIES): ClanKey[] {
-  const owner: (ClanKey | undefined)[] = ts.map((t) => t.capitalOf);
+export function initialOwners(ts: readonly Territory[] = TERRITORIES, preset?: readonly (ClanKey | undefined)[]): ClanKey[] {
+  const wardsLand = inWardsLand(ts);
+  const owner: (ClanKey | undefined)[] = ts.map((t, i) => preset?.[i] ?? t.capitalOf);
   const count = (k: ClanKey) => owner.filter((o) => o === k).length;
-  for (;;) {
-    let claimed = false;
-    for (const k of [...CLAN_KEYS].sort((a, b) => count(a) - count(b))) {
-      const free = ts.find((t) => owner[t.id] === k && t.near.some((n) => !owner[n] && ts[n].region === t.region));
-      if (!free) continue;
-      const n = free.near.find((m) => !owner[m] && ts[m].region === free.region)!;
-      owner[n] = k; claimed = true;
-      break;
+  const claim = (open: (t: Territory) => boolean) => {
+    for (;;) {
+      let claimed = false;
+      for (const k of [...CLAN_KEYS].sort((a, b) => count(a) - count(b))) {
+        const free = ts.find((t) => owner[t.id] === k && t.near.some((n) => !owner[n] && open(ts[n]) && ts[n].region === t.region));
+        if (!free) continue;
+        const n = free.near.find((m) => !owner[m] && open(ts[m]) && ts[m].region === free.region)!;
+        owner[n] = k; claimed = true;
+        break;
+      }
+      if (!claimed) break;
     }
-    if (!claimed) break;
-  }
+  };
+  claim((t) => !wardsLand[t.id]);
+  for (const t of ts) if (wardsLand[t.id] && !owner[t.id] && t.wards) owner[t.id] = t.wards;
+  claim((t) => wardsLand[t.id] && !t.reckoningOnly);
+  for (const t of ts) if (t.reckoningOnly && !owner[t.id]) owner[t.id] = leastLanded(owner);
   return owner.map((o, i) => o ?? CLAN_KEYS[i % CLAN_KEYS.length]);
 }

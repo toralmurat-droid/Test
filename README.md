@@ -104,6 +104,8 @@ Only the classes in `ACTIVE_CLASSES` can be played. Archived classes keep their 
   Throne Hall stand on the hill at the centre. The old court holds its lands (Oathbroken Knights, Crownguard, Hollow
   Heralds, Court Magi, Gildhounds, Crown Crows, Pretenders, Thronewardens; `server/crownMobs.ts`), and Herald-Marshal
   Ysmay Corrant's chain, The Riven Throne, climbs from Tollcross to Aldemar, the Riven King (Lv 50), in the Throne Hall.
+  The Crown is a land of the clan war with ten territories and no capital: each approach starts with the clan whose
+  Crownway leads into it, and the Crown Keep, held by the clan with the least land, changes hands only at a Reckoning.
 - **Dungeons** (`shared/dungeon.ts`): the Mawdeep, the Lantern Crypt and the Undercity.
 - **Quests** (`shared/quests.ts`): zone quest arcs in both acts, quest bosses (some only at night).
 - **Bounty boards** (`shared/bounty.ts`): pick a hunt for your level, paid when the last kill lands.

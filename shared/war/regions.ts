@@ -5,6 +5,8 @@
  * The homelands of the Host, Redfang and Hide-Kin were planned before they were built: until one was, its clan held
  * forward capitals in the built lands, which turned into ordinary territories once the homeland (with its own capital)
  * was built. All three are built now, so no forward capital is held; the mechanism stays for the lands to come.
+ * The Crown of the Marches (Act 6) is nobody's homeland and has no capital: it is a `wards` land, where each territory a
+ * gate leads into starts with the clan whose homeland lies behind that gate, and its Keep is `reckoning` ground.
  * Pure data, deterministic: territories.ts builds the war map from it.
  */
 import { actOfTile } from "../constants";
@@ -12,6 +14,7 @@ import { WAYGATE_DESERT, WAYGATE_OAKVALE } from "../desert";
 import { MOORSGATE_MOORS, MOORSGATE_OAKVALE } from "../moors";
 import { REDPASS_BADLANDS, REDPASS_OAKVALE } from "../badlands";
 import { SINKWAY_OAKVALE, SINKWAY_SINKHOLES } from "../sinkholes";
+import { crownGateTile, CROWNWAYS } from "../crown";
 import type { ClanKey } from "./clans";
 
 export type RegionKey = "oakvale" | "sunscar" | "moors" | "badlands" | "sinkholes" | "crown";
@@ -29,6 +32,13 @@ export interface Region {
   /** Is this tile in the land? Unset while the land is not built. Checked in REGIONS order: the first match wins. */
   contains?: (tx: number, ty: number) => boolean;
   capitals: Capital[];
+  /**
+   * A neutral land (no home, no capital): each territory at a link's end in it starts held by the home clan of the land
+   * on the link's other side (the gate's warden), and the rest of it is claimed after every homeland (initialOwners).
+   */
+  wards?: true;
+  /** Zones that never change hands by war pressure (no attack, siege, sack or raid): they flip only at a Reckoning (Crown PR4). */
+  reckoning?: string[];
 }
 
 /** A way between two lands; pa / pb are its ends in each land (tiles): the territories nearest them border each other. */
@@ -73,8 +83,10 @@ export const REGIONS: Region[] = [
   { key: "sinkholes", name: "The Mawdeep Sinkholes", compass: "S", home: "hidekin", contains: (x, y) => actOfTile(x, y) === 5, capitals: [
     { clan: "hidekin", zone: "Hidehall" },
   ] },
-  // Planned: no map yet
-  { key: "crown", name: "The Crown of the Marches", compass: "C", capitals: [] },
+  // The Crown of the Marches (Act 6, shared/crown.ts): neutral ground in the middle, no home and no capital. Its five
+  // approaches start with the clans whose Crownways lead into them (`wards`); the Crown Keep's bailey starts with the clan
+  // holding the least land and never falls to the armies: only a Reckoning (Crown PR4) hands it on.
+  { key: "crown", name: "The Crown of the Marches", compass: "C", contains: (x, y) => actOfTile(x, y) === 6, capitals: [], wards: true, reckoning: ["The Crown Keep"] },
 ];
 
 /** Ways between lands. A link is live only while both of its lands are built. The waygate comes first (ids follow this order). */
@@ -83,6 +95,8 @@ export const REGION_LINKS: RegionLink[] = [
   { a: "oakvale", b: "moors", name: "The Barrowgate", pa: MOORSGATE_OAKVALE, pb: MOORSGATE_MOORS },
   { a: "oakvale", b: "badlands", name: "The Red Pass", pa: REDPASS_OAKVALE, pb: REDPASS_BADLANDS },
   { a: "oakvale", b: "sinkholes", name: "The Sinkway", pa: SINKWAY_OAKVALE, pb: SINKWAY_SINKHOLES },
+  // the five Crownways (Act 6): each homeland's dais to its gate on the Crown's rim (appended: the older links keep their ids)
+  ...CROWNWAYS.map((c): RegionLink => ({ a: c.from, b: "crown", name: c.name, pa: c.home, pb: crownGateTile(c) })),
 ];
 
 /** The land a tile lies in (built lands only). */

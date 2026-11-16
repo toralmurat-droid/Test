@@ -14,7 +14,8 @@ function mulberry(a: number) {
 const clone = (s: WarState): WarState => JSON.parse(JSON.stringify(s));
 
 test("marches: warTick with deployments extracted plays exactly as before (golden over 50 seeded ticks, valor included)", () => {
-  // The hash was taken with shared/war/rules.ts as it was before W4 (deployments inline in warTick)
+  // The hash was taken with shared/war/rules.ts as it was before W4 (deployments inline in warTick); refreshed on purpose
+  // for each new land on the map (last: the Crown, 72 territories, 2026-11-16)
   const s = newWar(), minds = newMinds(), rnd = mulberry(4242), pressure: number[] = [];
   for (let i = 0; i < 50; i++) {
     const o = scriptedOrders(s, minds, rnd);
@@ -24,7 +25,7 @@ test("marches: warTick with deployments extracted plays exactly as before (golde
   const json = JSON.stringify({ s, pressure }, (_k, v) => (typeof v === "number" ? Number(v.toFixed(6)) : v));
   let h = 2166136261;
   for (let i = 0; i < json.length; i++) { h ^= json.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
-  assert.equal(h.toString(16), "6004e2da");
+  assert.equal(h.toString(16), "fdda4621");
 });
 
 test("marches: deployments is pure and gives warTick's pressure; a march mult scales only that clan's army attack there", () => {

@@ -1084,3 +1084,9 @@ Crown of the Marches PR2 (monsters, the Riven King, The Riven Throne chain): see
 ## Map clarity (2026-11-16)
 
 War table: "You are here", gates between lands, routes to any territory (client/src/warRoute.ts). Zone map: land title, where-you-are caption, labelled exits, "Ways out" and route cards (client/src/warHere.ts). One button switches maps and keeps the pick.
+
+## NL-8: the Crown of the Marches at war (2026-11-16, Crown PR3)
+Ten Crown territories (ids 62-71), no capital, the five Crownways as land links, the approaches warded by the clans
+behind their gates, the Crown Keep Reckoning-only. Details, migration (`PRE_CROWN_NAMES`), sims and bench:
+[crown-progress.md](crown-progress.md) PR3.
+

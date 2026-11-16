@@ -165,7 +165,7 @@ test("crown: every homeland's Crownway dais is open ground joined to its land, c
   assert.equal(hash(SINKHOLES_Y0, SINKHOLES_Y0 + SINKHOLES_H, box("sinkholes")), "6b461371a4d43dfeb6212584ed495fa5dc09115a48f3d09893985aaffa800a53", "the sinkholes");
 });
 
-test("crown: Lv 40-50 climbing inward from the rim, the Crownways open at Lv 40, no war there yet", () => {
+test("crown: Lv 40-50 climbing inward from the rim, the Crownways open at Lv 40, ten war territories (Crown PR3)", () => {
   assert.deepEqual(CROWN_LEVEL, { min: 40, mob: 48, special: 50, tilesPerLevel: 10 });
   assert.equal(ACT_LEVEL[6], CROWN_LEVEL);
   assert.deepEqual([actMobLevel(6, 3), actMobLevel(6, 60), actSpecialLevel(6, 60)], [40, 48, 50]);
@@ -202,10 +202,12 @@ test("crown: Lv 40-50 climbing inward from the rim, the Crownways open at Lv 40,
   assert.deepEqual(HOMELAND_GATES.map((h) => [h.act, h.level]), [[3, 20], [4, 25], [5, 30], [6, 40]]);
   assert.ok(actOpen(6, { level: 40 } as never) && !actOpen(6, { level: 39 } as never));
   for (const act of [1, 2, 3, 4, 5, 6]) { const q = actSpawn(act, randomSpawn); assert.equal(actAt(q.y, q.x), act, `act ${act} spawn`); }
-  // the Crown's monster zones (tests/crown-zones.test.ts); no war in it yet: its territories come later
+  // the Crown's monster zones (tests/crown-zones.test.ts); since Crown PR3 its ten lands are war territories (ids 62-71,
+  // tests/warcrown.test.ts), the Throne Hall (a lair) and the open Crown (wild) stay out
   assert.ok(SPAWN_ZONES.some((z) => actOfTile(z.x, z.y) === 6), "the Crown has monster zones");
-  assert.equal(regionOf(crownGateTile(CROWNWAYS[0]).x, crownGateTile(CROWNWAYS[0]).y), undefined, "not a war land yet");
-  assert.ok(!TERRITORIES.some((t) => t.act === 6));
+  assert.equal(regionOf(crownGateTile(CROWNWAYS[0]).x, crownGateTile(CROWNWAYS[0]).y)?.key, "crown", "a war land");
+  assert.deepEqual(TERRITORIES.filter((t) => t.act === 6).map((t) => t.id), [62, 63, 64, 65, 66, 67, 68, 69, 70, 71]);
+  assert.deepEqual(TERRITORIES.filter((t) => t.act === 6).map((t) => t.name).sort(), CROWN_LANDS.map((l) => l.name).sort());
 });
 
 /** onJoin as an account through a fake client (test rooms skip onAuth), like tests/sinkholes.test.ts. */

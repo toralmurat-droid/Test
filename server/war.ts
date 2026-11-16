@@ -9,7 +9,7 @@ import { TILE } from "../shared/constants";
 import { CLANS, CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import { newMinds, scriptedOrders, type Mind } from "../shared/war/doctrine";
 import { deployments, newWar, nightRaid, rallyClan, sackHold, supplyMap, WAR, warTick, type Orders, type TickExtra, type WarState } from "../shared/war/rules";
-import { TERRITORIES, type Territory } from "../shared/war/territories";
+import { initialOwners, TERRITORIES, type Territory } from "../shared/war/territories";
 import { regionByKey } from "../shared/war/regions";
 import { tunnelStrikes, type TunnelStrike } from "../shared/war/tunnels";
 import { warPhase, warView, type WarView } from "../shared/war/view";
@@ -115,20 +115,28 @@ function wellFormed(s: Saved | undefined): s is Saved {
  * The saved war on today's map: owner, Control, forts, sieges, pressure, the leaders' targets and the log follow their
  * territory by name. A territory new to the map starts with its capital's clan, else its land's home clan, else the
  * clan holding most of its neighbours, at full Control; one gone from the map is dropped (with its log lines). A capital
- * always starts with its clan. Pure: same names in the same order give the same war back. `oldNames` / `names` must not
- * repeat a name (wellFormed checks the save's).
+ * always starts with its clan. A new territory of a `wards` land (the Crown) is claimed as a new war claims it, round
+ * what the save holds (territories.ts initialOwners): its gate territories with their wardens, the rest by the clans
+ * with the least land, the Crown Keep by the clan holding the least of all. Pure: same names in the same order give the
+ * same war back. `oldNames` / `names` must not repeat a name (wellFormed checks the save's).
  */
 export function migrateWar(saved: Saved, oldNames: readonly string[], names: readonly string[], ts: readonly Territory[] = TERRITORIES): Saved {
   const was = new Map(oldNames.map((n, i) => [n, i])), from = names.map((n) => was.get(n)), st = saved.state;
   const pick = <T>(a: T[], seed: (i: number) => T) => from.map((o, i) => (o === undefined ? seed(i) : a[o]));
   const owner = pick<ClanKey | undefined>(st.owner, () => undefined);
+  const wardsLand = (t: Territory | undefined) => !!t && !!regionByKey(t.region)?.wards;
   for (let i = 0; i < names.length; i++) {
     if (owner[i]) continue;
     const t = ts.find((x) => x.name === names[i]), home = t && regionByKey(t.region)?.home;
+    if (wardsLand(t)) continue; // (claimed below, once every homeland's holder is known)
     const votes = new Map<ClanKey, number>();
     for (const m of t?.near ?? []) { const k = from[m] !== undefined ? owner[m] : undefined; if (k) votes.set(k, (votes.get(k) ?? 0) + 1); }
     const most = [...votes].sort((a, b) => b[1] - a[1])[0]?.[0];
     owner[i] = t?.capitalOf ?? home ?? most ?? CLAN_KEYS[i % CLAN_KEYS.length];
+  }
+  if (owner.some((o) => !o)) {
+    const at = new Map(names.map((n, i) => [n, i])), fill = initialOwners(ts, ts.map((t) => { const i = at.get(t.name); return i === undefined ? undefined : owner[i]; }));
+    for (let i = 0; i < names.length; i++) if (!owner[i]) { const j = ts.findIndex((t) => t.name === names[i]); owner[i] = j >= 0 ? fill[j] : CLAN_KEYS[i % CLAN_KEYS.length]; }
   }
   const state: WarState = {
     ...st, owner: owner as ClanKey[],
@@ -178,8 +186,15 @@ export const PRE_BADLANDS_NAMES: readonly string[] = [...PRE_MOORS_NAMES, "The G
  */
 export const PRE_SINKHOLES_NAMES: readonly string[] = [...PRE_BADLANDS_NAMES, "The Saltlick Flats", "Drovers' Draw", "The Hanging Arches",
   "The Cinnabar Pits", "Bloodstone Mesa", "Talon Fort", "Vulture's Roost", "Rattlesnake Gulch", "Gallows Canyon", "Fangrock"];
+/**
+ * The war map before the Crown of the Marches joined it (2026-11-16), with the sinkholes, in id order:
+ * PRE_SINKHOLES_NAMES and the 10 sinkholes territories (62). Saves on this map are named, so this only reads an unnamed
+ * save of its size. Frozen: never edit it.
+ */
+export const PRE_CROWN_NAMES: readonly string[] = [...PRE_SINKHOLES_NAMES, "Rootfall Slopes", "Hollowbrook Dells", "The Old Warren", "Tunneltop",
+  "Mosslight Fen", "The Pitfields", "The Gnawed Bank", "Scratchroot Burrows", "Rushmere Hollows", "Hidehall"];
 /** Older maps an unnamed save may have been written on, told apart by size (a size is never reused). */
-const OLD_MAPS = [PRE_MOORS_NAMES, PRE_BADLANDS_NAMES, PRE_SINKHOLES_NAMES];
+const OLD_MAPS = [PRE_MOORS_NAMES, PRE_BADLANDS_NAMES, PRE_SINKHOLES_NAMES, PRE_CROWN_NAMES];
 
 /** The names an unnamed save of `n` territories was written with: today's map, else an older map of that size. */
 const unnamed = (n: number, names: readonly string[]) => (n === names.length ? names : OLD_MAPS.find((m) => m.length === n));

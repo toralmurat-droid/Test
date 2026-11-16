@@ -37,7 +37,8 @@
  * Reports per clan the average and worst share of the land, how often any clan held more than WAR.leaderShare for over
  * three war days in a row (after a 7-day settling period), how many territories change hands per day, and the
  * clever clan's gain over its fair share when --clever is set, how often the Night Raiders hunted and whom the war
- * rallied for. Exit code 1 if the stalemate goal fails.
+ * rallied for; for the Crown of the Marches (a `wards` land) also each clan's share of it and how often one clan held over
+ * half of it, the snowball to watch there. Exit code 1 if the stalemate goal fails.
  */
 import { CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
 import { newMinds, scriptedOrders } from "../../shared/war/doctrine";
@@ -51,6 +52,7 @@ import { HOLD_SACK } from "../../shared/war/holdSack";
 import { BATTLE, battleOutcome, siteForces, isDecisive, meetSite, newBattle, pickMeetings, pickPitched, pitchedTicks, virtualBattle, type BattleSite } from "../../shared/war/battles";
 import type { BattleKind, BattleOutcome } from "../../shared/war/rules";
 import { TERRITORIES } from "../../shared/war/territories";
+import { regionByKey } from "../../shared/war/regions";
 import { TOWNS, townCounts, townPatron, townStep, type TownState } from "../../shared/war/towns";
 
 const args = process.argv.slice(2);
@@ -106,7 +108,12 @@ interface Result {
   battles: Record<BattleKind, number>; results: Record<BattleKind, [number, number, number]>; stormFlips: number; men: number; mins: number;
   /** --towns: town handovers and contests started per war day, contests called off; towns held per clan (average). */
   townFlips: number; townContests: number; townOff: number; townsHeld: Record<ClanKey, number>;
+  /** The neutral lands (regions.ts `wards`: the Crown): each clan's average share of them, the share of days one clan held
+   * more than half of them, territories of theirs changing hands per war day. */
+  crownAvg: Record<ClanKey, number>; crownHalf: number; crownFlips: number;
 }
+/** Territories of the neutral lands (the Crown of the Marches): reported apart, so a snowball there shows. */
+const NEUTRAL = TERRITORIES.filter((t) => regionByKey(t.region)?.wards).map((t) => t.id);
 
 /** Plays RUNS wars of DAYS days (same seeds for every call, so a run with and without the ruse can be compared). */
 function play(clever?: ClanKey): Result {
@@ -122,6 +129,8 @@ function play(clever?: ClanKey): Result {
   const battles: Record<BattleKind, number> = { pitched: 0, storm: 0, meet: 0 }, results: Record<BattleKind, [number, number, number]> = { pitched: [0, 0, 0], storm: [0, 0, 0], meet: [0, 0, 0] };
   let stormFlips = 0, menSum = 0, minSum = 0, townFlips = 0, townContests = 0, townOff = 0;
   const townsHeld = Object.fromEntries(CLAN_KEYS.map((k) => [k, 0])) as Record<ClanKey, number>;
+  const crownAvg = Object.fromEntries(CLAN_KEYS.map((k) => [k, 0])) as Record<ClanKey, number>;
+  let crownHalf = 0, crownFlips = 0;
   const slots = pitchedTicks();
   for (let r = 0; r < RUNS; r++) {
     const rnd = mulberry(SEED * 7919 + r), s = newWar(), minds = newMinds();
@@ -223,7 +232,7 @@ function play(clever?: ClanKey): Result {
           if (d >= SETTLE_DAYS) { if (r.change === "submitted") townFlips++; else if (r.change === "contested") townContests++; else if (r.change === "off") townOff++; }
         }
         if (TIERS) setWarRelations(s.owner, s.tick, d === 0 && i === 0 ? [] : undefined); // (display only, for the tiers: the clans at war as the live server keeps them)
-        for (let j = 0; j < N; j++) if (s.owner[j] !== prev[j]) flips++;
+        for (let j = 0; j < N; j++) if (s.owner[j] !== prev[j]) { flips++; if (NEUTRAL.includes(j)) crownFlips++; }
         prev = s.owner.slice();
       }
       if (d < SETTLE_DAYS) continue;
@@ -232,6 +241,11 @@ function play(clever?: ClanKey): Result {
       if (streak > STREAK_DAYS) dominated = true;
       for (const k of CLAN_KEYS) { const sh = landOf(s, k) / N; avg[k] += sh; worst[k] = Math.max(worst[k], sh); }
       if (TOWNS_ON) for (const t of TOWNS) townsHeld[towns[t.id].k]++;
+      if (NEUTRAL.length) {
+        const held = CLAN_KEYS.map((k) => NEUTRAL.filter((t) => s.owner[t] === k).length);
+        CLAN_KEYS.forEach((k, i) => { crownAvg[k] += held[i] / NEUTRAL.length; });
+        if (Math.max(...held) * 2 > NEUTRAL.length) crownHalf++;
+      }
       samples++;
       if (TIERS) for (const t of TERRITORIES) {
         const tier = holdTier(s, t.id);
@@ -242,13 +256,14 @@ function play(clever?: ClanKey): Result {
     if (dominated) dominatedRuns++;
     if (VERBOSE) console.log(`run ${r}${clever ? ` (${clever} ruse)` : ""}: ${CLAN_KEYS.map((k) => `${k} ${landOf(s, k)}`).join(", ")}${dominated ? "  DOMINATED" : ""}`);
   }
-  for (const k of CLAN_KEYS) { avg[k] /= Math.max(1, samples); townsHeld[k] /= Math.max(1, samples); }
+  for (const k of CLAN_KEYS) { avg[k] /= Math.max(1, samples); townsHeld[k] /= Math.max(1, samples); crownAvg[k] /= Math.max(1, samples); }
   for (const k of CLAN_KEYS) { hunted[k] /= Math.max(1, nights); rally[k] /= Math.max(1, ticks); }
   return { avg, worst, dominated: dominatedRuns / RUNS, flips: flips / (RUNS * DAYS), hunts: hunts / Math.max(1, nights), hunted, rally, sacks: sacks / (RUNS * DAYS), sackSieges: sackSieges / (RUNS * DAYS), tiers, frontOutpost: frontOut / Math.max(1, front), front: frontTiers,
     sizes, ambushed: ambushed / (RUNS * DAYS), clashes: clashes / (RUNS * DAYS), clashDead: clashDead / (RUNS * DAYS),
     battles: { pitched: battles.pitched / (RUNS * DAYS), storm: battles.storm / (RUNS * DAYS), meet: battles.meet / (RUNS * DAYS) }, results, stormFlips: stormFlips / (RUNS * DAYS),
     men: menSum / Math.max(1, 2 * (battles.pitched + battles.storm + battles.meet)), mins: minSum / Math.max(1, battles.pitched + battles.storm + battles.meet),
-    townFlips: townFlips / Math.max(1, RUNS * (DAYS - SETTLE_DAYS)), townContests: townContests / Math.max(1, RUNS * (DAYS - SETTLE_DAYS)), townOff: townOff / Math.max(1, RUNS * (DAYS - SETTLE_DAYS)), townsHeld };
+    townFlips: townFlips / Math.max(1, RUNS * (DAYS - SETTLE_DAYS)), townContests: townContests / Math.max(1, RUNS * (DAYS - SETTLE_DAYS)), townOff: townOff / Math.max(1, RUNS * (DAYS - SETTLE_DAYS)), townsHeld,
+    crownAvg, crownHalf: crownHalf / Math.max(1, samples), crownFlips: crownFlips / (RUNS * DAYS) };
 }
 
 const t0 = Date.now();
@@ -261,6 +276,10 @@ console.log("clan       avg land   most land (any day after settling)   hunted (
 for (const k of CLAN_KEYS) console.log(`${k.padEnd(10)} ${pct(base.avg[k]).padStart(7)}   ${pct(base.worst[k]).padStart(7)}                              ${pct(base.hunted[k]).padStart(6)}               ${pct(base.rally[k]).padStart(6)}`);
 console.log(`Night Raiders rode against a clan on ${pct(base.hunts)} of night ticks`);
 console.log(`territories changing hands: ${base.flips.toFixed(2)} per war day`);
+if (NEUTRAL.length) {
+  console.log(`the Crown (${NEUTRAL.length} territories): ${base.crownFlips.toFixed(2)} change hands per war day; share held on average: ${CLAN_KEYS.map((k) => `${k} ${pct(base.crownAvg[k])}`).join(", ")}`);
+  console.log(`  days one clan held more than half of the Crown: ${pct(base.crownHalf)}`);
+}
 if (SACK.length) console.log(`Holds sacked: ${base.sacks.toFixed(2)} per war day, calling ${base.sackSieges.toFixed(2)} sieges`);
 console.log(`runs where one clan held > ${pct(WAR.leaderShare)} for over ${STREAK_DAYS} days in a row: ${pct(base.dominated)} (goal: under 5%)`);
 {

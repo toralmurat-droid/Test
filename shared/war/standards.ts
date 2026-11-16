@@ -4,6 +4,7 @@
  * fighting. Standards sit on free ground inside each territory, the same on server and client (from the map).
  */
 import { TILE } from "../constants";
+import { CR, CROWN_LANDS } from "../crown";
 import { isSolidAt, PORTAL_SPOTS } from "../map";
 import { CLANS, type ClanKey } from "./clans";
 import { TERRITORIES } from "./territories";
@@ -37,11 +38,20 @@ export interface Standard { id: number; t: number; x: number; y: number }
 /** Tiles a standard keeps from a portal stone (the ring and the stone's prompt must not overlap). */
 const KEEP_CLEAR = 6;
 
+/**
+ * Hold spots a land was built round (map tiles): the Crown's lands (shared/crown.ts CROWN_LANDS) each keep a 7x7 patch
+ * clear for their Hold, off the king's roads that would leave its fort only gaps. Tried first; the search below is the
+ * fallback (and how every older land got its Hold). Standards keep off a patch, as off the Hold's spot.
+ */
+const HOLD_PATCHES = new Map(CROWN_LANDS.map((l) => [l.name, { x: l.hold[0], y: CR(l.hold[1]) }]));
+
 /** A walkable spot near (tx, ty) inside territory `t`'s rect, with a little room around it. */
 function freeSpot(t: (typeof TERRITORIES)[number], tx: number, ty: number): { x: number; y: number } | undefined {
+  const patch = HOLD_PATCHES.get(t.name);
   const free = (x: number, y: number) => {
     if (x < t.x + 1 || y < t.y + 1 || x >= t.x + t.w - 1 || y >= t.y + t.h - 1) return false;
     if (PORTAL_SPOTS.some((p) => Math.hypot(p.x - x, p.y - y) < KEEP_CLEAR)) return false; // its own E prompt there
+    if (patch && Math.hypot(patch.x - x, patch.y - y) <= STANDARD.range / TILE + 2) return false; // the Hold's patch
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (isSolidAt((x + 0.5 + dx) * TILE, (y + 0.5 + dy) * TILE)) return false;
     return true;
   };
@@ -85,6 +95,13 @@ function buildHolds(): Hold[] {
   for (const t of TERRITORIES) {
     const mine = STANDARDS.filter((s) => s.t === t.id);
     let best: { x: number; y: number; score: number } | undefined;
+    const patch = HOLD_PATCHES.get(t.name);
+    if (patch) {
+      const x = (patch.x + 0.5) * TILE_, y = (patch.y + 0.5) * TILE_;
+      let clear = !portals.some((p) => Math.hypot(p.x - patch.x, p.y - patch.y) < KEEP_CLEAR) && mine.every((s) => Math.hypot(s.x - x, s.y - y) > STANDARD.range + 2 * TILE_);
+      for (let dy = -INNER; dy <= INNER && clear; dy++) for (let dx = -INNER; dx <= INNER; dx++) if (solidAt(x + dx * TILE_, y + dy * TILE_)) clear = false;
+      if (clear) { out.push({ t: t.id, x, y }); continue; }
+    }
     // only the outer ring of the 7x7 clearing may relax and the fort may hang over the land's edge by a tile before the land gets none
     for (const [ringMax, edge] of [[3, HOLD_RADIUS + 1], [8, HOLD_RADIUS + 1], [24, HOLD_RADIUS + 1], [24, INNER + 1], [24, 1]]) {
       for (let ty = t.y + edge; ty < t.y + t.h - edge; ty++) for (let tx = t.x + edge; tx < t.x + t.w - edge; tx++) {

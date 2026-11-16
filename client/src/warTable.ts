@@ -15,7 +15,7 @@ import type { WarView } from "../../shared/war/view";
 import { viewTier } from "../../shared/war/intel";
 import { CITIES, cityText } from "../../shared/capitals";
 import { inPoly, layoutTerritories, SLOTS, WT_H, WT_W, type Pt } from "./warTableLayout";
-import { CROWN_LAND, CROWN_NODE, findRoute, gateReq, landOfNode, nodeName, routeLines, STONES, WAYS, type Here, type Step } from "./warRoute";
+import { CROWN_LAND, findRoute, gateReq, landOfNode, nodeName, routeLines, STONES, WAYS, type Here, type Step } from "./warRoute";
 import { wrap } from "./warHere";
 
 const KEY = "wartable";
@@ -126,11 +126,9 @@ export interface WarHover { x: number; y: number }
 /** What the table says about the hero: where they stand, the territory they picked, the portal stones they may use. */
 export interface WarTableUI { here?: Here; area?: string; sel?: number; woken?: ReadonlySet<string> }
 
-/** Where the Crown of the Marches stands on the sheet (it holds no territory yet: one node, `CROWN_NODE`). */
-const CROWN_PT: Pt = [590, 430];
 /** Screen spots of the nodes of the last frame, for picking a territory by click. */
 let spots: { id: number; x: number; y: number }[] = [], reach = 16;
-/** The territory (or the Crown) nearest a canvas point of the last frame, if it is close enough. */
+/** The territory nearest a canvas point of the last frame, if it is close enough. */
 export function warTablePick(x: number, y: number): number | undefined {
   let best: number | undefined, bd = reach;
   for (const s of spots) { const d = Math.hypot(s.x - x, s.y - y); if (d < bd) { bd = d; best = s.id; } }
@@ -152,11 +150,8 @@ export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, font: stri
   if (ds > 1) ds = Math.floor(ds * 4) / 4; // keep art pixels near-whole
   const mw = AW * ds, mh = AH * ds, mx = Math.round(pad + (avail.w - mw) / 2), my = Math.round(pad + (avail.h - mh) / 2);
   const u = ds / UNIT; // screen px per sheet unit
-  const kC = Math.max(2, Math.round(ds)); // the Crown icon's pixel size
-  const P = (id: number): [number, number] => {
-    if (id === CROWN_NODE) return [Math.round(mx + CROWN_PT[0] * u), Math.round(my + CROWN_PT[1] * u) + 3 * kC];
-    const p = POS.get(id)!; return [mx + p.x * u, my + p.y * u];
-  };
+  const kC = Math.max(2, Math.round(ds)); // the Crown icon's pixel size (over the Crown Keep)
+  const P = (id: number): [number, number] => { const p = POS.get(id)!; return [mx + p.x * u, my + p.y * u]; };
   const pulse = 0.5 + 0.5 * Math.sin(now / 250);
   const here = ui.here, hn = here?.node;
   g.save();
@@ -213,26 +208,25 @@ export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, font: stri
     text(label, bx + 10 * bs, by + 36 * bs + 12, GOLD); g.textAlign = "left";
   }
 
-  // the Crown of the Marches: neutral ground that every homeland reaches by its Crownway
-  { const cx = Math.round(mx + CROWN_PT[0] * u), cy = Math.round(my + CROWN_PT[1] * u), k = kC;
-    g.fillStyle = "#b09a5e";
-    for (const [x, y, w, h] of [[0, 3, 11, 3], [0, 0, 1, 3], [5, 0, 1, 3], [10, 0, 1, 3], [1, 1, 1, 2], [4, 1, 1, 2], [6, 1, 1, 2], [9, 1, 1, 2]]) g.fillRect(cx - 5 * k + x * k, cy + y * k, w * k, h * k);
-  }
-
   // territories: holds and capitals in holder colours
   const sz = Math.max(8, Math.round(15 * u));
   reach = Math.max(16, sz);
-  spots = [{ id: CROWN_NODE, x: P(CROWN_NODE)[0], y: P(CROWN_NODE)[1] }];
+  spots = [];
   for (const t of TERRITORIES) {
     const [x0, y0] = P(t.id), x = Math.round(x0), y = Math.round(y0), k = CLAN_KEYS[v.owner[t.id]], col = k ? MAP[k] : 0x888888;
-    const cap = !!t.capitalOf, s = cap ? Math.round(sz * 1.5) : Math.round(sz * [0.75, 1, 1.25][viewTier(v, t.id)]), h = s >> 1; // (a bigger marker for a bigger Hold)
+    const cap = !!t.capitalOf || !!t.reckoningOnly, s = cap ? Math.round(sz * 1.5) : Math.round(sz * [0.75, 1, 1.25][viewTier(v, t.id)]), h = s >> 1; // (a bigger marker for a bigger Hold)
     spots.push({ id: t.id, x, y });
     if (v.sieges.some((sg) => sg[0] === t.id)) { g.lineWidth = 2; g.strokeStyle = `rgba(255,80,40,${0.45 + 0.55 * pulse})`; g.strokeRect(x - h - 5, y - h - 5, s + 10, s + 10); }
     if (v.raided?.includes(t.id)) { g.lineWidth = 2; g.setLineDash([4, 3]); g.strokeStyle = `rgba(200,110,255,${0.7 + 0.3 * pulse})`; g.strokeRect(x - h - 3, y - h - 3, s + 6, s + 6); g.setLineDash([]); }
     g.fillStyle = "#0d0a07"; g.fillRect(x - h - 1, y - h - 1, s + 2, s + 2);
     g.fillStyle = hex(mix(col, 0x000000, cap ? 0.15 : 0.35)); g.fillRect(x - h, y - h, s, s);
     g.strokeStyle = cap ? "#ffd860" : hex(mix(col, 0xffffff, 0.35)); g.lineWidth = cap ? 2 : 1; g.strokeRect(x - h + 0.5, y - h + 0.5, s - 1, s - 1);
-    if (cap) { g.fillStyle = "#ffd860"; g.fillRect(x - 1, y - h - 6, 2, 6); g.fillStyle = hex(col); g.fillRect(x + 1, y - h - 6, 5, 3); } // a flag on the keep
+    if (t.reckoningOnly) { // the Crown Keep: a gold crown over it (it falls only at a Reckoning)
+      const k = Math.max(1, Math.round(kC / 2)), cx = x - 5 * k, cy = y - h - 5 * k;
+      g.fillStyle = "#0d0a07"; g.fillRect(cx - k, cy - k, 13 * k, 8 * k);
+      g.fillStyle = "#ffd860";
+      for (const [a, b, w, hh] of [[0, 3, 11, 3], [0, 0, 1, 3], [5, 0, 1, 3], [10, 0, 1, 3], [1, 1, 1, 2], [4, 1, 1, 2], [6, 1, 1, 2], [9, 1, 1, 2]]) g.fillRect(cx + a * k, cy + b * k, w * k, hh * k);
+    } else if (cap) { g.fillStyle = "#ffd860"; g.fillRect(x - 1, y - h - 6, 2, 6); g.fillStyle = hex(col); g.fillRect(x + 1, y - h - 6, 5, 3); } // a flag on the keep
   }
   // woken portal stones: a small orange diamond on the territory they stand in
   for (const st of STONES) {
@@ -245,7 +239,7 @@ export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, font: stri
   for (const w of WAYS) {
     const dim = route ? !onRoute.has(w.id) : !mineWay(w), col = route && onRoute.has(w.id) ? "#ffd166" : dim ? "#6f8ea3" : "#96d7ff";
     for (const [me, other] of [[w.a, w.b], [w.b, w.a]] as const) {
-      const [x, y] = P(me), [ox, oy] = P(other), d = Math.hypot(ox - x, oy - y) || 1, off = (me === CROWN_NODE ? 24 : sz * 0.9 + 10);
+      const [x, y] = P(me), [ox, oy] = P(other), d = Math.hypot(ox - x, oy - y) || 1, off = sz * 0.9 + 10;
       gateGlyph(g, Math.round(x + ((ox - x) / d) * off), Math.round(y + ((oy - y) / d) * off), 1, col);
     }
   }
@@ -318,7 +312,7 @@ export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, font: stri
     g.lineWidth = 6; g.strokeStyle = "rgba(0,0,0,0.65)"; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.stroke();
     g.lineWidth = 3; g.strokeStyle = "#ffd166"; g.setLineDash(here.near ? [5, 4] : []); g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.stroke(); g.setLineDash([]);
     g.lineWidth = 2; g.strokeStyle = `rgba(255,209,102,${0.7 * (1 - pulse)})`; g.beginPath(); g.arc(x, y, r + 5 + pulse * 10, 0, Math.PI * 2); g.stroke();
-    const label = hn === CROWN_NODE ? nodeName(hn) : (here.near ? "near " : "") + nodeName(hn);
+    const label = (here.near ? "near " : "") + nodeName(hn);
     if (y - r - 3 - 13 - 31 < my + 4) tag(x + r + 8, y - 15, "You are here", label, "#ffd166", "right"); // no room above: beside the ring
     else {
       const bob = Math.round(pulse * 3), ty = y - Math.round(r) - 3 - bob; // a pin pointing down at the ring
@@ -348,11 +342,11 @@ export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, font: stri
   else {
     if (here.near) para(ui.area ?? "Outside the zones", "#ffe8a3", 13, 15, 2);
     para(here.near ? `near ${nodeName(hn)}` : nodeName(hn), here.near ? "#cfc4aa" : "#ffe8a3", here.near ? 11 : 13, here.near ? 13 : 15, 2);
-    para(here.land === CROWN_LAND && hn === CROWN_NODE ? "Neutral ground" : NAMES[here.land ?? ""] ?? "", "#a39680", 11, 13);
+    para(`${NAMES[here.land ?? ""] ?? ""}${here.land === CROWN_LAND ? " (neutral ground)" : ""}`, "#a39680", 11, 13);
   }
   y += 5; g.fillStyle = "#3a2a1c"; g.fillRect(lx + 4, y - 3, lw - 12, 1); y += 8;
   if (tgt !== undefined && hn !== undefined && tgt !== hn) {
-    text(`Way to ${tgt === CROWN_NODE ? "the Crown" : nodeName(tgt)}`.slice(0, 26), lx + 4, y, "#8fe0ff", 13); y += 16;
+    text(`Way to ${nodeName(tgt)}`.slice(0, 26), lx + 4, y, "#8fe0ff", 13); y += 16;
     if (!route) para("No road from here.", "#d8c8a0", 11, 13);
     else {
       para(`${route.length} step${route.length === 1 ? "" : "s"}`, "#a39680", 11, 13);
@@ -374,6 +368,7 @@ export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, font: stri
   key(() => { g.fillStyle = hex(EMBER[0]); g.fillRect(lx + 3, y - 1, 18, 3); }, "Front line");
   key(() => { g.fillStyle = "#0d0a07"; g.fillRect(lx + 7, y - 6, 10, 10); g.strokeStyle = "#c9b27a"; g.lineWidth = 1; g.strokeRect(lx + 7.5, y - 5.5, 9, 9); }, "Hold");
   key(() => { g.fillStyle = "#0d0a07"; g.fillRect(lx + 6, y - 7, 13, 13); g.strokeStyle = "#ffd860"; g.lineWidth = 2; g.strokeRect(lx + 7, y - 6, 11, 11); }, "Capital (cannot fall)");
+  key(() => { g.fillStyle = "#ffd860"; for (const [a, b, w, hh] of [[0, 3, 11, 3], [0, 0, 1, 3], [5, 0, 1, 3], [10, 0, 1, 3]]) g.fillRect(lx + 7 + a, y - 3 + b, w, hh); }, "Crown Keep (a Reckoning only)");
   key(() => { gateGlyph(g, lx + 12, y, 1, "#96d7ff"); }, "Gate between lands");
   if (CITIES.length) key(() => { g.fillStyle = "#0d0a07"; g.fillRect(lx + 6, y - 7, 13, 13); g.fillStyle = hex(MAP[CITIES[0].clan]); g.fillRect(lx + 7, y - 6, 11, 11); g.fillStyle = "#0d0a07"; g.fillRect(lx + 11, y - 1, 3, 6); }, "City gate");
   key(() => { g.strokeStyle = `rgba(255,80,40,${0.5 + 0.5 * pulse})`; g.lineWidth = 2; g.strokeRect(lx + 6, y - 6, 12, 12); }, "Under siege");
@@ -384,11 +379,12 @@ export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, font: stri
   if (hover && hovered !== undefined) {
     const lines: string[] = [];
     let col = "#888";
-    if (hovered === CROWN_NODE) lines.push(nodeName(hovered), "Neutral ground, no clan holds it", `Five Crownways lead in (${gateReq(CROWN_LAND)})`);
-    else {
+    {
       const t = TERRITORIES[hovered], k = CLAN_KEYS[v.owner[hovered]], sg = v.sieges.find((s) => s[0] === hovered);
       col = k ? hex(MAP[k]) : "#888";
       lines.push(t.name, `${k ? short(k) : "Unclaimed"}${t.capitalOf ? "  (capital)" : ""}  ·  ${NAMES[t.region] ?? ""}`, `Level ${t.levels[0]}-${t.levels[1]}  Control ${v.control[hovered] ?? 0}`);
+      if (t.reckoningOnly) lines.push("Falls only at a Reckoning");
+      else if (t.region === CROWN_LAND && t.wards) lines.push(`Crownway land, first held by ${short(t.wards)} (${gateReq(CROWN_LAND)})`);
       if (sg) lines.push(`Siege by ${short(CLAN_KEYS[sg[1]])}`);
     }
     if (hn === hovered) lines.push("You are here");
