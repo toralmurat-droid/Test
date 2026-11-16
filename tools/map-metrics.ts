@@ -2,10 +2,11 @@
  * Navigation metrics for the world map: how open it is and how direct travel feels.
  * Run: npx tsx tools/map-metrics.ts
  */
-import { DEEP_END, DEEP_Y0, DESERT_H, DESERT_Y0, BADLANDS_H, BADLANDS_Y0, MAP_H, MAP_W, MOORS_H, MOORS_Y0, SINKHOLES_H, SINKHOLES_Y0, TILE, UNDER_END, WORLD_H } from "../shared/constants";
+import { CROWN_H, CROWN_Y0, DEEP_END, DEEP_Y0, DESERT_H, DESERT_Y0, BADLANDS_H, BADLANDS_Y0, MAP_H, MAP_W, MOORS_H, MOORS_Y0, SINKHOLES_H, SINKHOLES_Y0, TILE, UNDER_END, WORLD_H } from "../shared/constants";
 import { DOORS, isSolidTile, randomSpawn } from "../shared/map";
 import { FLOORS, LANDING } from "../shared/dungeon";
 import { waygateArrival, waygateById } from "../shared/act2";
+import { CROWNWAYS } from "../shared/crown";
 
 const N = MAP_W * MAP_H;
 // dungeon gates count as open (a hero opens them), so the floors behind them are reachable
@@ -40,6 +41,8 @@ const bands: { name: string; y0: number; y1: number; from: [number, number][] }[
   { name: "Act 3 moors (moorgate)", y0: MOORS_Y0, y1: MOORS_Y0 + MOORS_H, from: [px(waygateArrival(waygateById("moors")!))] },
   { name: "Act 4 badlands (Red Pass)", y0: BADLANDS_Y0, y1: BADLANDS_Y0 + BADLANDS_H, from: [px(waygateArrival(waygateById("badlands")!))] },
   { name: "Act 5 sinkholes (Sinkway)", y0: SINKHOLES_Y0, y1: SINKHOLES_Y0 + SINKHOLES_H, from: [px(waygateArrival(waygateById("sinkholes")!))] },
+  // the Crown: one entry per Crownway, so each gate's arrival is shown to reach the whole land on its own
+  ...CROWNWAYS.map((c) => ({ name: `Act 6 Crown (${c.name.replace(/^The /, "")})`, y0: CROWN_Y0, y1: CROWN_Y0 + CROWN_H, from: [px(waygateArrival(waygateById(`crown_${c.from}`)!))] })),
 ];
 const bandLines: string[] = [];
 let allReach = true;

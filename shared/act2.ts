@@ -1,9 +1,10 @@
-import { actOfTile, BADLANDS_LEVEL, MOORS_LEVEL, PLAYER_RADIUS, SINKHOLES_LEVEL, TILE, type Act } from "./constants";
+import { actOfTile, BADLANDS_LEVEL, CROWN_LEVEL, MOORS_LEVEL, PLAYER_RADIUS, SINKHOLES_LEVEL, TILE, type Act } from "./constants";
 import { CHAINS, chainDone, type Quester } from "./quests";
 import { KEL_MARKET, D, WAYGATE_DESERT, WAYGATE_OAKVALE } from "./desert";
 import { CAIRN_SQUARE, MOORSGATE_MOORS, MOORSGATE_OAKVALE, MR } from "./moors";
 import { REDPASS_BADLANDS, REDPASS_OAKVALE, BR, RUSTWATER_SQUARE } from "./badlands";
 import { ROPEWELL_SQUARE, SINKWAY_OAKVALE, SINKWAY_SINKHOLES, SR } from "./sinkholes";
+import { CR, crownGateTile, CROWNWAYS, TOLLCROSS_SQUARE } from "./crown";
 import { SALT_SQUARE } from "./saltmere";
 import { underground } from "./dungeon";
 import { isSolidAt, randomSpawn, SAFE_ZONE } from "./map";
@@ -19,9 +20,14 @@ import { roomyTile } from "./npcs";
  * from hero Lv 25 (BADLANDS_LEVEL.min), no quest needed.
  * Act 5: the Sinkway, a cave on the beach south of Sunken Lake, and its far end at the Mawdeep Sinkholes' north-west
  * (shared/sinkholes.ts), open from hero Lv 30 (SINKHOLES_LEVEL.min), no quest needed.
+ * Act 6: the five Crownways, one from each homeland (a dais near its seat) to a gate on the Crown of the Marches' rim
+ * on that homeland's side (shared/crown.ts CROWNWAYS), open from hero Lv 40 (CROWN_LEVEL.min), no quest needed. Each
+ * Crown gate leads back to the homeland it faces.
  * Using an awake gate takes the hero through to its twin, like the Mawdeep's ropes.
  */
-export type WaygateId = "oakvale" | "desert" | "moorsgate" | "moors" | "redpass" | "badlands" | "sinkway" | "sinkholes";
+export type WaygateId = "oakvale" | "desert" | "moorsgate" | "moors" | "redpass" | "badlands" | "sinkway" | "sinkholes"
+  | "crownway_oakvale" | "crown_oakvale" | "crownway_moors" | "crown_moors" | "crownway_badlands" | "crown_badlands"
+  | "crownway_sinkholes" | "crown_sinkholes" | "crownway_sunscar" | "crown_sunscar";
 export interface Waygate { id: WaygateId; x: number; y: number; to: WaygateId; label: string }
 const px = (t: { x: number; y: number }) => ({ x: (t.x + 0.5) * TILE, y: (t.y + 0.5) * TILE });
 export const WAYGATES: Waygate[] = [
@@ -33,6 +39,11 @@ export const WAYGATES: Waygate[] = [
   { id: "badlands", ...px(REDPASS_BADLANDS), to: "redpass", label: "Go back through the Red Pass home to Oakvale" },
   { id: "sinkway", ...px(SINKWAY_OAKVALE), to: "sinkholes", label: "Go down the Sinkway to the Mawdeep Sinkholes" },
   { id: "sinkholes", ...px(SINKWAY_SINKHOLES), to: "sinkway", label: "Go back up the Sinkway home to Oakvale" },
+  // the Crownways (Act 6): each homeland's dais ("crownway_<land>") and its gate on the Crown's rim ("crown_<land>")
+  ...CROWNWAYS.flatMap((c): Waygate[] => [
+    { id: `crownway_${c.from}`, ...px(c.home), to: `crown_${c.from}`, label: "Take the Crownway to the Crown of the Marches" },
+    { id: `crown_${c.from}`, ...px(crownGateTile(c)), to: `crownway_${c.from}`, label: `Go back through ${c.name.replace(/^The /, "the ")} home to ${c.land}` },
+  ]),
 ];
 /** How close a hero must stand to use a waygate (click it or press E), like a portal stone's PORTAL_RANGE. */
 export const WAYGATE_RANGE = 1.6 * TILE;
@@ -41,15 +52,18 @@ export const waygateById = (id: string) => WAYGATES.find((g) => g.id === id);
 export const waygateArrival = (g: Waygate) => ({ x: g.x, y: g.y + 2.4 * TILE });
 /**
  * The homelands' gate pairs (Acts 3 and up): each wakes at its act's minimum hero level, no quest, and says `shut`
- * (then "Return at level N.") while it is cold. A new homeland is one row here. The Sunscar's pair is not in it: it
- * wants Act 1's last bosses (act2Open).
+ * (then "Return at level N.") while it is cold. A new homeland is one row here (an act reached by several pairs, like
+ * the Crown's five Crownways, lists them all in its row). The Sunscar's pair is not in it: it wants Act 1's last bosses
+ * (act2Open).
  */
 export const HOMELAND_GATES: { act: Act; ids: readonly WaygateId[]; level: number; shut: string }[] = [
   { act: 3, ids: ["moorsgate", "moors"], level: MOORS_LEVEL.min, shut: "The gate is cold." },
   { act: 4, ids: ["redpass", "badlands"], level: BADLANDS_LEVEL.min, shut: "The pass is held shut." },
   { act: 5, ids: ["sinkway", "sinkholes"], level: SINKHOLES_LEVEL.min, shut: "The tunnel is caved in." },
+  // the Crown: five pairs lead to one act, so one row holds all ten gates
+  { act: 6, ids: CROWNWAYS.flatMap((c): WaygateId[] => [`crownway_${c.from}`, `crown_${c.from}`]), level: CROWN_LEVEL.min, shut: "The road is barred." },
 ];
-/** The homeland gate pair `g` belongs to (undefined for the Sunscar's waygates). */
+/** The homeland gate row `g` belongs to (undefined for the Sunscar's waygates). */
 export const homelandGate = (g: Waygate) => HOMELAND_GATES.find((h) => h.ids.includes(g.id));
 /** True for the moorgate pair (Act 3), false for the others. */
 export const isMoorsGate = (g: Waygate) => homelandGate(g)?.act === 3;
@@ -57,6 +71,8 @@ export const isMoorsGate = (g: Waygate) => homelandGate(g)?.act === 3;
 export const isBadlandsGate = (g: Waygate) => homelandGate(g)?.act === 4;
 /** True for the Sinkway pair (Act 5). */
 export const isSinkholesGate = (g: Waygate) => homelandGate(g)?.act === 5;
+/** True for any of the five Crownways' gates (Act 6), on either side. */
+export const isCrownGate = (g: Waygate) => homelandGate(g)?.act === 6;
 
 /** The chains that must be finished: the Hollow Crown (Ostrevar) and the Hide Rite (the Hide-Mother). */
 export const ACT2_KEYS = ["crown", "beast"] as const;
@@ -73,15 +89,17 @@ export function act2Missing(p: Quester | undefined): string[] {
 export const moorsOpen = (p: { level: number } | undefined) => !!p && p.level >= MOORS_LEVEL.min;
 /** True once the hero is strong enough for the badlands (Act 4): hero level only, no quest. */
 export const badlandsOpen = (p: { level: number } | undefined) => !!p && p.level >= BADLANDS_LEVEL.min;
+/** The Sun Gate's two ends lead into or out of the Sunscar, so they also want Act 2 unlocked (no way round its lock). */
+export const isSunGate = (g: Waygate) => g.id === "crown_sunscar" || g.id === "crownway_sunscar";
 /** Whether gate `g` is awake for this hero. */
 export const gateOpen = (g: Waygate, p: (Quester & { level: number }) | undefined) => {
   const h = homelandGate(g);
-  return h ? !!p && p.level >= h.level : act2Open(p);
+  return h ? !!p && p.level >= h.level && (!isSunGate(g) || act2Open(p)) : act2Open(p);
 };
 /** The note a hero gets at a cold gate. */
 export function gateColdNote(g: Waygate, p: Quester | undefined): string {
   const h = homelandGate(g);
-  if (h) return `${h.shut} Return at level ${h.level}.`;
+  if (h && (!isSunGate(g) || ((p as { level?: number } | undefined)?.level ?? 0) < h.level)) return `${h.shut} Return at level ${h.level}.`;
   const miss = act2Missing(p);
   return `The waygate's stones are cold. It will wake when ${miss.join(" and ")} ${miss.length > 1 ? "are" : "is"} beaten.`;
 }
@@ -146,6 +164,18 @@ export function sinkholesSpawn(): { x: number; y: number } {
   return waygateArrival(waygateById("sinkholes")!);
 }
 /**
+ * Tollcross Square (shared/crown.ts): where heroes in the Crown come back after dying, and where they log in if they
+ * left from Act 6. Tollcross is still bare ground; free ground only, the Greenward Gate's arrival spot if none is found.
+ */
+export function crownSpawn(): { x: number; y: number } {
+  const Q = TOLLCROSS_SQUARE, r = PLAYER_RADIUS;
+  for (let i = 0; i < 60; i++) {
+    const x = (Q.x + 1 + Math.random() * (Q.w - 2)) * TILE, y = (CR(Q.y) + 1 + Math.random() * (Q.h - 2)) * TILE;
+    if (![[-r, -r], [r, -r], [-r, r], [r, r]].some(([dx, dy]) => isSolidAt(x + dx, y + dy))) return { x, y };
+  }
+  return waygateArrival(waygateById("crown_oakvale")!);
+}
+/**
  * Saltmere's harbour square (shared/saltmere.ts), Act 1's second safe town: free ground only, the square's centre if
  * none is found. Only a respawn lands here (act1Home); Act 1 logins still start in Oakvale.
  */
@@ -172,5 +202,5 @@ export function act1Home(x: number, y: number, woke: (id: string) => boolean): {
 }
 /** The town (or camp) of an act, for a login or a respawn there; anything else is Oakvale's square (`home`). */
 export function actSpawn(act: number, home: () => { x: number; y: number }): { x: number; y: number } {
-  return act === 5 ? sinkholesSpawn() : act === 4 ? badlandsSpawn() : act === 3 ? moorsSpawn() : act === 2 ? desertSpawn() : home();
+  return act === 6 ? crownSpawn() : act === 5 ? sinkholesSpawn() : act === 4 ? badlandsSpawn() : act === 3 ? moorsSpawn() : act === 2 ? desertSpawn() : home();
 }

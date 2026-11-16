@@ -1,8 +1,9 @@
-import { actMobLevel, actOfTile, actSpecialLevel, BADLANDS_LEVEL, inDeepRow, ELITE, MobKind, MOORS_LEVEL, SINKHOLES_LEVEL, TILE } from "./constants";
+import { actMobLevel, actOfTile, actSpecialLevel, BADLANDS_LEVEL, inDeepRow, ELITE, MobKind, MOORS_LEVEL, SINKHOLES_LEVEL, CROWN_LEVEL, TILE } from "./constants";
 import { D, SUNSTONE } from "./desert";
 import { MOORSGATE_MOORS } from "./moors";
 import { REDPASS_BADLANDS } from "./badlands";
 import { MAW_LEDGE_RECT, SINKWAY_SINKHOLES, SR } from "./sinkholes";
+import { crownGateTile, CROWNWAYS } from "./crown";
 import { AREAS, isSafeZone, isSolidAt, OBJECTS, T, VILLAGE } from "./map";
 import { CAMP_POSTS, campMobs } from "./bandits";
 import { AMBUSH_ROOMS, chamberAtPx, FLOORS, LAIRS, LANDING, pointInChamber } from "./dungeon";
@@ -216,9 +217,13 @@ export function zoneLevels(a: { x: number; y: number; w: number; h: number }): [
   const lo = baseLevelAt(a.x + a.w / 2, a.y + a.h / 2);
   return [lo, lo + 2];
 }
+/** The Crownways' Crown-side gates (map tiles): Act 6's levels grow with the distance to the nearest. */
+const CROWN_ARRIVALS = CROWNWAYS.map(crownGateTile);
 /** Lowest monster level at a tile, from its distance to the village centre (a spot spans this level to +2). */
 export function baseLevelAt(tx: number, ty: number): number {
   const act = actOfTile(tx, ty);
+  // Act 6: from Lv 40 at the Crownways on the rim, a level every 10 tiles from the nearest one, inward toward the Keep
+  if (act === 6) return CROWN_LEVEL.min + Math.floor(Math.max(0, Math.min(...CROWN_ARRIVALS.map((a) => Math.hypot(tx - a.x, ty - a.y))) - 12) / CROWN_LEVEL.tilesPerLevel);
   // Act 5: from Lv 30 at the Sinkway (the band's north-west), a level every 12 tiles further on, south-east toward Hidehall
   if (act === 5) return SINKHOLES_LEVEL.min + Math.floor(Math.max(0, Math.hypot(tx - SINKWAY_SINKHOLES.x, ty - SINKWAY_SINKHOLES.y) - 12) / SINKHOLES_LEVEL.tilesPerLevel);
   // Act 4: from Lv 25 at the Red Pass (the band's east edge), a level every 16 tiles further on, west toward Fangrock
@@ -231,7 +236,7 @@ export function baseLevelAt(tx: number, ty: number): number {
   return 1 + Math.floor(Math.max(0, Math.hypot(tx - cx, ty - cy) - 40) / 8);
 }
 
-/** The level ceilings for a zone or a tile: its act's band (shared/constants.ts ACT_LEVEL: Oakvale Lv 25/30, the desert Lv 30-47/50, the moors Lv 20-33/35, the badlands Lv 25-38/40, the sinkholes Lv 30-43/45). */
+/** The level ceilings for a zone or a tile: its act's band (shared/constants.ts ACT_LEVEL: Oakvale Lv 25/30, the desert Lv 30-47/50, the moors Lv 20-33/35, the badlands Lv 25-38/40, the sinkholes Lv 30-43/45, the Crown Lv 40-48/50). */
 const levelFns = (tx: number, ty: number) => {
   const act = actOfTile(tx, ty);
   return { mob: (l: number) => actMobLevel(act, l), special: (l: number) => actSpecialLevel(act, l) };
@@ -239,7 +244,7 @@ const levelFns = (tx: number, ty: number) => {
 
 const inRect = (r: { x: number; y: number; w: number; h: number }, tx: number, ty: number) => tx >= r.x && tx < r.x + r.w && ty >= r.y && ty < r.y + r.h;
 /** Areas so broad they never keep a wild zone's monsters out (they hold other zones). */
-const BROAD_AREAS = ["Whispering Woods", "River Ashwell", "The Sunscar", "The Grey Barrow Moors", "The Red Badlands", "The Dry Ashwell", "The Mawdeep Sinkholes"];
+const BROAD_AREAS = ["Whispering Woods", "River Ashwell", "The Sunscar", "The Grey Barrow Moors", "The Red Badlands", "The Dry Ashwell", "The Mawdeep Sinkholes", "The Crown of the Marches"];
 /** Named areas (and Oakvale's surroundings) a wild zone leaves alone: its monsters stay in their own biome. */
 function claimedByArea(name: string, tx: number, ty: number): boolean {
   return AREAS.some((a) => a.name !== name && !BROAD_AREAS.includes(a.name) && inRect(a, tx, ty));
