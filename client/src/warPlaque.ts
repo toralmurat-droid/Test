@@ -14,6 +14,10 @@ import { HOLD_TIER_KEYS } from "../../shared/war/holdTiers";
 import { fmtCountdown, CLAN_LABEL } from "./warMap";
 import type { WarColumns } from "./warColumns";
 import { hudSlot } from "./hudSlots";
+import { townAt, TOWN } from "../../shared/war/towns";
+import { stewardName } from "../../shared/war/townText";
+import { TILE } from "../../shared/constants";
+import type { WarTowns } from "./warTowns";
 import "./warPlaque.css";
 
 const hex = (c: number) => `#${c.toString(16).padStart(6, "0")}`;
@@ -66,6 +70,27 @@ export class WarPlaque {
   /** Sacked Holds (client/src/warSack.ts): "Hold sacked by <clan>" or a banner going up, while the hero is in that land. */
   setSack(r: { line(t: number): string }) { this.sack = r; }
 
+  private towns?: WarTowns;
+  /** Capturable towns (client/src/warTowns.ts): inside one the plaque shows its holder, steward, discount or contest. */
+  setTowns(t: WarTowns) { this.towns = t; }
+
+  /** A town's plaque: "Saltmere", "held by Redfang · Steward X", then "-10% for you" or "Contested by Y, 22 min". */
+  private drawTown(i: NonNullable<ReturnType<WarTowns["info"]>>, now: number) {
+    const mn = i.until ? mins(i.until - now) : 0, disc = this.towns!.discount(i.town.id), raise = this.towns!.line(i.town.id);
+    const key = `town|${i.town.id}|${i.holder}|${i.by ?? ""}|${mn}|${disc}|${raise}`;
+    if (key === this.shown) return;
+    this.shown = key;
+    const name = document.createElement("div"); name.className = "wp-name"; name.textContent = i.town.name.replace(/^the /, "The ");
+    const held = document.createElement("div"); held.className = "wp-held"; held.textContent = `held by ${CLANS[i.holder].name}`;
+    const st = document.createElement("span"); st.className = "wp-land"; st.textContent = ` · ${stewardName(i.holder, i.town.id)}`; held.append(st);
+    const text = document.createElement("div"); text.className = "wp-text"; text.append(name, held);
+    if (i.by) { const c = document.createElement("div"); c.className = "wp-foot siege"; c.textContent = `Contested by ${CLANS[i.by].name}, ${mn} min`; text.append(c); }
+    if (disc && TOWN.live) { const d = document.createElement("div"); d.className = "wp-me"; d.textContent = `-${Math.round(TOWN.discount * 100)}% for you`; text.append(d); }
+    if (raise) { const r = document.createElement("div"); r.className = "wp-foot siege"; r.textContent = raise; text.append(r); }
+    this.el.replaceChildren(pennant(i.holder), text);
+    this.el.hidden = false;
+  }
+
   private cols?: WarColumns;
   /** Marching columns (client/src/warColumns.ts): a "Column of the Redfang marching on X · 4:10" line (time to the war tick) while the hero is in a land one marches on or leaves. */
   setColumns(c: WarColumns) { this.cols = c; }
@@ -86,6 +111,8 @@ export class WarPlaque {
 
   /** Call every frame with the hero's tile; it only redraws when something on it changes. */
   update(tx: number, ty: number, standing = "", now = Date.now()) {
+    const town = this.towns && townAt(tx * TILE, ty * TILE), ti = town && this.towns!.info(town.id);
+    if (ti) { this.drawTown(ti, now); return; }
     const v = this.view, t = v && territoryAt(Math.floor(tx), Math.floor(ty));
     if (!v || !t || v.owner[t.id] === undefined) { if (!this.el.hidden) this.el.hidden = true; this.shown = ""; return; }
     const own = CLAN_KEYS[v.owner[t.id]], ctl = v.control[t.id], sg = v.sieges.find((s) => s[0] === t.id);

@@ -18,6 +18,8 @@ import type { WritKind } from "../../shared/war/writs";
 import { COLUMN_ICON, drawClashIcon, drawColumnIcon, drawGateGlyph, ROAD_STYLE } from "./columnArt";
 import type { WarBattle } from "./warBattle";
 import { drawBattleMarker } from "./battleArt";
+import type { WarTowns } from "./warTowns";
+import { TOWN } from "../../shared/war/towns";
 import { columnTip, type ColView, type WarColumns } from "./warColumns";
 
 /** Bright map colours per clan (as on the war table). */
@@ -198,6 +200,8 @@ export interface WarMapData {
   me?: { x: number; y: number };
   /** W5: announced and fought big battles (client/src/warBattle.ts): a crossed-swords marker with a countdown, shown under fog. */
   battles?: WarBattle;
+  /** W6 capturable towns (client/src/warTowns.ts): an icon in the holder's colour, a contested ring with a countdown, a tooltip. */
+  towns?: WarTowns;
   /** Is this tile uncovered in the hero's fog? */
   seen(tx: number, ty: number): boolean;
 }
@@ -321,7 +325,66 @@ export function drawWarWorld(g: CanvasRenderingContext2D, d: WarMapData, v: WarM
     }
     g.restore();
   }
+  if (d.towns) drawTowns(g, d, v);
   g.restore();
+}
+
+/** Where a town's icon sits (tile centre of its steward). */
+const townPos = (t: { steward: { x: number; y: number } }): [number, number] => [(t.steward.x + 0.5) * TILE, (t.steward.y + 0.5) * TILE];
+
+/** Towns (W6): a little roofed house in the holder's colour, and while contested a pulsing ring in the contester's colour with the time left. */
+function drawTowns(g: CanvasRenderingContext2D, d: WarMapData, v: WarMapView) {
+  const mini = v.mini, k = mini ? 1 : 2;
+  for (const i of d.towns!.all()) {
+    const [wx, wy] = townPos(i.town);
+    if (!d.seen(Math.floor(wx / TILE), Math.floor(wy / TILE))) continue;
+    const [x, y] = pxs(v, wx, wy);
+    if (mini && (x < -20 || y < -20 || x > g.canvas.width + 20 || y > g.canvas.height + 20)) continue;
+    g.save(); g.translate(Math.round(x), Math.round(y)); v.upright(g);
+    g.imageSmoothingEnabled = false;
+    if (i.by) { // contested: a ring that breathes
+      const pulse = 0.5 + 0.5 * Math.sin(v.now / 350), r = (mini ? 6 : 10) + pulse * 2;
+      g.strokeStyle = CLAN_COL[i.by]; g.lineWidth = mini ? 1.5 : 2.5; g.globalAlpha = 0.6 + 0.4 * pulse;
+      g.beginPath(); g.arc(0, 0, r, 0, Math.PI * 2); g.stroke(); g.globalAlpha = 1;
+    }
+    const w = 5 * k, h = 4 * k;
+    g.fillStyle = "#1a1008"; g.fillRect(-w / 2 - k, -h / 2 - k, w + 2 * k, h + 2 * k);
+    g.fillStyle = CLAN_COL[i.holder]; g.fillRect(-w / 2, -h / 2, w, h);
+    g.fillStyle = "rgba(0,0,0,0.35)"; g.fillRect(-w / 2, 0, w, h / 2); // the wall under the roof
+    g.fillStyle = "#ffe8a3"; g.fillRect(-k / 2, h / 2 - 2 * k, k, 2 * k); // a door
+    if (!mini && i.by && i.until) {
+      g.font = `13px ${PF}`; g.textAlign = "center"; g.textBaseline = "middle";
+      const text = fmtCountdown(i.until - v.wall), tw = Math.ceil(g.measureText(text).width) + 8;
+      g.fillStyle = "rgba(13,10,7,0.92)"; g.fillRect(-tw / 2, 14, tw, 16);
+      g.strokeStyle = CLAN_COL[i.by]; g.lineWidth = 1; g.strokeRect(-tw / 2 + 0.5, 14.5, tw - 1, 15);
+      g.fillStyle = "#ffe8a3"; g.fillText(text, 0, 23);
+    }
+    g.restore();
+  }
+}
+
+/** The town nearest the pointer within `r` canvas px (seen ones only), by its id. */
+export function townTarget(d: WarMapData, toScreen: (wx: number, wy: number) => [number, number], px: number, py: number, r = 14): string | undefined {
+  let best: string | undefined, bd = r;
+  for (const i of d.towns?.all() ?? []) {
+    const [wx, wy] = townPos(i.town);
+    if (!d.seen(Math.floor(wx / TILE), Math.floor(wy / TILE))) continue;
+    const [x, y] = toScreen(wx, wy), dist = Math.hypot(x - px, y - py);
+    if (dist <= bd) { bd = dist; best = i.town.id; }
+  }
+  return best;
+}
+
+/** Tooltip lines of a town: holder and steward, "-10% for you" for its sworn heroes, a contest with its time left. */
+export function townTip(d: WarMapData, id: string, wall: number): string[] {
+  const i = d.towns?.info(id);
+  if (!i) return [];
+  const out = [`${i.town.name.replace(/^the /, "The ")} · held by ${LABEL[i.holder]}`];
+  const st = d.towns!.stewardOf(id);
+  if (st) out.push(`Steward: ${st}`);
+  if (i.by && i.until) out.push(`Contested by ${LABEL[i.by]}: ${fmtIn(i.until - wall)}`);
+  if (d.towns!.discount(id) && TOWN.live) out.push(`-${Math.round(TOWN.discount * 100)}% for you`);
+  return out;
 }
 
 const PF = '"Pixelify Sans", monospace';
