@@ -7,7 +7,7 @@
  */
 export const TITLES = ["", "Mentor", "Captain's Own", "Warden of Oakvale", "Rumour-Chaser",
   // the clans' capitals (W7): each city's leader names a Banneret of the clan with its title (shared/war/cityText.ts CityText.title)
-  "Hearthsworn"] as const;
+  "Hearthsworn", "Veilsworn", "Bonesworn", "Fangsworn", "Hidesworn"] as const;
 /** Trait bit per id (beast: the hide sewn in at the Hide-Mother's bargain; permanent, Penance keeps it). */
 export const TRAITS = { beast: 0 } as const;
 export type TraitId = keyof typeof TRAITS;

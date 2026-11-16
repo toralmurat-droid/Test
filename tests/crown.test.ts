@@ -1,10 +1,11 @@
 import { test } from "node:test";
+import { CITIES } from "../shared/capitals";
 import { BEAST_CHAIN, CHAINS, CROWN_CHAIN, packQuest } from "../shared/quests";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
   ACT_LEVEL, actMobLevel, actOfTile, actSpecialLevel, BADLANDS_H, BADLANDS_Y0, CITIES_Y0, CROWN_H, CROWN_LEVEL, CROWN_Y0, DESERT_H, DESERT_Y0, MAP_H, MAP_W,
-  MOORS_H, MOORS_Y0, SINKHOLES_H, SINKHOLES_LEVEL, SINKHOLES_Y0, TILE,
+  MOORS_H, MOORS_Y0, SINKHOLES_H, SINKHOLES_LEVEL, SINKHOLES_Y0, TILE, inCitiesBand,
 } from "../shared/constants";
 import { AREAS, EMPTY, GROUND, isSafeZone, isSolidAt, isSolidTile, OBJECTS, randomSpawn, T, TILE_COUNT } from "../shared/map";
 import {
@@ -68,8 +69,8 @@ test("crown: a band of its own under the sinkholes, built the same every time", 
     [OBJECTS, T.SPIRE, "broken spires", SPIRES.length * 3], [OBJECTS, T.BRAZIER, "braziers", 20], [OBJECTS, T.WALL_STONE, "the Keep's walls", 120],
     [OBJECTS, T.RUIN, "broken court walls", 40], [OBJECTS, T.TREE, "trees", 40], [OBJECTS, T.BUSH, "hedges and brush", 200]] as const)
     assert.ok(count(layer as number[][], id) >= min, `${name} in the Crown (${count(layer as number[][], id)})`);
-  // the new tiles stay in the Crown's band
-  for (let y = 0; y < MAP_H; y++) if (!inCrownRow(y)) for (let x = 0; x < MAP_W; x++) {
+  // the new tiles stay in the Crown's band (and the capitals' band)
+  for (let y = 0; y < MAP_H; y++) if (!inCrownRow(y) && !inCitiesBand(y)) for (let x = 0; x < MAP_W; x++) { // the capitals (W7) lay their streets in the lands' own ground tiles
     assert.ok(!NEW_TILES.includes(GROUND[y][x]) && !NEW_TILES.includes(OBJECTS[y][x]), `Crown tile at ${x},${y}`);
   }
   assert.ok(COURTS.length >= 6 && GARDENS.length >= 3);
@@ -152,17 +153,20 @@ test("crown: every homeland's Crownway dais is open ground joined to its land, c
     assert.ok(ay <= B.y1, `${c.name}: the arrival is inside the box`);
   }
   // each homeland band's tiles outside its box, hashed on the map before the Crown was added (Act 1's in
-  // tests/badlands.test.ts). A deliberate change to a homeland's map must update its hash.
+  // tests/badlands.test.ts). A deliberate change to a homeland's map must update its hash. The capitals' city gates
+  // (W7, shared/capitals.ts CITIES outerBox) are masked too: re-hashed with every city box masked on the map before
+  // the four city gates were added (the same hashes before and after: the gates changed only tiles inside their boxes).
   const hash = (y0: number, y1: number, B: TileBox) => {
-    const h = createHash("sha256"), inB = (x: number, y: number) => x >= B.x0 && x <= B.x1 && y >= B.y0 && y <= B.y1;
+    const boxes = [B, ...CITIES.map((c) => c.outerBox)];
+    const h = createHash("sha256"), inB = (x: number, y: number) => boxes.some((b) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1);
     for (let y = y0; y < y1; y++) h.update(GROUND[y].map((g, x) => (inB(x, y) ? -9 : g)).join(",") + "|" + OBJECTS[y].map((o, x) => (inB(x, y) ? -9 : o)).join(",") + "\n");
     return h.digest("hex");
   };
   const box = (from: string) => CROWNWAYS.find((c) => c.from === from)!.box;
-  assert.equal(hash(DESERT_Y0, DESERT_Y0 + DESERT_H, box("sunscar")), "cf06ed1b908ff518c8008beebb90be356a63c7d042900bd5568b7585005d3077", "the Sunscar");
-  assert.equal(hash(MOORS_Y0, MOORS_Y0 + MOORS_H, box("moors")), "6b9d38ddc1d4a8812ead5333fb181d0ee29d2077b33a616409cfde153a7c6179", "the moors");
-  assert.equal(hash(BADLANDS_Y0, BADLANDS_Y0 + BADLANDS_H, box("badlands")), "87d87a882414c81d6ebd845e784c73f21f385397ca763bbcb766dc33a926b9c4", "the badlands");
-  assert.equal(hash(SINKHOLES_Y0, SINKHOLES_Y0 + SINKHOLES_H, box("sinkholes")), "6b461371a4d43dfeb6212584ed495fa5dc09115a48f3d09893985aaffa800a53", "the sinkholes");
+  assert.equal(hash(DESERT_Y0, DESERT_Y0 + DESERT_H, box("sunscar")), "66b7194794105d4114a03969575000bb1c12e208671f7f3d56946e6bb52a4e6e", "the Sunscar");
+  assert.equal(hash(MOORS_Y0, MOORS_Y0 + MOORS_H, box("moors")), "947eb306cfcbab95d332c533b32d042549794dd09ecca06c784a365268b700ac", "the moors");
+  assert.equal(hash(BADLANDS_Y0, BADLANDS_Y0 + BADLANDS_H, box("badlands")), "5f0a854524ec3bb037becbd0a4797b8d6cddd875d8cbbf01a57ccdde331fcb14", "the badlands");
+  assert.equal(hash(SINKHOLES_Y0, SINKHOLES_Y0 + SINKHOLES_H, box("sinkholes")), "fce19433c2f8bd51ea84144b8824c184414f300ccba2055d663535e9c6094a01", "the sinkholes");
 });
 
 test("crown: Lv 40-50 climbing inward from the rim, the Crownways open at Lv 40, no war there yet", () => {

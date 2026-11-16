@@ -42,7 +42,8 @@ export interface GroundData {
    * clan's stone colour (`tints`, one [r, g, b] multiplier per plot; plot = floor((tile x - x0 + 2) / stride)); `rock` marks the solid
    * rock round the plots (black).
    */
-  cities?: { y0: number; x0: number; stride: number; tints: number[][]; rock: Uint8Array };
+  /** The capitals' band: per plot its tint and its homeland's act (the city's ground is painted like that land's). */
+  cities?: { y0: number; x0: number; stride: number; tints: number[][]; acts: number[]; rock: Uint8Array };
 }
 
 // Tile ids (shared/map.ts T)
@@ -702,6 +703,10 @@ export function paintChunk(g: GroundData, f: Fields, sx0: number, sy0: number, c
       CROWN = !!g.crown && wy / tile >= g.crown.y0 - 2 && wy / tile < g.crown.y1;
       CITY = !!g.cities && wy / tile >= g.cities.y0 - 2;
       DESERT = !!g.desert && wy / tile >= g.desert.y0 - 2 && wy / tile < g.desert.y1;
+      if (CITY) { // a capital's ground is its homeland's (Duskveil the desert's, Marrowkeep the moors', ...); Hearthhold Oakvale's
+        const c = g.cities!, act = c.acts[Math.max(0, Math.min(c.acts.length - 1, Math.floor((wx / tile - c.x0 + 2) / c.stride)))];
+        DESERT = act === 2; MOORS = act === 3; BADLANDS = act === 4; SINKHOLES = act === 5; CROWN = false;
+      }
       // wavy borders: warp the lookup point
       const u = wx + (vn(wx / 45, wy / 45, 3) - 0.5) * 18 + (vn(wx / 15, wy / 15, 1) - 0.5) * 10 + (vn(wx / 4, wy / 4, 4) - 0.5) * 4;
       const v = wy + (vn(wx / 45, wy / 45, 5) - 0.5) * 18 + (vn(wx / 15, wy / 15, 2) - 0.5) * 10 + (vn(wx / 4, wy / 4, 6) - 0.5) * 4;
@@ -770,7 +775,7 @@ export function paintChunk(g: GroundData, f: Fields, sx0: number, sy0: number, c
         const ao = field(f.ao, wx / tile - 0.5, wy / tile - 0.5);
         if (ao > 0) { const k = 1 - 0.45 * ao; r *= k; gg *= k; b *= k; }
       }
-      if (CITY) { // a capital: Oakvale's grounds in the clan's stone tint; the rock round the plots is bare black
+      if (CITY) { // a capital: its homeland's grounds in the clan's stone tint; the rock round the plots is bare black
         const c = g.cities!, pl = Math.max(0, Math.min(c.tints.length - 1, Math.floor((wx / tile - c.x0 + 2) / c.stride))), tn = c.tints[pl];
         if (tn) { r *= tn[0]; gg *= tn[1]; b *= tn[2]; }
         const rk = field(f.rock!, wx / tile - 0.5, wy / tile - 0.5) + (vn(wx / 6, wy / 6, 352) - 0.5) * 0.3, k = sstep(0.3, 0.62, rk);

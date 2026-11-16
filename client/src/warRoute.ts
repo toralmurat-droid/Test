@@ -8,6 +8,7 @@
  *  - `findRoute(a, b)`: the shortest way between two territories over borders (walk), gate pairs and, for the stones
  *    the hero has woken, portal stones. The Crown holds no territories yet, so it is one node of its own (`CROWN_NODE`).
  */
+import { cityAt } from "../../shared/capitals";
 import { HOMELAND_GATES } from "../../shared/act2";
 import { inCrownBand, inDeepRow, UNDER_END, WORLD_H } from "../../shared/constants";
 import { CR, CROWN_KEEP, CROWNWAYS, crownGateTile } from "../../shared/crown";
@@ -51,6 +52,8 @@ export interface Here {
 
 /** The territory and land of a map tile (underground: the land only, no node). */
 export function hereAt(tx: number, ty: number): Here {
+  const city = cityAt(tx, ty);
+  if (city) return hereAt(city.outer.x, city.outer.y); // inside a capital: where its city gate stands in its land
   const land = regionOf(tx, ty)?.key ?? (inCrownBand(ty) ? CROWN_LAND : undefined);
   if ((ty >= WORLD_H && ty < UNDER_END) || inDeepRow(ty)) return { land, near: false }; // dungeon floors and caves lie under the lands: no territory to mark
   const hit = TERRITORIES.find((t) => inRect(t, tx, ty));

@@ -1,9 +1,10 @@
 import { test } from "node:test";
+import { CITIES, cityGateDais } from "../shared/capitals";
 import assert from "node:assert/strict";
 import {
-  ACT_LEVEL, actMobLevel, actOfTile, actSpecialLevel, BADLANDS_H, BADLANDS_Y0, CROWN_Y0, MAP_H, MAP_W, SINKHOLES_H, SINKHOLES_LEVEL, SINKHOLES_Y0, TILE, WORLD_H,
+  ACT_LEVEL, actMobLevel, actOfTile, actSpecialLevel, BADLANDS_H, BADLANDS_Y0, CROWN_Y0, MAP_H, MAP_W, SINKHOLES_H, SINKHOLES_LEVEL, SINKHOLES_Y0, TILE, WORLD_H, inCitiesBand,
 } from "../shared/constants";
-import { AREAS, EMPTY, GROUND, isSafeZone, isSolidAt, isSolidTile, OBJECTS, randomSpawn, T, TILE_COUNT } from "../shared/map";
+import { AREAS, EMPTY, GROUND, isSafeZone, isSolidAt, isSolidTile, OBJECTS, randomSpawn, T, TILE_COUNT, NATURE } from "../shared/map";
 import {
   buildSinkholes, CAVE_MOUTHS, GREAT_MAW, HIDEHALL, inSinkholesRow, ROPEWELL, ROPEWELL_SQUARE, SINK_LANDS, SINKGATE, SINKS, SINKWAY_BOX,
   SINKWAY_OAKVALE, SINKWAY_SINKHOLES, SR, WARRENS,
@@ -44,6 +45,7 @@ test("sinkholes: a band of its own under the badlands, built the same every time
   const fresh = () => {
     const g = Array.from({ length: MAP_H }, () => Array<number>(MAP_W).fill(T.DIRT)), o = Array.from({ length: MAP_H }, () => Array<number>(MAP_W).fill(T.ROCK));
     const r = buildSinkholes(T, g, o, EMPTY);
+    for (const c of CITIES) if (c.act === 5) cityGateDais(c, T, g, o, EMPTY, (t) => NATURE.has(t)); // the capital's city gate (W7), cut in after the land
     return { g: g.slice(S0, S1), o: o.slice(S0, S1), areas: r.areas, roads: [...r.roads], posts: r.posts };
   };
   const a = fresh(), b = fresh();
@@ -62,8 +64,8 @@ test("sinkholes: a band of its own under the badlands, built the same every time
   assert.equal(OBJECTS[SR(GREAT_MAW.y)][GREAT_MAW.x + GREAT_MAW.rx - 3], T.PIT);
   for (const s of SINKS) assert.ok(s.flooded ? GROUND[SR(s.y)][s.x] === T.WATER : OBJECTS[SR(s.y)][s.x] === T.PIT, `sink at ${s.x},${s.y}`);
   for (const c of CAVE_MOUTHS) for (let i = -1; i <= 1; i++) assert.equal(OBJECTS[SR(c.y)][c.x + i], T.CAVE, `cave mouth at ${c.x},${c.y}`);
-  // the new tiles stay in the sinkholes band
-  for (let y = 0; y < MAP_H; y++) if (!inSinkholesRow(y)) for (let x = 0; x < MAP_W; x++) {
+  // the new tiles stay in the sinkholes band (and the capitals' band)
+  for (let y = 0; y < MAP_H; y++) if (!inSinkholesRow(y) && !inCitiesBand(y)) for (let x = 0; x < MAP_W; x++) { // the capitals (W7) lay their streets in the lands' own ground tiles
     assert.ok(!NEW_TILES.includes(GROUND[y][x]) && !NEW_TILES.includes(OBJECTS[y][x]), `sinkholes tile at ${x},${y}`);
   }
   // its own name, not the Act 1 hole down to the Warrens
