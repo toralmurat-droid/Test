@@ -6,7 +6,7 @@ import { CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import { atWar } from "../shared/war/feuds";
 import { newMinds } from "../shared/war/doctrine";
 import { garrisonSpots, patrolOf, TROOP } from "../shared/war/patrols";
-import { newWar } from "../shared/war/rules";
+import { newWar, targetsOf } from "../shared/war/rules";
 import { TERRITORIES } from "../shared/war/territories";
 import { parseTroop, WAR_TROOPS } from "../shared/war/troops";
 import { SAFE_ZONE } from "../shared/map";
@@ -158,22 +158,24 @@ test("war troops (room): a trooper kill gives no XP or loot, valor is capped; th
   freshWar();
   try {
     const { room, id, p } = await setup(srv);
-    const s = warState()!, owner = s.owner[LAND.id] as ClanKey, foe = CLAN_KEYS.find((k) => k !== owner && atWar(k, owner))!;
+    const s = warState()!, owner = s.owner[LAND.id] as ClanKey, foe = CLAN_KEYS.find((k) => k !== owner && atWar(k, owner) && targetsOf(s, k).includes(LAND.id))!; // (kill valor only where the war lets the clan fight)
     p.clan = foe; p.renown = 0;
     p.x = (LAND.x + LAND.w / 2) * TILE; p.y = (LAND.y + LAND.h / 2) * TILE; // inside the land
     const xp0 = p.xp, gold0 = p.gold, lvl0 = p.level;
     const n0 = landTroops(room).length;
     let items0 = 0; room.state.items.forEach(() => items0++);
-    for (let i = 0; i < WAR_TROOPS.killValorPerTick + 2; i++) {
+    let pts = 0;
+    for (let i = 0; pts < WAR_TROOPS.killValorPerTick + 2; i++) {
       const [tid, m] = landTroops(room).find(([, x]) => !x.dead)!;
       m.hp = 1;
+      pts += parseTroop(m.weapon)!.officer ? WAR_TROOPS.killPts.officer : WAR_TROOPS.killPts.soldier;
       room.hitTarget(id, tid, 10, [0, 0], {});
       assert.ok(m.dead, `kill ${i}`);
     }
     let items = 0; room.state.items.forEach(() => items++);
     assert.equal(p.xp, xp0); assert.equal(p.level, lvl0); assert.equal(p.gold, gold0);
     assert.equal(items, items0, "no loot");
-    assert.equal(p.renown, WAR_TROOPS.killValorPerTick * WAR_TROOPS.killValor, "valor capped per war tick (renown follows it)");
+    assert.equal(p.renown, WAR_TROOPS.killValorPerTick, "valor capped per war tick (renown follows it)");
     // the fallen come back at the Hold gate
     WAR_TROOPS.respawnMs = 200;
     await wait(350);
@@ -186,4 +188,67 @@ test("war troops (room): a trooper kill gives no XP or loot, valor is capped; th
     assert.equal(after.length, n0);
     assert.ok(after.every(([, m]) => parseTroop(m.weapon)?.clan === foe), "new holder's men");
   } finally { WAR_TROOPS.respawnMs = respawn; await srv.stop(); }
+});
+
+test("war troops (room, W2c): any soldier of a clan at war pays kill valor (officer 2), an enemy sworn hero 3 once per war tick; never a party mate; a creature kills in its owner's name", async () => {
+  const srv = await startRoom();
+  freshWar();
+  try {
+    const { room, id, p } = await setup(srv);
+    const s = warState()!, owner = s.owner[LAND.id] as ClanKey, foe = CLAN_KEYS.find((k) => k !== owner && atWar(k, owner) && targetsOf(s, k).includes(LAND.id))!; // (kill valor only where the war lets the clan fight)
+    p.clan = foe; p.renown = 0;
+    p.x = (LAND.x + LAND.w / 2) * TILE; p.y = (LAND.y + LAND.h / 2) * TILE;
+    const { _valorOf } = await import("../server/war");
+    const v0 = _valorOf(LAND.id, foe);
+    // a trooper that is no patrol's (a siege's, an escort's, a manhunter's...): the room pays its kill valor
+    const lone = (officer: boolean) => {
+      const mid = `test${Math.random()}`;
+      room.spawnMob("trooper", -1, mid, { x: p.x + 20, y: p.y, level: 20 });
+      const m = room.state.mobs.get(mid); m.weapon = officer ? `${owner}*` : owner;
+      room.mobDied(m, mid, id, p.name);
+    };
+    lone(false);
+    assert.equal(p.renown, WAR_TROOPS.killPts.soldier);
+    lone(true);
+    assert.equal(p.renown, WAR_TROOPS.killPts.soldier + WAR_TROOPS.killPts.officer, "an officer counts double");
+    assert.equal(_valorOf(LAND.id, foe) - v0, WAR_TROOPS.killPts.soldier + WAR_TROOPS.killPts.officer, "valor in the land the killer stands in");
+    // a hero's creature fells a lone trooper and a patrol guard: valor and renown in its owner's name
+    const sid = `pet${Math.random()}`;
+    room.spawnMob("skeleton", -1, sid, { x: p.x + 30, y: p.y, level: 20 }); room.state.mobs.get(sid).owner = id;
+    const rc = p.renown, mid = `test${Math.random()}`;
+    room.spawnMob("trooper", -1, mid, { x: p.x + 20, y: p.y, level: 20 });
+    const lm = room.state.mobs.get(mid); lm.weapon = owner;
+    room.mobDied(lm, mid, sid, "Skeleton");
+    assert.equal(p.renown - rc, WAR_TROOPS.killPts.soldier, "a creature's kill of a lone trooper pays its owner");
+    room.warTroops.tick(Date.now());
+    const [gid, gm] = guardOf(room);
+    const rg = p.renown;
+    gm.hp = 0; room.mobDied(gm, gid, sid, "Skeleton");
+    assert.ok(p.renown - rg > 0, "and of a patrol guard");
+    // an enemy sworn hero
+    const c2 = await srv.join({ cls: "wizard" });
+    await wait(150);
+    const q = room.state.players.get(c2.sessionId);
+    q.level = 30; q.clan = owner; q.invulnUntil = 0; q.x = p.x + 10; q.y = p.y;
+    const r0 = p.renown;
+    room.damagePlayer(c2.sessionId, 1e9, p.name, [0, 0], 0, { from: id });
+    assert.ok(q.dead, "the enemy hero fell");
+    assert.equal(p.renown - r0, WAR_TROOPS.killPts.hero, "an enemy sworn hero is worth 3");
+    // the same victim again in the same war tick: nothing (no farming a friend's respawns)
+    q.dead = false; q.hp = q.maxHp; q.invulnUntil = 0;
+    room.damagePlayer(c2.sessionId, 1e9, p.name, [0, 0], 0, { from: id });
+    assert.ok(q.dead);
+    assert.equal(p.renown - r0, WAR_TROOPS.killPts.hero, "once per victim per killer per war tick");
+    warState()!.tick++; // the next war tick: they are worth it again
+    q.dead = false; q.hp = q.maxHp; q.invulnUntil = 0;
+    room.damagePlayer(c2.sessionId, 1e9, p.name, [0, 0], 0, { from: id });
+    assert.equal(p.renown - r0, 2 * WAR_TROOPS.killPts.hero, "a new war tick, a new payout");
+    // a party mate: nothing (no farming with alts)
+    q.dead = false; q.hp = q.maxHp; q.invulnUntil = 0; p.party = q.party = "pt-test";
+    const r1 = p.renown;
+    room.damagePlayer(c2.sessionId, 1e9, p.name, [0, 0], 0, { from: id });
+    assert.ok(q.dead);
+    assert.equal(p.renown, r1, "a party mate pays nothing");
+    await c2.leave();
+  } finally { await srv.stop(); }
 });

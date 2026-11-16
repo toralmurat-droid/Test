@@ -10,7 +10,7 @@ import { newWar } from "../shared/war/rules";
 import { STANDARD, STANDARDS } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
 import { WAR_TROOPS } from "../shared/war/troops";
-import { writDay, writOffers, writPay, WRIT, type WritKind, type WritState } from "../shared/war/writs";
+import { cleanWrit, writDay, writOffers, writPay, WRIT, type WritKind, type WritState } from "../shared/war/writs";
 import { SAFE_ZONE } from "../shared/map";
 import { _resetWar, step, warState } from "../server/war";
 import { SWEAR_FIRST } from "../server/warWrits";
@@ -130,7 +130,7 @@ test("war writs (room): rout counts rival troopers killed by the hero standing i
   } finally { await srv.stop(); }
 });
 
-test("war writs (room): hold counts full minutes at a standard of the land", async () => {
+test("war writs (room): an old hold writ (no longer offered since W2c) still loads and counts full minutes at a standard of the land", async () => {
   const srv = await startRoom();
   freshWar();
   try {
@@ -138,8 +138,9 @@ test("war writs (room): hold counts full minutes at a standard of the land", asy
     const owner = warState()!.owner[LAND.id] as ClanKey;
     p.level = 30; p.clan = owner;
     const std = STANDARDS.find((s) => s.t === LAND.id)!;
-    p.writ = writOf("hold", owner, owner, 2);
-    p.x = std.x; p.y = std.y; p.lastAct = Date.now() + 60_000;
+    p.writ = cleanWrit(JSON.parse(JSON.stringify(writOf("hold", owner, owner, 2))), owner); // (as a save brings it back)
+    assert.equal(p.writ?.kind, "hold", "a saved hold writ still loads");
+    p.x = std.x; p.y = std.y; p.lastAct = Date.now(); // (an idle hero counts no minutes)
     room.warPresence.secs.set(id, { std: std.id, n: 58 }); // the room's tick (once a second) finishes the minute
     assert.ok(await until(() => p.writ?.n === 1, 4000), "a minute at the standard");
     const other = STANDARDS.find((s) => s.t !== LAND.id)!;

@@ -197,14 +197,15 @@ test("feuds (room): a sworn killer claims the bounty on a Wanted hero once per U
     room.damagePlayer(V.id, 1e9, K.p.name, [0, 0], 0, { from: K.id });
     assert.equal(wantedTier(V.p.feud, owner, Date.now()), 0, "settled");
     assert.equal(V.p.feud[owner].paid, utcDay(Date.now()));
-    assert.equal(K.p.renown, FEUD.bounty.renown, "bounty renown");
-    assert.equal(_valorOf(LAND.id, owner), FEUD.bounty.valor, "bounty valor for the clan where the hero fell");
+    const kv = atWar(owner, other) ? WAR_TROOPS.killPts.hero : 0; // (W2c: an enemy sworn hero is worth kill valor on top, where the clans are at war)
+    assert.equal(K.p.renown, FEUD.bounty.renown + kv, "bounty renown");
+    assert.equal(_valorOf(LAND.id, owner), FEUD.bounty.valor + kv, "bounty valor for the clan where the hero fell");
     assert.ok(sent.some(([t, v]) => t === "sfx" && v.ev === "bounty_claimed" && v.id === K.id));
     assert.equal(K.p.feud[other]?.pts, snapPts(killPoints("hero", owner, other)), "killing a hero sworn to another clan: points with it (a third if at war)");
     // again the same day: no second bounty
     revive(); wanted();
     room.damagePlayer(V.id, 1e9, K.p.name, [0, 0], 0, { from: K.id });
-    assert.equal(K.p.renown, FEUD.bounty.renown, "once per target per day");
+    assert.equal(K.p.renown, FEUD.bounty.renown + kv, "once per target per day (and kill valor once per victim per war tick)");
     assert.equal(wantedTier(V.p.feud, owner, Date.now()), 0, "still settled");
     // a javelin of the clan settles it too (no bounty: no hero killed them)
     revive(); wanted();

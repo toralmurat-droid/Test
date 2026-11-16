@@ -1,6 +1,7 @@
 /**
  * War writs (roadmap M2): clan work on the bounty boards, apart from the hunts (a hero holds one bounty and one writ).
- * Five kinds: `rout` the soldiers of a rival land the clan can attack, `hold` a standard on a front for full minutes,
+ * Five kinds: `rout` the soldiers of a rival land the clan can attack, `hold` a standard on a front for full minutes (no
+ * longer offered since W2c; an old one still completes),
  * `clear` the wild monsters out of the clan's own land, `escort` one of the clan's caravans to its end, `raid` a rival
  * clan's supply cart on a road that touches land the clan can push into (shared/war/caravans.ts). Offers come from the war state, so they follow the front:
  * sieges the clan is in first, then the lands under the most pressure. Writs pay gold, renown and valor, never XP.
@@ -44,6 +45,9 @@ export const WRIT = {
 
 export type WritKind = "rout" | "hold" | "clear" | "escort" | "raid";
 export const WRIT_KINDS: WritKind[] = ["rout", "hold", "clear", "escort", "raid"];
+/** The kinds the boards offer: not `hold` since W2c (standing at a standard pays nothing now). A `hold` writ in a save
+ * still loads and completes (server/warWrits.ts standardMinute). */
+export const OFFER_KINDS: WritKind[] = WRIT_KINDS.filter((k) => k !== "hold");
 /** The kinds tied to one caravan line (they carry `road`). */
 export const isRoadKind = (k: WritKind) => k === "escort" || k === "raid";
 
@@ -144,9 +148,9 @@ export function writOffers(s: WarState, clan: ClanKey, level: number, act: numbe
   // each kind's candidates: a land, and for escort / raid the caravan line too
   type Cand = { t: number; line?: CaravanLine };
   const carts = CARAVAN.live && WAR_TROOPS.live; // no carts on the roads: no escort or raid writs
-  const pool = Object.fromEntries(WRIT_KINDS.map((k) => [k, (isRoadKind(k) ? (carts ? writLines(s, clan, k) : []) : writLands(s, clan, k).map((t): Cand => ({ t })))
+  const pool = Object.fromEntries(OFFER_KINDS.map((k) => [k, (isRoadKind(k) ? (carts ? writLines(s, clan, k) : []) : writLands(s, clan, k).map((t): Cand => ({ t })))
     .filter((c) => fits(c.t)).sort((a, b) => rank(b.t) - rank(a.t) || a.t - b.t || (a.line ? a.line.a - b.line!.a || a.line.b - b.line!.b : 0))])) as Record<WritKind, Cand[]>;
-  const start = Math.floor(r() * WRIT_KINDS.length), order = WRIT_KINDS.map((_, i) => WRIT_KINDS[(start + i) % WRIT_KINDS.length]);
+  const start = Math.floor(r() * OFFER_KINDS.length), order = OFFER_KINDS.map((_, i) => OFFER_KINDS[(start + i) % OFFER_KINDS.length]);
   const n = order.length, used = new Set<number>(), lines = new Set<string>(), out: Writ[] = [];
   const hasRoad = (c: Cand) => !c.line || !!caravanRoute(c.line.a, c.line.b); // a line with no road never runs a cart
   for (let i = 0; i < WRIT.offers; i++) {

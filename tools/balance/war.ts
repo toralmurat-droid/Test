@@ -1,11 +1,15 @@
 /**
  * War sim: plays the clan war (shared/war/) headless with the scripted leaders, no players, and checks the design goal
  * (Murat 2026-11-13): left alone, the clans mostly cancel each other out; a clever plan wins some land but can't take over.
- * Run: npx tsx tools/balance/war.ts [runs=200] [days=30] [--clever=host] [--zeal=redfang[:30]] [--old-brakes] [--seed=1] [--verbose]
+ * Run: npx tsx tools/balance/war.ts [runs=200] [days=30] [--clever=host] [--zeal=redfang[:30]] [--sack=redfang[:6]] [--old-brakes] [--seed=1] [--verbose]
  *
  * `--zeal=<clan|all>[:valor]`: sworn heroes push for that clan (or for every clan alike) with this much valor a tick at
  * its main target, to see the brakes (Night Raiders, Rally) hold a clan its players carry. The design goal is checked
  * without players; a zeal run only reports.
+ *
+ * `--sack=<clan|all>[:perDay]`: that clan's heroes (or every clan's alike) sack perDay Holds a war day (W2b, spread
+ * evenly over the day) at its main target when the war lets it attack there and no siege is announced: rules.ts sackHold
+ * (Control, maybe a siege) and HOLD_SACK.sackValor valor that tick, as the live game does. Reports only, like zeal.
  *
  * Reports per clan the average and worst share of the land, how often any clan held more than WAR.leaderShare for over
  * three war days in a row (after a 7-day settling period), how many territories change hands per day, and the
@@ -14,7 +18,8 @@
  */
 import { CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
 import { newMinds, scriptedOrders } from "../../shared/war/doctrine";
-import { landOf, newWar, nightRaid, phaseOf, rallyClan, WAR, warTick, type TickExtra } from "../../shared/war/rules";
+import { landOf, newWar, nightRaid, phaseOf, rallyClan, sackHold, targetsOf, WAR, warTick, type TickExtra } from "../../shared/war/rules";
+import { HOLD_SACK } from "../../shared/war/holdSack";
 import { TERRITORIES } from "../../shared/war/territories";
 
 const args = process.argv.slice(2);
@@ -28,6 +33,10 @@ const [zealWho, zealV] = (flag("zeal") ?? "").split(":");
 const ZEAL: ClanKey[] = zealWho === "all" ? [...CLAN_KEYS] : CLAN_KEYS.includes(zealWho as ClanKey) ? [zealWho as ClanKey] : [];
 if (zealWho && !ZEAL.length) { console.error(`--zeal must be all or one of: ${CLAN_KEYS.join(", ")}`); process.exit(2); }
 const ZEAL_V = Number(zealV || 30);
+const [sackWho, sackN] = (flag("sack") ?? "").split(":");
+const SACK: ClanKey[] = sackWho === "all" ? [...CLAN_KEYS] : CLAN_KEYS.includes(sackWho as ClanKey) ? [sackWho as ClanKey] : [];
+if (sackWho && !SACK.length) { console.error(`--sack must be all or one of: ${CLAN_KEYS.join(", ")}`); process.exit(2); }
+const SACK_PER_DAY = Number(sackN || 6);
 // --old-brakes: the brakes as they were before the Raiders' hunt and the Rally (2026-11-15): the Raiders only bled a clan
 // over WAR.leaderShare, no strikes on its lands, no Rally on valor. For before/after comparisons.
 if (args.includes("--old-brakes")) Object.assign(WAR, { huntShare: 2, huntLands: 0, rallyValor: 1 });
@@ -42,6 +51,8 @@ interface Result {
   avg: Record<ClanKey, number>; worst: Record<ClanKey, number>; dominated: number; flips: number;
   /** Share of night ticks the Night Raiders rode against a clan; share of all ticks the war rallied for each clan. */
   hunts: number; hunted: Record<ClanKey, number>; rally: Record<ClanKey, number>;
+  /** Sacks per war day that landed (legal target, no siege), and the sieges they called. */
+  sacks: number; sackSieges: number;
 }
 
 /** Plays RUNS wars of DAYS days (same seeds for every call, so a run with and without the ruse can be compared). */
@@ -50,7 +61,7 @@ function play(clever?: ClanKey): Result {
   const worst = Object.fromEntries(CLAN_KEYS.map((k) => [k, 0])) as Record<ClanKey, number>;
   const hunted = Object.fromEntries(CLAN_KEYS.map((k) => [k, 0])) as Record<ClanKey, number>;
   const rally = Object.fromEntries(CLAN_KEYS.map((k) => [k, 0])) as Record<ClanKey, number>;
-  let samples = 0, dominatedRuns = 0, flips = 0, nights = 0, hunts = 0, ticks = 0;
+  let samples = 0, dominatedRuns = 0, flips = 0, nights = 0, hunts = 0, ticks = 0, sacks = 0, sackSieges = 0;
   for (let r = 0; r < RUNS; r++) {
     const rnd = mulberry(SEED * 7919 + r), s = newWar(), minds = newMinds();
     let streak = 0, dominated = false, prev = s.owner.slice();
@@ -60,6 +71,16 @@ function play(clever?: ClanKey): Result {
         if (ZEAL.length) {
           extra.valor = TERRITORIES.map(() => ({}));
           for (const k of ZEAL) { const t = orders[k].attack[0]?.t; if (t !== undefined) extra.valor[t][k] = ZEAL_V; }
+        }
+        const due = SACK.length ? Math.floor(((i + 1) * SACK_PER_DAY) / WAR.ticksPerDay) - Math.floor((i * SACK_PER_DAY) / WAR.ticksPerDay) : 0;
+        for (let n = 0; n < due; n++) for (const k of SACK) { // heroes sack the Hold of the clan's main target
+          const t = orders[k].attack[0]?.t;
+          if (t === undefined || !targetsOf(s, k).includes(t)) continue;
+          const r = sackHold(s, t, k, false);
+          if (!r) continue;
+          sacks++; if (r.siege) sackSieges++;
+          extra.valor ??= TERRITORIES.map(() => ({}));
+          extra.valor[t][k] = (extra.valor[t][k] ?? 0) + HOLD_SACK.sackValor;
         }
         if (d >= SETTLE_DAYS) {
           ticks++;
@@ -82,22 +103,23 @@ function play(clever?: ClanKey): Result {
   }
   for (const k of CLAN_KEYS) avg[k] /= Math.max(1, samples);
   for (const k of CLAN_KEYS) { hunted[k] /= Math.max(1, nights); rally[k] /= Math.max(1, ticks); }
-  return { avg, worst, dominated: dominatedRuns / RUNS, flips: flips / (RUNS * DAYS), hunts: hunts / Math.max(1, nights), hunted, rally };
+  return { avg, worst, dominated: dominatedRuns / RUNS, flips: flips / (RUNS * DAYS), hunts: hunts / Math.max(1, nights), hunted, rally, sacks: sacks / (RUNS * DAYS), sackSieges: sackSieges / (RUNS * DAYS) };
 }
 
 const t0 = Date.now();
 const base = play(), ruse = CLEVER ? play(CLEVER) : undefined;
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
-const who = ZEAL.length ? `heroes pushing ${zealWho} (${ZEAL_V} valor a tick)` : "no players";
+const who = [ZEAL.length ? `heroes pushing ${zealWho} (${ZEAL_V} valor a tick)` : "", SACK.length ? `heroes sacking for ${sackWho} (${SACK_PER_DAY} Holds a day each)` : ""].filter(Boolean).join(", ") || "no players";
 console.log(`War sim: ${RUNS} runs x ${DAYS} war days, ${N} territories, scripted leaders, ${who} (${((Date.now() - t0) / 1000).toFixed(1)} s)`);
 console.log("clan       avg land   most land (any day after settling)   hunted (night ticks)   rallied (ticks)");
 for (const k of CLAN_KEYS) console.log(`${k.padEnd(10)} ${pct(base.avg[k]).padStart(7)}   ${pct(base.worst[k]).padStart(7)}                              ${pct(base.hunted[k]).padStart(6)}               ${pct(base.rally[k]).padStart(6)}`);
 console.log(`Night Raiders rode against a clan on ${pct(base.hunts)} of night ticks`);
 console.log(`territories changing hands: ${base.flips.toFixed(2)} per war day`);
+if (SACK.length) console.log(`Holds sacked: ${base.sacks.toFixed(2)} per war day, calling ${base.sackSieges.toFixed(2)} sieges`);
 console.log(`runs where one clan held > ${pct(WAR.leaderShare)} for over ${STREAK_DAYS} days in a row: ${pct(base.dominated)} (goal: under 5%)`);
 if (ruse && CLEVER) {
   console.log(`with the ${CLEVER} ruse (feint by day, push at night): ${CLEVER} averages ${pct(ruse.avg[CLEVER])} of the land vs ${pct(base.avg[CLEVER])} without; domination ${pct(ruse.dominated)}`);
   console.log(`  goal: the ruse pays (more land) but no clan dominates (under 5%)`);
 }
-const fail = !ZEAL.length && (base.dominated >= 0.05 || (ruse && ruse.dominated >= 0.05));
+const fail = !ZEAL.length && !SACK.length && (base.dominated >= 0.05 || (ruse && ruse.dominated >= 0.05));
 if (fail) { console.log("GOAL FAILED: the war does not hold itself in check"); process.exitCode = 1; }

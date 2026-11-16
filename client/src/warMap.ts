@@ -38,7 +38,7 @@ export function fmtIn(ms: number): string {
 }
 
 /** The tooltip lines of territory t's Hold (or of a siege seen under fog when `held` is false: only the land and the siege). */
-export function holdTip(v: WarView, t: number, wall: number, held = true): string[] {
+export function holdTip(v: WarView, t: number, wall: number, held = true, sackedBy?: number): string[] {
   const i = holdIntel(v, t), out: string[] = [];
   const land = TERRITORIES[t]?.name ?? "";
   if (held && i.clan) {
@@ -47,6 +47,7 @@ export function holdTip(v: WarView, t: number, wall: number, held = true): strin
     if (i.guards || i.patrol) out.push(`${i.guards} guards, ${i.patrol} on patrol`);
   } else out.push(land);
   if (i.siege) out.push(`Siege by ${LABEL[i.siege[0]]} in ${fmtIn(i.siege[1] - wall)}`);
+  if (held && sackedBy !== undefined) { const k = CLAN_KEYS[sackedBy]; out.push(`Sacked${k ? ` by ${LABEL[k]}` : ""}: guards down until the next war tick`); } // (W2b, client/src/warSack.ts)
   return out;
 }
 
@@ -177,6 +178,8 @@ export interface WarMapData {
   plan?: WarPlan;
   writ?: { t: number; kind: WritKind; clan?: ClanKey } | null;
   tunnels?: MouthView[];
+  /** Holds sacked this war tick: territory -> the sacker's clan index, -1 unsworn (the "holds" message, client/src/warSack.ts). */
+  sacked?: ReadonlyMap<number, number>;
   /** Is this tile uncovered in the hero's fog? */
   seen(tx: number, ty: number): boolean;
 }
@@ -287,6 +290,14 @@ export function drawWarWorld(g: CanvasRenderingContext2D, d: WarMapData, v: WarM
     g.imageSmoothingEnabled = false;
     g.drawImage(ic, -Math.floor((11 * k) / 2), -Math.floor((9 * k) / 2), 11 * k, 9 * k);
     if (!mini && ci >= 0 && war.owner[h.t] === ci) { g.fillStyle = GOLD; g.fillRect(-2, 10, 4, 3); } // a pip under the own clan's Holds
+    const by = d.sacked?.get(h.t);
+    if (by !== undefined) { // sacked this war tick: the sacker's little flag on a pole at the icon's top right
+      const sk = CLAN_KEYS[by], px = Math.floor((11 * k) / 2) - k, py = -Math.floor((9 * k) / 2) - 5 * k;
+      g.fillStyle = "#1a1008"; g.fillRect(px - k, py - k, k * 3, 9 * k);
+      g.fillStyle = "#c8a040"; g.fillRect(px, py, k, 8 * k);
+      g.fillStyle = "#1a1008"; g.fillRect(px + k, py - k, 6 * k, 5 * k);
+      g.fillStyle = sk ? CLAN_COL[sk] : "#8a847c"; g.fillRect(px + k, py, 5 * k, 3 * k);
+    }
     g.restore();
   }
   g.restore();

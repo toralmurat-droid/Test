@@ -1,5 +1,5 @@
 /* Trading and the stash (client/src/trade.ts). Pixel font like all on-screen text. */
-#tradepanel, #stashpanel, #tradeask, #tradetoast, #stashprompt, #tradepanel button, #stashpanel button, #tradeask button, #bountypanel, #warpanel, #boardprompt, #warprompt, #bountypanel button , #warpanel button {
+#tradepanel, #stashpanel, #tradeask, #tradetoast, #stashprompt, #tradepanel button, #stashpanel button, #tradeask button, #bountypanel, #warpanel, #boardprompt, #warprompt, #sackprompt, #bountypanel button , #warpanel button {
   font-family: var(--pixel-font); -webkit-font-smoothing: none; -moz-osx-font-smoothing: grayscale; }
 #tradepanel, #stashpanel, #bountypanel , #warpanel { position: absolute; left: 50%; top: calc(50% - 30px); transform: translate(-50%, -50%); width: min(460px, calc(100% - 32px));
   max-height: calc(100% - 110px); overflow: auto; background: rgba(28,22,18,.97); border: 3px solid #6b5a3a; box-shadow: 0 0 0 2px #1a1210, 4px 4px 0 #000;
@@ -37,10 +37,10 @@
   opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 11; white-space: nowrap; }
 #tradetoast.ok { color: #b9ff8a; }
 #tradetoast.show { opacity: 1; }
-#stashprompt, #boardprompt , #warprompt { display: none; padding: 6px 12px; pointer-events: auto; cursor: pointer;
+#stashprompt, #boardprompt , #warprompt, #sackprompt { display: none; padding: 6px 12px; pointer-events: auto; cursor: pointer;
   background: rgba(32,22,8,.88); border: 2px solid #c9962b; border-radius: 4px; color: #fff3cf; font: 18px var(--pixel-font); white-space: nowrap; }
-#stashprompt.open, #boardprompt.open , #warprompt.open { display: block; }
-#stashprompt kbd, #boardprompt kbd , #warprompt kbd { display: inline-block; padding: 0 5px; margin-right: 4px; border: 1px solid #e9c35a; border-radius: 3px; background: #4a3410; color: #fff; font: 18px var(--pixel-font); }
+#stashprompt.open, #boardprompt.open , #warprompt.open, #sackprompt.open { display: block; }
+#stashprompt kbd, #boardprompt kbd , #warprompt kbd, #sackprompt kbd { display: inline-block; padding: 0 5px; margin-right: 4px; border: 1px solid #e9c35a; border-radius: 3px; background: #4a3410; color: #fff; font: 18px var(--pixel-font); }
 
 /* Bounty boards (client/src/bounty.ts) */
 #bountypanel , #warpanel { width: min(440px, calc(100% - 32px)); }

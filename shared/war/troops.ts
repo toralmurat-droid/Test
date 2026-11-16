@@ -30,10 +30,12 @@ export const WAR_TROOPS = {
   mobMarginTiles: 2,
   /** No trooper chases anything farther than this past its land's rect (tiles). */
   leashTiles: 6,
-  /** Valor a sworn hero earns for their clan by felling a trooper of another clan in its land... */
-  killValor: 1,
+  /** Valor (and as much renown) a sworn hero earns for their clan by felling a soldier of a clan at war with theirs, in
+   * the land they stand in: a soldier, an officer, a hero sworn to that clan (W2c: valor comes from fighting, not from
+   * standing at a standard; carts, rams and tunnel mouths pay through their own rules)... */
+  killPts: { soldier: 1, officer: 2, hero: 3 },
   /** ...at most this much per hero per war tick (WAR.tickMs). */
-  killValorPerTick: 5,
+  killValorPerTick: 12,
   /** How often a trooper looks for a target (ms). */
   pickMs: 400,
   /** Score bonuses when picking a foe: an enemy hero comes first, then a trooper of another clan, then wild monsters. */

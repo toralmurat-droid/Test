@@ -6,6 +6,7 @@ import { CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import { newMinds } from "../shared/war/doctrine";
 import { RITUAL, ritualSite, ritualSpot, ritualTime } from "../shared/war/rituals";
 import { newWar, targetsOf } from "../shared/war/rules";
+import { atWar } from "../shared/war/feuds";
 import { STANDARD } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
 import { WAR_TROOPS } from "../shared/war/troops";
@@ -177,8 +178,9 @@ test("rituals (room): killing the three acolytes breaks it, with renown and lega
     kill(a[2]);
     assert.equal(r().state, "broken");
     assert.equal(p.xp, xp0, "no XP");
-    assert.equal(p.renown, RITUAL.disruptRenown, "renown for the disruptor");
-    assert.equal(_valorOf(LAND.id, FOE), RITUAL.disruptValor, "valor for the disruptor's clan");
+    const kv = atWar(FOE, V) ? 3 * WAR_TROOPS.killPts.soldier : 0; // (W2c: each acolyte is a soldier of a clan at war: kill valor)
+    assert.equal(p.renown, RITUAL.disruptRenown + kv, "renown for the disruptor");
+    assert.equal(_valorOf(LAND.id, FOE), RITUAL.disruptValor + kv, "valor for the disruptor's clan");
     assert.equal(_valorOf(LAND.id, V), 0);
     assert.ok(sent.some(([t, v]) => t === "sfx" && v.ev === "ritual_broken" && v.x === SPOT.x));
     assert.ok(sent.some(([t, v]) => t === "chat" && v.name === "Herald" && /broke a ritual/.test(v.text) && v.text.includes(LAND.name)));
@@ -242,7 +244,8 @@ test("rituals (room): a summon's kill of the last acolyte counts for its hero", 
     const lastId = r().slots.find((s: any) => s.id).id;
     room.rituals.killed(a[2], lastId, sid);
     assert.equal(r().state, "broken");
-    assert.equal(p.renown, RITUAL.disruptRenown, "renown for the summoner");
-    assert.equal(_valorOf(LAND.id, FOE), RITUAL.disruptValor, "valor for the summoner's clan");
+    const kv = atWar(FOE, V) ? 2 * WAR_TROOPS.killPts.soldier : 0; // (the hero's own two kills pay kill valor; the summon's last blow goes straight to the ritual)
+    assert.equal(p.renown, RITUAL.disruptRenown + kv, "renown for the summoner");
+    assert.equal(_valorOf(LAND.id, FOE), RITUAL.disruptValor + kv, "valor for the summoner's clan");
   } finally { restore(); await srv.stop(); }
 });

@@ -13,7 +13,7 @@ button > .pxi:only-child { margin: 0; }
 
 /* ---------- Shared frame ---------- */
 body #hero, body #tree, body #gear, body #slotpick, body #npcdialog, body #questlog, body #portalmenu, body #ferrymenu,
-body #tradepanel, body #stashpanel, body #tradeask, body #shrineprompt, body #portalprompt, body #gateprompt, body #ferryprompt, body #stashprompt, body #bountypanel, body #warpanel, body #boardprompt , body #warprompt {
+body #tradepanel, body #stashpanel, body #tradeask, body #shrineprompt, body #portalprompt, body #gateprompt, body #ferryprompt, body #stashprompt, body #bountypanel, body #warpanel, body #boardprompt , body #warprompt, body #sackprompt {
   border: 18px solid transparent; border-image: var(--wf-bronze) 9 fill / 18px / 0 repeat; image-rendering: pixelated;
   background: none; border-radius: 0; box-shadow: none; color: #eadfc8; text-shadow: 2px 2px #050302;
   font-family: var(--pixel-font); -webkit-font-smoothing: none; -moz-osx-font-smoothing: grayscale; }
@@ -21,8 +21,8 @@ body #hero, body #tree, body #gear, body #questlog, body #portalmenu, body #ferr
 body #npcdialog { padding: 2px 8px 4px; font-size: 18px; font-family: var(--pixel-font); }
 body #slotpick { padding: 0 4px 2px; width: 270px; }
 body #tradeask { border-image-source: var(--wf-gold); padding: 0 8px 2px; }
-body #shrineprompt, body #portalprompt, body #gateprompt, body #ferryprompt, body #stashprompt, body #boardprompt , body #warprompt { padding: 0 4px; color: #eadfc8; }
-body #stashprompt, body #boardprompt , body #warprompt { border-image-source: var(--wf-gold); }
+body #shrineprompt, body #portalprompt, body #gateprompt, body #ferryprompt, body #stashprompt, body #boardprompt , body #warprompt, body #sackprompt { padding: 0 4px; color: #eadfc8; }
+body #stashprompt, body #boardprompt , body #warprompt, body #sackprompt { border-image-source: var(--wf-gold); }
 
 /* Titles: centred gold with a dark rule under them, like "Menu" */
 body #hero h2, body #tree h2, body #gear h2, body #tradepanel h2, body #stashpanel h2, body #partypanel h2, body #bountypanel h2 , body #warpanel h2 {
@@ -124,7 +124,7 @@ body #npcdialog p { color: #eadfc8; }
 body #npcdialog button { padding: 0 8px; font-size: 18px; font-family: var(--pixel-font); font-weight: normal; }
 body #npcdialog button.nd-accept { color: #c8f59a; background: none; }
 body #npcdialog button:disabled { color: #6d6250; filter: grayscale(1); opacity: 1; }
-body #npcdialog kbd, body #shrineprompt kbd, body #portalprompt kbd, body #gateprompt kbd, body #ferryprompt kbd, body #stashprompt kbd, body #boardprompt kbd , body #warprompt kbd {
+body #npcdialog kbd, body #shrineprompt kbd, body #portalprompt kbd, body #gateprompt kbd, body #ferryprompt kbd, body #stashprompt kbd, body #boardprompt kbd , body #warprompt kbd, body #sackprompt kbd {
   border: 0; border-radius: 0; background: #0f0a06; color: #e3bf6a; box-shadow: 0 0 0 2px #6a5232; font-weight: normal; }
 body #npcdialog.shop { border-color: transparent; }
 body #npcdialog h4 { color: #c9a45a; }

@@ -38,25 +38,30 @@ test("standards keep clear of portal stones", () => {
   for (const s of STANDARDS) for (const p of PORTAL_SPOTS) assert.ok(Math.hypot(p.x - s.x / 32, p.y - s.y / 32) >= 5, `standard ${s.id} vs ${p.id}`);
 });
 
-test("presence: ten active minutes in an enemy ring attack it; idle, dead or wandering heroes add nothing", async () => {
+test("presence (W2c): ten minutes in an enemy ring add no valor; the minutes are still reported, idle or not", async () => {
   const t0 = 5_000_000_000_000, base = newWar();
   let k = CLAN_KEYS[0], std = STANDARDS[0];
   for (const c of CLAN_KEYS) { const s = STANDARDS.find((x) => targetsOf(base, c).includes(x.t) && !TERRITORIES[x.t].capitalOf); if (s) { k = c; std = s; break; } }
   const run = async (hero: (i: number) => WarHero) => {
     _resetWar({ v: 1, state: newWar(), minds: newMinds(), next: t0, log: [] });
-    const pr = new Presence();
-    for (let i = 0; i < 600; i++) pr.tick([["a", hero(i)]], t0 - 600_000 + i * 1000);
+    const pr = new Presence(), minutes: number[] = [];
+    let p: WarHero | undefined;
+    for (let i = 0; i < 600; i++) { p = hero(i); pr.tick([["a", p]], t0 - 600_000 + i * 1000, (_id, t) => minutes.push(t)); }
     await step(t0);
-    return warState()!.pressure[std.t]; // attack that reached the territory this tick
+    return { pressure: warState()!.pressure[std.t], minutes: minutes.length, renown: p!.renown }; // attack that reached the territory this tick
   };
-  const active = (i: number): WarHero => ({ clan: k, clanAt: 0, dead: false, level: 1, x: std.x, y: std.y, lastAct: t0 - 600_000 + i * 1000, renown: 0 });
+  const active = (i: number): WarHero => ({ clan: k, clanAt: 0, dead: false, level: 10, x: std.x, y: std.y, lastAct: t0 - 600_000 + i * 1000, renown: 0 });
   const quiet = await run((i) => ({ ...active(i), clan: undefined }));
-  assert.ok(await run(active) > quiet, "attacking valor reaches the territory");
-  assert.equal(await run((i) => ({ ...active(i), lastAct: 0 })), quiet, "idle hero adds nothing");
-  assert.equal(await run((i) => ({ ...active(i), dead: true })), quiet, "dead hero adds nothing");
-  assert.equal(await run((i) => ({ ...active(i), x: i % 60 === 59 ? std.x : 0 })), quiet, "a second in the ring per minute is not a minute");
-  assert.ok(heroValor(50, std.t) < heroValor(1, std.t), "far over-levelled heroes bring less");
-  assert.ok(WAR.valorPerAdd >= STANDARD.valorPerMin);
+  assert.equal(quiet.minutes, 0, "an unsworn hero's minutes count for nothing");
+  const held = await run(active);
+  assert.equal(held.pressure, quiet.pressure, "standing in the ring adds no valor");
+  assert.equal(held.renown, 0, "and no renown");
+  assert.equal(held.minutes, 10, "ten full minutes reported (an old hold writ still counts them)");
+  assert.equal((await run((i) => ({ ...active(i), lastAct: 0 }))).minutes, 0, "an idle hero counts no minutes");
+  assert.equal((await run((i) => ({ ...active(i), dead: true }))).minutes, 0, "dead heroes hold nothing");
+  assert.equal((await run((i) => ({ ...active(i), x: i % 60 === 59 ? std.x : 0 }))).minutes, 0, "a second in the ring per minute is not a minute");
+  assert.equal(STANDARD.valorPerMin, 0);
+  assert.equal(heroValor(1, std.t), 0); assert.equal(heroValor(50, std.t), 0);
 });
 
 test("holds: one per territory, on free ground inside it", async () => {
@@ -70,27 +75,24 @@ test("holds: one per territory, on free ground inside it", async () => {
   }
 });
 
-test("renown: a full minute at a standard earns it, ranks rise, saves stay clean", async () => {
+test("renown: a full minute at a standard is reported but earns none (W2c); ranks rise, saves stay clean", async () => {
   const { RENOWN_RANKS, rankOf, cleanRenown } = await import("../shared/war/renown");
   const { clanView } = await import("../server/warHeroes");
   _resetWar({ v: 1, state: newWar(), minds: newMinds(), next: Date.now() + 1e9, log: [] });
   const std = STANDARDS[0], t0 = 1_000_000;
   const p: WarHero = { clan: "wardens", clanAt: 0, dead: false, level: 1, x: std.x, y: std.y, lastAct: t0, renown: RENOWN_RANKS[1].at - 1 };
   const pr = new Presence();
-  let ups: [string, string][] = [];
+  const ups: [string, string][] = [];
   const minutes: [string, number][] = [], onMinute = (id: string, t: number) => minutes.push([id, t]);
   for (let i = 1; i <= 59; i++) ups.push(...pr.tick([["a", p]], t0 + i * 1000, onMinute));
-  assert.equal(p.renown, RENOWN_RANKS[1].at - 1, "no renown before a full minute");
   assert.equal(minutes.length, 0, "no minute reported yet");
   ups.push(...pr.tick([["a", p]], t0 + 60_000, onMinute));
-  assert.deepEqual(minutes, [["a", std.t]], "the full minute is reported with its territory (war writs)");
-  assert.equal(p.renown, RENOWN_RANKS[1].at - 1 + heroValor(1, std.t));
-  assert.deepEqual(ups, [["a", RENOWN_RANKS[1].name]], "the rank-up is reported once");
+  assert.deepEqual(minutes, [["a", std.t]], "the full minute is reported with its territory (an old hold writ counts it)");
+  assert.equal(p.renown, RENOWN_RANKS[1].at - 1, "no renown from standing");
+  assert.deepEqual(ups, [], "no rank-up");
   assert.equal(clanView(p).renown, Math.floor(p.renown));
-  const idle = { ...p, renown: 5, lastAct: 0 };
-  for (let i = 1; i <= 120; i++) pr.tick([["b", idle]], t0 + i * 1000);
-  assert.equal(idle.renown, 5, "idle heroes earn nothing");
   assert.equal(rankOf(0), 0); assert.equal(rankOf(1e9), RENOWN_RANKS.length - 1);
+  assert.equal(rankOf(RENOWN_RANKS[1].at), 1);
   for (let i = 1; i < RENOWN_RANKS.length; i++) assert.ok(RENOWN_RANKS[i].at > RENOWN_RANKS[i - 1].at);
   assert.equal(cleanRenown(undefined), 0); assert.equal(cleanRenown(-3), 0); assert.equal(cleanRenown(NaN), 0); assert.equal(cleanRenown(42.5), 42.5);
 });

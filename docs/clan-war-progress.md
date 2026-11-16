@@ -805,3 +805,62 @@ rings + countdowns (shown under fog), `WarView.hot` hatching + `frontEdges` line
 caravans and tunnel mouths from the per-clan `"warplan"` message (`server/warIntel.ts`, sworn heroes only), the writ land,
 and a Calls to arms panel (`callsToArms`). Note: `hot` is public, so other clans see which lands were attacked (not by
 whom or from where). The plan shows last tick's attacks, not the next ones.
+
+## W2b Sacking Holds + W2c valor from fighting (2026-11-16)
+Murat: attack an encampment on your own initiative; "stand at the standard" valor is clunky.
+- **Sack (W2b):** `shared/war/holdSack.ts` (`HOLD_SACK`, `bannerSpot` = the fort's middle cell, a courtyard in every plan,
+  `sackReachPx` = `holdReachPx` + 3 tiles so every guard post is inside, `sackStep`, `sackGold`), `rules.ts` `sackHold`
+  (`WAR.sackControl` 8, shared with the sim), `server/war.ts` `strikeHold` (between ticks: Control, maybe a siege, a "sack"
+  `WarEvent` and a "siege" one when called, listeners and save at once), `server/warHolds.ts` (`WarHolds` behind
+  `HoldSackHost`), `server/warTroops.ts` `guardsAlive` / `holdGuardsOff`.
+  - A hero the holder's troops fight (`troopStance` enemy) stands within 1.5 tiles of the banner and sends `"sack"` `{t}`
+    (`allow("ask")`, integer land, every condition re-checked): refused while a holder guard lives in the reach, an active
+    (`STANDARD.idleMs`) holder-sworn hero of oath level stands in it, a siege is announced, the land was sacked this war
+    tick, or another hero here is raising. 12 s; any holder trooper (not an object) or active defender in the reach pauses
+    it (no grace); `lastHurt` moving restarts it; walking 2.25 tiles off, losing the enemy stance or a siege stops it.
+  - Done: one sack per land per war tick for every room (module memory, like caravans). Sworn and legal (`targetsOf`):
+    -8 Control, a siege by the sacker's clan at <= 25 (never at a capital), 10 valor, 20 renown (x Rally) to every hero
+    sworn to it in the reach. Unsworn or not legal: -4, no siege, no valor. Gold `20 + 5 x troopLevel(t)` at the banner.
+    Guards off until the next war tick in every room. `sfx hold_sacked {t, x, y, by, from}`, Herald + holder's leader
+    (`WarMoment` "sacked"; none for an unsworn sacker), `warev` kind "sack" (by = the holder when unsworn).
+  - Messages: server -> raiser `"sack"` `{t, progress, state: raise|paused|done|stop, err?}` (t -1 + err when refused);
+    server -> all `"holds"` `{tick, sacked: [t, clanIdx|-1][], raising: [t, pct, paused][]}` on change, progress 1/s, join.
+  - Client: `client/src/warSack.ts` (E prompt "Raise your banner over the X Hold", progress bar, `banner_raise` creak
+    within 9 tiles of a banner going up, plaque line), `warStandards.ts` `setSacked` (sacker's standard, or a grey rag for
+    an unsworn hero, at the banner spot), `warMap.ts` a small flag on a sacked Hold icon and a tooltip line, `warNotice.ts`
+    sack text, sounds `hold_sacked` / `banner_raise` in `sfx.ts`.
+- **Valor from fighting (W2c):** `STANDARD.valorPerMin` 0; `Presence` keeps counting minutes (no idle check) only for an
+  old `hold` writ, which still loads and completes; boards no longer offer `hold` (`OFFER_KINDS`). Kill valor
+  (`WarTroops.killValor`): a sworn hero of oath level killing a soldier (1) / officer (2) of a clan at war with theirs, or
+  a hero sworn to one (3, never a party mate), in a land their clan holds or may attack, `killValorPerTick` 12 (was 5),
+  renown alike. Patrols pay through `killed()`; the room pays every other trooper (siege, escort, tunnel, acolyte,
+  manhunter) and hero kills. Objects (carts, rams, mouths) keep their own pay. Oath panel / prompt: "Swear here · fight
+  for valor".
+- Sims (`npx tsx tools/balance/war.ts 200 30`): no players and `--zeal=all:30` identical before/after (the sim never
+  modelled the standards): Wardens 21.8 / Redfang 22.0 / Host 19.9 / Hide-Kin 16.2 / Veiled 20.0%, 5.59 flips a day (zeal
+  12.03), domination 0.0%. New `--sack=<clan|all>[:perDay]`: redfang:6 -> Redfang 21.9%, 4.0 sacks and 1.45 sieges a day,
+  6.22 flips; redfang:24 -> 21.4%, 6.21 flips; all:6 -> 19.1 sacks/day, 6.09 flips; hidekin:12 -> 16.3% (best day 24.2%),
+  5.52 flips. Domination 0.0% in every run.
+- Bench (`WAR=1 SPREAD=1 npm run bench`, noisy): before 3.50 / 6.90 ms tick avg (p95 7.1 / 13.8), after 6.30 / 4.60
+  (p95 10.9 / 8.7). 80 troopers, no dropped bots.
+- Follow-up: a sack's siege is marked (`Siege.sack`, optional, old saves load as the army's). When it fails it keeps
+  Control + `WAR.sackSiegeFail` (2) instead of the army siege's reset to 50. Sims after: no players unchanged (5.59 flips);
+  redfang:6 Redfang 21.8% (6.11 flips), redfang:24 21.6% (was 21.4%, 6.50), all:6 top clan 22.0% (6.16), hidekin:12
+  Hide-Kin 16.3% (5.35); domination 0.0%, no clan above 22.0% on average. The nudge does not matter (0 gives the same
+  numbers): sacks stop backfiring but still win no land, because a sack's siege only flips if the sacker's army is
+  attacking that land when it comes due, and the scripted leaders often look elsewhere.
+- Leaders follow their heroes' sacks (`doctrine.ts` `followedSack`): while a sack's siege is pending on a land the clan
+  may attack, that land comes first in its orders (one at a time, the soonest due). Sims: no players unchanged; redfang:6
+  21.7%, redfang:24 21.6%, all:6 top 22.0%, hidekin:12 16.3%; domination 0.0%. Still no land gain. A diagnostic run
+  (40 wars, redfang:24) shows why: territory share follows army strength, not Control. Without sacks Redfang won 1891 /
+  lost 1966 lands for 13.2 held on average; with sacks 1743 / 1812 for 13.3; letting sack sieges flip more easily (defence
+  rally 1.0 or 0.8 instead of 1.3) doubled both wins and losses and still held about 13.0. Sacks churn the front but add no
+  army; a land gain needs a force effect (valor that counts in the siege check, or a sacked land's defence weakened for
+  the tick) or a smaller army brake on the winner.
+- Open: making sacks pay off in land (above); a banner-raise cosmetic on the pole for onlookers; sacked Holds on the war table (`warTable.ts`).
+
+#### W2b/W2c review fixes (PR #466)
+- Guards can't be starved away: `WarTroops.guardsDue(t)` = guards the Hold should field (garrisonCount, capped by spots; 0 while sacked) minus those fallen this war tick or not back yet; `why()` refuses while any are due. A land with a hero in sack reach takes trooper slots first, guards before marchers.
+- Sack valor and the sack siege need the sacker's clan at war with the holder (`atWar`); a grudge or Wanted alone robs the Hold (gold, half Control, no siege). `sackHold` calls a siege only on a full (not half) sack.
+- Hero-kill valor once per victim per killer per war tick (`heroKillValor`). A hero's creature's trooper kills (lone or patrol) pay its owner kill valor and writ credit.
+- Presence idle check restored (an idle hero counts no standard minutes for old hold writs). `WarHolds.forget` is called on leave.

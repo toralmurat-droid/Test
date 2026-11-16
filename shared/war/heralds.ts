@@ -5,7 +5,7 @@
  */
 import type { ClanKey } from "./clans";
 
-export type WarMoment = "siege" | "besieged" | "took" | "lost" | "held" | "repelled";
+export type WarMoment = "siege" | "besieged" | "took" | "lost" | "held" | "repelled" | "sacked";
 
 export interface Leader { name: string; lines: Record<WarMoment, string[]> }
 
@@ -17,6 +17,7 @@ export const LEADERS: Record<ClanKey, Leader> = {
     lost: ["{land} fell to {foe}. We will be back with more spears.", "Mark it on the map: {land}. We owe {foe} a debt."],
     held: ["{land} held. {foe} broke on our palisade.", "They came, they bled, they left. {land} stands."],
     repelled: ["The walls of {land} were too high. Regroup.", "{foe} held {land}. Next time, more ladders."],
+    sacked: ["{foe} raised their rag over our Hold at {land}. Tear it down!", "The Hold of {land} was sacked by {foe}. Double the watch."],
   } },
   redfang: { name: "The Redfang Chief", lines: {
     siege: ["{land} has fat stores. Take them.", "Knives out, lads. {land} pays us now."],
@@ -25,6 +26,7 @@ export const LEADERS: Record<ClanKey, Leader> = {
     lost: ["{foe} took {land}. We'll take it back, and their purses too.", "Lost {land}. Find me who slept on watch."],
     held: ["{land} stays ours. {foe} learned what a red fang is.", "Ha! {foe} turned tail at {land}."],
     repelled: ["{land} held out. We raid somewhere softer.", "Pull back from {land}. We hit them where they sleep."],
+    sacked: ["{foe} robbed our camp at {land}? Nobody robs a robber twice.", "Who let {foe} into the camp at {land}? Find them. Gut them."],
   } },
   host: { name: "The Pale Marshal", lines: {
     siege: ["The dead march on {land}. They do not tire.", "Raise the engines before {land}. The night is ours."],
@@ -33,6 +35,7 @@ export const LEADERS: Record<ClanKey, Leader> = {
     lost: ["{land} is lost for a while. We have all the time there is.", "{foe} hold {land}. Graves keep."],
     held: ["{land} held. {foe} filled our ranks.", "The dead do not yield {land}."],
     repelled: ["{land} resisted. The night will come again.", "Fall back from {land}. Gather the bones."],
+    sacked: ["{foe} defiled our keep at {land}. The dead will remember their faces.", "Let {foe} wave their banner at {land}. It will hang over their graves."],
   } },
   hidekin: { name: "The Hide-Mother", lines: {
     siege: ["Dig under {land}, my children.", "{land} smells of fear. Tunnel."],
@@ -41,6 +44,7 @@ export const LEADERS: Record<ClanKey, Leader> = {
     lost: ["{foe} took {land}. The tunnels remember.", "Seal the ways under {land}. We will dig again."],
     held: ["{land} holds. {foe} cannot fight in the dark.", "The burrows of {land} ate them."],
     repelled: ["{land} is too hard to dig. Another way.", "Back into the earth. {land} can wait."],
+    sacked: ["{foe} trampled our burrow at {land}. Bite them, my children!", "The burrow of {land} is fouled by {foe}. Dig them out."],
   } },
   veiled: { name: "The Veiled Oracle", lines: {
     siege: ["The sun turns against {land}. Begin the rite.", "At noon {land} will be ours. It is written."],
@@ -49,6 +53,7 @@ export const LEADERS: Record<ClanKey, Leader> = {
     lost: ["{land} slips from the Circle. A dark omen for {foe}.", "{foe} took {land}. The stars will turn."],
     held: ["{land} held. {foe} could not see what we saw.", "The rite protects {land}."],
     repelled: ["{land} is not yet ready to see. Patience.", "The omens were wrong at {land}. We wait."],
+    sacked: ["{foe} profaned the shrine of {land}. The omens turn against them.", "The shrine of {land} was sacked by {foe}. It was foreseen. It will be avenged."],
   } },
 };
 
@@ -63,7 +68,8 @@ export function leaderLine(k: ClanKey, moment: WarMoment, land: string, foe: Cla
 }
 
 /** Who speaks for an event, and in which mood: the defender calls to arms, the winner boasts. */
-export function eventVoice(kind: "siege" | "flip" | "held", by: ClanKey, from: ClanKey): { k: ClanKey; foe: ClanKey; moment: WarMoment } {
+export function eventVoice(kind: "siege" | "flip" | "held" | "sack", by: ClanKey, from: ClanKey): { k: ClanKey; foe: ClanKey; moment: WarMoment } {
+  if (kind === "sack") return { k: from, foe: by, moment: "sacked" }; // the holder answers a sack of its Hold
   return kind === "siege" ? { k: from, foe: by, moment: "besieged" } : kind === "flip" ? { k: by, foe: from, moment: "took" } : { k: from, foe: by, moment: "held" };
 }
 

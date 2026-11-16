@@ -1,6 +1,6 @@
 /**
  * Heroes in the clan war (shared/war/standards.ts): the oath (saved per hero, sent with the "clan" message; clan and
- * rank only reach other clients through server/warOaths.ts) and the minutes sworn heroes spend in a standard's ring, reported to the war as valor.
+ * rank only reach other clients through server/warOaths.ts) and the minutes sworn heroes spend in a standard's ring (for old `hold` writs).
  */
 import { heroValor, STANDARD, standardAt, isClan, nextOathAt } from "../shared/war/standards";
 import { CLANS, type ClanKey } from "../shared/war/clans";
@@ -30,13 +30,17 @@ export function swear(p: WarHero, want: unknown, now = Date.now()): string {
   return "";
 }
 
-/** Seconds each hero has stood in one ring since their last report (by session id; leaving the ring starts over). */
+/**
+ * Seconds each hero has stood in one ring since their last full minute (by session id; leaving the ring starts over). Since
+ * W2c the minutes pay no valor (STANDARD.valorPerMin 0); they still complete an old `hold` war writ (`onMinute`), and
+ * would pay heroValor again if that number came back. An idle hero (STANDARD.idleMs) counts no minutes.
+ */
 export class Presence {
   private secs = new Map<string, { std: number; n: number }>();
 
   /**
    * Call once a second with every hero in the room. Returns the heroes who reached a new renown rank (id, rank name).
-   * `onMinute` hears of every full minute a hero stood at a standard of territory t (war writs count them).
+   * `onMinute` hears of every full minute a sworn hero stood at a standard of territory t (war writs count them).
    */
   tick(heroes: Iterable<[string, WarHero]>, now = Date.now(), onMinute?: (id: string, t: number) => void): [string, string][] {
     const ranked: [string, string][] = [];
@@ -50,7 +54,7 @@ export class Presence {
       if (n >= 60) {
         const v = heroValor(p.level, s.t), was = rankOf(p.renown);
         // effort the war counted earns the hero renown (shared/war/renown.ts), more while the war rallies for their clan
-        if (addValor(s.t, p.clan!, v)) p.renown += v * rallyRenown(warState(), p.clan);
+        if (v > 0 && addValor(s.t, p.clan!, v)) p.renown += v * rallyRenown(warState(), p.clan);
         const rank = rankOf(p.renown);
         if (rank > was) ranked.push([id, RENOWN_RANKS[rank].name]);
         this.secs.set(id, { std: s.id, n: 0 });
