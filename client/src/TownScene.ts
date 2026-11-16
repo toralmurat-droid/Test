@@ -20,7 +20,7 @@ import { moveStep } from "../../shared/movement";
 import { SPAWN_ZONES, zoneAt } from "../../shared/spawns";
 import { musicCombat, setMusicZone } from "./music";
 import { bindSfx, play as playSfx, sfxFrame } from "./sfx";
-import { songweaverSfx } from "./sfx";
+import { songweaverSfx, setSwornClan } from "./sfx";
 import { DI_EVENTS, diEvent } from "./songbookFx";
 import { setSongbook } from "./songbookData";
 import { matOfItem } from "../../shared/lutemaker";
@@ -83,6 +83,8 @@ import { WarSack } from "./warSack";
 import { WarTabards } from "./warTabards";
 import { WarNotice } from "./warNotice";
 import { WarColumns } from "./warColumns";
+import { WarBattle } from "./warBattle";
+import { BATTLE } from "../../shared/war/battles";
 import { CLAN_KEYS } from "../../shared/war/clans";
 import { WarRoadFx } from "./warRoads";
 import type { WarView } from "../../shared/war/view";
@@ -449,6 +451,8 @@ export class TownScene extends Phaser.Scene {
   private warCols = new WarColumns(); // W4: roads and columns placed on the clock (warColumns.ts), read by the maps and the plaque
   private warRoadFx?: WarRoadFx; // the trampled-track ground decal near the hero (warRoads.ts)
   private warNotice?: WarNotice;
+  private warBattle = new WarBattle((t) => this.warNotice?.say(t)); // W5 big battles: notices, bar, result, markers (warBattle.ts)
+  private corpses = 0; // trooper corpses lying now (capped inside a big battle)
   /** How a server clan trooper sees this hero (shared/war/troops.ts troopStance), from the oath the "clan" message brought. */
   private troopStanceOf(weapon: string): TroopStance {
     const t = parseTroop(weapon), me = (this.room?.state as any)?.players?.get(this.me);
@@ -1616,7 +1620,7 @@ export class TownScene extends Phaser.Scene {
     const chatlog = document.getElementById("chatlog")!;
     for (const t of takeCarried()) { const el = document.createElement("div"); el.textContent = t; chatlog.prepend(el); }
     this.room.onMessage("upgrading", () => upgradeAnnounced());
-    this.room.onLeave((code: number) => { if (this.quitting) return; this.feed("Disconnected from server"); reconnectSoon(login, code === 4000); });
+    this.room.onLeave((code: number) => { if (this.quitting) return; this.warBattle.disconnected(); this.feed("Disconnected from server"); reconnectSoon(login, code === 4000); }); // (the battle din stops with the connection)
     // A connection that silently died (nothing heard for 15s) is treated the same way. A quiet spot sends no
     // state patch, so the server's heartbeat ("hb", every 4s) and the monster feed also count as signs of life.
     let lastPatch = Date.now();
@@ -1624,7 +1628,8 @@ export class TownScene extends Phaser.Scene {
     this.room.onStateChange(alive);
     this.room.onMessage("hb", alive);
     this.warStd = new WarStandards(this, (type, msg) => this.room.send(type, msg)); // clan war standards and oaths
-    this.warTroops = new WarTroops(this); // cosmetic clan patrols, derived from the war snapshot
+    this.warTroops = new WarTroops(this);
+    this.warTroops.liveTroopers = () => { let n = 0; for (const e of this.entities.values()) if (e.mob && e.state.kind === "trooper" && !e.state.dead) n++; return n; }; // cosmetic clan patrols, derived from the war snapshot
     this.feud = new WarFeud(this, this.room, { // feuds (client/src/warFeud.ts): Shift+click provoke, Wanted badge and marks
       me: () => (this.room?.state as any)?.players?.get(this.me), clan: () => this.warStd?.clan || undefined,
       holder: (t) => clanOfIndex(this.warLast?.owner[t] ?? -1), entities: () => this.entities,
@@ -1657,13 +1662,15 @@ export class TownScene extends Phaser.Scene {
       if (first || !own || !v) return; // the join message only fills the map; later new columns on the clan's land are announced
       for (const [id, ci, , to] of m.cols) if (!known.has(id) && CLAN_KEYS[ci] !== own && v.owner[to] === CLAN_KEYS.indexOf(own)) { this.warNotice?.column(CLAN_KEYS[ci], to); break; }
     }); // W4: the marching columns (shared/war/marches.ts ColumnsMsg)
+    this.warBattle.attach(this); setSwornClan(() => this.warStd?.clan || undefined);
+    this.room.onMessage("battle", (m) => { this.warBattle.setMsg(m); this.warTroops?.setBattle(this.warBattle.fighting()); }); // W5: big battles (shared/war/battles.ts BattleMsg)
     this.room.onMessage("warplan", (m) => { if (this.minimap && m && Array.isArray(m.march)) this.minimap.plan = m; }); // the own clan's attacks of the last war tick (server/warIntel.ts)
     const warNotice = this.warNotice = new WarNotice(document.getElementById("hud")!);
     this.room.onMessage("warev", (e) => warNotice.show(e, this.entities.get(this.me)?.sprite));
     this.room.onMessage("warraid", (r) => warNotice.raid(r, this.entities.get(this.me)?.sprite)); // the Night Raiders strike the leading clan's lands
     this.room.onMessage("mv", alive);
     this.startPing();
-    window.setInterval(() => { if (!this.quitting && Date.now() - lastPatch > 15_000) reconnectSoon(login); }, 3000);
+    window.setInterval(() => { if (!this.quitting && Date.now() - lastPatch > 15_000) { this.warBattle.disconnected(); reconnectSoon(login); } }, 3000);
   }
 
   /**
@@ -2167,15 +2174,19 @@ export class TownScene extends Phaser.Scene {
 
   /** The fallen trooper lies a moment longer than the server keeps it, then fades. */
   private trooperCorpse(e: Entity) {
+    if (this.warBattle.inField && this.corpses >= BATTLE.corpseCap) return; // a big battle: at most 30 lie at once
     const c = this.add.sprite(e.sprite.x, e.sprite.y, e.sprite.texture.key, 13).setOrigin(e.sprite.originX, e.sprite.originY).setScale(e.sprite.scaleX);
     setBaseDepth(c, e.sprite.y);
-    this.tweens.add({ targets: c, alpha: 0, delay: 1400, duration: 700, onComplete: () => c.destroy() });
+    this.corpses++;
+    this.tweens.add({ targets: c, alpha: 0, delay: 1400, duration: 700, onComplete: () => { c.destroy(); this.corpses--; } });
   }
 
   /** "<Clan> soldier" / "<Clan> captain" over a trooper, coloured by how its clan sees this hero: ally, neutral, enemy. */
-  private trooperLabel(e: Entity, p: any, x: number, y: number) {
+  private trooperLabel(e: Entity, p: any, x: number, y: number, id: string) {
     const t = parseTroop(p.weapon);
     if (!t || p.dead || p.hidden) { e.label?.setVisible(false); return; }
+    // inside a big battle only officers and captains (Mob.title), the hovered trooper and the hero's target carry a name
+    if (this.warBattle.inField && !p.title && !t.officer && id !== this.pointer?.hoverId && id !== this.pointer?.inspectId && id !== this.pointer?.targetId) { e.label?.setVisible(false); return; }
     if (!e.label) e.label = isoAnchor(this.add.text(x, y, p.title || troopName(t.clan, t.officer, t.cart, t.part === "ram", t.part === "mouth"), { // (manhunters carry a title)
       fontFamily: TEXT_FONT, fontSize: `${TEXT_PX}px`, color: "#c8c8c8", stroke: "#000", strokeThickness: 2,
     }).setOrigin(0.5, 1).setScale(WT * 0.85).setResolution(1), e.sprite) as Phaser.GameObjects.Text;
@@ -3475,7 +3486,7 @@ export class TownScene extends Phaser.Scene {
       }
 
       const x = Math.round(e.sprite.x), y = Math.round(e.sprite.y);
-      if (e.mob && p.kind === "trooper") this.trooperLabel(e, p, x, y);
+      if (e.mob && p.kind === "trooper") this.trooperLabel(e, p, x, y, id);
       // Monsters: HP bar over the head (only while it matters, see showWorldBar); their name and level are in the top bar
       const mobBarY = y - e.top - 4;
       if (e.label && !e.mob) { // (a clan trooper places its own name: trooperLabel)
@@ -3604,7 +3615,7 @@ export class TownScene extends Phaser.Scene {
     this.ferry?.update(meEnt?.state, meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near || !!this.portals?.near);
     this.waygates?.update(meEnt?.state, meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near);
     this.portals?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near || !!this.shrine?.near);
-    if (this.minimap) { this.minimap.war = this.warLast; this.minimap.clan = this.warStd?.clan || undefined; this.minimap.sacked = this.sack?.sacked; this.minimap.lines = this.warCols; } // the war table layer (warTable.ts) and the war overlays (warMap.ts)
+    if (this.minimap) { this.minimap.war = this.warLast; this.minimap.clan = this.warStd?.clan || undefined; this.minimap.sacked = this.sack?.sacked; this.minimap.lines = this.warCols; this.minimap.battles = this.warBattle; } // the war table layer (warTable.ts) and the war overlays (warMap.ts)
     if (this.minimap && this.npcs) this.minimap.markers = [...this.npcs.markers, ...(this.portals?.markers() ?? []), ...(this.bounty?.markers() ?? []), ...(this.dungeon?.markers() ?? []), ...(this.waygates?.markers() ?? []), ...(this.qcarry?.markers() ?? []), ...(this.tide?.markers() ?? [])];
 
     const mine = meEnt?.state;
@@ -3639,6 +3650,7 @@ export class TownScene extends Phaser.Scene {
       this.ambient?.setHero(tx, ty); // the moors' mist thickens in its hollows
       this.warStd?.update(meEnt.state.dead ? undefined : meEnt.sprite, !!this.npcs?.isOpen || !!this.npcs?.busy || !!this.chests?.near || !!this.stash?.near || !!this.bounty?.near || !!this.portals?.near || !!this.shrine?.near || !!this.waygates?.near || !!this.dungeon?.nearDoor, now);
       this.warTroops?.update(meEnt.state.dead ? undefined : meEnt.sprite, now);
+      this.warBattle.update(meEnt.state.dead ? undefined : meEnt.sprite);
       this.warRituals?.update(meEnt.state.dead ? undefined : meEnt.sprite); // the Veiled ritual circle (warRituals.ts)
       this.sack?.update(meEnt.state.dead ? undefined : meEnt.sprite, !!this.npcs?.isOpen || !!this.npcs?.busy || !!this.chests?.near || !!this.stash?.near || !!this.bounty?.near || !!this.portals?.near); // a hostile Hold's banner (warSack.ts)
       if (!meEnt.state.dead) this.warRoadFx?.update(meEnt.sprite.x, meEnt.sprite.y);

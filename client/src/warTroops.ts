@@ -23,6 +23,8 @@ import { MOB_LOOK, mobTexture, WAR_LEGACY, warSoldierTexture } from "./textures"
 import { SMOOTH } from "./isoflag";
 import { faceOf } from "./watch";
 import { pennant } from "./warPlaque";
+import { BATTLE, type BattleView } from "../../shared/war/battles";
+import { TILE } from "../../shared/constants";
 
 const FADE_MS = 900;
 const CHECK_MS = 400; // how often the set of nearby lands is re-read
@@ -103,7 +105,42 @@ export class WarTroops {
   /** The land whose siege the server fights with real troopers (-1 none): no painted battle there. */
   private liveSiege = -1;
 
+  /** W5 big battle being fought, and the painted reserve ranks behind its two lines (one pooled squad per side). */
+  private battle?: BattleView;
+  private ranks: [Squad, Squad] = [this.rankSquad(), this.rankSquad()];
+  private ranksAt = 0;
+  /** Live trooper mobs the scene shows now: the reserve left is the pool minus these (set by TownScene). */
+  liveTroopers: () => number = () => 0;
+
   constructor(private scene: Phaser.Scene) {}
+
+  private rankSquad(): Squad { return { t: -1, sig: "", men: [], cycle: 0, phase: 0, alpha: 1, target: 1 }; }
+
+  /** The big battle being fought now, or undefined: its painted reserve ranks stand behind each line (cosmetic, pooled). */
+  setBattle(b: BattleView | undefined) { if (b?.id !== this.battle?.id) { for (const s of this.ranks) this.shrink(s, 0); } this.battle = b; this.ranksAt = 0; }
+
+  private shrink(s: Squad, n: number) { while (s.men.length > n) { const m = s.men.pop()!; m.spr.destroy(); } }
+
+  /** Grow or shrink each side's ranks to the reserve left (men - live troopers, scaled to BATTLE.paintedMax). */
+  private syncRanks(me: { x: number; y: number }) {
+    const b = this.battle;
+    if (!b || b.state !== 1 || Math.hypot(me.x - b.x, me.y - b.y) > BATTLE.barTiles * TILE) { for (const s of this.ranks) this.shrink(s, 0); return; }
+    const live = this.liveTroopers(), al = Math.hypot(b.dx, b.dy) || 1, ax = b.dx / al, ay = b.dy / al, px = -ay, py = ax;
+    for (let side = 0; side < 2; side++) {
+      const sq = this.ranks[side], clan = side ? b.b : b.a, sgn = side ? 1 : -1;
+      const reserve = Math.max(0, b.men[side] - live / 2), full = Math.max(1, b.men0[side] - BATTLE.perSide);
+      const n = Math.min(BATTLE.paintedMax, Math.round(BATTLE.paintedMax * Math.min(1, reserve / full)));
+      this.shrink(sq, n);
+      for (let i = sq.men.length; i < n; i++) {
+        const row = Math.floor(i / 10), col = i % 10, h = mix(b.t * 17 + side, i, 9);
+        const lat = (col - 4.5) * 24 + ((h % 9) - 4), dep = sgn * ((7 + row * 0.9) * TILE + ((h >> 8) % 7) - 3);
+        const pos = this.ground({ x: b.x + ax * dep + px * lat, y: b.y + ay * dep + py * lat }, { x: b.x + ax * sgn * 6 * TILE, y: b.y + ay * sgn * 6 * TILE });
+        const m = this.soldier(clan, i, "fight", false);
+        m.fight = { seed: b.t * 31 + side + 7, slot: i, pos, mate: { x: pos.x - ax * sgn * 40, y: pos.y - ay * sgn * 40 }, from: { x: pos.x + ax * sgn * 30, y: pos.y + ay * sgn * 30 }, h, tilt: h & 1 ? 1 : -1 };
+        sq.men.push(m);
+      }
+    }
+  }
 
   /** The war snapshot: owners and sieges decide who walks where. Squads that no longer match fade out at the next check. */
   setWar(v: WarView) { this.view = v; this.dirty = true; }
@@ -112,7 +149,7 @@ export class WarTroops {
   setSiege(t: number) { if (t !== this.liveSiege) { this.liveSiege = t; this.dirty = true; } }
 
   /** Sprites alive now (for the perf check). */
-  get sprites(): number { let n = 0; for (const s of this.squads.values()) n += s.men.length; for (const s of this.dying) n += s.men.length; return n; }
+  get sprites(): number { let n = this.ranks[0].men.length + this.ranks[1].men.length; for (const s of this.squads.values()) n += s.men.length; for (const s of this.dying) n += s.men.length; return n; }
 
   /** What a land's squad looks like now: holder, the attacker while a siege is called, and the strength by control. */
   private sigOf(t: number): string {
@@ -126,8 +163,12 @@ export class WarTroops {
     this.lastNow = wall;
     if (me && underground(me.y)) { this.clear(); return; } // dungeon floors: no clan troops
     if (this.view && me && (this.dirty || wall >= this.checkAt)) { this.dirty = false; this.checkAt = wall + CHECK_MS; this.sync(me); }
-    if (!this.squads.size && !this.dying.length) return;
+    if (me && wall >= this.ranksAt) { this.ranksAt = wall + 1000; this.syncRanks(me); }
+    else if (!me && this.ranks[0].men.length + this.ranks[1].men.length) for (const s of this.ranks) this.shrink(s, 0);
+    const ranked = this.ranks[0].men.length + this.ranks[1].men.length > 0;
+    if (!this.squads.size && !this.dying.length && !ranked) return;
     const ready = this.scene.anims.exists(`${SHEET}_idle_down`);
+    if (ranked) for (const s of this.ranks) this.draw(s, wall, dt, ready);
     for (const s of this.squads.values()) this.draw(s, wall, dt, ready);
     for (let i = this.dying.length - 1; i >= 0; i--) {
       const s = this.dying[i];
@@ -140,6 +181,7 @@ export class WarTroops {
     for (const s of this.squads.values()) this.destroy(s);
     for (const s of this.dying) this.destroy(s);
     this.squads.clear(); this.dying.length = 0;
+    for (const s of this.ranks) this.shrink(s, 0);
   }
 
   /** Squads for the lands with a stop near the hero; mismatching ones fade out and get replaced, far ones go. */

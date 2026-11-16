@@ -1,7 +1,7 @@
 /**
  * War sim: plays the clan war (shared/war/) headless with the scripted leaders, no players, and checks the design goal
  * (Murat 2026-11-13): left alone, the clans mostly cancel each other out; a clever plan wins some land but can't take over.
- * Run: npx tsx tools/balance/war.ts [runs=200] [days=30] [--clever=host] [--zeal=redfang[:30]] [--sack=redfang[:6]] [--sack-fort=0.1] [--tiers] [--ambush=hidekin[:0.5]] [--clash] [--per-soldier=30] [--old-brakes] [--seed=1] [--verbose]
+ * Run: npx tsx tools/balance/war.ts [runs=200] [days=30] [--clever=host] [--zeal=redfang[:30]] [--sack=redfang[:6]] [--sack-fort=0.1] [--tiers] [--ambush=hidekin[:0.5]] [--clash] [--per-soldier=30] [--battles] [--battle-heroes=redfang[:1.3]] [--old-brakes] [--seed=1] [--verbose]
  *
  * Marching columns (W4, shared/war/marches.ts): every run prints the histogram of column sizes (men, officer included)
  * so COLUMN.perSoldier can be tuned (`--per-soldier=<n>` tries another value). `--ambush=<clan|all>[:share]`: each tick
@@ -9,6 +9,14 @@
  * scales those attacks by marchMult (rules.ts TickExtra.march). `--clash` (a what-if: the live war charges no men for
  * a meeting nobody fights, only a live clash's real deaths count): columns of clans at war on one road in opposite
  * directions meet and lose clashLosses. Both report only, like zeal.
+ *
+ * `--battles` (W5, shared/war/battles.ts): big battles as the live war fights them with no hero near: the pitched battles at
+ * their local times (placed by pickPitched 3 ticks ahead), stormings of sieges that come due on a close margin
+ * (isDecisive), and up to BATTLE.meetPerDay meeting battles of columns of 6+ men of clans at war on one road in opposite
+ * directions (the largest first; their columns then do not clash). At most one a tick and BATTLE.perDay a day. Each is a
+ * virtualBattle with men from that tick's deployments, handed to warTick as TickExtra.battle. With battles on by default
+ * in the live war, this is the run the no-player goal is judged on too. `--battle-heroes=<clan|all>[:kMult]`: that clan's
+ * heroes fight in every battle it is in, multiplying its side's killing rate by kMult (default 1.3; reports only).
  *
  * `--tiers` (W3, diagnostic): the share of Holds at each tier (holdTiers.ts: outpost, camp, fortress) per clan after
  * settling, the average tier and the share of front-line lands that are outposts. `--sack-fort=<x>` sets WAR.sackFort
@@ -36,6 +44,8 @@ import { clashLosses, COLUMN, marchesOf, marchMult, plansOf } from "../../shared
 import { tunnelStrikes } from "../../shared/war/tunnels";
 import { deployments, landOf, newWar, nightRaid, phaseOf, rallyClan, sackHold, targetsOf, WAR, warTick, type TickExtra } from "../../shared/war/rules";
 import { HOLD_SACK } from "../../shared/war/holdSack";
+import { BATTLE, battleOutcome, siteForces, isDecisive, meetSite, newBattle, pickMeetings, pickPitched, pitchedTicks, virtualBattle, type BattleSite } from "../../shared/war/battles";
+import type { BattleKind, BattleOutcome } from "../../shared/war/rules";
 import { TERRITORIES } from "../../shared/war/territories";
 
 const args = process.argv.slice(2);
@@ -64,6 +74,11 @@ const AMBUSH_SHARE = Number(ambushS || 0.5), CLASH = args.includes("--clash");
 if (flag("per-soldier") !== undefined) COLUMN.perSoldier = Number(flag("per-soldier"));
 if (flag("sack-fort") !== undefined) WAR.sackFort = Number(flag("sack-fort"));
 if (flag("camp-fort") !== undefined) HOLD_TIER.camp.fort = Number(flag("camp-fort")); // (--tiers: try another camp threshold)
+const BATTLES = args.includes("--battles") || flag("battle-heroes") !== undefined;
+const [bhWho, bhK] = (flag("battle-heroes") ?? "").split(":");
+const BH: ClanKey[] = bhWho === "all" ? [...CLAN_KEYS] : CLAN_KEYS.includes(bhWho as ClanKey) ? [bhWho as ClanKey] : [];
+if (bhWho && !BH.length) { console.error(`--battle-heroes must be all or one of: ${CLAN_KEYS.join(", ")}`); process.exit(2); }
+const BH_K = Number(bhK || 1.3);
 const SETTLE_DAYS = 7, STREAK_DAYS = 3;
 
 function mulberry(a: number) {
@@ -81,6 +96,8 @@ interface Result {
   tiers: Record<ClanKey, [number, number, number]>; frontOutpost: number; front: [number, number, number];
   /** Marching columns (W4): men per column (index = size), columns cut down by an ambush, meetings and men lost there, per war day. */
   sizes: number[]; ambushed: number; clashes: number; clashDead: number;
+  /** --battles: battles per war day by kind, results (attacker / defender / draw) by kind, stormings that flipped, men per side, minutes fought. */
+  battles: Record<BattleKind, number>; results: Record<BattleKind, [number, number, number]>; stormFlips: number; men: number; mins: number;
 }
 
 /** Plays RUNS wars of DAYS days (same seeds for every call, so a run with and without the ruse can be compared). */
@@ -94,10 +111,16 @@ function play(clever?: ClanKey): Result {
   const frontTiers: [number, number, number] = [0, 0, 0];
   let samples = 0, dominatedRuns = 0, flips = 0, nights = 0, hunts = 0, ticks = 0, sacks = 0, sackSieges = 0, ambushed = 0, clashes = 0, clashDead = 0;
   const sizes = Array<number>(COLUMN.max + 2).fill(0);
+  const battles: Record<BattleKind, number> = { pitched: 0, storm: 0, meet: 0 }, results: Record<BattleKind, [number, number, number]> = { pitched: [0, 0, 0], storm: [0, 0, 0], meet: [0, 0, 0] };
+  let stormFlips = 0, menSum = 0, minSum = 0;
+  const slots = pitchedTicks();
   for (let r = 0; r < RUNS; r++) {
     const rnd = mulberry(SEED * 7919 + r), s = newWar(), minds = newMinds();
     let streak = 0, dominated = false, prev = s.owner.slice();
+    const announced = new Map<number, BattleSite>(); // settle tick (day index) -> the pitched battle placed 3 ticks before its start
     for (let d = 0; d < DAYS; d++) {
+      let today = 0, meetsToday = 0;
+      announced.clear();
       for (let i = 0; i < WAR.ticksPerDay; i++) {
         const orders = scriptedOrders(s, minds, rnd, clever), extra: TickExtra = {};
         if (ZEAL.length) {
@@ -133,6 +156,48 @@ function play(clever?: ClanKey): Result {
           fallen.set(m.id, Math.min(m.size, (fallen.get(m.id) ?? 0) + Math.round(m.size * AMBUSH_SHARE)));
           ambushed++;
         }
+        if (BATTLES) {
+          if (!CLASH) setWarRelations(s.owner, s.tick, d === 0 && i === 0 ? [] : undefined); // (the clans at war, as the live server keeps them)
+          // pitched: placed at notice (3 ticks before the start), fought at the start, settled at the tick after it
+          const lead = Math.round(BATTLE.noticeMs / WAR.tickMs);
+          for (const st of slots) if (i === st - lead) { const p = pickPitched(s); if (p) announced.set(st + 1, p); }
+          const dep = deployments(s, orders, phaseOf(s.tick)), fight = (site: BattleSite, kind: BattleKind, fa: number, fb: number): BattleOutcome => {
+            const b = virtualBattle(newBattle(site, kind, 0, 0, 0, fa, fb), [BH.includes(site.a) ? BH_K : 1, BH.includes(site.b) ? BH_K : 1]);
+            battles[kind]++; results[kind][b.result === "att" ? 0 : b.result === "def" ? 1 : 2]++; menSum += b.men0[0] + b.men0[1]; minSum += b.el / 60;
+            today++;
+            return battleOutcome(b)!;
+          };
+          let out: BattleOutcome | undefined;
+          // the pitched battles still to come today keep their places under the day's cap
+          const free = BATTLE.perDay - slots.filter((st) => st + 1 > i).length, ph = phaseOf(s.tick);
+          const p = today < BATTLE.perDay ? announced.get(i) : undefined;
+          if (p && s.owner[p.t] === p.b) out = fight(p, "pitched", ...siteForces(s, "pitched", p.t, p.a, dep.attack[p.t], dep.defence[p.t], ph));
+          if (!out && today < free) { // a siege due on a close margin: the closest one is stormed
+            let best = -1, bm = Infinity;
+            for (let t = 0; t < N; t++) {
+              if (!isDecisive(s, t, dep.attack[t], dep.defence[t], phaseOf(s.tick))) continue;
+              const m = Math.abs(Math.log((dep.attack[t][s.siege[t]!.by] ?? 1) / Math.max(1e-9, dep.defence[t])));
+              if (m < bm) { bm = m; best = t; }
+            }
+            if (best >= 0) {
+              const by = s.siege[best]!.by, own = s.owner[best];
+              out = fight({ t: best, from: best, a: by, b: own }, "storm", ...siteForces(s, "storm", best, by, dep.attack[best], dep.defence[best], ph));
+            }
+          }
+          if (!out && today < free && meetsToday < BATTLE.meetPerDay) {
+            const pairs: { a: typeof ms[number]; b: typeof ms[number] }[] = [];
+            for (let a = 0; a < ms.length; a++) for (let b = a + 1; b < ms.length; b++) if (atWar(ms[a].clan, ms[b].clan) && meetSite(ms[a], ms[b])) pairs.push({ a: ms[a], b: ms[b] });
+            const m = pickMeetings(pairs, 1)[0], site = m && meetSite(m.a, m.b);
+            if (site) {
+              out = fight(site, "meet", site.forceA, site.forceB); meetsToday++;
+              fallen.delete(m.a.id); fallen.delete(m.b.id); // (they fought the battle, not a clash)
+            }
+          }
+          if (out) {
+            extra.battle = [out];
+            if (out.kind === "storm" && out.result === "att") stormFlips++;
+          }
+        }
         if (fallen.size) extra.march = ms.flatMap((m) => (fallen.get(m.id) ? [{ t: m.to, k: m.clan, mult: marchMult(m.size - Math.min(m.size, fallen.get(m.id)!), m.size) }] : []));
         if (d >= SETTLE_DAYS) {
           ticks++;
@@ -162,14 +227,16 @@ function play(clever?: ClanKey): Result {
   for (const k of CLAN_KEYS) avg[k] /= Math.max(1, samples);
   for (const k of CLAN_KEYS) { hunted[k] /= Math.max(1, nights); rally[k] /= Math.max(1, ticks); }
   return { avg, worst, dominated: dominatedRuns / RUNS, flips: flips / (RUNS * DAYS), hunts: hunts / Math.max(1, nights), hunted, rally, sacks: sacks / (RUNS * DAYS), sackSieges: sackSieges / (RUNS * DAYS), tiers, frontOutpost: frontOut / Math.max(1, front), front: frontTiers,
-    sizes, ambushed: ambushed / (RUNS * DAYS), clashes: clashes / (RUNS * DAYS), clashDead: clashDead / (RUNS * DAYS) };
+    sizes, ambushed: ambushed / (RUNS * DAYS), clashes: clashes / (RUNS * DAYS), clashDead: clashDead / (RUNS * DAYS),
+    battles: { pitched: battles.pitched / (RUNS * DAYS), storm: battles.storm / (RUNS * DAYS), meet: battles.meet / (RUNS * DAYS) }, results, stormFlips: stormFlips / (RUNS * DAYS),
+    men: menSum / Math.max(1, 2 * (battles.pitched + battles.storm + battles.meet)), mins: minSum / Math.max(1, battles.pitched + battles.storm + battles.meet) };
 }
 
 const t0 = Date.now();
 const base = play(), ruse = CLEVER ? play(CLEVER) : undefined;
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 const who = [ZEAL.length ? `heroes pushing ${zealWho} (${ZEAL_V} valor a tick)` : "", SACK.length ? `heroes sacking for ${sackWho} (${SACK_PER_DAY} Holds a day each)` : "",
-  AMBUSH.length ? `heroes ambushing columns on ${ambushWho}'s lands (${pct(AMBUSH_SHARE)} of each)` : "", CLASH ? "columns clashing on shared roads" : ""].filter(Boolean).join(", ") || "no players";
+  BATTLES ? `big battles${BH.length ? ` (${bhWho}'s heroes in them, k x${BH_K})` : ""}` : "", AMBUSH.length ? `heroes ambushing columns on ${ambushWho}'s lands (${pct(AMBUSH_SHARE)} of each)` : "", CLASH ? "columns clashing on shared roads" : ""].filter(Boolean).join(", ") || "no players";
 console.log(`War sim: ${RUNS} runs x ${DAYS} war days, ${N} territories, scripted leaders, ${who} (${((Date.now() - t0) / 1000).toFixed(1)} s)`);
 console.log("clan       avg land   most land (any day after settling)   hunted (night ticks)   rallied (ticks)");
 for (const k of CLAN_KEYS) console.log(`${k.padEnd(10)} ${pct(base.avg[k]).padStart(7)}   ${pct(base.worst[k]).padStart(7)}                              ${pct(base.hunted[k]).padStart(6)}               ${pct(base.rally[k]).padStart(6)}`);
@@ -182,6 +249,11 @@ console.log(`runs where one clan held > ${pct(WAR.leaderShare)} for over ${STREA
   console.log(`column sizes (men, officer included; perSoldier ${COLUMN.perSoldier}): ${base.sizes.map((c, k) => (k >= COLUMN.min + 1 ? `${k}: ${pct(c / n)}` : "")).filter(Boolean).join("  ")}  (${(n / (RUNS * DAYS)).toFixed(1)} columns a war day)`);
 }
 if (AMBUSH.length) console.log(`columns ambushed: ${base.ambushed.toFixed(1)} per war day (each cut to ${pct(1 - AMBUSH_SHARE)} of its men, attack x${marchMult(Math.round(8 * (1 - AMBUSH_SHARE)), 8).toFixed(2)} for a full column; floor ${COLUMN.floor})`);
+if (BATTLES) {
+  const res = (k: BattleKind) => { const [a, b, c] = base.results[k], n = Math.max(1, a + b + c); return `att ${pct(a / n)} / def ${pct(b / n)} / draw ${pct(c / n)}`; };
+  console.log(`big battles per war day: pitched ${base.battles.pitched.toFixed(2)} (${res("pitched")}), stormings ${base.battles.storm.toFixed(2)} (${res("storm")}; ${base.stormFlips.toFixed(2)} flips), meetings ${base.battles.meet.toFixed(2)} (${res("meet")})`);
+  console.log(`  men per side ${base.men.toFixed(0)} (perMan ${BATTLE.perMan}, ${BATTLE.menMin}-${BATTLE.menMax}), ${base.mins.toFixed(1)} min fought on average`);
+}
 if (CLASH) console.log(`column meetings: ${base.clashes.toFixed(2)} per war day, ${base.clashDead.toFixed(2)} men lost per war day`);
 if (SACK.length || flag("sack-fort") !== undefined) console.log(`a sack takes ${WAR.sackFort} off the land's fort (WAR.sackFort)`);
 if (TIERS) {
@@ -198,5 +270,5 @@ if (ruse && CLEVER) {
   console.log(`with the ${CLEVER} ruse (feint by day, push at night): ${CLEVER} averages ${pct(ruse.avg[CLEVER])} of the land vs ${pct(base.avg[CLEVER])} without; domination ${pct(ruse.dominated)}`);
   console.log(`  goal: the ruse pays (more land) but no clan dominates (under 5%)`);
 }
-const fail = !ZEAL.length && !SACK.length && !AMBUSH.length && !CLASH && (base.dominated >= 0.05 || (ruse && ruse.dominated >= 0.05));
+const fail = !ZEAL.length && !SACK.length && !AMBUSH.length && !CLASH && !BH.length && (base.dominated >= 0.05 || (ruse && ruse.dominated >= 0.05));
 if (fail) { console.log("GOAL FAILED: the war does not hold itself in check"); process.exitCode = 1; }

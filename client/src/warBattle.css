@@ -1,0 +1,22 @@
+/* Big battle bar (warBattle.ts): top centre, two clan-coloured bars of men left, banner pips, time left; result banner after */
+body #warbattle { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 8; pointer-events: none; box-sizing: border-box;
+  width: 440px; max-width: calc(100vw - 760px); min-width: 320px; padding: 6px 12px 8px; background: #120c06e8; box-shadow: 0 0 0 2px #080504, 0 0 0 4px #6a5232;
+  color: #eadfc8; text-shadow: 2px 2px #050302; font: 16px var(--pixel-font); -webkit-font-smoothing: none; }
+body #warbattle[hidden] { display: none; }
+#warbattle .wb-head { display: flex; justify-content: space-between; gap: 10px; color: #ffd98a; white-space: nowrap; }
+#warbattle .wb-head .wb-time { color: #eadfc8; }
+#warbattle .wb-row { display: flex; align-items: center; gap: 6px; margin-top: 3px; }
+#warbattle .wb-side { width: 96px; flex: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#warbattle .wb-bar { position: relative; flex: 1; height: 10px; background: #1a1208; box-shadow: 0 0 0 1px #080504, 0 0 0 2px #45331e; }
+#warbattle .wb-bar i { position: absolute; left: 0; top: 0; bottom: 0; transition: width .6s linear; }
+#warbattle .wb-bar b { position: absolute; top: 0; bottom: 0; width: 2px; background: #000a; }
+#warbattle .wb-n { width: 42px; flex: none; text-align: right; color: #c9b89a; }
+#warbattle .wb-pips { display: flex; justify-content: center; gap: 8px; margin-top: 5px; color: #a8977a; }
+#warbattle .wb-pips i { width: 12px; height: 12px; box-shadow: 0 0 0 1px #080504, 0 0 0 2px #c9b89a; }
+/* The result banner takes the bar's place */
+#warbattle.result { text-align: center; padding: 8px 14px 10px; }
+#warbattle .wb-res { font-size: 22px; color: #ffd98a; }
+#warbattle .wb-res.win { color: #9fe07a; }
+#warbattle .wb-res.lose { color: #ff8a6a; }
+#warbattle .wb-sub { color: #c9b89a; margin-top: 2px; }
+@media (max-width: 1500px) { body #warbattle { width: 380px; min-width: 300px; max-width: calc(100vw - 700px); font-size: 15px; } #warbattle .wb-side { width: 80px; } }

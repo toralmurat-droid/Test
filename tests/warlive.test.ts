@@ -111,7 +111,9 @@ test("heralds: every leader has a line for every moment, filled in and capitalis
     const l = leaderLine(k, m, "Brinewood", k === "host" ? "wardens" : "host", 3);
     assert.ok(l.text.length > 10 && !/[{}]/.test(l.text) && l.text[0] === l.text[0].toUpperCase(), `${k} ${m}: ${l.text}`);
   }
-  for (const k of CLAN_KEYS) for (const m of ["march", "ambushed", "clash"] as const) assert.equal(LEADERS[k].lines[m].length, 2, `${k} ${m}`);
+  for (const k of CLAN_KEYS) for (const m of ["march", "ambushed", "clash", "battle_called", "battle_start", "battle_banner", "battle_captain", "battle_won", "battle_lost"] as const) assert.equal(LEADERS[k].lines[m].length, 2, `${k} ${m}`);
+  const { CAPTAIN_NAMES, captainName } = await import("../shared/war/heralds");
+  for (const k of CLAN_KEYS) { assert.ok(CAPTAIN_NAMES[k].length >= 3); assert.equal(captainName(k, "pitched-3-1", 1), captainName(k, "pitched-3-1", 1)); assert.ok(CAPTAIN_NAMES[k].includes(captainName(k, "storm-9-5", 0))); }
   assert.deepEqual(eventVoice("siege", "redfang", "wardens"), { k: "wardens", foe: "redfang", moment: "besieged" });
   assert.deepEqual(eventVoice("flip", "redfang", "wardens"), { k: "redfang", foe: "wardens", moment: "took" });
 });
@@ -232,7 +234,9 @@ test("live war (W4 review B1): with no players the server war plays exactly the 
   const { warOrders, warState, warMeetings } = await import("../server/war");
   const { COLUMN } = await import("../shared/war/marches");
   const { warPhase } = await import("../shared/war/view");
-  const t0 = 10_000_000_000_000, N = 300;
+  const { BATTLE } = await import("../shared/war/battles");
+  const t0 = 10_000_000_000_000, N = 300, battlesWere = BATTLE.live;
+  BATTLE.live = false; // (W5 battles off: they move the war with no players too, tests/warbattles-room.test.ts checks them)
   const run = async (check: boolean) => {
     _resetWar(saved(t0));
     const owners: string[] = [];
@@ -256,7 +260,7 @@ test("live war (W4 review B1): with no players the server war plays exactly the 
     Object.assign(COLUMN, { clashLoss: 0, clashCap: 0 });
     const b = await run(false);
     assert.deepEqual(b.owners, a.owners, "the clash formula plays no part");
-  } finally { Object.assign(COLUMN, saved2); }
+  } finally { Object.assign(COLUMN, saved2); BATTLE.live = battlesWere; }
   assert.ok(a.meetings > 0, `columns met (${a.meetings}) and cost nothing`);
 });
 

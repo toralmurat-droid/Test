@@ -40,6 +40,16 @@ export class WarNotice {
     return `Night Raiders! They strike ${TERRITORIES[t]?.name ?? "?"}, land of ${CLANS[r.clan]?.name ?? "?"}.`;
   }
 
+  /** W5: a big battle's notice (30 min, 5 min, the start): shown wherever the hero is, with a soft horn. */
+  say(text: string, ms = 8000) {
+    play("horn", undefined, undefined, 0.6, undefined, { minGap: 4000 });
+    this.el.textContent = text;
+    this.el.className = "siege";
+    this.el.hidden = false;
+    clearTimeout(this.timer);
+    this.timer = window.setTimeout(() => { this.el.hidden = true; }, ms);
+  }
+
   /** W4: a column of another clan marches on land of the hero's clan (shown wherever the hero is; the horn is soft). */
   column(clan: ClanKey, t: number) {
     play("horn", undefined, undefined, 0.5, undefined, { minGap: 4000 });

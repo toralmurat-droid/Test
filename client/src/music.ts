@@ -54,6 +54,8 @@ const TRACKS: Track[] = [
   { id: "kharsun", name: "The Buried City", url: "/assets/music/the-buried-city.mp3", optional: true },
   { id: "sand-steel", name: "Sand and Steel", url: "/assets/music/sand-and-steel.mp3", optional: true },
   { id: "sunwright", name: "Ishael, the Sunwright", url: "/assets/music/ishael-the-sunwright.mp3", optional: true },
+  // Clan war W5: the big battle loop (boss-style, while the hero stands in the field); falls back to the Pale Marshal's March
+  { id: "war-battle", name: "Battle of the Clans", url: "/assets/music/war-battle.mp3", optional: true },
   { id: "desert-sounds", name: "Desert sounds", ambience: true, desert: true },
 ];
 /** The mp3 files in the game (vite.config.mts lists client/public/assets/music at build time). */
@@ -120,6 +122,8 @@ let zoneBattle: string | null = null;
 // Battle state
 let heat = 0;
 let battle: { track: string; zone: string; boss?: boolean } | null = null;
+/** Clan war W5: the hero stands in a big battle's field while it is fought (set by warBattle.ts through setMusicWar). */
+let warField = false;
 /** Act 2's theme: still to play (the first time in the desert each time the game opens) / playing now */
 let arrival: "todo" | "playing" | "done" = "todo";
 let act = 1;
@@ -173,7 +177,7 @@ function wantedTrack(): string {
 
 /** Share of the set volume for the mp3 now playing: swells with the battle heat in Auto. */
 function swellLevel(): number {
-  if (!battle || settings.pick !== "auto" || !settings.swell) return 1;
+  if (!battle || settings.pick !== "auto" || !settings.swell || (warField && battle.boss)) return 1;
   return SWELL_FLOOR + (1 - SWELL_FLOOR) * Math.min(1, Math.max(0, (heat - HEAT_START) / (HEAT_FULL - HEAT_START)));
 }
 
@@ -285,7 +289,12 @@ function tick() {
   // The opening song in the world never loops (it plays once, then the normal rules)
   if (inWorld && playing === "hearth" && audioEl?.loop) audioEl.loop = false;
   // The boss song loops while the fight lasts, and fades once it has gone quiet
-  if (battle?.boss && heat < 1) { battle = null; switchTrack(FADE_IN, 3); return; }
+  // (a big clan battle: its song plays as long as the hero stands in the field, hot or not)
+  if (warField && !battle && !intro) {
+    const track = firstOf("war-battle", "pale-marshals");
+    if (track) { battle = { track, zone: "battle", boss: true }; if (arrival === "playing") arrival = "done"; switchTrack(1); return; }
+  }
+  if (battle?.boss && (warField ? battle.zone !== "battle" : heat < 1)) { battle = null; switchTrack(FADE_IN, 3); return; }
   if (!battle && !intro && zoneBattle && zoneName && heat >= HEAT_START && Date.now() >= (cooldownUntil.get(zoneBattle) ?? 0)) {
     const boss = zoneBattle === "sunwright";
     battle = { track: zoneBattle, zone: zoneName, boss };
@@ -357,6 +366,13 @@ export function setMusicZone(zone: string | undefined, mobs: Partial<Record<stri
     if (intro && started && calm !== "village") { intro = false; if (settings.pick === "auto") switchTrack(FADE_IN, 4); return; }
     if (settings.pick === "auto" && !battle && !intro && arrival !== "playing") switchTrack();
   }, started ? ZONE_SETTLE * 1000 : 0);
+}
+
+/** The hero is inside a big clan battle's field while it is fought (clan war W5): Auto plays the battle song for as long as it lasts. */
+export function setMusicWar(on: boolean) {
+  if (on === warField) return;
+  warField = on;
+  if (!on && battle?.zone === "battle") { battle = null; if (settings.pick === "auto") switchTrack(FADE_IN, 3); }
 }
 
 /** Fighting near the hero: a hit on a monster nearby (1) or on the hero (3). */
