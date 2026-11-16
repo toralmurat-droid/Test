@@ -408,6 +408,7 @@ const BOXES = new Map<number, WallBox>();
 const TILES = new Map<number, number[]>();
 const REACH = new Map<number, number[]>(); // per Hold: the largest fort reach of any clan at each tier
 const bit = (tier: number, ci: number) => 1 << (tier * CLAN_KEYS.length + ci);
+if (HOLD_TIERS.length * CLAN_KEYS.length > 16) throw new Error("holdWalls: clan x tier bits no longer fit WallBox.bits (Uint16)");
 
 function build() {
   FORTS = new Map(); GRID = new Uint16Array(MAP_W * MAP_H); SOLID = new Int8Array(MAP_W * MAP_H).fill(-1);
