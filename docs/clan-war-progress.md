@@ -1075,3 +1075,7 @@ in every act.
   5.85 flips a day, domination 0%; 0.75 town handovers a day. Gate fight at Lv 25 (`pve.ts --troops --garrison`):
   Wizard 77%, Vampire 100%, Summoner 100%, Songweaver 40% win. Bench unchanged within noise.
 - **Open:** Kel Ashar left out (Act 2's main town); the Songweaver alone struggles at the gate.
+
+## W7 capital cities (in progress)
+
+City band below the Crown, one walled city per clan behind a city gate beside its seat (Murat 2026-11-16). Wardens first (gate at Goldenreach Farms). Plan: see the PR.
