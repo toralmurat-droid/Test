@@ -1,5 +1,6 @@
 {
   "date": "2026-11-16",
+  "patch": 279,
   "title": "War roads and marching columns",
   "changes": [
     "Roads now run between neighbouring Holds on the map, and clans march their war columns along them before an attack.",
