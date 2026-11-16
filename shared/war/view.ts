@@ -8,6 +8,7 @@ import type { WarState } from "./rules";
 import { huntedClan, rallyClan, WAR } from "./rules";
 import { holdTiers } from "./holdTiers";
 import { TERRITORIES, type Territory } from "./territories";
+import type { ReckonView } from "./crown";
 
 export interface WarView {
   tick: number;
@@ -30,6 +31,8 @@ export interface WarView {
   tier?: number[];
   /** Pairs of clans at war (shared/war/feuds.ts pairOf), from the server's memory of the borders; the client takes them as they are. */
   wars?: number[];
+  /** The Reckoning (shared/war/crown.ts): the next or current window, the scores while it runs, the crowned clan, the last result; absent from older servers. */
+  reck?: ReckonView;
 }
 
 /** `raided`: the lands the Night Raiders struck in the last tick (server/war.ts keeps them; not part of the state). */

@@ -17,6 +17,7 @@ import { CITIES, cityText } from "../../shared/capitals";
 import { inPoly, layoutTerritories, SLOTS, WT_H, WT_W, type Pt } from "./warTableLayout";
 import { CROWN_LAND, findRoute, gateReq, landOfNode, nodeName, routeLines, STONES, WAYS, type Here, type Step } from "./warRoute";
 import { wrap } from "./warHere";
+import { reckonCountdown } from "../../shared/war/crown";
 
 const KEY = "wartable";
 let on = (() => { try { return localStorage.getItem(KEY) === "1"; } catch { return false; } })();
@@ -355,14 +356,25 @@ export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, font: stri
   } else if (hn !== undefined) { para(tgt === hn ? "This is where you stand." : "Click a territory to see the way there.", "#a39680", 11, 13); if (tgt !== hn) para("The dotted lines are gates between lands.", "#a39680", 11, 13); }
   y += 6; g.fillStyle = "#3a2a1c"; g.fillRect(lx + 4, y - 3, lw - 12, 1); y += 10;
   if (!tight || y < bot - 150) { text("The Riven Marches", lx + 4, y, "#f6b040", 14); y += 15; }
+  const rk = v.reck;
   CLAN_KEYS.forEach((k, i) => {
     const n = v.owner.filter((o) => CLAN_KEYS[o] === k).length, tag = v.hunt === i ? "hunted" : v.rally === i ? "Rally" : "";
     g.fillStyle = "#0d0a07"; g.fillRect(lx + 3, y - 6, 12, 12); g.fillStyle = hex(MAP[k]); g.fillRect(lx + 4, y - 5, 10, 10);
     text(short(k), lx + 21, y, "#eadfc8", 12);
+    if (rk?.crowned === i) { g.font = `12px ${font}`; crownMark(g, Math.round(lx + 25 + g.measureText(short(k)).width), y - 5, 1); } // crowned at the last Reckoning
+    if (rk?.on && rk.score) { g.textAlign = "right"; text(`${rk.score[i] ?? 0}`, lx + lw - 30, y, "#ffd860", 11); g.textAlign = "left"; } // Reckoning score so far
     g.textAlign = "right"; text(`${n}`, lx + lw - 6, y, "#ffe8a3", 13); g.textAlign = "left";
     if (tag) { y += 12; text(tag, lx + 21, y, v.hunt === i ? "#c890ff" : "#9fe07a", 11); }
     y += rowH;
   });
+  // the Reckoning (shared/war/crown.ts): when, or how long it still runs, and the last result
+  if (rk && y < bot - 60) {
+    y += 4; g.fillStyle = "#3a2a1c"; g.fillRect(lx + 4, y - 3, lw - 12, 1); y += 10;
+    text(rk.on ? "The Reckoning: now" : "The Reckoning", lx + 4, y, rk.on ? `rgba(255,216,96,${0.7 + 0.3 * pulse})` : "#ffd860", 13); y += 15;
+    para(rk.on ? `${reckonCountdown(rk, now)} · scores in gold above` : `${reckonCountdown(rk, now)} (first Saturday, 18:00 UTC)`, "#eadfc8", 11, 13, 2);
+    const lw0 = rk.last && CLAN_KEYS[rk.last.winner];
+    if (!rk.on && lw0) para(`Last: ${short(lw0)} ${rk.last!.kept ? "kept" : "took"} the Keep`, "#a39680", 11, 13, 2);
+  }
   y += 2;
   const key = (draw: () => void, label: string) => { if (y > bot) return; draw(); text(label, lx + 28, y, "#cfc4aa", 11); y += keyH; };
   key(() => { g.fillStyle = hex(EMBER[0]); g.fillRect(lx + 3, y - 1, 18, 3); }, "Front line");
@@ -401,6 +413,13 @@ export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, font: stri
     lines.forEach((l, i) => text(l, tx + 7, ty + 12 + i * 16, i === 0 ? GOLD : l.startsWith("Click") ? "#8fe0ff" : "#eadfc8", 12));
   }
   g.restore();
+}
+
+/** A small gold crown (11 x 6 art px at scale k), its top-left at (x, y): the clan a Reckoning crowned. */
+function crownMark(g: CanvasRenderingContext2D, x: number, y: number, k: number) {
+  g.fillStyle = "#0d0a07"; g.fillRect(x - k, y - k, 13 * k, 8 * k);
+  g.fillStyle = "#ffd860";
+  for (const [a, b, w, hh] of [[0, 3, 11, 3], [0, 0, 1, 3], [5, 0, 1, 3], [10, 0, 1, 3], [1, 1, 1, 2], [4, 1, 1, 2], [6, 1, 1, 2], [9, 1, 1, 2]]) g.fillRect(x + a * k, y + b * k, w * k, hh * k);
 }
 
 const routeCache = new Map<string, Step[] | undefined>();

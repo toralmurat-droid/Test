@@ -8,6 +8,7 @@ import { wantedTier, type FeudState } from "../shared/war/feuds";
 import { RENOWN_RANKS, rankOf } from "../shared/war/renown";
 import { rallyRenown } from "../shared/war/rules";
 import { addValor, warState } from "./war";
+import { boonRenown } from "./warCrown";
 
 export interface WarHero { clan?: ClanKey; clanAt: number; dead: boolean; level: number; x: number; y: number; lastAct: number; renown: number; feud?: FeudState }
 export interface ClanView { clan: ClanKey | ""; next: number; minLevel: number; renown: number }
@@ -54,7 +55,7 @@ export class Presence {
       if (n >= 60) {
         const v = heroValor(p.level, s.t), was = rankOf(p.renown);
         // effort the war counted earns the hero renown (shared/war/renown.ts), more while the war rallies for their clan
-        if (v > 0 && addValor(s.t, p.clan!, v)) p.renown += v * rallyRenown(warState(), p.clan);
+        if (v > 0 && addValor(s.t, p.clan!, v)) p.renown += v * rallyRenown(warState(), p.clan) * boonRenown(p.clan);
         const rank = rankOf(p.renown);
         if (rank > was) ranked.push([id, RENOWN_RANKS[rank].name]);
         this.secs.set(id, { std: s.id, n: 0 });

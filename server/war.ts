@@ -27,6 +27,7 @@ import {
 import { frontStep } from "../shared/war/siege";
 import { TOWN, TOWNS, townById, townCounts, townPatron, townStep, townsView, type TownChange, type TownState, type TownsMsg } from "../shared/war/towns";
 import { openKv, type Kv } from "./store";
+import { cleanCrown, crownClock, crownTick, crownValor, crownView, type CrownSave } from "./warCrown";
 
 /**
  * What else a tick brought, for the room to announce (not logged, not saved): the Night Raiders' strike on the hunted
@@ -58,6 +59,8 @@ interface Saved {
   ahead?: Partial<Record<ClanKey, Orders>>; cols?: Record<string, ColSave>; battles?: BattleSave;
   /** W6: each capturable town's holder and contest (shared/war/towns.ts). Optional: read through cleanTowns, dropped on a map change. */
   towns?: Record<string, TownState>;
+  /** Crown PR4: the Reckoning (server/warCrown.ts). Optional: read through cleanCrown; a save without it has had no Reckoning yet. Kept on a map change. */
+  crown?: CrownSave;
 }
 
 const KEY = "war";
@@ -228,6 +231,7 @@ export async function startWar(store?: Kv) {
   relate(saved.rel ?? []);
   cleanBattles();
   cleanTowns(); // (W6)
+  saved.crown = cleanCrown(saved.crown); // (Crown PR4)
   try { lookAhead(saved.next - WAR.tickMs); } catch (e) { console.error("War: the orders ahead could not be given:", e); } // (the next tick tries again)
   timer = setInterval(() => { step(Date.now()).catch((e) => console.error("War: tick failed:", e)); }, 15_000);
   timer.unref?.();
@@ -240,6 +244,7 @@ export async function step(now: number) {
   if (!saved) return;
   settleMeetings(now);
   try { battleClock(now); } catch (e) { console.error("War: battles failed:", e); } // (with no room open, the battles go on here)
+  try { crownClock(now); } catch (e) { console.error("War: the Reckoning failed:", e); } // (Crown PR4: its warning, start, standings and close)
   if (now < saved.next) { if (dirtyAt && now - lastSave >= COLUMN.saveMs) await save(now); return; }
   const late = Math.floor((now - saved.next) / WAR.tickMs);
   if (late >= CATCH_UP) saved.next = now - (CATCH_UP - 1) * WAR.tickMs;
@@ -278,6 +283,7 @@ function tickOnce(at: number, news: WarNews): WarEvent[] {
   warTick(s, orders, { phase, valor, march: marchMults(), ...(battle.length ? { battle } : {}), ...townExtra() });
   lastOrders = orders;
   valor = TERRITORIES.map(() => ({}));
+  try { crownTick(at); } catch (e) { console.error("War: the Reckoning's tick failed:", e); } // (Crown PR4: the Crown's land scores on the new owners)
   // the orders for the next tick, at once (same leaders, same seed as if given then): their columns march now
   saved!.cols = {};
   try { saved!.ahead = scriptedOrders(s, saved!.minds, rng(s.tick * 2654435761 + 1)); lookAhead(at); }
@@ -299,10 +305,15 @@ function tickOnce(at: number, news: WarNews): WarEvent[] {
   return out;
 }
 
-/** A hero's effort for clan `k` in territory `t` (the room adds it while heroes hold standards). */
-export function addValor(t: number, k: ClanKey, amount: number): boolean {
+/**
+ * A hero's effort for clan `k` in territory `t` (the room adds it while heroes hold standards). `by`: the hero who earned
+ * it (server/warCrown.ts keyOf), so a Reckoning knows who took part.
+ */
+export function addValor(t: number, k: ClanKey, amount: number, by?: string): boolean {
   if (!saved || !(t >= 0 && t < TERRITORIES.length) || !CLANS[k] || !(amount > 0)) return false;
-  valor[t][k] = (valor[t][k] ?? 0) + Math.min(amount, WAR.valorPerAdd);
+  const v = Math.min(amount, WAR.valorPerAdd);
+  valor[t][k] = (valor[t][k] ?? 0) + v;
+  crownValor(t, k, v, by);
   return true;
 }
 
@@ -329,7 +340,7 @@ export function strikeHold(t: number, k: ClanKey | undefined, half: boolean, her
 }
 
 /** The snapshot players get, with the clans at war (shared/war/feuds.ts: the client takes them as they are). */
-const viewOf = (s: Saved): WarView => ({ ...warView(s.state, s.next, lastRaided), wars: warPairs() });
+const viewOf = (s: Saved): WarView => ({ ...warView(s.state, s.next, lastRaided), wars: warPairs(), reck: crownView() });
 export const warNow = (): WarView | undefined => (saved ? viewOf(saved) : undefined);
 /**
  * The clans at war (shared/war/feuds.ts) for the war as it stands: after a load (`last`: the saved memory), after every
@@ -756,6 +767,7 @@ export function _resetWar(s?: Saved, store?: Kv) {
   marches = []; paths.clear(); meets = undefined; seenLive.clear(); halting.clear(); joined.clear(); dirtyAt = 0; colVersion++;
   pendingLive.clear(); fielded.clear(); captainRoom.clear(); bannerReports.clear(); scoredWin.clear(); heroCaps.clear(); clanCaps.clear(); battleNews.length = 0; cleanBattles(); battleVer++;
   heldGate.clear(); cleanTowns(); townVer++; // (W6)
+  saved.crown = cleanCrown(saved.crown); // (Crown PR4)
   if (saved.ahead) lookAhead(saved.next - WAR.tickMs); // (no orders ahead: given at the first tick, as before W4)
 }
 /** Tests: set the last tick's orders; they are the orders ahead too (the plan and the columns follow them). */
@@ -924,4 +936,32 @@ function townNews(room: { broadcast(type: string, msg: unknown): void }, e: WarE
   }
   if (t && e.change !== "off") room.broadcast("sfx", { ev: e.change === "contested" ? "town_contested" : "town_claimed", id: t.id, x: Math.round((t.gate.x + 0.5) * TILE), y: Math.round((t.gate.y + 0.5) * TILE), by: e.by, from: e.from });
   // (the "towns" view, with the banners going up there, goes out from each room's own WarTowns.onWar, the same news)
+}
+
+// ---- The Reckoning (Crown PR4: shared/war/crown.ts has the rules, server/warCrown.ts the window and the pay) ---------------
+
+/** The war save's Reckoning part (created on first use), or undefined before the war is loaded. */
+export const warCrownSave = (): CrownSave | undefined => (saved ? (saved.crown ??= {}) : undefined);
+/** The Reckoning changed the save: written with the next step's save, or at once when `now` is set (a result, a payout). */
+export function warCrownChanged(now: number, atOnce = false) {
+  if (!saved) return;
+  if (atOnce) { kv?.set(KEY, saved).catch((e) => console.error("War: could not save:", e)); return; }
+  dirtyAt ||= now;
+}
+/**
+ * A Reckoning gave the Keep (territory t, rules.ts never moves it) to clan `k`: full Control, no siege, no works; the
+ * news goes out like a tick's (a "flip" event: the Herald, the leaders, the horn, every room's snapshot).
+ */
+export function crownKeep(t: number, k: ClanKey, text: string, now = Date.now()) {
+  if (!saved || !CLANS[k] || !(t >= 0 && t < saved.state.owner.length)) return;
+  const s = saved.state, from = s.owner[t];
+  if (from === k) return;
+  s.owner[t] = k; s.control[t] = 100; s.siege[t] = null; s.fort[t] = 0; s.pressure[t] = 0;
+  const e: WarEvent = { at: now, tick: s.tick, kind: "flip", t, by: k, from, text };
+  saved.log.push(e);
+  if (saved.log.length > LOG_MAX) saved.log.splice(0, saved.log.length - LOG_MAX);
+  if (!process.env.NODE_TEST_CONTEXT) console.log(`War: ${text}`);
+  relate();
+  const view = viewOf(saved);
+  listeners.forEach((f) => { try { f(view, [e], {}); } catch (err) { console.error("War listener:", err); } });
 }

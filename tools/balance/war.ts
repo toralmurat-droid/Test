@@ -39,6 +39,12 @@
  * clever clan's gain over its fair share when --clever is set, how often the Night Raiders hunted and whom the war
  * rallied for; for the Crown of the Marches (a `wards` land) also each clan's share of it and how often one clan held over
  * half of it, the snowball to watch there. Exit code 1 if the stalemate goal fails.
+ *
+ * The Reckoning (Crown PR4, shared/war/crown.ts), on unless `--no-reckoning`: every `--reckon-every=<days>` war days
+ * (default 30, a month) the war ticks of 18:00-21:00 (war tick 0 is midnight) score the Crown's land, and the top clan takes
+ * the Keep (a tie: the holder keeps it). No players, so no valor unless `--reckon-valor=<clan>:<valor a tick>` adds that
+ * clan's heroes fighting in the Crown. Reports who won, how often the holder kept the Keep and how often one clan won
+ * twice running (the snowball to watch: with five clans about 20% is chance).
  */
 import { CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
 import { newMinds, scriptedOrders } from "../../shared/war/doctrine";
@@ -53,6 +59,7 @@ import { BATTLE, battleOutcome, siteForces, isDecisive, meetSite, newBattle, pic
 import type { BattleKind, BattleOutcome } from "../../shared/war/rules";
 import { TERRITORIES } from "../../shared/war/territories";
 import { regionByKey } from "../../shared/war/regions";
+import { keepOf, landPoints, RECKONING, reckonWinner, scoresOf, type ReckonTally } from "../../shared/war/crown";
 import { TOWNS, townCounts, townPatron, townStep, type TownState } from "../../shared/war/towns";
 
 const args = process.argv.slice(2);
@@ -88,6 +95,14 @@ if (bhWho && !BH.length) { console.error(`--battle-heroes must be all or one of:
 const BH_K = Number(bhK || 1.3);
 const TOWNS_ON = args.includes("--towns");
 const SETTLE_DAYS = 7, STREAK_DAYS = 3;
+const RECKON = !args.includes("--no-reckoning"), RECKON_EVERY = Number(flag("reckon-every") ?? 30);
+const [rvWho, rvV] = (flag("reckon-valor") ?? "").split(":");
+const RV: ClanKey | undefined = CLAN_KEYS.includes(rvWho as ClanKey) ? (rvWho as ClanKey) : undefined;
+if (rvWho && !RV) { console.error(`--reckon-valor must be one of: ${CLAN_KEYS.join(", ")}`); process.exit(2); }
+const RV_V = Number(rvV || 10);
+/** The war ticks of the Reckoning's window in its day (war tick 0 at midnight UTC). */
+const RECKON_FROM = Math.round((RECKONING.hour * 3600_000) / WAR.tickMs), RECKON_TO = RECKON_FROM + Math.round((RECKONING.hours * 3600_000) / WAR.tickMs);
+const KEEP = keepOf(TERRITORIES);
 
 function mulberry(a: number) {
   return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
@@ -111,6 +126,8 @@ interface Result {
   /** The neutral lands (regions.ts `wards`: the Crown): each clan's average share of them, the share of days one clan held
    * more than half of them, territories of theirs changing hands per war day. */
   crownAvg: Record<ClanKey, number>; crownHalf: number; crownFlips: number;
+  /** Reckonings held, won by each clan, kept by the holder, won by the clan that won the one before. */
+  reckonings: number; reckonWins: Record<ClanKey, number>; reckonKept: number; reckonRepeat: number;
 }
 /** Territories of the neutral lands (the Crown of the Marches): reported apart, so a snowball there shows. */
 const NEUTRAL = TERRITORIES.filter((t) => regionByKey(t.region)?.wards).map((t) => t.id);
@@ -130,7 +147,8 @@ function play(clever?: ClanKey): Result {
   let stormFlips = 0, menSum = 0, minSum = 0, townFlips = 0, townContests = 0, townOff = 0;
   const townsHeld = Object.fromEntries(CLAN_KEYS.map((k) => [k, 0])) as Record<ClanKey, number>;
   const crownAvg = Object.fromEntries(CLAN_KEYS.map((k) => [k, 0])) as Record<ClanKey, number>;
-  let crownHalf = 0, crownFlips = 0;
+  let crownHalf = 0, crownFlips = 0, reckonings = 0, reckonKept = 0, reckonRepeat = 0;
+  const reckonWins = Object.fromEntries(CLAN_KEYS.map((k) => [k, 0])) as Record<ClanKey, number>;
   const slots = pitchedTicks();
   for (let r = 0; r < RUNS; r++) {
     const rnd = mulberry(SEED * 7919 + r), s = newWar(), minds = newMinds();
@@ -138,6 +156,7 @@ function play(clever?: ClanKey): Result {
     const towns: Record<string, TownState> = {};
     if (TOWNS_ON) for (const t of TOWNS) towns[t.id] = { k: s.owner[townPatron(t.id)] };
     const announced = new Map<number, BattleSite>(); // settle tick (day index) -> the pitched battle placed 3 ticks before its start
+    let tally: ReckonTally | undefined, lastWinner: ClanKey | undefined;
     for (let d = 0; d < DAYS; d++) {
       let today = 0, meetsToday = 0;
       announced.clear();
@@ -232,6 +251,17 @@ function play(clever?: ClanKey): Result {
           if (d >= SETTLE_DAYS) { if (r.change === "submitted") townFlips++; else if (r.change === "contested") townContests++; else if (r.change === "off") townOff++; }
         }
         if (TIERS) setWarRelations(s.owner, s.tick, d === 0 && i === 0 ? [] : undefined); // (display only, for the tiers: the clans at war as the live server keeps them)
+        if (RECKON && KEEP && (d + 1) % RECKON_EVERY === 0 && i >= RECKON_FROM && i < RECKON_TO) { // the Reckoning: the window's ticks score, its end decides
+          tally ??= { land: {}, valor: {} };
+          for (const [k, v] of Object.entries(landPoints(s.owner, TERRITORIES)) as [ClanKey, number][]) tally.land[k] = (tally.land[k] ?? 0) + v;
+          if (RV) tally.valor[RV] = (tally.valor[RV] ?? 0) + RV_V;
+          if (i === RECKON_TO - 1) {
+            const holder = s.owner[KEEP.id], { winner, kept } = reckonWinner(scoresOf(tally), holder);
+            s.owner[KEEP.id] = winner; s.control[KEEP.id] = 100;
+            reckonings++; reckonWins[winner]++; if (kept) reckonKept++; if (winner === lastWinner) reckonRepeat++;
+            lastWinner = winner; tally = undefined;
+          }
+        }
         for (let j = 0; j < N; j++) if (s.owner[j] !== prev[j]) { flips++; if (NEUTRAL.includes(j)) crownFlips++; }
         prev = s.owner.slice();
       }
@@ -263,7 +293,8 @@ function play(clever?: ClanKey): Result {
     battles: { pitched: battles.pitched / (RUNS * DAYS), storm: battles.storm / (RUNS * DAYS), meet: battles.meet / (RUNS * DAYS) }, results, stormFlips: stormFlips / (RUNS * DAYS),
     men: menSum / Math.max(1, 2 * (battles.pitched + battles.storm + battles.meet)), mins: minSum / Math.max(1, battles.pitched + battles.storm + battles.meet),
     townFlips: townFlips / Math.max(1, RUNS * (DAYS - SETTLE_DAYS)), townContests: townContests / Math.max(1, RUNS * (DAYS - SETTLE_DAYS)), townOff: townOff / Math.max(1, RUNS * (DAYS - SETTLE_DAYS)), townsHeld,
-    crownAvg, crownHalf: crownHalf / Math.max(1, samples), crownFlips: crownFlips / (RUNS * DAYS) };
+    crownAvg, crownHalf: crownHalf / Math.max(1, samples), crownFlips: crownFlips / (RUNS * DAYS),
+    reckonings, reckonWins, reckonKept, reckonRepeat };
 }
 
 const t0 = Date.now();
@@ -279,6 +310,11 @@ console.log(`territories changing hands: ${base.flips.toFixed(2)} per war day`);
 if (NEUTRAL.length) {
   console.log(`the Crown (${NEUTRAL.length} territories): ${base.crownFlips.toFixed(2)} change hands per war day; share held on average: ${CLAN_KEYS.map((k) => `${k} ${pct(base.crownAvg[k])}`).join(", ")}`);
   console.log(`  days one clan held more than half of the Crown: ${pct(base.crownHalf)}`);
+}
+if (RECKON && base.reckonings) {
+  const n = base.reckonings, runsWithTwo = Math.floor(DAYS / RECKON_EVERY) - 1;
+  console.log(`Reckonings: ${n} (every ${RECKON_EVERY} war days${RV ? `, ${rvWho}'s heroes adding ${RV_V} Crown valor a tick` : ""}); won by ${CLAN_KEYS.map((k) => `${k} ${pct(base.reckonWins[k] / n)}`).join(", ")}`);
+  console.log(`  the holder kept the Keep ${pct(base.reckonKept / n)}; the last winner won again ${runsWithTwo > 0 ? pct(base.reckonRepeat / Math.max(1, n - RUNS)) : "n/a (one Reckoning a run)"}`);
 }
 if (SACK.length) console.log(`Holds sacked: ${base.sacks.toFixed(2)} per war day, calling ${base.sackSieges.toFixed(2)} sieges`);
 console.log(`runs where one clan held > ${pct(WAR.leaderShare)} for over ${STREAK_DAYS} days in a row: ${pct(base.dominated)} (goal: under 5%)`);

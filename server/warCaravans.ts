@@ -19,6 +19,7 @@ import { TERRITORIES } from "../shared/war/territories";
 import { troopStance, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
 import { clanOfIndex } from "../shared/war/view";
 import { addValor, warNow, warState } from "./war";
+import { boonRenown, crownCredit, keyOf } from "./warCrown";
 import { newFighter, type FightGround, type Fighter, type TroopHero, type TroopMob, type WarTroops } from "./warTroops";
 
 export interface CaravanHost {
@@ -250,6 +251,7 @@ export class WarCaravans {
       for (const [hid, o] of this.h.heroes()) {
         if (o.dead || o.clan !== raider || o.level < STANDARD.minLevel || (hid !== killerId && Math.hypot(o.x - m.x, o.y - m.y) > CARAVAN.helperPx)) continue;
         this.renown(hid, o, CARAVAN.raidRenown);
+        { const by = keyOf(o); if (by) crownCredit(land.id, by, raider, CARAVAN.raidValor); } // (a Reckoning: every raider took part)
       }
     }
     this.h.broadcast("sfx", { ev: "caravan_raided", id, x: Math.round(m.x), y: Math.round(m.y), by: raider, from: clan });
@@ -276,6 +278,7 @@ export class WarCaravans {
     for (const [hid, p] of this.h.heroes()) {
       if (!names.has(p.name) || p.clan !== clan) continue;
       this.renown(hid, p, CARAVAN.escortRenown);
+      { const by = keyOf(p); if (by) crownCredit(b, by, clan, CARAVAN.deliverValor); }
       this.h.writ?.(hid, "escort", tr.line);
       this.h.tell(hid, `The caravan reached ${TERRITORIES[b].name}: the ${CLANS[clan].name} thank you.`);
     }
@@ -284,7 +287,7 @@ export class WarCaravans {
 
   private renown(hid: string, p: TroopHero, n: number) {
     const was = rankOf(p.renown);
-    p.renown += n;
+    p.renown += n * boonRenown(p.clan);
     const rank = rankOf(p.renown);
     if (rank > was) this.h.ranked(hid, RENOWN_RANKS[rank].name);
   }

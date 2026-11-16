@@ -110,6 +110,7 @@ import { ASK_BURST, ASK_PER_SEC, Bucket, CHAT_BURST, CHAT_PER_SEC, CRAFT_BURST, 
 import { Player } from "./player";
 import { byPart, hitBy } from "./hitBy";
 import { addValor, attachWar, onWar, rallyTell, relate, warNow, warState, warTowns } from "./war";
+import { boonGold, boonGoldMult, WarCrown } from "./warCrown";
 import { HoldWalls } from "./holdWalls";
 import { routeFrame } from "../shared/war/holdRoutes";
 import { clanView, cleanOath, Presence, swear } from "./warHeroes";
@@ -832,6 +833,14 @@ export class TownRoom extends Room<TownState> {
     sfx: (msg) => this.broadcast("sfx", msg),
   });
 
+  /** The Reckoning (server/warCrown.ts): the Herald's news, the notice, the pay of heroes who took part. */
+  private reckoning = new WarCrown({
+    heroes: () => this.state.players.entries(), hero: (id) => this.state.players.get(id),
+    broadcast: (type, msg) => this.broadcast(type, msg), send: (id, type, msg) => this.clients.getById(id)?.send(type, msg),
+    ranked: (pid, rank) => { const c = this.clients.getById(pid), p = this.state.players.get(pid); if (c && p) { c.send("clan", clanView(p)); c.send("chat", { id: "", name: "Herald", text: `Your renown grows: you are now ${rank}.` }); } },
+    renowned: (pid) => { const c = this.clients.getById(pid), p = this.state.players.get(pid); if (c && p) c.send("clan", clanView(p)); },
+  });
+
   /** Hold walls (server/holdWalls.ts): the forts follow the war's holders; nobody is left standing in a wall. */
   private holdWalls = new HoldWalls({ heroes: () => this.state.players.entries(), mobs: () => this.state.mobs.entries() });
 
@@ -848,7 +857,8 @@ export class TownRoom extends Room<TownState> {
       const r = news.rally?.clan; // the Rally came to a clan: its sworn heroes here hear what it means for them
       if (r) for (const [id, p] of this.state.players.entries()) if (p.clan === r) this.clients.getById(id)?.send("chat", { id: "", name: "Herald", text: rallyTell(r) });
     }); // the clan war (server/war.ts) runs on its own; the room passes on the news
-    this.offWar = () => { offNews(); offTroops(); };
+    const offCrown = this.reckoning.attach();
+    this.offWar = () => { offNews(); offTroops(); offCrown(); };
     this.limitMessages();
     this.qsteps = new QuestSteps({
       player: (pid) => this.state.players.get(pid),
@@ -1298,6 +1308,7 @@ export class TownRoom extends Room<TownState> {
     this.oaths.sync(); client.send("oaths", this.oaths.full()); // tabards: others learn this hero's oath, this client gets everyone's
     this.writs.join(client.sessionId); // a war writ in progress (or withdrawn while away)
     this.feuds.join(client.sessionId); // their feuds (owner only) and everyone's Wanted marks (server/warFeuds.ts)
+    this.reckoning.join(client.sessionId); // a Reckoning's pay waiting, and a word when one runs or is near (server/warCrown.ts)
     console.log(`${p.name} the ${CLASSES[p.cls].name} joined (${this.clients.length} online)`);
   }
 
@@ -5694,7 +5705,7 @@ export class TownRoom extends Room<TownState> {
     // Kill XP: every group member in the same zone gets it (the killer alone when solo)
     const xp = Math.round(def.xp * mobScale(m.level, "xp") * (m.tide ? TIDE.xpMult : 1));
     for (const pid of a?.party ? this.groupNear(attackerId, m.x, m.y) : [attackerId]) this.grantXp(pid, xp, m);
-    this.dropLoot(m.kind, m.x, m.y, mobScale(m.level, "gold") * (m.kind === "bandit" ? BANDIT_ROLES[roleOf(m.weapon)].loot : 1) * (m.champion ? CHAMPION.goldMult : 1), m.level);
+    this.dropLoot(m.kind, m.x, m.y, mobScale(m.level, "gold") * (m.kind === "bandit" ? BANDIT_ROLES[roleOf(m.weapon)].loot : 1) * (m.champion ? CHAMPION.goldMult : 1) * boonGoldMult(a?.clan), m.level); // (the crowned clan's boon: server/warCrown.ts)
     if (m.champion) this.champLoot(m); // a champion: more gold, gear rolls, a potion and a rune
     this.mobDied(m, targetId, attackerId, a?.name ?? "");
   }
@@ -6141,7 +6152,7 @@ export class TownRoom extends Room<TownState> {
       if (s.type === "learn" && activeSkills(p.cls).some((k) => skillLearned(p.cls, p.talents, k.id))) this.nextStep(id, p, c);
       return;
     }
-    p.gold += d.reward.gold;
+    p.gold += boonGold(p.clan, d.reward.gold);
     if (d.sets) setMeta(p, META.flags, withChoice(metaOf(p, META.flags), d.sets.flag, d.sets.v)); // QuestDef.sets: e.g. Penance done
     if (d.reward.song) this.learnSong(id, p, d.reward.song); // a Songweaver learns the quest's song (shared/songbook.ts)
     // Reward potions fit the hero's level; what the bag can't hold is put down at their feet
@@ -6292,6 +6303,7 @@ export class TownRoom extends Room<TownState> {
     let row = 0; // stack the "+loot" texts so they don't overlap
     const got = (kind: ItemKind, amount: number, gear = "") =>
       client.send("pickup", { kind, amount, x: c.x, y: c.y - 8 - 9 * row++, gear, name: kind === "gear" ? lvlName(gear, p.cls) : kind === "potion" || kind === "mpotion" ? potionName(kind, potSize(gear)) : "" });
+    loot.gold = boonGold(p.clan, loot.gold); // (the crowned clan's boon)
     p.gold += loot.gold;
     got("gold", loot.gold);
     for (let i = 0; i < loot.potions; i++) {
@@ -6353,7 +6365,7 @@ export class TownRoom extends Room<TownState> {
   private payHero(pid: string, gold: number, rune?: string) {
     const p = this.state.players.get(pid);
     if (!p) return;
-    p.gold += gold;
+    p.gold += boonGold(p.clan, gold); // (the crowned clan's boon: server/warCrown.ts)
     if (rune) { if (this.bagFull(p)) this.dropItem("gear", p.x, p.y, 1, rune, pid); else setBag(p, [...bagItems(p), rune]); }
   }
 
@@ -6366,7 +6378,7 @@ export class TownRoom extends Room<TownState> {
     if (b!.n < b!.goal) { client?.send("bounty", { active: b }); return; }
     p.bounty = undefined;
     p.bountyDone++;
-    p.gold += b!.gold;
+    p.gold += boonGold(p.clan, b!.gold);
     this.grantXp(id, b!.xp, p);
     client?.send("bounty", { active: null, done: b });
   }

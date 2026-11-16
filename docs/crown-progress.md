@@ -8,7 +8,7 @@ Act 6, the neutral land in the middle of the Riven Marches (levels 40-50). Plan:
 | 1 | The land: `shared/crown.ts`, the five Crownways, Tollcross, the Crown Keep and its Throne Hall | merged |
 | 2 | The court's monsters, the Riven King, The Riven Throne quest chain | merged |
 | 3 | War territories (ids 62-71) | this log (branch claude/crown-war) |
-| 4 | The Reckoning | not started |
+| 4 | The Reckoning | this log (branch claude/crown-reckoning) |
 
 ## PR2: the Riven Court (2026-11-16)
 
@@ -125,5 +125,48 @@ to run noise (two before runs differ by 1 ms).
 - The client still offers the "raise banner" prompt at the Keep's Hold; the server answers that it falls only at a
   Reckoning.
 - The Wardens' approach is cut off from their supply on a new war (its Crownway lands on the Host's Stormbreak Crags).
-- PR4: the Reckoning (sets the Keep's holder through `reckoningOnly`).
+- PR4: the Reckoning (sets the Keep's holder through `reckoningOnly`): see below.
 
+
+## PR4: the Reckoning (2026-11-16)
+
+Owner's defaults of 2026-11-15. **Rules** (`shared/war/crown.ts`, numbers in `RECKONING`): the first Saturday of each
+month, 18:00-21:00 UTC (`reckoningOf`, `reckoningAt`; UTC, so no daylight saving). Each war tick in the window scores
+1 point per Crown territory held and 3 for the Keep (`landPoints`); valor sworn heroes earn in Crown territories adds
+`valorPts` 0.25 a valor (one busy hero, ~12 valor a tick, is worth about three territories). The top score takes the Keep;
+a tie at the top (or no score) leaves it with its holder (`reckonWinner`). The clan a Reckoning crowned (it may be the
+holder that kept it) gets the boon while it holds the Keep (`crownBoon`): x1.1 gold (monster loot by the killer's clan,
+quest, bounty and chest gold, `payHero` sums) and x1.1 renown (every renown source that takes the Rally's multiplier, and
+caravans). Before the first Reckoning nobody has the boon (the Keep's first holder was only given it). Pay for taking
+part (`reckonReward`): 500 gold and 30 renown, +500 / +30 for the winning clan's heroes, for a sworn hero with at least 1
+Crown valor in the window; it waits 14 days.
+
+**Server** (`server/warCrown.ts`): the war save's optional `crown` field (`cleanCrown` on load; a save without it has had
+no Reckoning; kept through `migrateWar`): `crowned`, `warned`, `cur` (window, land points, valor per clan, each hero's
+part by `name/class`), `last`, `pay`. `server/war.ts` calls `crownClock` every 15 s (warning 1 h before, start, standings
+each hour, close), `crownTick` after each war tick and `crownValor` from `addValor` (which takes the hero's key now;
+battles, holds and caravans credit each helper with `crownCredit`). The close sets the Keep's holder through
+`war.ts crownKeep` (a "flip" event: Herald, leaders, horn, every room's snapshot) and saves at once. Rooms (`WarCrown`):
+Herald lines and a `reckon` message for the notice; online heroes are paid at the result, others on login (`claimCrown`
+takes the pay once, whichever room asks). `_startReckoning` opens one for tests (no message reaches it). The war view
+carries `reck` (`ReckonView`: window, `on`, scores, `crowned`, last result).
+
+**Client:** `warNotice.ts` shows the `reckon` notice in the pixel font; `warTable.ts` lists the Reckoning's countdown (or
+the time left and the scores while it runs) and the last result in the legend, a crown by the crowned clan's name;
+`warPlaque.ts` shows the countdown at the Keep; the crowned clan's pennants (plaque, standards in the world) wear a gold
+crown in place of their lozenge.
+
+**War sim** (`tools/balance/war.ts`, the Reckoning on by default, `--no-reckoning` off, `--reckon-valor=<clan>:<v>` adds
+a clan's heroes): `200 30` gives exactly PR3's numbers (Wardens 19.3%, Redfang 22.7%, Host 18.3%, Hide-Kin 18.0%, Veiled
+21.7%; 7.93 flips a day; domination 0.0%): with no players the holder always keeps the Keep. `200 120` (800 Reckonings):
+Hide-Kin win 100%, the holder keeps it 100%. With heroes (`50 120`): Veiled +5 valor a tick win 21% (holder kept 94.5%,
+the last winner again 98.7%), Redfang +10 win 3.5% (kept 98.5%). Domination stays 0.0%. **The Keep is sticky**: its 3
+points a tick, on top of the holder's Crown land, decide most Reckonings, and a clan that takes it keeps it unless heroes
+fight hard against it. The armies' war is untouched (the Keep adds 1 income like any land). Owner's call whether the
+Keep should count less, or the holder's points less.
+
+**Open:**
+- The Keep's stickiness (above): an owner decision on `RECKONING.keepPts` / `valorPts`.
+- The writ board's valor (`server/warWrits.ts`) and the standing minutes (no valor since W2c) credit no hero for a
+  Reckoning; kills, battles, Hold sacks, caravans and feud bounties do.
+- The Hold banners baked in the hold atlases do not wear the crown (only the standards and pennants).

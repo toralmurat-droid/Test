@@ -2,19 +2,23 @@
  * War news where it happens (roadmap M1): a war horn and a short notice when a siege is called, a land falls or
  * holds in the territory the hero stands in or next to it. Elsewhere the Herald's chat line is enough.
  */
-import { CLANS, type ClanKey } from "../../shared/war/clans";
+import { CLANS, CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
 import { TERRITORIES } from "../../shared/war/territories";
 import { WAR } from "../../shared/war/rules";
 import { territoryAt } from "../../shared/war/view";
 import { TILE } from "../../shared/constants";
 import { play } from "./sfx";
 import { hudSlot } from "./hudSlots";
+import { spanText } from "../../shared/war/crown";
 import "./warPlaque.css";
 
 /** `sack`: a hero sacked the Hold of t (server/warHolds.ts); `by` is the holder itself when the hero was unsworn. */
 export interface WarEv { kind: "siege" | "flip" | "held" | "sack"; t: number; by: ClanKey; from: ClanKey }
 /** Server "warraid": the Night Raiders struck these lands of the clan they hunt (server/war.ts attachWar). */
 export interface WarRaid { clan: ClanKey; ts: number[] }
+
+/** Server "reckon" (server/warCrown.ts): the Reckoning's warning, start, hourly standings and result; scores and winner as CLAN_KEYS indexes. */
+export interface ReckonMsg { kind: "warn" | "start" | "standings" | "result"; start: number; end: number; score?: number[]; winner?: number; kept?: boolean }
 
 export class WarNotice {
   private el = document.createElement("div");
@@ -38,6 +42,23 @@ export class WarNotice {
   /** Text of the Night Raiders' notice for a struck land. */
   static raidText(r: WarRaid, t: number): string {
     return `Night Raiders! They strike ${TERRITORIES[t]?.name ?? "?"}, land of ${CLANS[r.clan]?.name ?? "?"}.`;
+  }
+
+  /** Text of the Reckoning's notice (exported for tests). */
+  static reckonText(m: ReckonMsg, now = Date.now()): string {
+    const lead = () => { const i = (m.score ?? []).reduce((b, v, j, a) => (v > a[b] ? j : b), 0), k = CLAN_KEYS[i]; return k && m.score?.[i] ? `${CLANS[k].name} lead with ${m.score[i]}` : "nobody leads yet"; };
+    if (m.kind === "warn") return `The Reckoning begins in ${spanText(m.start - now)}: the Crown Keep is at stake.`;
+    if (m.kind === "start") return "The Reckoning has begun! Hold the Crown's lands and fight there.";
+    if (m.kind === "standings") return `The Reckoning: ${lead()}, ${spanText(m.end - now)} left.`;
+    const w = CLAN_KEYS[m.winner ?? -1];
+    return w ? `${CLANS[w].name} ${m.kept ? "keep" : "take"} the Crown Keep!` : "The Reckoning is over.";
+  }
+
+  /** The Reckoning's news: shown wherever the hero is. */
+  reckon(m: ReckonMsg) {
+    if (!m || typeof m.kind !== "string" || !Number.isFinite(m.start) || !Number.isFinite(m.end)) return;
+    this.say(WarNotice.reckonText(m), m.kind === "result" ? 10000 : 8000);
+    this.el.className = "reckon";
   }
 
   /** W5: a big battle's notice (30 min, 5 min, the start): shown wherever the hero is, with a soft horn. */
