@@ -1,5 +1,6 @@
 {
   "date": "2026-11-16",
+  "patch": 280,
   "title": "No More Monster Piles",
   "changes": [
     "Monsters in a fight no longer pile into one another: a pack spreads out round its target, each body in its own place, and big monsters take more room."
