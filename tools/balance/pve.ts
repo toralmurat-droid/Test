@@ -1,9 +1,10 @@
 /**
  * PvE balance simulator: bot heroes play the first zone (Lv 1-30) against its monsters and bosses.
- * Run: npx tsx tools/balance/pve.ts [runsPerCase] [--bosses] [--zones] [--act2] [--moors] [--badlands] [--sinkholes] [--champions] [--troops] [--caravan] [--siege] [--tunnel] [--class=vampire] [--build=0|1|2] [--boss=king] [--no-execute] [--songweaver]
+ * Run: npx tsx tools/balance/pve.ts [runsPerCase] [--bosses] [--zones] [--act2] [--moors] [--badlands] [--sinkholes] [--crown] [--champions] [--troops] [--caravan] [--siege] [--tunnel] [--class=vampire] [--build=0|1|2] [--boss=king] [--no-execute] [--songweaver]
  * --moors: zone runs against Act 3's monsters (the Grey Barrow Moors, Lv 20-33) instead of Act 1's, heroes Lv 20-34.
  * --badlands: zone runs against Act 4's monsters (the Red Badlands, Lv 25-38) instead of Act 1's, heroes Lv 26-40.
  * --sinkholes: zone runs against Act 5's monsters (the Mawdeep Sinkholes, Lv 30-43) instead of Act 1's, heroes Lv 30-44.
+ * --crown: zone runs against Act 6's monsters (the Crown of the Marches, Lv 40-48) instead of Act 1's, heroes Lv 40-50.
  * --siege: a siege front (shared/war/siege.ts): the hero and SIEGE_BATTLE.perFront allied soldiers vs as many attackers, Lv 15 / 30 / 45 (and the soldiers alone);
  *   then the Host's siege ram (shared/war/works.ts): the hero alone vs the ram and its crew.
  * --tunnel: the hero alone collapses a Hide-Kin tunnel mouth (shared/war/tunnels.ts) while its waves come out: win = the mouth falls.
@@ -30,7 +31,7 @@ import { TOWN } from "../../shared/war/towns";
 import { NIGHT_RAID } from "../../shared/raiders";
 import { ACTIVE_CLASSES, ClassKind } from "../../shared/classes";
 import { BANDIT_AI, BANDIT_ROLES, CHIEF } from "../../shared/bandits";
-import { BEAST, BEAST_RIDER, BLOB_AI, DEMON, ELITE, HOLLOW_KING, MOB_ATTACK_RANGE, MOB_LEVEL, MOBS, MobKind, mobScale, MOORS_AI, MOORS_KINDS, BADLANDS_AI, BADLANDS_KINDS, SINKHOLES_AI, SINKHOLES_KINDS, MOTHER, SKELETON_AI, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, SUNWRIGHT, REGEN_DELAY_MS, REGEN_PER_STA } from "../../shared/constants";
+import { BEAST, BEAST_RIDER, BLOB_AI, DEMON, ELITE, HOLLOW_KING, MOB_ATTACK_RANGE, MOB_LEVEL, MOBS, MobKind, mobScale, MOORS_AI, MOORS_KINDS, BADLANDS_AI, BADLANDS_KINDS, SINKHOLES_AI, SINKHOLES_KINDS, CROWN_AI, CROWN_KINDS, RIVEN_KING, MOTHER, SKELETON_AI, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, SUNWRIGHT, REGEN_DELAY_MS, REGEN_PER_STA } from "../../shared/constants";
 import { MOB_COMBAT, mobBody, mobSound, POISE, poiseSpeed } from "../../shared/combat";
 import { POTION_COOLDOWN_MS, POTION_SIZES } from "../../shared/potions";
 import { activeSkills, SKILLS } from "../../shared/skills";
@@ -156,6 +157,44 @@ export function mobSpec(kind: MobKind, level: number, opt: { weapon?: string; hp
     if (kind === "mawfather") {
       spec.specials.push({ name: "Roar", every: Ro.cooldownMs, windup: Ro.windupMs, min: 0, max: Ro.range, radius: Ro.radius, mult: Ro.dmgMult, at: "self", slowMs: Ro.slowMs });
       spec.specials.push({ name: "Falling Stones", every: Fa.cooldownMs, windup: Fa.windupMs, min: 0, max: Fa.range, radius: Fa.radius, mult: Fa.dmgMult, at: "target", stunMs: 400, hpBelow: Fa.hpFrac, first: 0 });
+    }
+  }
+  // Act 6 (server/TownRoom.ts RANGED: CROWN_AI decree / arcane; BEAST_MOVES gore / maul / pounce / swoop / stomp;
+  // server/crownMobs.ts). A rider lands on every blow; a decree or war cry rallies the caster half the time. A Crownguard's
+  // shield (it holds, taking `mult` from the front, which is where the bot stands) counted as more HP and fewer blows; a
+  // magus's blink and a pretender's usurping as a little more HP; a knight's broken oath as an enrage; the Thronewarden's
+  // rampart over itself as more HP. The Riven King: his Edge down a lane, the Shards (phase 2), Kingsfall (phase 3: run)
+  if (CROWN_KINDS.includes(kind)) {
+    const R = BEAST_RIDER[kind], A = CROWN_AI, Wl = A.warlords[kind], K = RIVEN_KING;
+    const G = BEAST.gore, P = BEAST.pounce, Sw = BEAST.swoop, S = BEAST.stomp, M = BEAST.maul;
+    if (R) spec.dmg *= 1 + BEAST[R].ticks * BEAST[R].dmgMult;
+    if (Wl) spec.dmg *= 1 + (CHIEF.warCry.dmg - 1) * Wl.buffMs / Wl.cooldownMs;
+    if (kind === "oathbreaker") {
+      spec.lunge = { min: G.min, max: G.max, every: G.cooldownMs, mult: G.dmgMult };
+      spec.enrage = { hpBelow: A.oath.hpFrac, speed: A.oath.speed, cd: A.oath.cooldown };
+      spec.dmg *= 1 + (A.oath.dmg - 1) * A.oath.hpFrac;
+    }
+    if (kind === "crownguard") {
+      const up = A.ward.ms / A.ward.everyMs;
+      spec.hp /= 1 - up * (1 - A.ward.mult); spec.cd /= 1 - up;
+      spec.specials.push({ name: "Halberd Sweep", every: M.cooldownMs, windup: M.windupMs, min: 0, max: M.range, radius: M.reach, mult: M.dmgMult, at: "self", kb: M.knockback });
+    }
+    if (kind === "hollowherald") { const D = A.decree; ranged(D.range, D.keepAway, D.shotSpeed, D.shotRadius, D.mult); spec.dmg *= 1 + (CHIEF.warCry.dmg - 1) * A.proclaim.buffMs / A.proclaim.everyMs * 0.5; }
+    if (kind === "courtmagus") { const Ar = A.arcane; ranged(Ar.range, Ar.keepAway, Ar.shotSpeed, Ar.shotRadius, Ar.mult); spec.hp *= 1.1; }
+    if (kind === "gildhound") spec.lunge = { min: P.min, max: P.max, every: P.cooldownMs, mult: P.dmgMult };
+    if (kind === "crowncrow") spec.lunge = { min: Sw.min, max: Sw.max, every: Sw.cooldownMs, mult: Sw.dmgMult };
+    if (kind === "pretender") spec.hp *= 1.15;
+    if (kind === "thronewarden" || kind === "rivenking") {
+      spec.specials.push({ name: "Maul", every: M.cooldownMs, windup: M.windupMs, min: 0, max: M.range, radius: M.reach, mult: M.dmgMult, at: "self", kb: M.knockback });
+      spec.specials.push({ name: "Stomp", every: S.cooldownMs, windup: S.windupMs, min: 0, max: S.range, radius: S.radius, mult: S.dmgMult, at: "self", kb: S.knockback, stunMs: S.stunMs });
+    }
+    if (kind === "thronewarden") spec.hp *= 1 + (1 - A.rampart.mult) * A.rampart.ms / A.rampart.everyMs;
+    if (kind === "rivenking") {
+      const E = K.edge, Sh = K.shards, Kf = K.kingsfall;
+      spec.specials.push({ name: "Riven Edge", every: E.everyMs, windup: E.windupMs, min: E.min, max: E.max, radius: E.width / 2 + 6, mult: E.dmgMult, at: "target", kb: E.knockback, first: E.firstMs });
+      spec.specials.push({ name: "Crown Shards", every: Sh.everyMs, windup: Sh.windupMs, min: 0, max: Sh.range, radius: Sh.radius, mult: Sh.dmgMult, at: "target", stunMs: Sh.stunMs, hpBelow: K.phase[0], first: 0 });
+      spec.specials.push({ name: "Kingsfall", every: Kf.everyMs, windup: Kf.windupMs, min: 0, max: Kf.radius * 1.6, radius: Kf.radius, mult: Kf.dmgMult, at: "self", kb: Kf.knockback, hpBelow: K.phase[1], first: 0 });
+      spec.enrage = { hpBelow: K.phase[1], speed: K.wrath.speed, cd: K.wrath.cooldown };
     }
   }
   if (kind === "camelfolk") { const S = BEAST.stomp; spec.specials.push({ name: "Stomp", every: S.cooldownMs, windup: S.windupMs, min: 0, max: S.range, radius: S.radius, mult: S.dmgMult, at: "self", kb: S.knockback, stunMs: S.stunMs }); }
@@ -454,6 +493,8 @@ export const CHAMP_CASES: { kind: MobKind; affixes: AffixKey[]; level: number; w
   // Act 5: the Hide-Kin come Hide-Stitched like their Mawdeep kin
   { kind: "delver", affixes: ["stitched"], level: 34 }, { kind: "cackler", affixes: ["stitched"], level: 32 }, { kind: "stagkin", affixes: ["stitched"], level: 36 },
   { kind: "quillback", affixes: ["stitched"], level: 38 }, { kind: "stitcher", affixes: ["stitched"], level: 40 },
+  // Act 6: the Crown's dead knights and heralds come back Risen like the Necromancer's dead
+  { kind: "oathbreaker", affixes: ["risen"], level: 42 }, { kind: "crownguard", affixes: ["risen"], level: 45 }, { kind: "hollowherald", affixes: ["risen"], level: 46 },
 ];
 function champRun(cls: ClassKind, c: (typeof CHAMP_CASES)[number], champ: boolean, build: Build, potions = 3): RunResult {
   const h = make("h", cls, c.level, build);
@@ -521,6 +562,15 @@ function sinkholesMob(level: number): MobSpec {
   return mobSpec(pick(pool), L);
 }
 let SINKHOLES = false;
+/** Act 6 (the Crown of the Marches, shared/spawns.ts): its court at Lv 40-48, knights, hounds and crows first, the guard, heralds, magi and pretenders further in. */
+function crownMob(level: number): MobSpec {
+  const L = Math.min(48, Math.max(40, level));
+  const pool: MobKind[] = ["oathbreaker", "crowncrow", "gildhound", "oathbreaker"];
+  if (L >= 41) pool.push("crownguard", "hollowherald", "courtmagus");
+  if (L >= 43) pool.push("pretender", "crownguard", "hollowherald", "courtmagus");
+  return mobSpec(pick(pool), L);
+}
+let CROWN = false;
 
 const CHAIN = 6; // encounters per zone run: 1 monster (55%), 2 (35%) or 3 (10%)
 const potionSize = (level: number) => (level >= 20 ? 2 : level >= 10 ? 1 : 0);
@@ -534,7 +584,7 @@ function zoneRun(cls: ClassKind, level: number, build: Build, mobLevel: (i: numb
   let t = 0, kills = 0, lost = 0, fightMs = 0;
   for (let i = 0; i < CHAIN; i++) {
     const r = Math.random(), size = r < 0.55 ? 1 : r < 0.9 ? 2 : 3;
-    const ms = Array.from({ length: size }, (_, k) => new MobF((ACT2 ? desertMob : MOORS ? moorsMob : BADLANDS ? badlandsMob : SINKHOLES ? sinkholesMob : zoneMob)(mobLevel(i)), "m" + k));
+    const ms = Array.from({ length: size }, (_, k) => new MobF((ACT2 ? desertMob : MOORS ? moorsMob : BADLANDS ? badlandsMob : SINKHOLES ? sinkholesMob : CROWN ? crownMob : zoneMob)(mobLevel(i)), "m" + k));
     const d = new PveDuel(h, ms, pack, t);
     const hp0 = h.hp, t0 = d.now;
     let w: F | null | undefined;
@@ -578,6 +628,11 @@ export const BOSSES: BossDef[] = [
   // Act 5, the sinkholes: a Hide-Chieftain (zone elite) and the Maw-Father on his ledge in the Great Maw (a zone boss)
   { name: "Hide-Chieftain Lv38", kind: "hidechief", level: 38, hero: 37, plain: true },
   { name: "Maw-Father Lv45", kind: "mawfather", level: 45, hero: 44, plain: true },
+  // Act 6, the Crown: a Thronewarden (zone elite), the Pretender of the Vigil (a named quest summon) and the Riven King
+  // (the chain's last quest: Lv 50, hpMult 2 as summoned; his guard, called mid-fight, is left out)
+  { name: "Thronewarden Lv46", kind: "thronewarden", level: 46, hero: 45, plain: true },
+  { name: "Prince Ottrin Lv47", kind: "pretender", level: 47, hero: 46, hpMult: 4 },
+  { name: "Riven King Lv50", kind: "rivenking", level: 50, hero: 49, hpMult: 2 },
   // quest summons from the quest concepts (shared/quests.ts): the wrong-grave ambush and the Crown in the Sand finale
   { name: "Disturbed Dead Lv17", kind: "skeleton", level: 17, hero: 15, hpMult: 3 },
   { name: "Ostrevar's Envoy Lv39", kind: "sanddead", level: 39, hero: 38, hpMult: 7 },
@@ -909,8 +964,9 @@ if (process.argv[1]?.includes("pve")) {
     MOORS = !ACT2 && process.argv.includes("--moors"); // the moors' monsters, heroes Lv 20-34
     BADLANDS = !ACT2 && !MOORS && process.argv.includes("--badlands"); // the badlands' monsters, heroes Lv 26-40
     SINKHOLES = !ACT2 && !MOORS && !BADLANDS && process.argv.includes("--sinkholes"); // the sinkholes' monsters, heroes Lv 30-44
-    const levels = ACT2 ? [30, 33, 36, 39, 42, 45, 48] : MOORS ? [20, 22, 24, 26, 28, 30, 32, 34] : BADLANDS ? [26, 28, 30, 32, 34, 36, 38, 40] : SINKHOLES ? [30, 32, 34, 36, 38, 40, 42, 44] : [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30];
-    console.log(`Zone runs: ${CHAIN} encounters (1-3 monsters) in a row vs monsters of the hero's level to +2 (capped ${ACT2 ? 47 : MOORS ? 33 : BADLANDS ? 38 : SINKHOLES ? 43 : 25}), 3 heal + 3 mana potions.`);
+    CROWN = !ACT2 && !MOORS && !BADLANDS && !SINKHOLES && process.argv.includes("--crown"); // the Crown's monsters, heroes Lv 40-50
+    const levels = CROWN ? [40, 42, 44, 46, 48, 50] : ACT2 ? [30, 33, 36, 39, 42, 45, 48] : MOORS ? [20, 22, 24, 26, 28, 30, 32, 34] : BADLANDS ? [26, 28, 30, 32, 34, 36, 38, 40] : SINKHOLES ? [30, 32, 34, 36, 38, 40, 42, 44] : [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30];
+    console.log(`Zone runs: ${CHAIN} encounters (1-3 monsters) in a row vs monsters of the hero's level to +2 (capped ${CROWN ? 48 : ACT2 ? 47 : MOORS ? 33 : BADLANDS ? 38 : SINKHOLES ? 43 : 25}), 3 heal + 3 mana potions.`);
     console.log("Cell = cleared% / HP lost per kill / seconds per kill / potions drunk per run");
     console.log("Lv".padEnd(5) + CLASSES.map((c) => c.padEnd(22)).join(""));
     const tot: Record<string, { w: number; n: number }> = {};
