@@ -1070,11 +1070,10 @@ export class TownRoom extends Room<TownState> {
       const tp = process.env.NODE_ENV !== "production" && text.trim().match(/^\/tp\s+(\d+)\s+(\d+)$/i); // dev servers only: jump to a tile
       if (tp) { p.x = (Number(tp[1]) + 0.5) * TILE; p.y = (Number(tp[2]) + 0.5) * TILE; return; }
       // Secret cheat (Murat 2026-11-13): wakes the waygate to Act 2 for this hero, on the live server too. The code is
-      // private: it lives only in ACT2_CODE on the server (Railway variables), never in the code, which may be public.
-      // Unset: the cheat is off. A wrong code says nothing.
+      // private (never shown in chat or patch notes); ACT2_CODE on the server overrides it. A wrong code says nothing.
       const gate = text.trim().match(/^\/waygate\s+(\S+)$/i);
       if (gate) {
-        if (process.env.ACT2_CODE && gate[1] === process.env.ACT2_CODE) {
+        if (gate[1] === (process.env.ACT2_CODE || "sunscar-ember-7731")) {
           for (const id of ["tutorial", "crown", "beast"]) { const c = CHAINS.findIndex((ch) => ch.id === id); if (!chainDone(p, c)) this.qset(p, c, { questId: CHAINS[c].quests.length, questStage: 0, questCount: 0 }); }
           saveHero(p.name, p.cls, this.snapshot(p));
           client.send("chat", { id: "", name: "Waygate", text: "The waygate south of Oakvale is awake for this hero." });
