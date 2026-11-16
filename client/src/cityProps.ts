@@ -17,7 +17,9 @@ import type { Pen } from "./worldProps";
 export interface CityPropArt { w: number; h: number; /** foot anchor in the frame, texels */ ox: number; oy: number; frames: number; draw: (p: Pen, f: number) => void }
 
 const N = 6, TAU = Math.PI * 2;
-const BLUE = [0x0a1020, 0x121c3a, 0x1c3470, 0x23468f, 0x3260b4, 0x4a7ad0];
+/** The Wardens' cloth (shared/war/clans.ts CLANS.wardens.cloth 0x3b4a2c: green) and its trim (0xd9822b: orange), as in the Hold standards. */
+const BLUE = [0x0e140a, 0x1c2614, 0x2c3a20, 0x3b4a2c, 0x546a3c, 0x6f8a4e];
+const ORANGE = [0x3a1a08, 0x7a3a0c, 0xb4601c, 0xd9822b, 0xf0b44a, 0xffd88a];
 const RED = [0x1e0606, 0x561410, 0x962a1e, 0xcc5a3a];
 const IVORY = [0x2a261e, 0x4a4436, 0x7a705a, 0xa89c80, 0xd0c4a4, 0xece2c8];
 const FLAME = [0xc05a18, 0xf08a2c, 0xffc860, 0xffeaa8, 0xfff8e0];
@@ -155,7 +157,7 @@ function rack(p: Pen) {
 }
 
 // ---- Wardens wall banner -----------------------------------------------------------------------------------
-/** A tall pole by a wall: crossbar with brass finials, a swallow-tailed blue banner with a gold hearth-flame, stirring in the wind. */
+/** A tall pole by a wall: crossbar with brass finials, a swallow-tailed green banner with orange trim and a hearth-flame, stirring in the wind. */
 function banner(p: Pen, f: number) {
   const g = new IsoPaint(p, 40, 112, 14, 104), ph = (f / N) * TAU;
   g.shadow(1, 1, 6, 0.4);
@@ -169,13 +171,13 @@ function banner(p: Pen, f: number) {
   g.quad([0.2, 0.6, 85], [W, 0, 0], [0, 0, -H], (l, s, t, x, y) => {
     const m = Math.abs(s - 0.5) * 2;
     if (t > 1 - 0.14 * (1 - m)) return undefined; // swallow tail
-    if (m > 0.9 || t < 0.04 || t > 0.9 - 0.14 * (1 - m)) return ramp(BRASSR, l * 0.9 + 0.05, x, y);
+    if (m > 0.9 || t < 0.04 || t > 0.9 - 0.14 * (1 - m)) return ramp(ORANGE, l * 0.9 + 0.05, x, y);
     const ft = (t - 0.2) / 0.55;
     if (ft > 0 && ft < 1) {
       const w = 0.42 * Math.pow(Math.sin(Math.PI * Math.pow(ft, 0.8)), 0.9) * (1 - 0.2 * Math.sin(ft * 9));
-      if (m < w) return ramp(BRASSR, l + 0.15 - (m / Math.max(0.01, w)) * 0.15, x, y);
+      if (m < w) return ramp(ORANGE, l + 0.15 - (m / Math.max(0.01, w)) * 0.15, x, y);
     }
-    if (t > 0.78 && t < 0.83 && m < 0.5) return ramp(BRASSR, l, x, y);
+    if (t > 0.78 && t < 0.83 && m < 0.5) return ramp(ORANGE, l, x, y);
     return ramp(BLUE, l + (hsh(Math.floor(s * 30), Math.floor(t * 70), 5) - 0.5) * 0.06 + t * 0.05, x, y);
   }, (s, t) => Math.sin(ph - t * 3.4 + s * 1.3) * (0.6 + 2.4 * t) * 0.8);
 }

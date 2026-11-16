@@ -11,8 +11,7 @@ import { RENOWN_RANKS } from "../../shared/war/renown";
 import { TROOP_LOOK } from "../../shared/war/patrols";
 import { respecCost } from "../../shared/upkeep";
 import { TILE } from "../../shared/constants";
-import { ALTAR_KEY, cityBannerKey, cityTextures, WARTABLE_KEY } from "./cityArt";
-import { worldPropTextures } from "./worldProps";
+import { CITY_PROPS, cityPropKey, cityPropTextures } from "./cityProps";
 import { MOB_LOOK, warSoldierTexture } from "./textures";
 import { SMOOTH } from "./isoflag";
 import { CHAR_ORIGIN, CHAR_SCALE, ensureCharSheet, playCharAnim, type CharacterName } from "./artAssets";
@@ -51,12 +50,13 @@ export class CityLayer {
   private made = false;
   private prompt = document.createElement("div");
   private tables: { x: number; y: number }[] = [];
+  /** Animated props (flames, cloth): stepped about 6 times a second. */
+  private anim: { spr: Phaser.GameObjects.Sprite; frames: number; ph: number }[] = [];
 
   constructor(private scene: Phaser.Scene, private h: CityHost) {
     this.prompt.id = "cityprompt";
     this.prompt.onclick = () => this.interact();
     hudSlot("promptstack").append(this.prompt);
-    worldPropTextures(scene);
     for (const c of CITIES) this.props(c);
   }
 
@@ -81,19 +81,17 @@ export class CityLayer {
   tablesPx() { return this.tables; }
 
   private props(c: City) {
-    cityTextures(this.scene, c.clan);
+    cityPropTextures(this.scene);
     for (const p of CITY_TEMPLATE.props) {
-      const s = p.solid, fx = s ? s[0] + s[2] / 2 : p.x + 0.5, fy = s ? s[1] + s[3] : p.y + 0.9, at = cityPx(c, fx, fy);
-      const add = (tex: string, frame: string | number | undefined, scale: number) => this.scene.add.sprite(at.x, at.y, tex, frame as never).setOrigin(0.5, 1).setScale(scale).setDepth(at.y);
-      if (p.kind === "banner") add(cityBannerKey(c.clan), undefined, 0.8);
-      else if (p.kind === "wartable") { add(`${WARTABLE_KEY}_${c.clan}`, undefined, 0.9); this.tables.push({ x: at.x, y: at.y - 6 }); }
-      else if (p.kind === "altar") {
-        add(`${ALTAR_KEY}_${c.clan}`, undefined, 0.8);
-        const glow = this.scene.add.image(at.x, at.y - 28, "glow").setTint(0xffc060).setScale(1.6).setAlpha(0.2).setBlendMode(Phaser.BlendModes.ADD).setDepth(at.y + 1);
+      if (p.kind === "stash") continue; // the account stash chest is drawn by trade.ts
+      const s = p.solid, fx = s ? s[0] + s[2] / 2 : p.x + 0.5, fy = s ? s[1] + s[3] : p.y + 0.9, at = cityPx(c, fx, fy), a = CITY_PROPS[p.kind];
+      const spr = this.scene.add.sprite(at.x, at.y, cityPropKey(p.kind), 0).setOrigin(a.ox / a.w, a.oy / a.h).setDepth(at.y);
+      if (a.frames > 1) this.anim.push({ spr, frames: a.frames, ph: Math.floor((p.x * 7 + p.y * 3) % a.frames) });
+      if (p.kind === "wartable") this.tables.push({ x: at.x, y: at.y - 6 });
+      if (p.kind === "altar") {
+        const glow = this.scene.add.image(at.x, at.y - 30, "glow").setTint(0xffc060).setScale(1.6).setAlpha(0.2).setBlendMode(Phaser.BlendModes.ADD).setDepth(at.y + 1);
         this.scene.tweens.add({ targets: glow, alpha: 0.34, duration: 700, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
       }
-      else if (p.kind === "dummy") add("props", "training_dummy", 0.85);
-      else if (p.kind === "rack") add("wp_weapon_rack", 0, 0.62);
     }
   }
 
@@ -121,6 +119,8 @@ export class CityLayer {
 
   /** Every frame: the guards and townsfolk of a city the hero is near, the war table prompt. */
   update(me: { x: number; y: number } | undefined, blocked: boolean) {
+    const tick = Math.floor(performance.now() / 160);
+    for (const a of this.anim) a.spr.setFrame((tick + a.ph) % a.frames);
     if (me && !this.made && CITIES.some((c) => { const p = cityPx(c, 26, 20); return Math.hypot(p.x - me.x, p.y - me.y) < 45 * TILE; })) {
       this.made = true;
       for (const c of CITIES) { GUARDS.forEach((g, i) => this.men.push(this.man(c, g, i, true))); FOLKS.forEach((f, i) => this.men.push(this.man(c, f, i, false))); }
