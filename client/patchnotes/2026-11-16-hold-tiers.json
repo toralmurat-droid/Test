@@ -1,5 +1,6 @@
 {
   "date": "2026-11-16",
+  "patch": 278,
   "title": "Holds grow",
   "changes": [
     "A Hold that its clan keeps in peace grows from an outpost into a camp and then a fortress, with bigger walls in the clan's own style and more guards at each step.",
