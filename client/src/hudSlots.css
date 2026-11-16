@@ -23,6 +23,7 @@ body #topright { position: absolute; top: 8px; right: 8px; width: 264px; display
 body #topright > #online { order: 1; pointer-events: auto; }
 body #topright > #mapbox { order: 2; }
 body #topright > #location { order: 3; }
+body #topright > #landline { order: 3; }
 body #topright > #stats { order: 4; }
 body #topright > #tidebox { order: 5; }
 body #topright > #questtracker { order: 6; }

@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-16",
+  "title": "Clearer maps",
+  "changes": [
+    "The war table now shows where you are: a pulsing marker on your territory, your land lit up, and \"You: territory, land\" under the map and in the side panel.",
+    "The gates between lands are drawn as gate pairs with a dotted road and the gate's name. Click or hover a territory to see the way there from where you stand: a gold path on the table and the steps (gates, portal stones you have woken) in the side panel.",
+    "The zone map names every gate and portal stone with the land and territory it leads to, outlines the territory you are in, and lets you click a territory to pick it. The War table / Zone map button swaps between the two and keeps your pick."
+  ]
+}
