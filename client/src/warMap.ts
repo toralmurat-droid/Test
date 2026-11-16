@@ -8,17 +8,19 @@ import { TILE } from "../../shared/constants";
 import type { ClanKey } from "../../shared/war/clans";
 import { CLAN_KEYS } from "../../shared/war/clans";
 import { caravanLines } from "../../shared/war/caravans";
-import { callsToArms, frontEdges, holdIntel, landPin, type CallToArms, type WarPlan } from "../../shared/war/intel";
+import { callsToArms, frontEdges, holdIntel, landPin, viewTier, type CallToArms, type WarPlan } from "../../shared/war/intel";
 import { HOLDS } from "../../shared/war/standards";
 import { TERRITORIES, WAR_MAP, type Territory } from "../../shared/war/territories";
 import type { MouthView } from "../../shared/war/tunnels";
 import type { WarView } from "../../shared/war/view";
+import { HOLD_TIER_KEYS } from "../../shared/war/holdTiers";
 import type { WritKind } from "../../shared/war/writs";
 
 /** Bright map colours per clan (as on the war table). */
 export const CLAN_COL: Record<ClanKey, string> = { wardens: "#e08a2a", redfang: "#d03a2a", host: "#5fb0a0", hidekin: "#a0703a", veiled: "#7a7aff" };
 const LABEL: Record<ClanKey, string> = { wardens: "Wardens", redfang: "Redfang", host: "Ossuary Host", hidekin: "Hide-Kin", veiled: "Veiled Circle" };
-const FORT: Record<ClanKey, string> = { wardens: "stockade", redfang: "war camp", host: "keep", hidekin: "burrow-fort", veiled: "sanctum" };
+export { FORT } from "./holdNames";
+import { FORT } from "./holdNames";
 const GOLD = "#ffd166", EMBER = "#f6b040";
 
 // ---------- pure helpers (tested) ----------
@@ -42,7 +44,7 @@ export function holdTip(v: WarView, t: number, wall: number, held = true, sacked
   const i = holdIntel(v, t), out: string[] = [];
   const land = TERRITORIES[t]?.name ?? "";
   if (held && i.clan) {
-    out.push(`${LABEL[i.clan]} ${FORT[i.clan]} · ${land}`);
+    out.push(`${LABEL[i.clan]} ${FORT[i.clan][i.tier]} (${HOLD_TIER_KEYS[i.tier]}) · ${land}`);
     out.push(`Control ${i.control}%`);
     if (i.guards || i.patrol) out.push(`${i.guards} guards, ${i.patrol} on patrol`);
   } else out.push(land);
@@ -148,16 +150,22 @@ export function rimTargets(v: WarView, clan: ClanKey | undefined, writ: { t: num
 
 // ---------- icons (cached canvases) ----------
 
-const ART = ["#.#.#.#.#.#", "###########", "#sssssssss#", "#sscccccss#", "#sscccccss#", "#ssscccsss#", "#sssdddsss#", "#sssdddsss#", "###########"];
-const icons = new Map<ClanKey, HTMLCanvasElement>();
-/** A small fort in the clan's colour, 11 x 9 art px, built once per clan. */
-function holdIcon(k: ClanKey): HTMLCanvasElement {
-  let c = icons.get(k);
+/** Hold icons by tier: an outpost (7 x 6 art px), a camp (11 x 9) and a fortress (15 x 10). */
+const ARTS = [
+  ["#.#.#.#", "#######", "#sscss#", "#sscss#", "#ssdss#", "#######"],
+  ["#.#.#.#.#.#", "###########", "#sssssssss#", "#sscccccss#", "#sscccccss#", "#ssscccsss#", "#sssdddsss#", "#sssdddsss#", "###########"],
+  ["##.#.#.#.#.#.##", "###############", "#sssssssssssss#", "#ssscccccccsss#", "#ssscccccccsss#", "#ssscccccccsss#", "#ssssdddddssss#", "#sssssdddsssss#", "#sssssdddsssss#", "###############"],
+];
+const icons = new Map<string, HTMLCanvasElement>();
+/** A small fort in the clan's colour, built once per clan and tier. */
+function holdIcon(k: ClanKey, tier = 1): HTMLCanvasElement {
+  const key = `${k}${tier}`, art = ARTS[tier] ?? ARTS[1];
+  let c = icons.get(key);
   if (c) return c;
-  c = Object.assign(document.createElement("canvas"), { width: 11, height: 9 });
+  c = Object.assign(document.createElement("canvas"), { width: art[0].length, height: art.length });
   const g = c.getContext("2d")!, pal: Record<string, string> = { "#": "#0d0a07", s: "#b8a888", c: CLAN_COL[k], d: "#2a1f16" };
-  ART.forEach((row, y) => [...row].forEach((ch, x) => { if (pal[ch]) { g.fillStyle = pal[ch]; g.fillRect(x, y, 1, 1); } }));
-  icons.set(k, c);
+  art.forEach((row, y) => [...row].forEach((ch, x) => { if (pal[ch]) { g.fillStyle = pal[ch]; g.fillRect(x, y, 1, 1); } }));
+  icons.set(key, c);
   return c;
 }
 let hatch: CanvasPattern | undefined;
@@ -283,16 +291,16 @@ export function drawWarWorld(g: CanvasRenderingContext2D, d: WarMapData, v: WarM
   for (const h of HOLDS) {
     const clan = CLAN_KEYS[war.owner[h.t]];
     if (!clan || !d.seen(Math.floor(h.x / TILE), Math.floor(h.y / TILE))) continue;
-    const [x, y] = pxs(v, h.x, h.y), k = mini ? 1 : 2, ic = holdIcon(clan);
+    const [x, y] = pxs(v, h.x, h.y), k = mini ? 1 : 2, ic = holdIcon(clan, viewTier(war, h.t)), iw = ic.width, ih = ic.height;
     // cull only on the flat minimap: the world map draws inside the iso transform, where map space is not screen space
     if (mini && (x < -20 || y < -20 || x > g.canvas.width + 20 || y > g.canvas.height + 20)) continue;
     g.save(); g.translate(Math.round(x), Math.round(y)); v.upright(g);
     g.imageSmoothingEnabled = false;
-    g.drawImage(ic, -Math.floor((11 * k) / 2), -Math.floor((9 * k) / 2), 11 * k, 9 * k);
-    if (!mini && ci >= 0 && war.owner[h.t] === ci) { g.fillStyle = GOLD; g.fillRect(-2, 10, 4, 3); } // a pip under the own clan's Holds
+    g.drawImage(ic, -Math.floor((iw * k) / 2), -Math.floor((ih * k) / 2), iw * k, ih * k);
+    if (!mini && ci >= 0 && war.owner[h.t] === ci) { g.fillStyle = GOLD; g.fillRect(-2, Math.floor((ih * k) / 2) + 1, 4, 3); } // a pip under the own clan's Holds
     const by = d.sacked?.get(h.t);
     if (by !== undefined) { // sacked this war tick: the sacker's little flag on a pole at the icon's top right
-      const sk = CLAN_KEYS[by], px = Math.floor((11 * k) / 2) - k, py = -Math.floor((9 * k) / 2) - 5 * k;
+      const sk = CLAN_KEYS[by], px = Math.floor((iw * k) / 2) - k, py = -Math.floor((ih * k) / 2) - 5 * k;
       g.fillStyle = "#1a1008"; g.fillRect(px - k, py - k, k * 3, 9 * k);
       g.fillStyle = "#c8a040"; g.fillRect(px, py, k, 8 * k);
       g.fillStyle = "#1a1008"; g.fillRect(px + k, py - k, 6 * k, 5 * k);

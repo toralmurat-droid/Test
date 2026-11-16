@@ -7,6 +7,9 @@ import { CLANS, CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
 import { regionName } from "../../shared/war/regions";
 import { territoryAt, type WarView } from "../../shared/war/view";
 import type { SiegeView } from "../../shared/war/siege";
+import { holdIntel, viewTier } from "../../shared/war/intel";
+import { FORT } from "./holdNames";
+import { HOLD_TIER_KEYS } from "../../shared/war/holdTiers";
 import { hudSlot } from "./hudSlots";
 import "./warPlaque.css";
 
@@ -85,13 +88,15 @@ export class WarPlaque {
     const sacked = this.sack?.line(t.id) ?? "";
     // the brakes (shared/war/rules.ts): the Night Raiders hunt the leading clan, the war rallies for the weakest
     const brake = v.raided?.includes(t.id) ? "Night Raiders struck here" : v.hunt === v.owner[t.id] ? "The Night Raiders hunt its holder" : v.rally === v.owner[t.id] ? `Rally for ${CLANS[own].name}` : "";
-    const key = `${t.id}|${own}|${ctl}|${line}|${standing}|${fronts}|${rite}|${brake}|${sacked}`;
+    const tier = viewTier(v, t.id); // (the guard count follows tier and Control, so it needs no key of its own)
+    const key = `${t.id}|${own}|${tier}|${ctl}|${line}|${standing}|${fronts}|${rite}|${brake}|${sacked}`;
     if (key === this.shown) return;
     this.shown = key;
-    const cl = CLANS[own];
+    const cl = CLANS[own], guards = holdIntel(v, t.id).guards;
     const name = document.createElement("div"); name.className = "wp-name"; name.textContent = t.capitalOf ? `${t.name} (${t.forward ? "forward capital" : "capital"})` : t.name;
     const held = document.createElement("div"); held.className = "wp-held"; held.textContent = cl.name; // the land rides on the holder line, keeping the title short
     const land = document.createElement("span"); land.className = "wp-land"; land.textContent = ` · ${regionName(t.region)}`; held.append(land);
+    const tl = document.createElement("div"); tl.className = "wp-foot"; tl.textContent = `${FORT[own][tier]} (${HOLD_TIER_KEYS[tier]})${guards ? ` · ${guards} guards` : ""}`;
     const bar = document.createElement("div"); bar.className = "wp-bar"; bar.title = `Control ${ctl}/100`;
     const fill = document.createElement("i"); fill.style.width = `${ctl}%`; fill.style.background = hex(cl.trim === 0x1a1414 ? cl.cloth : cl.trim);
     const num = document.createElement("b"); num.textContent = `${ctl}`;
@@ -99,7 +104,7 @@ export class WarPlaque {
     const foot = document.createElement("div"); foot.className = "wp-foot";
     if (sg) { foot.classList.add("siege"); foot.textContent = `${CLANS[CLAN_KEYS[sg[1]]].name} besiege it: ${mins(sg[2] - now)} min`; }
     else foot.textContent = t.capitalOf ? "A capital never falls" : `Fronts move in ${mins(v.next - now)} min`;
-    const text = document.createElement("div"); text.className = "wp-text"; text.append(name, held, bar, foot);
+    const text = document.createElement("div"); text.className = "wp-text"; text.append(name, held, tl, bar, foot);
     if (fronts) { const fl = document.createElement("div"); fl.className = "wp-foot siege"; fl.textContent = fronts; text.append(fl); }
     if (rite) { const rl = document.createElement("div"); rl.className = "wp-foot"; rl.textContent = rite; text.append(rl); }
     if (sacked) { const sl = document.createElement("div"); sl.className = "wp-foot siege"; sl.textContent = sacked; text.append(sl); }
