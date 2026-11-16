@@ -204,7 +204,7 @@ test("room: the Red Pass is shut under Lv 25, crosses at Lv 25, and a hero saved
     assert.ok(await until(() => notes.some((t) => /The pass is held shut\. Return at level 25\./.test(t))), "the shut-pass note");
     assert.deepEqual(crossed, [], "Lv 24: refused");
     assert.equal(actAt(p.y, p.x), 1);
-    p.level = 25;
+    p.level = 25; p.lastHurt = 0; p.dead = false; p.hp = p.maxHp; // a mob by the pass may have struck while we waited (combat lock PORTAL_COMBAT_MS)
     c.send("waygate");
     assert.ok(await until(() => crossed.length === 1));
     assert.deepEqual(crossed, ["badlands"]);
