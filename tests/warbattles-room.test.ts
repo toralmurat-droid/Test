@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startRoom, wait } from "./helpers/room";
+import { startRoom, until, wait } from "./helpers/room";
 import { TILE } from "../shared/constants";
 import { type ClanKey } from "../shared/war/clans";
 import { newMinds } from "../shared/war/doctrine";
@@ -140,10 +140,10 @@ test("battles (room): the lines wake near a hero in slots of their own; only swo
     _resetWar(saved(now + WAR.tickMs));
     const b: Battle = _forceBattle(SITE, "pitched", now - 1000, FIELD.x, FIELD.y)!;
     const c = await srv.join({ cls: "wizard" });
+    const msgs: BattleMsg[] = [];
+    c.onMessage("battle", (m: BattleMsg) => msgs.push(m)); // subscribe before waiting, so the join send isn't dropped
     await wait(150);
     const room = srv.room, id = c.sessionId, p = room.state.players.get(id);
-    const msgs: BattleMsg[] = [];
-    c.onMessage("battle", (m: BattleMsg) => msgs.push(m));
     p.level = 30; p.hp = p.maxHp = 1_000_000; p.invulnUntil = 0; p.clan = undefined; p.renown = 0;
     p.x = FIELD.x; p.y = FIELD.y;
     room.state.mobs.forEach((m: any, mid: string) => { if (m.kind !== "trooper") room.state.mobs.delete(mid); });
@@ -204,7 +204,7 @@ test("battles (room): the lines wake near a hero in slots of their own; only swo
     assert.equal(room.battles.count, 0, "the battle's men are gone: the room's cap is back to WAR_TROOPS.maxTroops");
     troopers = 0; room.state.mobs.forEach((m: any) => { if (m.kind === "trooper" && !m.dead) troopers++; });
     assert.ok(troopers <= WAR_TROOPS.maxTroops);
-    await wait(300);
+    await until(() => msgs.some((m) => m.list.some((v) => v.id === b.id)));
     assert.ok(msgs.some((m) => m.list.some((v) => v.id === b.id)), "the clients hear of the battle");
   } finally { restore(); await srv.stop(); }
 });
