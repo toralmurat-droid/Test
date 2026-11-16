@@ -1,5 +1,5 @@
 {
- "sources": "254afee241aab348",
+ "sources": "bdf4d78af8c37dd5",
  "clips": {
   "w_firebolt": {
    "ms": 3050,
@@ -11,19 +11,19 @@
   },
   "w_storm": {
    "ms": 4050,
-   "frames": 81
+   "frames": 82
   },
   "v_leech": {
    "ms": 3050,
-   "frames": 62
+   "frames": 61
   },
   "v_link": {
    "ms": 4050,
-   "frames": 82
+   "frames": 81
   },
   "v_lance": {
    "ms": 3050,
-   "frames": 62
+   "frames": 61
   },
   "v_boil": {
    "ms": 3050,
@@ -35,7 +35,7 @@
   },
   "v_ward": {
    "ms": 4050,
-   "frames": 81
+   "frames": 82
   },
   "v_tide": {
    "ms": 4050,
@@ -47,15 +47,15 @@
   },
   "v_bats": {
    "ms": 4050,
-   "frames": 82
+   "frames": 81
   },
   "v_gaze": {
    "ms": 3050,
-   "frames": 61
+   "frames": 62
   },
   "v_rats": {
    "ms": 3050,
-   "frames": 62
+   "frames": 61
   },
   "v_batform": {
    "ms": 4050,
@@ -71,11 +71,11 @@
   },
   "v_rend": {
    "ms": 3050,
-   "frames": 61
+   "frames": 62
   },
   "v_thirst": {
    "ms": 4050,
-   "frames": 81
+   "frames": 82
   },
   "v_devour": {
    "ms": 3050,
@@ -91,11 +91,11 @@
   },
   "v_bite": {
    "ms": 3050,
-   "frames": 62
+   "frames": 61
   },
   "v_brides": {
    "ms": 5250,
-   "frames": 105
+   "frames": 106
   },
   "su_golem": {
    "ms": 5250,
@@ -103,23 +103,23 @@
   },
   "su_step": {
    "ms": 3050,
-   "frames": 62
+   "frames": 61
   },
   "su_blackhole": {
    "ms": 4050,
-   "frames": 82
+   "frames": 81
   },
   "su_horizon": {
    "ms": 4050,
-   "frames": 82
+   "frames": 81
   },
   "su_blades": {
    "ms": 4050,
-   "frames": 82
+   "frames": 81
   },
   "su_colossus": {
    "ms": 5250,
-   "frames": 105
+   "frames": 106
   },
   "su_wisps": {
    "ms": 5250,
@@ -131,7 +131,7 @@
   },
   "sg_modulate": {
    "ms": 3050,
-   "frames": 62
+   "frames": 61
   },
   "sg_ballad": {
    "ms": 4050,
@@ -143,19 +143,19 @@
   },
   "sg_pedal": {
    "ms": 4050,
-   "frames": 82
+   "frames": 81
   },
   "sg_chorale": {
    "ms": 4050,
-   "frames": 81
+   "frames": 82
   },
   "sg_march": {
    "ms": 4050,
-   "frames": 82
+   "frames": 81
   },
   "sg_jig": {
    "ms": 4050,
-   "frames": 81
+   "frames": 82
   },
   "sg_call": {
    "ms": 4050,
@@ -163,7 +163,7 @@
   },
   "sg_anthem": {
    "ms": 4050,
-   "frames": 81
+   "frames": 82
   },
   "sg_dirge": {
    "ms": 4050,
@@ -175,7 +175,7 @@
   },
   "sg_crack": {
    "ms": 3050,
-   "frames": 62
+   "frames": 61
   },
   "sg_twelve": {
    "ms": 4050,
