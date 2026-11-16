@@ -5,7 +5,8 @@
  */
 import type { ClanKey } from "./clans";
 
-export type WarMoment = "siege" | "besieged" | "took" | "lost" | "held" | "repelled" | "sacked" | "march" | "ambushed" | "clash";
+export type WarMoment = "siege" | "besieged" | "took" | "lost" | "held" | "repelled" | "sacked" | "march" | "ambushed" | "clash"
+  | "battle_called" | "battle_start" | "battle_banner" | "battle_captain" | "battle_won" | "battle_lost";
 
 export interface Leader { name: string; lines: Record<WarMoment, string[]> }
 
@@ -21,6 +22,12 @@ export const LEADERS: Record<ClanKey, Leader> = {
     march: ["Wardens, the road is ours. March for {land}!", "Boots on the road. {foe} will see us at {land} before they see the sun."],
     ambushed: ["Our column was cut down on the road to {land}. {foe} fight like thieves.", "Bury our fallen, then march again for {land}."],
     clash: ["Steel on the road to {land}! Hold the line, Wardens!", "{foe} met our column in the open. Let them learn what the watch is."],
+    battle_called: ["Wardens, muster at {land}. {foe} will have their open field.", "Polish the spears. We meet {foe} at {land}, face to face."],
+    battle_start: ["Shields up, Wardens. {land} is ours to keep or lose today.", "Horns! The watch stands at {land}."],
+    battle_banner: ["The banner at {land} is ours. Hold it, Wardens!", "Raise the hearth-banner over that rise. Do not let {foe} take it back."],
+    battle_captain: ["A captain of ours is down at {land}. Close the line and fight on.", "They killed one of ours at {land}. Stand fast, the watch does not break."],
+    battle_won: ["The field of {land} is ours. Count the living, bury the dead.", "{foe} broke at {land}. The watch stands."],
+    battle_lost: ["We lost the field at {land}. Remember the faces of the fallen.", "{foe} carried {land}. The watch will march again."],
   } },
   redfang: { name: "The Redfang Chief", lines: {
     siege: ["{land} has fat stores. Take them.", "Knives out, lads. {land} pays us now."],
@@ -33,6 +40,12 @@ export const LEADERS: Record<ClanKey, Leader> = {
     march: ["Out on the road, lads. {land} is waiting to be robbed.", "March light and grab heavy. {land} pays us now."],
     ambushed: ["{foe} jumped our column on the road to {land}? Somebody talked.", "Our lads were cut down on the road. {foe} will pay double."],
     clash: ["Our column met {foe} on the road to {land}. Cut your way through!", "A fight on the road? Good. Take their purses after."],
+    battle_called: ["{foe} want a fight at {land}? Fine. Sharpen everything.", "A pitched battle at {land}. Plenty of purses to take after."],
+    battle_start: ["Charge, lads! Loot is for the living.", "{land} is a butcher's yard today. Cut deep."],
+    battle_banner: ["That banner at {land} is ours now. Rob it of its pole.", "Hold the banner, lads. Nobody robs a robber."],
+    battle_captain: ["They put a knife in one of my captains at {land}. Somebody pays.", "A captain down at {land}? Then step up and fight for him."],
+    battle_won: ["{foe} ran from {land}. Strip the field.", "The field is ours. Count the purses."],
+    battle_lost: ["Lost the field at {land}. Somebody sold us out, and I'll find them.", "{foe} won at {land} this once. We'll bleed them for it."],
   } },
   host: { name: "The Pale Marshal", lines: {
     siege: ["The dead march on {land}. They do not tire.", "Raise the engines before {land}. The night is ours."],
@@ -45,6 +58,12 @@ export const LEADERS: Record<ClanKey, Leader> = {
     march: ["The column walks for {land}. The road is long. We are patient.", "March, you dead. {land} will not wait forever."],
     ambushed: ["Our column fell on the road to {land}. They will rise again.", "{foe} struck from the dark. The dead do not forget the road."],
     clash: ["The columns meet on the road to {land}. Let {foe} fall and join us.", "Steel on bone. The road to {land} is ours."],
+    battle_called: ["The dead will stand on {land}. Let {foe} bring their living.", "A field is chosen at {land}. We have waited longer for less."],
+    battle_start: ["Rise, all of you. {land} is waiting.", "The line stands at {land}. The fallen will fill every gap."],
+    battle_banner: ["The banner at {land} is ours. The dead guard it well.", "Plant the pale standard at {land}. {foe} will not pull it down."],
+    battle_captain: ["A captain falls at {land}. He will rise again.", "One of ours is down. Close ranks. The dead do not mourn."],
+    battle_won: ["{land} is quiet. {foe} lie still, and they are ours now.", "The field is ours. The Host grows."],
+    battle_lost: ["We lost the field at {land}. The dead are patient.", "{foe} hold {land} for now. Graves keep."],
   } },
   hidekin: { name: "The Hide-Mother", lines: {
     siege: ["Dig under {land}, my children.", "{land} smells of fear. Tunnel."],
@@ -57,6 +76,12 @@ export const LEADERS: Record<ClanKey, Leader> = {
     march: ["Out of the burrow, my children. The road leads to {land}.", "Quiet feet on the road to {land}. Then bite."],
     ambushed: ["They caught our column on the road to {land}. Bring the hurt ones home.", "{foe} cut down my children on the road. Dig, and wait."],
     clash: ["Our column met {foe} on the road. Bite, my children, bite!", "Teeth and claws on the road to {land}. Do not give an inch."],
+    battle_called: ["{foe} come to {land} in the open? Gather, my children.", "Out of the burrows. We fight at {land} in the light."],
+    battle_start: ["Bite, my children! All of you, all at once!", "The field at {land} is ours to chew."],
+    battle_banner: ["Our banner flies at {land}. Guard it with your teeth.", "Dig in round the banner. {foe} will not take it."],
+    battle_captain: ["One of my captains is down at {land}. Bring his teeth home.", "They killed a captain. Bite harder, children."],
+    battle_won: ["The field of {land} is ours, my children. Feast.", "{foe} fled the field at {land}. The burrow is proud."],
+    battle_lost: ["We lost the field at {land}. Go back to the earth and heal.", "{foe} drove us from {land}. The tunnels remember."],
   } },
   veiled: { name: "The Veiled Oracle", lines: {
     siege: ["The sun turns against {land}. Begin the rite.", "At noon {land} will be ours. It is written."],
@@ -69,6 +94,12 @@ export const LEADERS: Record<ClanKey, Leader> = {
     march: ["The column sets out for {land}. The road was foreseen.", "Walk in the sun, children of the Circle. {land} awaits."],
     ambushed: ["Our column was cut down on the road to {land}. It was foreseen, and it will be paid.", "{foe} struck on the road. The omens turn against them."],
     clash: ["The columns meet on the road to {land}. As it was written.", "{foe} stand in our way. The Circle does not turn aside."],
+    battle_called: ["The sun will stand over {land} in battle. It was foreseen.", "Gather at {land}, children of the Circle. {foe} walk into the rite."],
+    battle_start: ["Begin the chant. The field at {land} is the rite.", "The Circle takes the field. As it was written."],
+    battle_banner: ["The banner at {land} is ours. The omens are good.", "Hold the banner high at {land}. {foe} cannot see what we see."],
+    battle_captain: ["A captain falls at {land}. A dark omen for {foe}.", "One of ours is cut down. It was foreseen. Chant louder."],
+    battle_won: ["{land} is ours. The omens spoke true.", "{foe} fell at {land}. As it was written."],
+    battle_lost: ["The field at {land} is lost. The omens were clouded.", "{foe} won at {land}. The stars will turn."],
   } },
 };
 
@@ -148,4 +179,22 @@ export function feudLine(k: ClanKey, moment: FeudMoment, hero: string, seed: num
   const opts = FEUD_LINES[k][moment];
   const t = opts[Math.abs(Math.floor(seed)) % opts.length].replace(/\{hero\}/g, hero);
   return { name: LEADERS[k].name, text: t.charAt(0).toUpperCase() + t.slice(1) };
+}
+
+/** Battle captains (W5): names for the named soldiers of a battle, in each clan's flavour; picked by battle id and place. */
+export const CAPTAIN_NAMES: Record<ClanKey, string[]> = {
+  wardens: ["Sergeant Aldric", "Warden Brenna", "Old Corwin", "Sir Hadrian", "Marta Oakshield"],
+  redfang: ["Knife-Jory", "Gutter Bess", "One-Ear Rask", "Dagga Redhand", "Fat Merrow"],
+  host: ["Brother Ossian", "The Gaunt Vael", "Ashen Marrow", "Sister Hollow", "Bellringer Thane"],
+  hidekin: ["Digger Snout", "Old Clawmother", "Gnash", "Mudbelly", "Scratch-Tooth"],
+  veiled: ["Sun-Reader Ilsa", "Aurel the Seer", "Noon-Caller Dessa", "Brother Candle", "Veilsworn Tamar"],
+};
+
+/** A small stable hash of a string (battle ids). */
+export function hashStr(s: string): number { let h = 7; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; }
+
+/** The name of captain place `i` of `k` in battle `id`: the same on every restart and in every room. */
+export function captainName(k: ClanKey, id: string, i: number): string {
+  const n = CAPTAIN_NAMES[k];
+  return n[(hashStr(id) + i) % n.length];
 }

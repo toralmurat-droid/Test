@@ -157,7 +157,7 @@ test("battles (room): the lines wake near a hero in slots of their own; only swo
     let troopers = 0; room.state.mobs.forEach((m: any) => { if (m.kind === "trooper") troopers++; });
     assert.ok(troopers <= WAR_TROOPS.maxTroops + BATTLE.extraTroops, `${troopers} troopers in the room`);
     const cap0 = lv.places[0].find((x: any) => x.captain).id, capMob = room.state.mobs.get(cap0);
-    assert.match(capMob.title, /^Captain of the /);
+    assert.match(capMob.title, /, captain$/);
     // stance gates: unsworn, ally, under the oath level: no damage
     const sol = lv.places[0].find((x: any) => x.id && !x.captain).id, m0 = room.state.mobs.get(sol), hp0 = m0.hp;
     for (const [clan, lvl] of [[undefined, 30], [SITE.a, 30], [SITE.b, STANDARD.minLevel - 1]] as [ClanKey | undefined, number][]) {

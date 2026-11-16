@@ -17,6 +17,7 @@ import { underground } from "../shared/dungeon";
 import { blocked } from "../shared/movement";
 import { CLANS, type ClanKey } from "../shared/war/clans";
 import { BATTLE, battleBanners, battleField, battleGold, battleView, type Battle, type BattleMsg } from "../shared/war/battles";
+import { captainName, hashStr, leaderLine, type WarMoment } from "../shared/war/heralds";
 import { RENOWN_RANKS, rankOf } from "../shared/war/renown";
 import { roadOffLimits } from "../shared/war/roads";
 import { rallyRenown, WAR } from "../shared/war/rules";
@@ -118,13 +119,16 @@ export class WarBattles {
       if (n.kind === "announce") {
         const mins = Math.max(0, Math.round((b.start - now) / 60_000));
         this.herald(b.kind === "storm" ? `${A} storm the walls of ${land}: the siege is fought out at the gate${mins ? ` in ${mins} min` : ""}!` : `${what} for ${land}: ${A} against ${D}${mins ? `, in ${mins} min` : ""}!`);
+        this.say(b.a, "battle_called", b, b.b);
       } else if (n.kind === "start") {
         this.herald(`${what} for ${land} has begun: ${A} (${b.men0[0]} men) against ${D} (${b.men0[1]} men).`);
         this.h.broadcast("sfx", { ev: "battle_horn", id: b.id, x: Math.round(b.x), y: Math.round(b.y), a: b.a, b: b.b });
+        this.say(b.a, "battle_start", b, b.b); this.say(b.b, "battle_start", b, b.a);
       } else if (n.kind === "end") {
         const won = b.result === "att" ? A : b.result === "def" ? D : "";
         this.herald(won ? `${won} won the battle for ${land}.` : `The battle for ${land} ends in a draw.`);
         this.h.broadcast("sfx", { ev: "battle_end", id: b.id, x: Math.round(b.x), y: Math.round(b.y), result: b.result });
+        if (won) { const w = b.result === "att" ? b.a : b.b, l = b.result === "att" ? b.b : b.a; this.say(w, "battle_won", b, l); this.say(l, "battle_lost", b, w); }
       } else this.herald(`The battle for ${land} is called off.`);
     }
     // the reminder BATTLE.remindMs before a battle starts (once per battle per room)
@@ -132,6 +136,11 @@ export class WarBattles {
       this.paid.add(`r${b.id}`);
       this.herald(`The battle for ${TERRITORIES[b.t].name} begins in ${Math.max(1, Math.round((b.start - now) / 60_000))} min.`);
     }
+  }
+  /** A clan leader speaks in the room's chat about a battle (called, start, banner, captain, won, lost), as in server/warMarches.ts. */
+  private say(k: ClanKey, moment: WarMoment, b: Battle, foe: ClanKey, seed = 0) {
+    const l = leaderLine(k, moment, TERRITORIES[b.t].name, foe, hashStr(b.id) + seed);
+    this.h.broadcast("chat", { id: "", name: l.name, text: l.text });
   }
   private herald(text: string) { this.h.broadcast("chat", { id: "", name: "Herald", text }); }
 
@@ -215,7 +224,7 @@ export class WarBattles {
         const id = `wb${++this.seq}`, level = troopLevel(l.b.t, p.captain), mob = this.h.spawn(id, level, at.x, at.y, troopWeapon(clan, p.captain));
         if (!mob) continue;
         mob.hp = mob.maxHp = troopStats(clan, level, p.captain).hp * (p.captain ? BATTLE.captainHp : 1);
-        if (p.captain) mob.title = `Captain of the ${CLANS[clan].name}`;
+        if (p.captain) mob.title = `${captainName(clan, l.b.id, side * BATTLE.captains + i)}, captain`;
         p.id = id; p.f = newFighter(clan, p.captain);
         this.mobs.set(id, { side, i });
         room--;
@@ -240,6 +249,7 @@ export class WarBattles {
       }
       const to = battleFront(l.b.id, i, n[0], n[1], now);
       if (to) this.h.broadcast("sfx", { ev: "battle_banner", id: l.b.id, i, x: Math.round(q.x), y: Math.round(q.y), clan: to === "atk" ? l.b.a : l.b.b });
+      if (to) this.say(to === "atk" ? l.b.a : l.b.b, "battle_banner", l.b, to === "atk" ? l.b.b : l.b.a, i);
     });
   }
   private bannerPts(l: Live) {
@@ -323,6 +333,7 @@ export class WarBattles {
     if (pl.captain && battleCaptain(l.b.id, s.side, now)) {
       this.h.broadcast("sfx", { ev: "battle_officer", id: l.b.id, x: Math.round(m.x), y: Math.round(m.y), clan });
       this.herald(`${p ? p.name : "A blade"} cut down a captain of the ${CLANS[clan].name} at ${TERRITORIES[l.b.t].name}!`);
+      this.say(clan, "battle_captain", l.b, clan === l.b.a ? l.b.b : l.b.a, l.b.captains[s.side]);
     }
     if (p && killerId && p.clan && !p.dead && p.level >= STANDARD.minLevel && p.clan !== clan && atWar(p.clan, clan) && troopStance(clan, p) === "enemy") {
       const pts = WAR_TROOPS.killPts[pl.captain ? "officer" : "soldier"] + (pl.captain ? BATTLE.captainValor : 0);
