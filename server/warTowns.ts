@@ -200,7 +200,7 @@ export class WarTowns {
       if (alive) continue;
       gt.slots[i] = "";
       if (fell.has(i) || room <= 0) continue;
-      const officer = i === 0, level = troopLevel(patron, officer), at = posts[i];
+      const officer = i === 0, level = Math.max(TOWN.minGuardLevel, troopLevel(patron, officer)), at = posts[i];
       const gid = `wg${++this.seq}`, m = this.h.spawn(gid, level, at.x, at.y, troopWeapon(gt.k, officer));
       if (!m) continue;
       m.hp = m.maxHp = troopStats(gt.k, level, officer).hp;

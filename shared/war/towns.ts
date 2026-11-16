@@ -24,6 +24,8 @@ export const TOWN = {
   maxExt: 3,
   /** The town guard at the gate muster while contested: soldiers and one captain of the old holder. */
   guards: 4, captain: 1,
+  /** Gate guards are at least this level, so a town on a beginner land (Millbrook, North Meadow) still needs a real fight. */
+  minGuardLevel: 15,
   /** Time to raise the banner at the gate (ms): the Holds' sack rules (holdSack.ts sackStep). */
   raiseMs: HOLD_SACK.raiseMs,
   /** The raiser must stand this close to the gate (tiles): to start, and (x1.5) to keep raising. */
