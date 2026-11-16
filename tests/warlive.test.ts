@@ -111,6 +111,7 @@ test("heralds: every leader has a line for every moment, filled in and capitalis
     const l = leaderLine(k, m, "Brinewood", k === "host" ? "wardens" : "host", 3);
     assert.ok(l.text.length > 10 && !/[{}]/.test(l.text) && l.text[0] === l.text[0].toUpperCase(), `${k} ${m}: ${l.text}`);
   }
+  for (const k of CLAN_KEYS) for (const m of ["march", "ambushed", "clash"] as const) assert.equal(LEADERS[k].lines[m].length, 2, `${k} ${m}`);
   assert.deepEqual(eventVoice("siege", "redfang", "wardens"), { k: "wardens", foe: "redfang", moment: "besieged" });
   assert.deepEqual(eventVoice("flip", "redfang", "wardens"), { k: "redfang", foe: "wardens", moment: "took" });
 });

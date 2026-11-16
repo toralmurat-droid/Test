@@ -1,3 +1,4 @@
+import { LEADERS } from "../shared/war/heralds";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startRoom, until, wait } from "./helpers/room";
@@ -195,6 +196,7 @@ test("columns (room): the Herald announces a tick's columns once (a sack's news 
     room.marches.onWar(); room.marches.onWar();
     const lines = sent.filter(([t, msg]) => t === "chat" && msg.name === "Herald" && /^Columns march/.test(msg.text));
     assert.equal(lines.length, 1, "once");
+    assert.ok(sent.some(([t, msg]) => t === "chat" && msg.name === LEADERS[m.clan].name), "the leader of the marching clan speaks");
     assert.ok(lines[0][1].text.includes(TERRITORIES[m.to].name));
     assert.ok(told.some((x) => x.includes(TERRITORIES[m.to].name) && /your clan's land/.test(x)), "the holder's sworn hear a column comes");
     assert.equal(sent.filter(([t]) => t === "columns").length >= 2, true, "the columns each time");

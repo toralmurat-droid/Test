@@ -13,8 +13,9 @@
 import { TILE, type Dir } from "../shared/constants";
 import { underground } from "../shared/dungeon";
 import { blocked } from "../shared/movement";
-import { CLAN_KEYS, CLANS } from "../shared/war/clans";
+import { CLAN_KEYS, CLANS, type ClanKey } from "../shared/war/clans";
 import { COLUMN, columnPos, columnTrip, type ColumnPos, type ColumnRow, type ColumnsMsg, type March } from "../shared/war/marches";
+import { leaderLine, type WarMoment } from "../shared/war/heralds";
 import { RENOWN_RANKS, rankOf } from "../shared/war/renown";
 import { pathKnown, roadEntry, roadOffLimits, roadPairs, routePos, warPath, type RoadEntry, type WarPath } from "../shared/war/roads";
 import { TERRITORIES } from "../shared/war/territories";
@@ -76,6 +77,8 @@ export class WarMarches {
   private beside = new Map<string, Map<string, number>>();
   private arrived = new Set<string>();
   private clashed = new Set<string>();
+  /** Columns whose first fallen soldier the leader already answered. */
+  private ambushed = new Set<string>();
   private sentVersion = -1;
   /** The columns the Herald last announced (their ids), so a sack's news between ticks does not repeat it. */
   private announced = "";
@@ -248,7 +251,12 @@ export class WarMarches {
     if (!s) return false;
     this.mobs.delete(id);
     s.live.men[s.i] = "";
-    columnLost(s.live.m.id, 1, now);
+    const m = s.live.m;
+    if (columnLost(m.id, 1, now) && !this.ambushed.has(m.id)) {
+      this.ambushed.add(m.id);
+      if (this.ambushed.size > 64) this.ambushed.delete(this.ambushed.values().next().value!);
+      this.say(m.clan, "ambushed", m, this.defender(m));
+    }
     return true;
   }
 
@@ -269,6 +277,17 @@ export class WarMarches {
     }
   }
 
+  /** The clan holding the land a column marches on (the other side of its leader's words). */
+  private defender(m: March): ClanKey {
+    const d = CLAN_KEYS[(warNow()?.owner ?? [])[m.to]];
+    return d && d !== m.clan ? d : CLAN_KEYS[(CLAN_KEYS.indexOf(m.clan) + 1) % CLAN_KEYS.length];
+  }
+  /** The leader of `k` speaks in the room's chat about a column (march, ambushed, clash), as for a sack (server/war.ts attachWar). */
+  private say(k: ClanKey, moment: WarMoment, m: March, foe: ClanKey) {
+    const l = leaderLine(k, moment, TERRITORIES[m.to].name, foe, warNow()?.tick ?? 0);
+    this.h.broadcast("chat", { id: "", name: l.name, text: l.text });
+  }
+
   /** A meeting's moment came: the clash sound where it is and a Herald line, once per room. */
   private clash(m: March, now: number) {
     const mt = meetingFor(m.id);
@@ -279,6 +298,8 @@ export class WarMarches {
     if (!o) return;
     this.h.broadcast("sfx", { ev: "column_clash", x: mt.x, y: mt.y, a: m.clan, b: o.clan });
     this.h.broadcast("chat", { id: "", name: "Herald", text: `The ${CLANS[m.clan].name} and the ${CLANS[o.clan].name} columns clash on the road between ${TERRITORIES[m.from].name} and ${TERRITORIES[m.to].name}!` });
+    this.say(m.clan, "clash", m, o.clan);
+    this.say(o.clan, "clash", m, m.clan);
   }
 
   /**
@@ -294,6 +315,7 @@ export class WarMarches {
     const on = (m: March) => `the ${CLANS[m.clan].name} on ${TERRITORIES[m.to].name}`, few = ms.slice(0, 3).map(on);
     const list = few.length > 1 ? `${few.slice(0, -1).join(", ")} and ${few[few.length - 1]}` : few[0];
     this.h.broadcast("chat", { id: "", name: "Herald", text: `Columns march: ${list}${ms.length > 3 ? `, and ${ms.length - 3} more` : ""}.` });
+    for (const m of ms.slice(0, 3)) this.say(m.clan, "march", m, this.defender(m));
     const owner = warNow()?.owner ?? [];
     for (const [hid, h] of this.h.heroes()) {
       if (!h.clan) continue;
