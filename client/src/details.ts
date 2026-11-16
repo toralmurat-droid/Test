@@ -1,5 +1,6 @@
 import { ISO, SMOOTH } from "./isoflag";
 import { isoAnchor, isoScreen } from "./iso";
+import { staticObj } from "./staticChunks";
 import Phaser from "phaser";
 import { ART_K as K, MAP_H, MAP_W, TILE } from "../../shared/constants";
 import { AREAS, EMPTY, GROUND, OBJECTS, T, VILLAGE } from "../../shared/map";
@@ -735,6 +736,9 @@ export class Details {
   addLight(x: number, y: number, color: number, scale: number, base: number, flicker = 0.08, lift = 0, dx = 0): Phaser.GameObjects.Image {
     const img = this.scene.add.image(x + dx, y - lift, "light").setTint(color).setScale(scale).setBlendMode(Phaser.BlendModes.ADD).setDepth(27500).setAlpha(0);
     if (lift || dx) isoAnchor(img, { x, y }); // iso: keep it up at the lamp, not skewed onto the ground
+    // iso: out of the display list while far from the view (hundreds of lamps, windows and fires across the lands)
+    const sx = x - y + dx, sy = (x + y) / 2 - lift, r = 32 * scale + 16;
+    staticObj(this.scene, img, { box: [sx - r, sy - r, sx + r, sy + r] });
     this.lights.push({ img, base, flicker });
     return img;
   }
@@ -749,7 +753,8 @@ export class Details {
       if (ISO) {
         // iso: hangs on the front wall of the house, about head height
         const foot = { x, y: (ty + 1) * TILE };
-        isoAnchor(scene.add.image(x, foot.y - 30, "lantern").setOrigin(0.5, 0).setDepth(foot.y + 1), foot);
+        const lx = x - foot.y, ly = (x + foot.y) / 2 - 30;
+        staticObj(scene, isoAnchor(scene.add.image(x, foot.y - 30, "lantern").setOrigin(0.5, 0).setDepth(foot.y + 1), foot), { box: [lx - 24, ly - 8, lx + 24, ly + 40] });
         this.addLight(x, foot.y, 0xffb347, 2.2, 0.75, 0.08, 21); // in the lantern (its middle is 21 px up the wall)
         continue;
       }
