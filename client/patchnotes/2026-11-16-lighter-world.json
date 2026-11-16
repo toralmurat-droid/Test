@@ -1,5 +1,6 @@
 {
   "date": "2026-11-16",
+  "patch": 292,
   "title": "Smoother frames",
   "changes": [
     "Buildings are now prepared only when you come near them, so the game loads faster and uses less graphics memory (the capital cities were the biggest part).",
