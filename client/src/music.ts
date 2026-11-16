@@ -43,6 +43,9 @@ const TRACKS: Track[] = [
   { id: "saltmere", name: "Tides of Saltmere", url: "/assets/music/tides-of-saltmere.mp3", optional: true },
   { id: "country", name: "Countryside tune", url: "/assets/music/countryside-tune.mp3" },
   { id: "village-sounds", name: "Village sounds", ambience: true },
+  // Act 6, the Crown: Tollcross and the open Marches (optional: without the files Tollcross plays the village tune, the rest the country tune)
+  { id: "tollcross", name: "Tollcross tune", url: "/assets/music/tollcross-tune.mp3", optional: true },
+  { id: "crown", name: "Crown of the Marches tune", url: "/assets/music/crown-of-the-marches.mp3", optional: true },
   // Act 2, the Sunscar (optional until Murat's mp3s are added; file names in docs/music/act2-prompts.md)
   { id: "second-sun", name: "Song of the Second Sun", url: "/assets/music/song-of-the-second-sun.mp3", optional: true },
   { id: "kel-ashar", name: "Kel Ashar tune", url: "/assets/music/kel-ashar-tune.mp3", withSounds: true, desert: true, optional: true },
@@ -69,6 +72,8 @@ const BADLANDS_TOWNS = ["The Rustwater Post", "Rustwater Post"];
 const SINKHOLES_TOWNS = ["Ropewell"];
 /** Act 1 areas with their own calm song (Saltmere's sea shanty), else the village tune. */
 const SALTMERE = ["Saltmere"];
+/** Act 6 calm area that plays the Tollcross tune (the Truce Market outside the Keep), else the village tune. */
+const CROWN_TOWNS = ["Tollcross"];
 const OASES = ["Palmshade Oasis", "Mirage Wells", "Jackal Springs"];
 const BURIED = ["Kharsun, the Buried City", "The Veiled Sanctum"];
 const FURNACE = "The Sun Furnace";
@@ -300,8 +305,8 @@ function tick() {
  * Where the hero stands: the monster zone (name + its `mobs`, or undefined outside any) and the area
  * name. Cheap to call every frame.
  */
-export function setMusicZone(zone: string | undefined, mobs: Partial<Record<string, number>> | undefined, area: string, actNowRaw: 1 | 2 | 3 | 4 | 5 = 1) {
-  const actNow: 1 | 2 = actNowRaw === 2 ? 2 : 1; // Acts 3, 4 and 5 borrow the valley's calm country track until the moors, the badlands and the sinkholes have their own music (slots: a badlands / sinkholes calm track here)
+export function setMusicZone(zone: string | undefined, mobs: Partial<Record<string, number>> | undefined, area: string, actNowRaw: 1 | 2 | 3 | 4 | 5 | 6 = 1) {
+  const actNow: 1 | 2 = actNowRaw === 2 ? 2 : 1; // Acts 3 to 6 borrow the valley's calm country track until the moors, the badlands and the sinkholes have their own music (slots: a badlands / sinkholes calm track here)
   if (!inWorld) {
     // In the world now: the opening song plays on to its end instead of looping
     inWorld = true;
@@ -335,6 +340,7 @@ export function setMusicZone(zone: string | undefined, mobs: Partial<Record<stri
     zoneBattle = actOneBattle;
     calm = !zone && (TOWNS.includes(area) || (actNowRaw === 3 && MOORS_TOWNS.includes(area)) || (actNowRaw === 4 && BADLANDS_TOWNS.includes(area)) || (actNowRaw === 5 && SINKHOLES_TOWNS.includes(area))) ? "village" : "country";
     if (calm === "village" && actNowRaw === 1 && SALTMERE.includes(area)) calm = firstOf("saltmere") ?? "village";
+    if (actNowRaw === 6) calm = !zone && CROWN_TOWNS.includes(area) ? firstOf("tollcross", "village") ?? "village" : firstOf("crown") ?? "country";
   }
   // Back to the valley while the theme plays: it fades with the calm change below
   if (actNow !== act) { act = actNow; if (arrival === "playing") arrival = "done"; }
