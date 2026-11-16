@@ -7,6 +7,7 @@
 import { CLANS, CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
 import { bannerSpot, cleanHoldsMsg, HOLD_SACK, type HoldsMsg } from "../../shared/war/holdSack";
 import { HOLDS } from "../../shared/war/standards";
+import { TERRITORIES } from "../../shared/war/territories";
 import type { TroopStance } from "../../shared/war/troops";
 import { TILE } from "../../shared/constants";
 import { hudSlot } from "./hudSlots";
@@ -86,17 +87,19 @@ export class WarSack {
 
   /** Every frame: the prompt at a hostile Hold's banner, the hero's progress bar, the creak of banners going up near. */
   update(me: { x: number; y: number } | undefined, blocked: boolean, now = Date.now()) {
-    let near: number | undefined;
+    let near: number | undefined, reckon = false;
     if (me && !blocked) for (const hd of HOLDS) {
       const at = bannerSpot(hd.t), k = this.h.holder(hd.t);
       if (!at || !k || Math.hypot(at.x - me.x, at.y - me.y) > HOLD_SACK.useTiles * TILE) continue;
+      // the Crown Keep is never sacked (server/warHolds.ts): a note instead of the prompt
+      if (TERRITORIES[hd.t]?.reckoningOnly) { reckon = this.h.stance(k) !== "ally"; break; }
       if (this.h.stance(k) === "enemy" && !this.h.besieged(hd.t) && !this.sackedMap.has(hd.t)) near = hd.t;
       break;
     }
     this.near = near;
-    this.prompt.classList.toggle("open", near !== undefined && !this.mine);
+    this.prompt.classList.toggle("open", (near !== undefined || reckon) && !this.mine);
     const k = near !== undefined ? this.h.holder(near) : undefined;
-    const html = near !== undefined && k ? `<kbd>E</kbd> Raise your banner over the ${CLANS[k].name} Hold` : "";
+    const html = reckon ? "The Crown Keep falls only at a Reckoning" : near !== undefined && k ? `<kbd>E</kbd> Raise your banner over the ${CLANS[k].name} Hold` : "";
     if (this.prompt.innerHTML !== html) this.prompt.innerHTML = html;
     // the hero's own banner: progress in the pixel font, or why not
     const m = this.mine, err = now < this.errUntil ? this.err : "";
