@@ -12,6 +12,7 @@ import { CLAN_COL } from "./warMap";
 import { setMusicWar } from "./music";
 import { setBattleDin, stopBattleDin } from "./sfx";
 import { BANNER_FLUTTER, BANNER_FRAME, ensureBattleBannerTextures } from "./battleArt";
+import { setBaseDepth } from "./iso";
 import "./warBattle.css";
 
 const KIND_NAME = { pitched: "Pitched battle", storm: "Storming", meet: "Meeting battle" } as const;
@@ -49,6 +50,8 @@ export class WarBattle {
   private scene?: Phaser.Scene;
   private poles = new Map<string, Phaser.GameObjects.Sprite>();
   private dinOn = false;
+  /** The room connection dropped (the reconnect overlay is up): silent and empty until the next "battle" message. */
+  private offline = false;
 
   constructor(private say: (text: string) => void) {
     this.el.id = "warbattle";
@@ -68,7 +71,7 @@ export class WarBattle {
         const key = `${b.id}:${i}`; live.add(key);
         let sp = this.poles.get(key);
         if (!sp) { sp = sc.add.sprite(x, y, "battle_banner", 0).setOrigin(0.5, 1).setDepth(y); this.poles.set(key, sp); }
-        sp.setPosition(x, y).setDepth(y);
+        setBaseDepth(sp.setPosition(x, y), y); // (no re-sort of the display list every frame: iso.ts)
         sp.setFrame((holder ? BANNER_FRAME.defender : BANNER_FRAME.attacker) + (Math.floor(wall / 280 + i) % 2 ? BANNER_FLUTTER : 0));
       });
     }
@@ -87,6 +90,7 @@ export class WarBattle {
 
   setMsg(m: BattleMsg, wall = Date.now()) {
     if (!m || !Array.isArray(m.list)) return;
+    this.offline = false;
     if (typeof m.now === "number" && Number.isFinite(m.now)) this.offset = m.now - wall;
     this.list = m.list;
     const now = wall + this.offset;
@@ -121,8 +125,17 @@ export class WarBattle {
     return Math.hypot(me.x - b.x, me.y - b.y) <= 14 * TILE;
   }
 
+  /** The room disconnected: the din stops at once, the bar and the battle music go until the server speaks again. */
+  disconnected() {
+    this.offline = true; this.list = [];
+    stopBattleDin(); this.dinOn = false;
+    if (this.inField) { this.inField = false; setMusicWar(false); }
+    this.el.hidden = true;
+  }
+
   /** Per frame: notices, the bar, the result banner and the music flag. `me` is the living hero in world px. */
   update(me: { x: number; y: number } | undefined, wall = Date.now()) {
+    if (this.offline) return;
     const now = wall + this.offset;
     let bar: BattleView | undefined, field = false, din = 0;
     this.drawPoles(wall);

@@ -1029,5 +1029,28 @@ in every act.
   - Bench (`npm run bench`, noisy 4-core container): `WAR=1` 5 bots 4.37 ms avg / 7.3 p95; `WAR=1 BATTLE=1` 6.96 /
     15.7 (138 battle troopers, 118 fighting); 20 bots `SPREAD=1 BATTLE=1` 13.63 / 23.0, 19.8 ticks/s, no drops;
     `DEFLATE=1 BATTLE=1` 13.5 kB/s on the wire per player.
-  - Open: leader lines (`WarMoment` battle moments, content step 3), captain names, the client (step 4), sounds
-    (step 5), the patch note; per-battle caps are memory only (a restart mid-battle resets them).
+  - Open: per-battle caps are memory only (a restart mid-battle resets them).
+- **Review fixes (W5 reviewer NOT OK, 2026-11-16):**
+  - Banners: every room that has the battle live reports its own count per banner each second (`battleScore`); the
+    battle clock sums the rooms' last counts per `scoreMs` window and steps each banner's `frontStep` once per window,
+    by time. A window nobody reported leaves the banners alone, so an empty room can neither freeze nor reset them.
+    A banner changing hands goes out as battle news (each room plays `battle_banner` and the leader line).
+  - Captains stand in one room only (the room fielding the most men; it keeps them while it reports and fields any),
+    never more than the battle has left (`b.captains`); a fallen captain's place is flagged and never filled again;
+    `captainValor` is paid only when `battleCaptain` counts the kill.
+  - Pay at the end only in a room that fielded men for the battle. Active = moved, dealt battle damage (a hit on a
+    battle soldier) or took it (a battle soldier's blow) within `BATTLE.idleMs`; `fieldMarginTiles` and `roomStaleMs`
+    are in `BATTLE` too.
+  - Stormings vs W2 sieges: the storming replaces the siege's live waves. From its announcement (30 s after the tick)
+    to its end, `WarSieges` never wakes that land's siege and puts a live one to sleep (`stormingAt`); the storming's
+    lines fight at the gate instead. So no siege front valor is earned while the storming runs. Valor already
+    gathered in that interval (sacks, standards, kills) still counts in the next tick's fight there (Control,
+    attrition, pressure), but the flip is the storming's: an attacker win flips, a defender win fails the siege, and
+    only a draw falls back to the usual check. Meeting battles: while one is fought, the two columns' live troopers
+    stand down (`inMeetBattle`, `WarMarches`), so the W4 meeting is never also live (it is marked "sim" and costs no
+    men).
+  - Staleness: a battle more than one tick interval past its end is dropped, unfed, when the tick reads the outcomes.
+  - Client: the banner poles use `setBaseDepth`; the battle din and the battle music stop when the room disconnects.
+  - Bench, 20 bots `WAR=1 SPREAD=1` (load average about 4 from other jobs; two pairs): without `BATTLE` 15.48 ms
+    avg / 27.1 p95, 19.4 ticks/s and 12.04 / 17.5, 19.7 ticks/s; with `BATTLE=1` 18.22 / 33.8, 19.4 ticks/s and
+    16.24 / 26.0, 19.7 ticks/s (138 battle troopers); no dropped bots.

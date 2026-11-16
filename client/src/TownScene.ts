@@ -1619,7 +1619,7 @@ export class TownScene extends Phaser.Scene {
     const chatlog = document.getElementById("chatlog")!;
     for (const t of takeCarried()) { const el = document.createElement("div"); el.textContent = t; chatlog.prepend(el); }
     this.room.onMessage("upgrading", () => upgradeAnnounced());
-    this.room.onLeave((code: number) => { if (this.quitting) return; this.feed("Disconnected from server"); reconnectSoon(login, code === 4000); });
+    this.room.onLeave((code: number) => { if (this.quitting) return; this.warBattle.disconnected(); this.feed("Disconnected from server"); reconnectSoon(login, code === 4000); }); // (the battle din stops with the connection)
     // A connection that silently died (nothing heard for 15s) is treated the same way. A quiet spot sends no
     // state patch, so the server's heartbeat ("hb", every 4s) and the monster feed also count as signs of life.
     let lastPatch = Date.now();
@@ -1669,7 +1669,7 @@ export class TownScene extends Phaser.Scene {
     this.room.onMessage("warraid", (r) => warNotice.raid(r, this.entities.get(this.me)?.sprite)); // the Night Raiders strike the leading clan's lands
     this.room.onMessage("mv", alive);
     this.startPing();
-    window.setInterval(() => { if (!this.quitting && Date.now() - lastPatch > 15_000) reconnectSoon(login); }, 3000);
+    window.setInterval(() => { if (!this.quitting && Date.now() - lastPatch > 15_000) { this.warBattle.disconnected(); reconnectSoon(login); } }, 3000);
   }
 
   /**

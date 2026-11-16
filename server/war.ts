@@ -24,7 +24,7 @@ import {
   BATTLE, battleDay, battleField, battleOutcome, battleStep, cleanBattle, isDecisive, meetSite, newBattle, pickMeetings, pickPitched, pitchedSlot, pitchedTimes,
   setMen, siteForces, stormField, type Battle, type BattleSite,
 } from "../shared/war/battles";
-import { frontStep, type Side } from "../shared/war/siege";
+import { frontStep } from "../shared/war/siege";
 import { TOWN, TOWNS, townById, townCounts, townPatron, townStep, townsView, type TownChange, type TownState, type TownsMsg } from "../shared/war/towns";
 import { openKv, type Kv } from "./store";
 
@@ -450,11 +450,17 @@ export const _warDirty = () => dirtyAt > 0;
 const pendingLive = new Map<string, [number, number]>();
 /** Men each room fields per battle (room -> [attackers, defenders], when reported): no two rooms field the same men. */
 const fielded = new Map<string, Map<unknown, { n: [number, number]; at: number }>>();
+/** Per battle: the one room that fields the captains (the room fielding the most men; it keeps them while it reports). */
+const captainRoom = new Map<string, unknown>();
+/** Per battle: each room's latest banner counts in the current BATTLE.scoreMs window ([attackers, defenders] per banner), and the last window scored. */
+type BannerReport = { w: number; n: [number, number][] };
+const bannerReports = new Map<string, Map<unknown, { cur: BannerReport; prev?: BannerReport }>>();
+const scoredWin = new Map<string, number>();
 /** Per battle: per hero name the kill valor and the renown it paid; per clan the valor (BATTLE caps). Memory only. */
 const heroCaps = new Map<string, Map<string, { kill: number; renown: number }>>();
 const clanCaps = new Map<string, Map<ClanKey, number>>();
 /** What happened to the battles since the rooms last looked: announced, started, ended, called off (the rooms announce it). */
-export interface BattleNews { kind: "announce" | "start" | "end" | "off"; b: Battle }
+export interface BattleNews { kind: "announce" | "start" | "end" | "off" | "banner"; b: Battle; /** "banner": which banner changed hands. */ i?: number }
 const battleNews: BattleNews[] = [];
 let battleVer = 0;
 
@@ -504,9 +510,33 @@ export function battleClock(now = Date.now()) {
       battleStep(b, step / 1000, live);
       changed(now);
     }
+    if (!b.result) scoreBanners(b, now);
     if (b.result && b.done === undefined) { b.done = now; pendingLive.delete(b.id); battleNews.push({ kind: "end", b }); }
   }
   trimNews();
+}
+/**
+ * The banners' hysteresis (siege.ts frontStep), once per BATTLE.scoreMs window and by time like the steps: every room
+ * that has the battle live reports its own count per banner (troopers and active sworn heroes a side in its ring),
+ * the counts of all rooms are summed, and each banner steps once with the sum. A window nobody reported leaves the
+ * banners as they are, so a room with no men there can neither freeze nor reset them.
+ */
+function scoreBanners(b: Battle, now: number) {
+  const cur = Math.floor((now - b.start) / BATTLE.scoreMs), last = scoredWin.get(b.id);
+  scoredWin.set(b.id, cur);
+  if (last === undefined) return; // (first sight, or after a restart: from the next window on)
+  const reps = bannerReports.get(b.id);
+  for (let w = last; w < cur; w++) {
+    const sum = b.banners.map((): [number, number] => [0, 0]);
+    let any = false;
+    for (const x of reps?.values() ?? []) {
+      const r = x.cur.w === w ? x.cur : x.prev?.w === w ? x.prev : undefined; // (a room's last count in that window)
+      if (r) { any = true; r.n.forEach((c, i) => { if (sum[i]) { sum[i][0] += c[0]; sum[i][1] += c[1]; } }); }
+    }
+    if (!any) continue;
+    b.banners.forEach((f, i) => { if (frontStep(f, sum[i][0], sum[i][1], b.start + (w + 1) * BATTLE.scoreMs)) { battleNews.push({ kind: "banner", b, i }); changed(now); } });
+  }
+  if (reps) for (const [r, x] of reps) if (x.cur.w < cur - 1) reps.delete(r);
 }
 function add(b: Battle, now: number) {
   const bs = book(now);
@@ -567,9 +597,12 @@ function battleOutcomes(at: number): NonNullable<TickExtra["battle"]> {
   const bs = saved?.battles;
   if (!bs) return [];
   const out: NonNullable<TickExtra["battle"]> = [];
-  for (const b of bs.list) if (b.result && !b.fed) { const o = battleOutcome(b); if (o) out.push(o); b.fed = true; }
-  bs.list = bs.list.filter((b) => !(b.fed && at - (b.done ?? 0) > BATTLE.keepMs));
-  for (const id of [...heroCaps.keys()]) if (!bs.list.some((b) => b.id === id)) { heroCaps.delete(id); clanCaps.delete(id); fielded.delete(id); }
+  // a battle more than a tick interval past its end is stale (never begun, or kept from a long outage): dropped unfed
+  const stale = (b: Battle) => at - b.end > WAR.tickMs;
+  for (const b of bs.list) if (b.result && !b.fed && !stale(b)) { const o = battleOutcome(b); if (o) out.push(o); b.fed = true; }
+  bs.list = bs.list.filter((b) => !stale(b) && !(b.fed && at - (b.done ?? 0) > BATTLE.keepMs));
+  for (const m of [heroCaps, clanCaps, fielded, captainRoom, bannerReports, scoredWin] as Map<string, unknown>[])
+    for (const id of [...m.keys()]) if (!bs.list.some((b) => b.id === id)) m.delete(id);
   if (out.length) battleVer++;
   lastFed = out;
   return out;
@@ -603,23 +636,46 @@ export function battleDeath(id: string, side: 0 | 1, n = 1): boolean {
  * Room `room` fields `n` men a side of battle `id` now: what it may field, its share of the pools left after what other
  * rooms (reported within 5 s) field. Every room calls it each second for the battle it has live.
  */
-export function battleFielded(id: string, room: unknown, n: [number, number], now = Date.now()): [number, number] {
+export function battleFielded(id: string, room: unknown, n: [number, number], now = Date.now()): { may: [number, number]; captains: boolean } {
   const b = fighting(id);
-  if (!b) return [0, 0];
+  if (!b) return { may: [0, 0], captains: false };
   let m = fielded.get(id);
   if (!m) fielded.set(id, (m = new Map()));
   m.set(room, { n: [Math.max(0, n[0]), Math.max(0, n[1])], at: now });
   const others: [number, number] = [0, 0];
-  for (const [r, f] of m) { if (now - f.at > 5000) { m.delete(r); continue; } if (r !== room) { others[0] += f.n[0]; others[1] += f.n[1]; } }
-  return [Math.max(0, b.men[0] - others[0]), Math.max(0, b.men[1] - others[1])];
+  let most: unknown, mostN = 0;
+  for (const [r, f] of m) {
+    if (now - f.at > BATTLE.roomStaleMs) { m.delete(r); continue; }
+    if (r !== room) { others[0] += f.n[0]; others[1] += f.n[1]; }
+    if (f.n[0] + f.n[1] > mostN) { mostN = f.n[0] + f.n[1]; most = r; }
+  }
+  // the captains: one room only, the one fielding the most men; it keeps them while it reports and fields any
+  const cur = captainRoom.get(id), keep = cur !== undefined && m.has(cur) && m.get(cur)!.n[0] + m.get(cur)!.n[1] > 0;
+  if (!keep) { if (most !== undefined) captainRoom.set(id, most); else if (cur === undefined || !m.has(cur)) captainRoom.set(id, room); }
+  return { may: [Math.max(0, b.men[0] - others[0]), Math.max(0, b.men[1] - others[1])], captains: captainRoom.get(id) === room };
 }
-/** A room counted banner `i`'s ring (siege.ts frontStep, the siege fronts' hysteresis): true when its holder changed. */
-export function battleFront(id: string, i: number, atk: number, def: number, now = Date.now()): Side | undefined {
-  const b = fighting(id), f = b?.banners[i];
-  if (!f || !frontStep(f, atk, def, now)) return undefined;
-  changed(now);
-  return f.holder;
+/**
+ * Room `room` counted the banners' rings of battle `id` now ([attackers, defenders] per banner: its troopers and its
+ * active sworn heroes): its latest count in this BATTLE.scoreMs window. The clock sums the rooms' counts per window
+ * (scoreBanners). Only rooms that have the battle live report.
+ */
+export function battleScore(id: string, room: unknown, n: readonly (readonly [number, number])[], now = Date.now()) {
+  const b = fighting(id);
+  if (!b || !Array.isArray(n) || n.length !== b.banners.length) return;
+  let m = bannerReports.get(id);
+  if (!m) bannerReports.set(id, (m = new Map()));
+  const ok = (v: number) => (Number.isFinite(v) && v > 0 ? v : 0);
+  const rep: BannerReport = { w: Math.floor((now - b.start) / BATTLE.scoreMs), n: n.map((x) => [ok(x[0]), ok(x[1])] as [number, number]) }, was = m.get(room);
+  m.set(room, { cur: rep, prev: was && was.cur.w !== rep.w ? was.cur : was?.prev });
 }
+/** A storming is announced or being fought at land t (its siege's live waves stand down: server/warSieges.ts). */
+export const stormingAt = (t: number): boolean => warBattles().some((b) => b.kind === "storm" && b.t === t && !b.result);
+/**
+ * Column m stands in a meeting battle being fought now: its live troopers stand down while it runs (the battle's
+ * lines take their place; server/warMarches.ts).
+ */
+export const inMeetBattle = (m: Pick<March, "clan" | "from" | "to">, now = Date.now()): boolean => warBattles().some((b) => b.kind === "meet" && !b.result && now >= b.start
+  && ((m.clan === b.a && m.from === b.from && m.to === b.t) || (m.clan === b.b && m.from === b.t && m.to === b.from)));
 /** A captain of side `side` fell: that side kills slower for the rest of the battle. False when it has none left. */
 export function battleCaptain(id: string, side: 0 | 1, now = Date.now()): boolean {
   const b = fighting(id);
@@ -683,7 +739,7 @@ export function flushWar() { if (saved && kv?.setSync) try { kv.setSync(KEY, sav
 export function _resetWar(s?: Saved, store?: Kv) {
   stopWar(); saved = s ?? fresh(Date.now()); saved.names ??= namesNow(); kv = store; valor = TERRITORIES.map(() => ({})); lastOrders = undefined; lastStrikes = []; lastPlans = {}; lastRaided = []; relate(saved.rel ?? []);
   marches = []; paths.clear(); meets = undefined; seenLive.clear(); halting.clear(); joined.clear(); dirtyAt = 0; colVersion++;
-  pendingLive.clear(); fielded.clear(); heroCaps.clear(); clanCaps.clear(); battleNews.length = 0; cleanBattles(); battleVer++;
+  pendingLive.clear(); fielded.clear(); captainRoom.clear(); bannerReports.clear(); scoredWin.clear(); heroCaps.clear(); clanCaps.clear(); battleNews.length = 0; cleanBattles(); battleVer++;
   heldGate.clear(); cleanTowns(); townVer++; // (W6)
   if (saved.ahead) lookAhead(saved.next - WAR.tickMs); // (no orders ahead: given at the first tick, as before W4)
 }

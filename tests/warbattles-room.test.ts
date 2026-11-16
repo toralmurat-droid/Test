@@ -12,7 +12,7 @@ import { TERRITORIES } from "../shared/war/territories";
 import { warPhase } from "../shared/war/view";
 import type { Kv } from "../server/store";
 import {
-  _battleFed, _forceBattle, _resetWar, _valorOf, battleClock, battleDeath, battleFielded, step, warBattles, warNow, warOrders, warState, type SavedWar,
+  _battleFed, _forceBattle, _resetWar, _valorOf, battleClock, battleDeath, battleFielded, battleScore, inMeetBattle, step, stormingAt, warBattles, warNow, warOrders, warState, type SavedWar,
 } from "../server/war";
 import { WarBattles, type BattleHost } from "../server/warBattles";
 import type { TroopHero, TroopMob } from "../server/warTroops";
@@ -91,12 +91,12 @@ test("battles (server war): the war save keeps the battles; a restart mid-battle
 });
 
 /** A fake room for the two-room test: its own mobs and one hero standing on the field. */
-function fakeRoom(hero: Partial<TroopHero> = {}) {
+function fakeRoom(hero: Partial<TroopHero> = {}, paid: [string, number][] = []) {
   const mobs = new Map<string, TroopMob>(), heroes = new Map<string, TroopHero>([["h", { name: `H${Math.random()}`, clan: undefined, level: 30, x: FIELD.x, y: FIELD.y, dead: false, renown: 0, ...hero }]]);
   const host: BattleHost = {
     spawn: (id, level, x, y, weapon) => { const m = { kind: "trooper", weapon, level, x, y, homeX: x, homeY: y, dir: "down", hp: 1, maxHp: 1, dead: false, title: "" } as unknown as TroopMob; mobs.set(id, m); return m; },
     remove: (id) => { mobs.delete(id); }, mob: (id) => mobs.get(id), heroes: () => heroes.entries(), hero: (id) => heroes.get(id),
-    broadcast: () => {}, tell: () => {}, ranked: () => {}, pay: () => {},
+    broadcast: () => {}, tell: () => {}, ranked: () => {}, pay: (id, g) => { paid.push([id, g]); },
   };
   return { mobs, heroes, wb: new WarBattles(host, {} as any) };
 }
@@ -126,7 +126,7 @@ test("battles (two rooms): the pools are shared; no two rooms field the same men
     battleClock(now + BATTLE.stepMs); // (the same time again: nothing more)
     assert.equal(warBattles()[0].men[0], 55);
     // the rooms report what they field: together never more than the pools
-    const fa = battleFielded(b.id, "probe", [0, 0], now + 3000);
+    const fa = battleFielded(b.id, "probe", [0, 0], now + 3000).may;
     assert.ok(fa[0] >= 0 && side(A, 0) + side(B, 0) <= 60);
     A.wb.tick(now + BATTLE.reserveMs + 3000); B.wb.tick(now + BATTLE.reserveMs + 3000);
     assert.ok(side(A, 0) + side(B, 0) <= warBattles()[0].men[0], `fielded ${side(A, 0)} + ${side(B, 0)} <= ${warBattles()[0].men[0]}`);
@@ -207,4 +207,112 @@ test("battles (room): the lines wake near a hero in slots of their own; only swo
     await wait(300);
     assert.ok(msgs.some((m) => m.list.some((v) => v.id === b.id)), "the clients hear of the battle");
   } finally { restore(); await srv.stop(); }
+});
+
+test("battles (two rooms): banners are scored once per window from every room's counts summed; an empty room neither freezes nor resets them", () => {
+  const now = Date.now();
+  _resetWar(saved(now + WAR.tickMs));
+  const b = _forceBattle(SITE, "pitched", now, FIELD.x, FIELD.y)!;
+  battleClock(now);
+  assert.equal(b.banners[1].holder, "def");
+  const S = BATTLE.scoreMs, lead: [number, number][] = [[0, 0], [5, 0], [0, 0]], empty: [number, number][] = [[0, 0], [0, 0], [0, 0]];
+  // room A leads at the centre every second; room B, with no men there, reports zeros every second too
+  for (let t = now; t <= now + 20_000 + 3 * S; t += 1000) { battleScore(b.id, "A", lead, t); battleScore(b.id, "B", empty, t); battleClock(t); }
+  assert.equal(b.banners[1].holder, "atk", "the lead held captureMs: the centre changes hands despite the empty room");
+  // the counts of two rooms add up: 1 + 1 is a lead of 2 (holdMargin), neither alone is
+  const t1 = now + 40_000;
+  for (let t = t1; t <= t1 + 20_000 + 3 * S; t += 1000) { battleScore(b.id, "A", [[0, 1], [0, 0], [0, 0]], t); battleScore(b.id, "B", [[0, 1], [0, 0], [0, 0]], t); battleClock(t); }
+  assert.equal(b.banners[0].holder, "def", "two rooms' defenders together take the left flank");
+  // a window nobody reported leaves the hysteresis alone
+  const f = { ...b.banners[2] };
+  battleClock(t1 + 60_000);
+  assert.deepEqual(b.banners[2], f);
+  // calling the clock twice for the same time steps nothing twice
+  const before = JSON.stringify(b.banners);
+  battleClock(t1 + 60_000);
+  assert.equal(JSON.stringify(b.banners), before);
+});
+
+test("battles (two rooms): the captains stand in one room only, a fallen captain never comes back, its valor only once", () => {
+  try {
+    BATTLE.perSide = 30;
+    const now = Date.now();
+    _resetWar(saved(now + WAR.tickMs));
+    const b = _forceBattle(SITE, "pitched", now - 1000, FIELD.x, FIELD.y)!;
+    battleClock(now);
+    b.men0 = [200, 200]; b.men = [200, 200];
+    const A = fakeRoom(), B = fakeRoom();
+    A.wb.tick(now); B.wb.tick(now);
+    const caps = (r: ReturnType<typeof fakeRoom>, s: 0 | 1) => r.wb._live()!.places[s].filter((p: { id: string; captain: boolean }) => p.id && p.captain).length;
+    assert.equal(caps(A, 0) + caps(B, 0), BATTLE.captains, "the captains of a side stand once, in one room");
+    const holder = caps(A, 0) ? A : B;
+    const cap = holder.wb._live()!.places[0].find((p: { id: string; captain: boolean }) => p.id && p.captain)!, m = holder.mobs.get(cap.id)!;
+    m.dead = true; holder.wb.killed(m, cap.id, undefined, now);
+    assert.equal(b.captains[0], 1);
+    for (let t = now + 1000; t <= now + 3 * BATTLE.reserveMs; t += BATTLE.reserveMs) { A.wb.tick(t); B.wb.tick(t); }
+    assert.equal(caps(A, 0) + caps(B, 0), BATTLE.captains - 1, "the fallen captain does not come back");
+  } finally { restore(); }
+});
+
+test("battles (rooms): only heroes in a room that fielded men are paid; a watcher in an empty room earns nothing", () => {
+  try {
+    BATTLE.activeMs = 1;
+    const now = Date.now();
+    _resetWar(saved(now + WAR.tickMs));
+    const b = _forceBattle(SITE, "pitched", now - 1000, FIELD.x, FIELD.y)!;
+    battleClock(now);
+    const paidA: [string, number][] = [], paidB: [string, number][] = [];
+    const A = fakeRoom({ clan: SITE.b }, paidA), B = fakeRoom({ clan: SITE.b, y: FIELD.y + 3 }, paidB);
+    BATTLE.extraTroops = 140;
+    A.wb.tick(now);
+    const had = BATTLE.perSide; BATTLE.perSide = 0; // (room B fields nobody)
+    B.wb.tick(now);
+    BATTLE.perSide = had;
+    for (const [r, dy] of [[A, 8], [B, 8]] as const) { r.heroes.get("h")!.y += dy; r.wb.tick(now + 1000); }
+    assert.equal(B.wb.count, 0);
+    b.men[0] = 1; battleClock(now + 10 * BATTLE.stepMs);
+    assert.equal(b.result, "def");
+    A.wb.tick(now + 20_000); B.wb.tick(now + 20_000);
+    assert.ok(paidA.length > 0, "the room that fought pays its hero");
+    assert.equal(paidB.length, 0, "the room that fielded nobody pays nothing");
+  } finally { restore(); }
+});
+
+test("battles: a battle a tick interval past its end is stale: dropped unfed", async () => {
+  const t0 = 12_000_000_000_000;
+  _resetWar(saved(t0));
+  const b = _forceBattle(SITE, "pitched", t0 - 3 * WAR.tickMs, FIELD.x, FIELD.y)!;
+  b.result = "att"; b.begun = true; b.done = t0 - 2 * WAR.tickMs;
+  await step(t0);
+  assert.deepEqual(_battleFed(), [], "not fed");
+  assert.ok(!warBattles().some((x) => x.id === b.id), "dropped");
+});
+
+test("battles: a storming makes the siege's live waves stand down; a meeting battle the columns'", async () => {
+  const now = Date.now();
+  _resetWar(saved(now + WAR.tickMs));
+  assert.equal(stormingAt(SITE.t), false);
+  _forceBattle(SITE, "storm", now + 30_000, FIELD.x, FIELD.y, BATTLE.shortMs);
+  assert.equal(stormingAt(SITE.t), true, "announced: the siege's waves stand down already");
+  const meet = _forceBattle({ t: SITE.from, from: SITE.t, a: SITE.b, b: SITE.a }, "meet", now - 1000, FIELD.x, FIELD.y, BATTLE.shortMs)!;
+  assert.ok(meet);
+  assert.equal(inMeetBattle({ clan: SITE.b, from: SITE.t, to: SITE.from }, now), true, "the attacking column");
+  assert.equal(inMeetBattle({ clan: SITE.a, from: SITE.from, to: SITE.t }, now), true, "the other column");
+  assert.equal(inMeetBattle({ clan: SITE.a, from: SITE.from, to: SITE.t }, now - 5000), false, "not before it starts");
+  // in a room: a live siege at that land sleeps while the storming is called
+  const srv = await startRoom();
+  try {
+    _resetWar(saved(Date.now() + WAR.tickMs));
+    const st = warState()!; st.siege[SITE.t] = { by: SITE.a, at: st.tick + 6 }; st.control[SITE.t] = 20;
+    const c = await srv.join({ cls: "wizard" });
+    await wait(150);
+    const room = srv.room, p = room.state.players.get(c.sessionId), T = TERRITORIES[SITE.t];
+    p.x = (T.x + T.w / 2) * TILE; p.y = (T.y + T.h / 2) * TILE;
+    room.sieges.tick(Date.now());
+    const live = () => [...room.sieges.sieges.values()].some((s: any) => s.live);
+    assert.ok(live(), "the siege is live with a hero there");
+    _forceBattle(SITE, "storm", Date.now() + 30_000, FIELD.x, FIELD.y, BATTLE.shortMs);
+    room.sieges.tick(Date.now());
+    assert.equal(live(), false, "the storming replaces its waves");
+  } finally { await srv.stop(); }
 });
