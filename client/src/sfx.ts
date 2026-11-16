@@ -36,7 +36,7 @@ let voices = 0;
 const MAX_VOICES = 28;
 const lastPlay = new Map<string, number>();
 /** Sounds that ring for seconds (kept connected longer). */
-const LONG = new Set(["lootRare", "lootLegendary", "horn", "ritual", "ritualCall", "demonRise", "demonRoar", "shrine", "portalTravel", "portalWake", "ferryOff", "ferryOn", "necroWind", "heroDie", "levelup", "owl", "chime", "warcry", "motherInflate", "demonFire", "skelDie", "lutePluck", "swResonate", "swShatter", "swBounce", "swSnap", "swSwell", "caravan_raided", "caravan_arrived", "siege_front", "ram_wrecked", "ram_at_gate", "tunnel_open", "tunnel_collapse", "ritual_broken", "ritual_done", "wanted_up", "bounty_claimed", "hold_sacked", "hold_grow", "column_clash", "column_march", "column_gate", "battle_horn", "battle_banner", "battle_officer", "battle_end", "town_contested", "town_claimed", "city_oath", "city_reward"]);
+const LONG = new Set(["lootRare", "lootLegendary", "horn", "ritual", "ritualCall", "demonRise", "demonRoar", "shrine", "portalTravel", "portalWake", "ferryOff", "ferryOn", "necroWind", "heroDie", "levelup", "owl", "chime", "warcry", "motherInflate", "demonFire", "skelDie", "lutePluck", "swResonate", "swShatter", "swBounce", "swSnap", "swSwell", "caravan_raided", "caravan_arrived", "siege_front", "ram_wrecked", "ram_at_gate", "tunnel_open", "tunnel_collapse", "ritual_broken", "ritual_done", "wanted_up", "bounty_claimed", "hold_sacked", "hold_grow", "column_clash", "column_march", "column_gate", "battle_horn", "battle_banner", "battle_officer", "battle_end", "town_contested", "town_claimed", "city_oath", "city_reward", "crownBell", "crownFall"]);
 const AMBIENT = new Set(["crackle", "bird", "cricket", "chime", "owl", "step", "skelIdle", "blobGurgle", "crawl"]);
 
 const TOWNS = ["Oakvale", "Market Square", "Chapel of the Dawn", "The Rusty Tankard", "The Smithy", "Saltmere", "Hunter's Camp"];
@@ -591,6 +591,14 @@ const R: Record<string, Recipe> = {
   houndSnarl: (o, t, v, p = 1) => voice(o, t, { f: 150 * p, f2: 110 * p, dur: 0.25, vol: 0.16 * v, vowel: [600, 900], att: 0.02, rough: 0.6 }),
   houndHowl: (o, t, v) => voice(o, t, { f: 260, f2: 420, dur: 1.1, vol: 0.14 * v, vowel: [500, 800], att: 0.25, rough: 0.15 }),
   vultureScreech: (o, t, v, p = 1) => tone(o, t, { f: 1900 * p, f2: 1100 * p, dur: 0.3, vol: 0.06 * v, att: 0.02 }),
+  // Act 6, the Crown of the Marches (server/crownMobs.ts): a raised shield, a court bell, a mirror shattering, the king's blade
+  crownWard: (o, t, v) => { clank(o, t, 0.35 * v, 900); thud(o, t, 120, 0.25 * v, 0.15); },
+  crownBell: (o, t, v, ms = 1100) => { bell(o, t, 392, 2.2, 0.07 * v); bell(o, t + ms / 2000, 523, 2, 0.06 * v); },
+  crownHush: (o, t, v) => tone(o, t, { f: 523, f2: 260, dur: 0.3, vol: 0.06 * v, att: 0.01 }),
+  crownShatter: (o, t, v) => { for (let i = 0; i < 5; i++) tone(o, t + i * 0.03, { type: "triangle", f: rnd(2200, 3600), dur: rnd(0.08, 0.2), vol: 0.06 * v }); noise(o, t, { type: "highpass", f: 3500, dur: 0.25, vol: 0.18 * v }); },
+  crownEdge: (o, t, v) => { whoosh(o, t, 400, 2600, 0.3, 0.45 * v); clank(o, t + 0.12, 0.2 * v, 1700); },
+  crownFall: (o, t, v) => { thud(o, t, 45, 0.9 * v, 0.7); noise(o, t, { type: "lowpass", f: 600, f2: 120, dur: 0.9, vol: 0.35 * v }); bell(o, t + 0.05, 196, 2.5, 0.06 * v); },
+  crowCaw: (o, t, v, p = 1) => voice(o, t, { f: 520 * p, f2: 430 * p, dur: 0.18, vol: 0.1 * v, vowel: [900, 1500], att: 0.01, rough: 0.7 }),
   firepotThrow: (o, t, v) => { noise(o, t, { dur: 0.25, vol: 0.06 * v, f: 900, f2: 2500 }); },
   firepotBurst: (o, t, v) => { noise(o, t, { dur: 0.5, vol: 0.12 * v, f: 1800, f2: 300 }); tone(o, t, { f: 140, f2: 50, dur: 0.3, vol: 0.14 * v }); },
   demonGrowl: (o, t, v) => voice(o, t, { f: 60, f2: 50, dur: 0.6, vol: 0.25 * v, vowel: [350, 700], att: 0.1, rough: 0.3 }),
@@ -1318,9 +1326,10 @@ R.owl = (o, t, v) => {
 
 interface Ent { sprite: { x: number; y: number }; state: any; mob?: boolean; hero?: string; top?: number }
 
-const UNDEAD = new Set(["skeleton", "skeletonmage", "necromancer", "crawler", "sanddead", "wight", "bonehound", "mistwraith", "legionary", "cairnlord", "barrowking"]);
+const UNDEAD = new Set(["skeleton", "skeletonmage", "necromancer", "crawler", "sanddead", "wight", "bonehound", "mistwraith", "legionary", "cairnlord", "barrowking",
+  "oathbreaker", "crownguard", "hollowherald", "thronewarden", "rivenking"]); // the last five: Act 6 Crown dead
 /** Act 4 people (Redfang raiders) use the bandit voices; the beasts below snarl and screech. */
-const RAIDER = new Set(["outrider", "crossbowman", "firebrand", "redcaptain", "rourke"]);
+const RAIDER = new Set(["outrider", "crossbowman", "firebrand", "redcaptain", "rourke", "courtmagus", "pretender"]);
 /** Act 5 Hide-Kin: each voice family (the rest growl like beasts). */
 const HIDEKIN = new Set(["delver", "cackler", "stagkin", "quillback", "stitcher", "sinkworm", "hidechief", "mawfather"]);
 function hkVoice(k: string): [string, number] { return k === "cackler" ? ["cacklerLaugh", 1] : k === "stagkin" ? ["stagBellow", 1] : k === "sinkworm" ? ["wormGurgle", 1] : k === "mawfather" ? ["stagBellow", 0.7] : k === "hidechief" ? ["beastGrowl", 0.8] : ["beastGrowl", 1]; }
@@ -1360,8 +1369,9 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
       else if (UNDEAD.has(k)) P(k === "skeletonmage" || k === "necromancer" ? "shotMagic" : "skelSwing", id, 0.8);
       else if (RAIDER.has(k)) { P("swing", id, 0.8, k === "redcaptain" || k === "rourke"); if (Math.random() < 0.3) P("grunt", id, 0.7, idPitch(id)); }
       else if (HIDEKIN.has(k)) { const [n, p] = hkVoice(k); P(n, id, 0.7, p * idPitch(id), { key: "hv" + id, minGap: 600 }); }
-      else if (k === "warhound") P("houndSnarl", id, 0.7, idPitch(id));
+      else if (k === "warhound" || k === "gildhound") P("houndSnarl", id, 0.7, idPitch(id));
       else if (k === "vulture") P("vultureScreech", id, 0.6, idPitch(id));
+      else if (k === "crowncrow") P("crowCaw", id, 0.6, idPitch(id));
       else if (k === "bandit") { P("swing", id, 0.8, e.state.weapon === "brute"); if (Math.random() < 0.3) P("grunt", id, 0.7, idPitch(id)); }
       else if (k === "demon") P("demonGrowl", id, 0.7);
       else if (k === "veiled") P("shotMagic", id, 0.7);
@@ -1390,7 +1400,8 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
       else if (UNDEAD.has(k)) P("skelHurt", id, 1, undefined, { key: "sh" + id, minGap: 100 });
       else if (RAIDER.has(k) && Math.random() < 0.6) P("grunt", id, 0.8, idPitch(id, 1.1), { key: "bg" + id, minGap: 250 });
       else if (HIDEKIN.has(k) && Math.random() < 0.5) { const [n, p] = hkVoice(k); P(n, id, 0.6, p * idPitch(id, 1.2), { key: "hh2" + id, minGap: 400 }); }
-      else if (k === "warhound") P("houndSnarl", id, 0.6, idPitch(id, 1.2), { key: "bh" + id, minGap: 250 });
+      else if (k === "warhound" || k === "gildhound") P("houndSnarl", id, 0.6, idPitch(id, 1.2), { key: "bh" + id, minGap: 250 });
+      else if (k === "crowncrow") P("crowCaw", id, 0.5, idPitch(id, 1.2), { key: "bh" + id, minGap: 250 });
       else if (k === "bandit" && Math.random() < 0.6) P("grunt", id, 0.8, idPitch(id, 1.1), { key: "bg" + id, minGap: 250 });
     } else if (!blocked) P("heroHurt", id, id === me() ? 1 : 0.7, hpitch(e.state), { key: "hh" + id, minGap: 250 });
   });
@@ -1528,6 +1539,23 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
     else if (ev === "sew") P("hkSew", id, 0.8);
     else if (ev === "stitch") P("hkStitch", to ?? id, 0.9);
   });
+  // Act 6 Crown court moves (server/crownMobs.ts); the pictures are in client/src/crownFx.ts
+  on("crown", ({ ev, id, x, y, ms, pts }) => {
+    if (ev === "oath") P("warcry", id, 0.8, undefined, { reach: 1.3 });
+    else if (ev === "ward" || ev === "rampart") P("crownWard", id, 0.9);
+    else if (ev === "proclaim") P("crownBell", id, 1, ms, { reach: 1.5 });
+    else if (ev === "decree") P("horn", id, 0.7, undefined, { reach: 1.5 });
+    else if (ev === "hush") P("crownHush", id, 0.9);
+    else if (ev === "blink") P("zap", id, 0.8);
+    else if (ev === "hunt") P("houndHowl", id, 0.9, undefined, { reach: 2 });
+    else if (ev === "usurp") P("shout2", id, 1, 0.8, { reach: 1.3 });
+    else if (ev === "phase") P("demonRoar", id, 0.7, undefined, { reach: 2 });
+    else if (ev === "edge" || ev === "fall") P("windup", id, 1, ms);
+    else if (ev === "shards") P("hkMark", id, 0.8, ms);
+    else if (ev === "edgecut") play("crownEdge", x, y);
+    else if (ev === "shardfall") { const p = (pts as number[][] | undefined)?.[0]; if (p) play("crownShatter", p[0], p[1]); }
+    else if (ev === "fallen") play("crownFall", x, y, 1, undefined, { reach: 2 });
+  });
   on("bwind", ({ id, ms, kind }) => P(kind === "leap" ? "leap" : "windup", id, 1, ms));
   on("bhit", ({ kind, x, y }) => play("bashGround", x, y, 1, kind === "leap"));
   on("warcry", ({ id }) => P("warcry", id, 1, undefined, { reach: 1.5 }));
@@ -1586,7 +1614,8 @@ export function sfxFrame(meId: string, ents: Map<string, Ent>) {
         else if (UNDEAD.has(k)) play("skelDie", e.sprite.x, e.sprite.y);
         else if (RAIDER.has(k)) play("heroDie", e.sprite.x, e.sprite.y, 0.7);
         else if (HIDEKIN.has(k)) { const [n, p] = hkVoice(k); play(n, e.sprite.x, e.sprite.y, 0.9, p * 0.75); }
-        else if (k === "warhound") play("houndSnarl", e.sprite.x, e.sprite.y, 0.8, 0.7);
+        else if (k === "warhound" || k === "gildhound") play("houndSnarl", e.sprite.x, e.sprite.y, 0.8, 0.7);
+        else if (k === "crowncrow") play("crowCaw", e.sprite.x, e.sprite.y, 0.7, 0.8);
         else if (k === "vulture") play("vultureScreech", e.sprite.x, e.sprite.y, 0.7, 0.8);
         else if (k === "bandit") play("heroDie", e.sprite.x, e.sprite.y, 0.7);
       } else if (id !== meId) play("heroDie", e.sprite.x, e.sprite.y, 0.6);
