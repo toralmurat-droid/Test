@@ -69,6 +69,15 @@ export const WAR = {
   // A sack also tears down part of the Hold's works (W3): `fort` (built-up time, the defence bonus and the Hold's tier,
   // holdTiers.ts) loses this much (half for an unsworn hero, like the Control)
   sackFort: 0.02,
+  // Big battles (W5, shared/war/battles.ts; their own numbers are in BATTLE): what an outcome does to the war at the next
+  // tick. The loser's army loses battleArmyHit x the share of its men it lost. A pitched or meeting battle won by the
+  // attacker: the land loses battleControl Control and the attacker's army attack there counts battleAttack; won by
+  // the defender: its defence counts battleDefence and Control grows battleHold. A storming flips the land or fails the siege
+  battleArmyHit: 0.08,
+  battleControl: 12,
+  battleAttack: 1.25,
+  battleDefence: 1.25,
+  battleHold: 8,
 };
 
 /** `sack`: called by a sacked Hold (sackHold), not by the armies (optional: older saves have none). */
@@ -197,7 +206,23 @@ const fortCap = (k: ClanKey) => WAR.fortMax * (CLANS[k].doctrine === "palisade" 
  * `march` (W4): clan k's army attack on land t counts `mult` (0..1) of itself: what is left of its marching column
  * (shared/war/marches.ts marchMult, floored there); valor is untouched.
  */
-export interface TickExtra { phase?: number; valor?: Partial<Record<ClanKey, number>>[]; march?: { t: number; k: ClanKey; mult: number }[] }
+export interface TickExtra { phase?: number; valor?: Partial<Record<ClanKey, number>>[]; march?: { t: number; k: ClanKey; mult: number }[]; battle?: BattleOutcome[] }
+
+/** W5 big battles (shared/war/battles.ts): a pitched battle at fixed times, a storming at a siege's gate, a meeting of two columns. */
+export type BattleKind = "pitched" | "storm" | "meet";
+export type BattleResult = "att" | "def" | "draw";
+/**
+ * A battle fought since the last tick, as TickExtra.battle hands it in: land t (held by `def`), attacker `att`, who won,
+ * and the share (0..1) of its starting men each side lost. Validated here (it comes from the server's battle records).
+ */
+export interface BattleOutcome { kind: BattleKind; t: number; att: ClanKey; def: ClanKey; result: BattleResult; lostA: number; lostB: number }
+const BATTLE_KINDS: readonly unknown[] = ["pitched", "storm", "meet"], BATTLE_RESULTS: readonly unknown[] = ["att", "def", "draw"];
+const okOutcome = (b: BattleOutcome | undefined, n: number): b is BattleOutcome => !!b && BATTLE_KINDS.includes(b.kind) && BATTLE_RESULTS.includes(b.result)
+  && Number.isInteger(b.t) && b.t >= 0 && b.t < n && !!CLANS[b.att] && !!CLANS[b.def] && b.att !== b.def;
+const share01 = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0);
+
+/** Land t's defence as the fight reckons it: the raw defenders there x supply x the defender's edge x time of day x forts. */
+export const defenceAt = (s: WarState, t: number, raw: number, phase: number, supply: number[]) => raw * supply[t] * WAR.defender * timeBonus(s.owner[t], phase) * (1 + s.fort[t]);
 
 /** Troops that `v` valor is worth: each point counts, but a crowd adds less and less (WAR.valorCap at most). */
 export const valorForce = (v: number) => (v > 0 ? WAR.valorCap * (1 - Math.exp(-v / WAR.valorScale)) : 0);
@@ -274,6 +299,23 @@ export function warTick(s: WarState, orders: Partial<Record<ClanKey, Orders>>, e
     const a = Number.isInteger(m?.t) ? attack[m.t] : undefined, mult = typeof m?.mult === "number" && Number.isFinite(m.mult) ? Math.max(0, Math.min(1, m.mult)) : 1;
     if (a && CLANS[m.k] && a[m.k] !== undefined) a[m.k] = a[m.k]! * mult;
   }
+  // Big battles (W5): the loser's army bleeds; a pitched or meeting battle moves Control and weighs on this tick's fight
+  // there; a storming is kept for the siege check below. Nothing at all with no battle (the pre-W5 path)
+  let storms: Map<number, BattleOutcome> | undefined;
+  for (const b of extra.battle ?? []) {
+    if (!okOutcome(b, TERRITORIES.length)) continue;
+    const loser = b.result === "att" ? b.def : b.result === "def" ? b.att : undefined;
+    if (loser) s.army[loser] = Math.max(0, s.army[loser] * (1 - WAR.battleArmyHit * share01(loser === b.att ? b.lostA : b.lostB)));
+    if (s.owner[b.t] !== b.def || b.result === "draw") continue; // (the land changed hands meanwhile: its fight is moot)
+    if (b.kind === "storm") { (storms ??= new Map()).set(b.t, b); continue; }
+    if (b.result === "att") {
+      s.control[b.t] = Math.max(0, s.control[b.t] - WAR.battleControl);
+      if (attack[b.t][b.att] !== undefined) attack[b.t][b.att] = attack[b.t][b.att]! * WAR.battleAttack;
+    } else {
+      s.control[b.t] = Math.min(100, s.control[b.t] + WAR.battleHold);
+      defence[b.t] *= WAR.battleDefence;
+    }
+  }
   // Players: valor for the owner defends, valor for a clan that may attack this territory pushes for that clan
   extra.valor?.forEach((vs, id) => {
     if (!vs || id >= TERRITORIES.length) return;
@@ -291,7 +333,7 @@ export function warTick(s: WarState, orders: Partial<Record<ClanKey, Orders>>, e
     const id = t.id, own = s.owner[id], atk = attack[id];
     const total = Object.values(atk).reduce((a, b) => a + (b ?? 0), 0);
     s.pressure[id] = total;
-    const def = defence[id] * supply[id] * WAR.defender * timeBonus(own, phase) * (1 + s.fort[id]);
+    const def = defenceAt(s, id, defence[id], phase, supply);
     if (total <= 0) {
       s.control[id] = Math.min(100, s.control[id] + WAR.regrow);
       s.fort[id] = Math.min(fortCap(own), s.fort[id] + WAR.fortGrow * (CLANS[own].doctrine === "palisade" ? WAR.palisadeFort : 1));
@@ -314,7 +356,9 @@ export function warTick(s: WarState, orders: Partial<Record<ClanKey, Orders>>, e
     if (!sg && s.control[id] <= WAR.siegeAt) s.siege[id] = { by: top[0], at: s.tick + WAR.siegeWarnTicks };
     else if (sg && s.tick >= sg.at) {
       const by = atk[sg.by] ?? 0, mult = CLANS[sg.by].doctrine === "siege" ? WAR.hostSiege : WAR.siegeBonus;
-      if (by * mult > def * WAR.siegeHold) { s.owner[id] = sg.by; s.fort[id] = 0; s.control[id] = 60; }
+      const storm = storms?.get(id)?.att === sg.by ? storms.get(id)!.result : undefined; // (a storming settles it: W5)
+      if (storm === "def") s.control[id] = sg.sack ? Math.min(100, s.control[id] + WAR.sackSiegeFail) : 50;
+      else if (storm === "att" || by * mult > def * WAR.siegeHold) { s.owner[id] = sg.by; s.fort[id] = 0; s.control[id] = 60; }
       else s.control[id] = sg.sack ? Math.min(100, s.control[id] + WAR.sackSiegeFail) : 50; // (a sack's siege does not hand the holder its grip back)
       s.siege[id] = null;
     }

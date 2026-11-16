@@ -956,3 +956,33 @@ the 4 road gaps simulated; joining pays 8 valor and 10 renown; a column camps at
   lines per clan, patch note; the 4 road gaps (a later `area:map` PR); clashes off a shared road and live columns joining
   the siege fronts (W5, `Meeting` records are ready); the `--ambush=redfang:1` extreme lifts one clan to 24.9 % (the
   0.5 floor is the knob).
+
+## W5: big battles, branch claude/war-big-battles (stacked on claude/war-roads)
+Owner questions answered with the plan's defaults (2026-11-16): 3 pitched battles a day at 13:00, 19:00 and 21:30
+Europe/Zurich; 30 min notice and a reminder at 5; about 140 live soldiers plus painted ranks; stormings settle decisive
+sieges (within +-30 %); 2 meeting battles a day; a third clan at war with both sides may join; no veteran badge; battles
+in every act.
+- **Step 1, shared rules and sim** (`shared/war/battles.ts`, `BATTLE` table): `pitchedSlot(now)` / `pitchedTimes(day)` /
+  `battleDay(now)` (local day for the caps, Intl time zone), `battleField(a, b)` (a 20 x 12 box, long side across the
+  road, nearest the war way's middle within 24 tiles; 85 % walkable and its middle third clear; off safe ground,
+  villages, monster-free ground and every Hold footprint; cached per pair; 87 of 88 neighbour pairs have one, Old Ruins |
+  Old Watchtower does not and is never chosen), `battleBanners`, `stormField` (the siege approach), `pickPitched(s)`
+  (most pressed non-capital land, strongest neighbouring clan from its best-supplied adjacent land with a field),
+  `siegeOdds` / `isDecisive` / `siteForces`, `meetSite` / `pickMeetings` (both columns 6+ men; the stronger column attacks
+  the land it marches on), `battleMen(force)` = clamp(round(force / 1), 60, 300), `newBattle`, `battleStep(b, dt, live,
+  kMult)` (Lanchester, k 0.00175/s, banners x1.15 each, lost captains x0.92 each, live deaths fill the step's quota and
+  only the excess is extra), `battleResult`, `virtualBattle`, `battleOutcome`, `battleView` and the `"battle"` message
+  type `BattleMsg { now, list: BattleView[] }`.
+- **Rules** (`shared/war/rules.ts`): `TickExtra.battle: BattleOutcome[]` (`{kind, t, att, def, result, lostA, lostB}`,
+  validated). The loser's army x(1 - 0.08 x share lost); pitched or meeting won by the attacker: Control -12 and its
+  attack there x1.25; won by the defender: defence x1.25 and Control +8; a storming won by the besieger flips the land,
+  lost it fails the siege, a draw leaves the usual check. Numbers in `WAR.battle*`. No battle: the tick is identical
+  (golden hash over 600 seeded ticks with valor and march extras, `tests/warbattles.test.ts`).
+- **Sim** (`npx tsx tools/balance/war.ts 200 30`): without `--battles` identical (21.8 / 22.0 / 19.9 / 16.2 / 20.0 %,
+  5.59 flips a day, domination 0.0 %). `--battles`: Wardens 22.0 / Redfang 21.8 / Host 19.8 / Hide-Kin 16.3 / Veiled
+  20.1 %, 5.73 flips a day (+2.5 %), domination 0.0 %; per war day 2.87 pitched (attacker 54.9 / defender 42.2 / draw
+  2.9 %), 2.45 stormings (35.9 / 56.6 / 7.5 %, 0.88 flips), 0.59 meetings; 171 men a side, 6.1 min fought.
+  `--battle-heroes=redfang:1.3`: Redfang 22.0 %, 6.56 flips, domination 0.0 %.
+- **The live war follows the `--battles` numbers**: battles are on by default (`BATTLE.live`) and are fought with no
+  players too, so the no-player goal is now judged on the `--battles` run (accepted by the orchestrator as long as the
+  gate holds: domination 0 %, top clan <= 23 %, flips within +-15 % of 5.59).
