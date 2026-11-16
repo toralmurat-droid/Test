@@ -16,6 +16,7 @@ import type { WarView } from "../../shared/war/view";
 import { HOLD_TIER_KEYS } from "../../shared/war/holdTiers";
 import type { WritKind } from "../../shared/war/writs";
 import { COLUMN_ICON, drawClashIcon, drawColumnIcon, drawGateGlyph, ROAD_STYLE } from "./columnArt";
+import type { WarBattle } from "./warBattle";
 import { columnTip, type ColView, type WarColumns } from "./warColumns";
 
 /** Bright map colours per clan (as on the war table). */
@@ -194,6 +195,8 @@ export interface WarMapData {
   /** W4: the war roads and marching columns (client/src/warColumns.ts); `me` the hero in world px (column visibility). */
   lines?: WarColumns;
   me?: { x: number; y: number };
+  /** W5: announced and fought big battles (client/src/warBattle.ts): a crossed-swords marker with a countdown, shown under fog. */
+  battles?: WarBattle;
   /** Is this tile uncovered in the hero's fog? */
   seen(tx: number, ty: number): boolean;
 }
@@ -264,6 +267,7 @@ export function drawWarWorld(g: CanvasRenderingContext2D, d: WarMapData, v: WarM
     }
   }
   if (d.lines) drawColumns(g, d, v);
+  if (d.battles) drawBattles(g, d, v);
   // Tunnel mouths: open ones where the hero has been (or any of the Hide-Kin's own)
   for (const m of d.tunnels ?? []) {
     if (!(d.clan === "hidekin" || (m.state === "open" && d.seen(Math.floor(m.x / TILE), Math.floor(m.y / TILE))))) continue;
@@ -381,6 +385,41 @@ function drawColumns(g: CanvasRenderingContext2D, d: WarMapData, v: WarMapView) 
     else drawColumnIcon(g, -3, -COLUMN_ICON.h + 1, c.clan, c.men);
     g.restore();
   }
+}
+
+/** Big battles (W5): crossed swords in the two clans' colours with the time to the start (or left); the Herald tells everyone, so no fog. */
+function drawBattles(g: CanvasRenderingContext2D, d: WarMapData, v: WarMapView) {
+  const k = v.mini ? 2 : 3, pulse = 1 + Math.sin(v.now / 260) * 0.06;
+  for (const b of d.battles!.markers(v.wall)) {
+    const [x, y] = pxs(v, b.x, b.y);
+    if (v.mini && outOfView(g, x, y, x, y)) continue;
+    g.save(); g.translate(Math.round(x), Math.round(y)); v.upright(g);
+    g.fillStyle = "rgba(13,10,7,0.85)"; g.beginPath(); g.arc(0, 0, 5.5 * k, 0, Math.PI * 2); g.fill();
+    g.lineWidth = v.mini ? 1.5 : 2.5; g.strokeStyle = CLAN_COL[b.a]; g.beginPath(); g.arc(0, 0, 5.5 * k, Math.PI * 0.5, Math.PI * 1.5); g.stroke();
+    g.strokeStyle = CLAN_COL[b.b]; g.beginPath(); g.arc(0, 0, 5.5 * k, -Math.PI * 0.5, Math.PI * 0.5); g.stroke();
+    g.scale(k * pulse, k * pulse); drawClashIcon(g, -4.5, -4.5);
+    g.restore();
+    if (!v.mini) {
+      g.save(); g.translate(Math.round(x), Math.round(y)); v.upright(g);
+      const text = `${b.state === 0 ? "Battle" : "Fighting"} ${fmtCountdown(b.ms)}`;
+      g.font = `bold 12px ${PF}`; g.textAlign = "center"; g.textBaseline = "middle";
+      const w = Math.ceil(g.measureText(text).width) + 10, by0 = -5.5 * k - 12;
+      g.fillStyle = "rgba(13,10,7,0.92)"; g.fillRect(-w / 2, by0 - 9, w, 18);
+      g.strokeStyle = b.state === 0 ? "#ffd98a" : "#ff6b5e"; g.lineWidth = 2; g.strokeRect(-w / 2 + 1, by0 - 8, w - 2, 16);
+      g.fillStyle = "#ffe8a3"; g.fillText(text, 0, by0 + 1);
+      g.restore();
+    }
+  }
+}
+
+/** The battle marker nearest the pointer within `r` px (tooltip text), if any. */
+export function battleTarget(d: WarMapData, toScreen: (wx: number, wy: number) => [number, number], px: number, py: number, wall: number, r = 18): string | undefined {
+  let best: string | undefined, bd = r;
+  for (const b of d.battles?.markers(wall) ?? []) {
+    const [x, y] = toScreen(b.x, b.y), dist = Math.hypot(x - px, y - py);
+    if (dist <= bd) { bd = dist; best = b.tip; }
+  }
+  return best;
 }
 
 /** The column nearest the pointer within `r` px (tooltip line), if any. */
