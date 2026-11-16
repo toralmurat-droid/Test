@@ -6,7 +6,8 @@
 import type { ClanKey } from "./clans";
 
 export type WarMoment = "siege" | "besieged" | "took" | "lost" | "held" | "repelled" | "sacked" | "march" | "ambushed" | "clash"
-  | "battle_called" | "battle_start" | "battle_banner" | "battle_captain" | "battle_won" | "battle_lost";
+  | "battle_called" | "battle_start" | "battle_banner" | "battle_captain" | "battle_won" | "battle_lost"
+  | "town_claimed" | "town_lost" | "town_contested";
 
 export interface Leader { name: string; lines: Record<WarMoment, string[]> }
 
@@ -28,6 +29,9 @@ export const LEADERS: Record<ClanKey, Leader> = {
     battle_captain: ["A captain of ours is down at {land}. Close the line and fight on.", "They killed one of ours at {land}. Stand fast, the watch does not break."],
     battle_won: ["The field of {land} is ours. Count the living, bury the dead.", "{foe} broke at {land}. The watch stands."],
     battle_lost: ["We lost the field at {land}. Remember the faces of the fallen.", "{foe} carried {land}. The watch will march again."],
+    town_claimed: ["{land} flies the hearth-banner now. Keep the roads open and the hall warm.", "The reeve takes the hall at {land}. {foe} will find the watch at the gate."],
+    town_lost: ["{land} slipped from us to {foe}. The shops stay open, but we will be back.", "The hall at {land} is theirs for now. The watch remembers."],
+    town_contested: ["{foe} are at the gate of {land}. Hold it, Wardens.", "Word from {land}: {foe} want the hall. They will have to climb over us."],
   } },
   redfang: { name: "The Redfang Chief", lines: {
     siege: ["{land} has fat stores. Take them.", "Knives out, lads. {land} pays us now."],
@@ -46,6 +50,9 @@ export const LEADERS: Record<ClanKey, Leader> = {
     battle_captain: ["They put a knife in one of my captains at {land}. Somebody pays.", "A captain down at {land}? Then step up and fight for him."],
     battle_won: ["{foe} ran from {land}. Strip the field.", "The field is ours. Count the purses."],
     battle_lost: ["Lost the field at {land}. Somebody sold us out, and I'll find them.", "{foe} won at {land} this once. We'll bleed them for it."],
+    town_claimed: ["{land} pays the Compact now. Hang the red.", "We hold {land}. The tolls are ours, lads."],
+    town_lost: ["{foe} took {land} and its ledgers. Remember who drank there.", "Lost {land}? Somebody counts this one against {foe}."],
+    town_contested: ["{foe} sniff round the gate of {land}. Let them sniff.", "Strong men at the gate of {land}. {foe} want our tolls. Make them pay."],
   } },
   host: { name: "The Pale Marshal", lines: {
     siege: ["The dead march on {land}. They do not tire.", "Raise the engines before {land}. The night is ours."],
@@ -64,6 +71,9 @@ export const LEADERS: Record<ClanKey, Leader> = {
     battle_captain: ["A captain falls at {land}. He will rise again.", "One of ours is down. Close ranks. The dead do not mourn."],
     battle_won: ["{land} is quiet. {foe} lie still, and they are ours now.", "The field is ours. The Host grows."],
     battle_lost: ["We lost the field at {land}. The dead are patient.", "{foe} hold {land} for now. Graves keep."],
+    town_claimed: ["{land} is quiet and the Host keeps it. The clerks have the keys.", "The hall at {land} is ours. It will be kept in order."],
+    town_lost: ["{land} passes to {foe}. We have counted worse losses.", "{foe} hold the hall at {land}. The dead are patient."],
+    town_contested: ["{foe} stand at the gate of {land}. The dead will stand there too.", "The hall at {land} is claimed by {foe}. Make them earn it."],
   } },
   hidekin: { name: "The Hide-Mother", lines: {
     siege: ["Dig under {land}, my children.", "{land} smells of fear. Tunnel."],
@@ -82,6 +92,9 @@ export const LEADERS: Record<ClanKey, Leader> = {
     battle_captain: ["One of my captains is down at {land}. Bring his teeth home.", "They killed a captain. Bite harder, children."],
     battle_won: ["The field of {land} is ours, my children. Feast.", "{foe} fled the field at {land}. The burrow is proud."],
     battle_lost: ["We lost the field at {land}. Go back to the earth and heal.", "{foe} drove us from {land}. The tunnels remember."],
+    town_claimed: ["{land} is ours, my children. Dig the burrow under the hall.", "We took {land}. Mind the roof and keep the ways open."],
+    town_lost: ["{foe} took {land}. Seal the ways, we dig again.", "The hall at {land} is lost. The burrow remembers."],
+    town_contested: ["{foe} come to the gate of {land}. Bite their heels.", "They want {land}. Hold the gate, my children."],
   } },
   veiled: { name: "The Veiled Oracle", lines: {
     siege: ["The sun turns against {land}. Begin the rite.", "At noon {land} will be ours. It is written."],
@@ -100,6 +113,9 @@ export const LEADERS: Record<ClanKey, Leader> = {
     battle_captain: ["A captain falls at {land}. A dark omen for {foe}.", "One of ours is cut down. It was foreseen. Chant louder."],
     battle_won: ["{land} is ours. The omens spoke true.", "{foe} fell at {land}. As it was written."],
     battle_lost: ["The field at {land} is lost. The omens were clouded.", "{foe} won at {land}. The stars will turn."],
+    town_claimed: ["{land} comes under the Veil. As it was foretold.", "The hall at {land} is ours. The envoy will keep it well."],
+    town_lost: ["{land} leaves the Circle. It was seen, and it will turn.", "{foe} hold the hall at {land}. The omens are patient."],
+    town_contested: ["{foe} stand at the gate of {land}. We saw them coming.", "The gate of {land} is tested. The Circle does not bend."],
   } },
 };
 
