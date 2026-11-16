@@ -21,9 +21,10 @@ export const RECKONING = {
   keepPts: 3,
   /**
    * Points per valor a clan's sworn heroes earn in Crown territories during the window. A hero tops out near 12 valor a
-   * war tick (WAR_TROOPS.killValorPerTick), so one busy hero is worth about three territories, a band of four the whole Crown.
+   * war tick (WAR_TROOPS.killValorPerTick), so one busy hero outweighs the whole Crown: the heroes who turn up decide the Reckoning,
+   * not the armies (at 0.25 the holder kept the Keep ~98% of the time even against a busy clan).
    */
-  valorPts: 0.25,
+  valorPts: 1,
   /** Heralds: a warning this long before the window, the standings every `standingsMs` while it runs. */
   warnMs: 60 * 60_000,
   standingsMs: 60 * 60_000,

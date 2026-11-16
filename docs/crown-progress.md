@@ -133,7 +133,7 @@ to run noise (two before runs differ by 1 ms).
 Owner's defaults of 2026-11-15. **Rules** (`shared/war/crown.ts`, numbers in `RECKONING`): the first Saturday of each
 month, 18:00-21:00 UTC (`reckoningOf`, `reckoningAt`; UTC, so no daylight saving). Each war tick in the window scores
 1 point per Crown territory held and 3 for the Keep (`landPoints`); valor sworn heroes earn in Crown territories adds
-`valorPts` 0.25 a valor (one busy hero, ~12 valor a tick, is worth about three territories). The top score takes the Keep;
+`valorPts` 1 a valor (one busy hero, ~12 valor a tick, outweighs the whole Crown, so heroes decide; at 0.25 the holder kept the Keep ~98%). The top score takes the Keep;
 a tie at the top (or no score) leaves it with its holder (`reckonWinner`). The clan a Reckoning crowned (it may be the
 holder that kept it) gets the boon while it holds the Keep (`crownBoon`): x1.1 gold (monster loot by the killer's clan,
 quest, bounty and chest gold, `payHero` sums) and x1.1 renown (every renown source that takes the Rally's multiplier, and
