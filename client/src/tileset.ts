@@ -778,6 +778,73 @@ const DRAW: Record<number, (p: Painter, f: number, v: number) => void> = {
     p.rect(2.5, 3, 1, 4, 0x4a6a34); p.rect(12.5, 3, 1, 5, 0x3a5a2c); p.rect(7, 6.4, 1, 2, 0x5a3a20);
     for (let k = 0; k < 4; k++) { p.px(4.5 + k * 2.3, 6.6 + (k % 2), 0x3a2618); p.px(4.5 + k * 2.3, 7.6 + (k % 2), 0x1c120c); } // drip teeth
   },
+  // Act 6, the Crown of the Marches (the iso view draws the props from crownArt.ts; these are the top-down tiles and minimap colours)
+  [T.MARBLE]: (p, _f, v) => { // cracked white flagstones in a running bond, gilt veins, dark joints, weeds in the gaps
+    const tones = [0xc2c4cb, 0xb4b7bf, 0xcdcdd0, 0xa9adb7], sl = [0, 0, 0, 0].map(() => tones[p.ri(4)]);
+    p.each((x, y) => {
+      const band = y < 8 ? 0 : 1, jx = band ? 13 : 5, fx = (x - jx + 32) % 16, fy = y % 8;
+      if (fx < 0.6 || fy < 0.6) return 0x41454f; // joint
+      const g = p.r(), base = sl[band * 2 + (fx + 0.5 > 8 ? 1 : 0)];
+      if (fx < 1.6 || fy < 1.6) return g > 0.6 ? 0xe2e2e4 : 0xd6d7da; // lit rim, top left
+      if (g < 0.08) return 0x9296a2;
+      if (g > 0.94) return 0xe8e6de;
+      return base;
+    });
+    // gilt vein: a lazy diagonal through one slab, a grey vein beside it
+    const vy = 1 + p.ri(5) + (v & 1) * 8, vx = 6 + p.ri(4);
+    for (let i = 0; i < 9; i++) { const x = vx + i * 0.8, y = vy + Math.sin(i * 0.9 + v) * 1.2 + i * 0.35; p.fpx(Math.floor(x * K), Math.floor(y * K), 0xe4b43a); p.fpx(Math.floor(x * K) + 1, Math.floor(y * K) + 1, 0xbf8c26); p.fpx(Math.floor(x * K) - 1, Math.floor(y * K) + 2, 0x8c909b); }
+    // a hairline crack and a chip
+    const cx = 1 + p.ri(8), cy = 9 + p.ri(4);
+    for (let i = 0; i < 12; i++) p.fpx(cx * K + i, cy * K + Math.floor(Math.sin(i * 0.8 + v) * 1.6 + i * 0.3), 0x646873);
+    if (v & 2) p.frect(2 + p.ri(24), 2 + p.ri(20), 3, 2, 0x8c909b);
+    // weeds and moss in a joint
+    const wx = 2 + p.ri(24), wy = (v & 1 ? 15 : 8) * K - 1;
+    for (let k = 0; k < 7; k++) p.fpx(wx + p.ri(7) - 3, wy + p.ri(3) - 1, k % 3 ? 0x42682a : 0x62903a);
+    p.speckle(0x2b4a1d, 2);
+  },
+  [T.STATUE]: (p, _f, v) => { // a broken crowned king on a plinth, ivy climbing him
+    p.disc(8, 14.6, 7.4, 1.8, SHADOW);
+    p.rect(2.5, 12.5, 11, 2.5, 0x8c909b); p.rect(2.5, 12.5, 11, 1, 0xd6d7da); p.rect(3, 14, 10, 1, 0x646873);
+    p.rect(4, 10, 8, 2.5, 0xb4b7bf); p.rect(4, 10, 8, 0.6, 0xe2e2e4); p.rect(4, 11.3, 8, 0.5, 0xe4b43a); p.rect(11.4, 10, 0.6, 2.5, 0x8c909b);
+    p.rect(5.3, 5, 5.4, 5.4, 0xc2c4cb); p.rect(5.3, 5, 1.4, 5.4, 0xdcdde0); p.rect(9.7, 5, 1, 5.4, 0x8c909b); // robe
+    p.rect(4.2, 4.2, 7.6, 2, 0xb4b7bf); p.rect(4.2, 4.2, 7.6, 0.6, 0xe2e2e4);
+    p.rect(8, 6.5, 0.8, 5, 0xe8e6de); p.rect(7, 6.5, 2.8, 0.8, 0xe4b43a); // the sword, point-down
+    if (v & 1) { p.rect(6.4, 2.5, 3.2, 2, 0x8c909b); p.px(6.4, 1.8, 0x646873); } // the head is gone: a snapped neck
+    else { p.disc(8, 3, 1.9, 1.9, 0xc2c4cb); p.rect(6.2, 1.4, 3.6, 0.9, 0xe4b43a); p.px(6.2, 0.5, 0xffdf72); p.px(8, 0.2, 0xffdf72); p.px(9.6, 1, 0xbf8c26); }
+    p.rect(11.2, 5, 1.4, 1.2, 0x646873); // a lost arm
+    p.rect(4.6, 8.5, 1, 3.5, 0x42682a); p.px(5, 7.6, 0x62903a); p.px(11.4, 12.5, 0x42682a); p.speckle(0x62903a, 2, 3, 9, 10, 5);
+    p.speckle(0x646873, 4, 4, 4, 8, 8);
+  },
+  [T.SPIRE]: (p, _f, v) => { // a snapped pale granite spire, ashlar courses and a lancet slit
+    p.disc(8, 14.6, 6.6, 1.6, SHADOW);
+    p.rect(3.4, 13, 9.2, 2, 0x75777d); p.rect(3.4, 13, 9.2, 0.6, 0xb1aeaa);
+    const top = 2 + (v & 1) * 2;
+    p.each((x, y) => {
+      const w = 3.4 + (y - top) * 0.1;
+      if (y < top || y >= 13 || Math.abs(x + 0.5 - 8) > w) return undefined;
+      const row = Math.floor((y - top) / 2.4), jx = (x * 0.5 + row * 0.37) % 1;
+      if ((y - top) % 2.4 < 0.6 || jx < 0.06) return 0x494b52;
+      if (x + 0.5 < 8 - w * 0.4) return p.r() > 0.9 ? 0xd0cbc0 : 0xb1aeaa;
+      return x + 0.5 > 8 + w * 0.5 ? 0x6c6d73 : 0x908f92;
+    });
+    p.rect(7.4, 6.2, 1.2, 3, 0x16171b); // the lancet
+    p.px(5.4, top, 0x6c6d73); p.px(10, top - 0.5, 0x908f92); p.px(7.2, top + 0.3, 0x494b52); // the jagged break
+    p.rect(5.2, 9.8, 6, 0.6, 0xbf8c26); // a gilt-stained string course
+    p.px(4.6, 13, 0x42682a); p.px(5, 12, 0x2b4a1d); p.rect(10.6, 8, 0.8, 4, 0x42682a); p.speckle(0x62903a, 2, 4, 8, 8, 5);
+    p.px(2.4, 14, 0x908f92); p.px(13, 14.4, 0x75777d);
+  },
+  [T.BRAZIER]: (p, f) => { // a lit iron brazier on a granite drum: scrolled legs, studded bowl, a fire that never went out
+    p.disc(8, 14.6, 7, 1.6, SHADOW);
+    p.rect(4.5, 12, 7, 3, 0x75777d); p.rect(4.5, 12, 7, 0.7, 0xb1aeaa); p.rect(4.5, 13.4, 7, 0.5, 0xe4b43a);
+    p.rect(5.4, 9, 0.9, 3.4, 0x26262d); p.rect(9.7, 9, 0.9, 3.4, 0x26262d); p.rect(7.6, 9.4, 0.9, 2.8, 0x17171b);
+    p.disc(8, 8.2, 5.4, 2.2, 0x26262d); p.rect(2.6, 7.6, 10.8, 1.1, 0x3a3a45); p.rect(2.6, 7.6, 10.8, 0.5, 0x74747f);
+    for (let x = 3.4; x < 13; x += 2) p.px(x, 7.7, 0xbf8c26);
+    p.rect(3.6, 7, 8.8, 1, 0x8a2a0a);
+    const fl = [[0, 1, 0], [1, 0, 1], [0, 2, 1], [1, 1, 0]][f % 4];
+    p.rect(5.2, 3.4 + fl[0], 5.6, 4.2 - fl[0], 0xe8701a); p.rect(6.2 - fl[2] * 0.5, 1.4 - fl[1] * 0.5 + 1, 3.2, 4, 0xffa830);
+    p.rect(7, 4, 2, 3, 0xffd864); p.px(7.5 + fl[2], 1.4 - fl[1] * 0.5 + 0.4, 0xffa830);
+    if (fl[1] === 2) p.px(7.5, 0, 0xfff6b0);
+  },
 };
 
 /**
@@ -793,7 +860,7 @@ export const ROWS = 128;
  * palisades and signposts are painted as sprites, so the 112 palisade/signpost mask rows are never drawn there.
  */
 export const COMMON_ROWS = 16;
-const VARIED = new Set<number>([T.GRASS, T.TALL_GRASS, T.FLOWERS, T.DIRT, T.COBBLE, T.SAND, T.WATER, T.FLOOR, T.FLAGS, T.FIELD, T.BRIDGE, T.HEATHER, T.BOG, T.CLAY, T.GRAVEL, T.MOSS]);
+const VARIED = new Set<number>([T.GRASS, T.TALL_GRASS, T.FLOWERS, T.DIRT, T.COBBLE, T.SAND, T.WATER, T.FLOOR, T.FLAGS, T.FIELD, T.BRIDGE, T.HEATHER, T.BOG, T.CLAY, T.GRAVEL, T.MOSS, T.MARBLE]);
 const CONNECTED = new Set<number>([T.RUIN, T.BEAM, T.PALISADE]);
 const LIGHT = new Set<number>([T.GRASS, T.TALL_GRASS, T.FLOWERS]);
 
@@ -855,7 +922,7 @@ export function displayGrid(grid: number[][]): number[][] {
 }
 
 /** Tiles that change over time (see `drawTileFrame`). */
-export const ANIMATED_TILES: number[] = [T.WATER, T.WHEEL, T.CAMPFIRE, T.TALL_GRASS, T.FLOWERS];
+export const ANIMATED_TILES: number[] = [T.WATER, T.WHEEL, T.CAMPFIRE, T.TALL_GRASS, T.FLOWERS, T.BRAZIER];
 
 /** How many rows (from the top) of an animated tile `drawTileFrame` repaints: the rest never change. */
 export const animatedRows = (id: number) => (VARIED.has(id) ? 4 : 1);

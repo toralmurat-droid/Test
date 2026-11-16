@@ -1531,7 +1531,7 @@ function groundKind(x: number, y: number): string {
   if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return "grass";
   const g = GROUND[ty][tx];
   if (g === T.BRIDGE || OBJECTS[ty][tx] === T.FLOOR) return "wood";
-  if (g === T.COBBLE) return "stone";
+  if (g === T.COBBLE || g === T.MARBLE) return "stone"; // MARBLE (the Crown): hard flagstones, the stone step
   if (g === T.WATER) return "water";
   if (g === T.SAND) return "sand";
   return "grass"; // incl. MOSS (the sinkholes): soft damp earth, the grass step

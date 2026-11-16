@@ -1,9 +1,11 @@
 import Phaser from "phaser";
-import { gateOpen, homelandGate, isBadlandsGate, isMoorsGate, isSinkholesGate, WAYGATE_RANGE, waygateArrival, waygateById, WAYGATES, type Waygate } from "../../shared/act2";
+import { gateOpen, homelandGate, isBadlandsGate, isCrownGate, isSunGate, isMoorsGate, isSinkholesGate, WAYGATE_RANGE, waygateArrival, waygateById, WAYGATES, type Waygate } from "../../shared/act2";
 import type { Quester } from "../../shared/quests";
 import { moorgateTexture, MOORGATE_FRAMES } from "./moorsArt";
 import { redPassTexture, REDPASS_FRAMES } from "./badlandsArt";
 import { SINKWAY_FRAMES, sinkwayTexture } from "./sinkholesArt";
+import { CROWNGATE_FRAMES, crownGateTexture } from "./crownArt";
+import { crownwayFrom, type CrownwayFrom } from "../../shared/crown";
 import { hiResTexture } from "./smooth";
 import { isoAnchor, isoX, isoY, IsoView } from "./iso";
 import type { MapMarker } from "./minimap";
@@ -32,13 +34,17 @@ function texFor(scene: Phaser.Scene, g: Waygate, awake: boolean) {
   if (isMoorsGate(g)) return moorgateTexture(scene, g.id === "moorsgate" ? "forest" : "moors", awake);
   if (isBadlandsGate(g)) return redPassTexture(scene, g.id === "redpass" ? "forest" : "badlands", awake);
   if (isSinkholesGate(g)) return sinkwayTexture(scene, g.id === "sinkway" ? "coast" : "sinkholes", awake);
+  if (isCrownGate(g)) return crownGateTexture(scene, crownFromId(g), g.id.startsWith("crown_") ? "crown" : "home", awake);
   return { key: newTexture(scene, g.id === "desert", awake), ox: WG_OX / WG_W, oy: WG_OY / WG_H };
 }
 
+/** Which homeland a Crownway gate (crown_<land> or crownway_<land>) belongs to. */
+const crownFromId = (g: Waygate) => g.id.replace(/^crown(way)?_/, "") as CrownwayFrom;
+
 /** Glow colour of an awake gate: gold, cold blue for the moorgates, warm orange for the rest incl. the Red Pass. */
-const glowFor = (g: Waygate) => (isMoorsGate(g) ? 0x7fb0d8 : isSinkholesGate(g) ? 0x9ac86a : 0xffa040);
+const glowFor = (g: Waygate) => (isCrownGate(g) ? 0xffc860 : isMoorsGate(g) ? 0x7fb0d8 : isSinkholesGate(g) ? 0x9ac86a : 0xffa040);
 /** The marker's name and colour on the maps (an awake / asleep gate). */
-const nameFor = (g: Waygate) => (g.id === "moorsgate" ? "The Moorgate" : g.id === "redpass" || g.id === "badlands" ? "The Red Pass" : isSinkholesGate(g) ? "The Sinkway" : g.label);
+const nameFor = (g: Waygate) => (isCrownGate(g) ? crownwayFrom(crownFromId(g)).name : g.id === "moorsgate" ? "The Moorgate" : g.id === "redpass" || g.id === "badlands" ? "The Red Pass" : isSinkholesGate(g) ? "The Sinkway" : g.label);
 
 export class WaygateLayer {
   private gates: { g: Waygate; img: Phaser.GameObjects.Sprite; glow: Phaser.GameObjects.Image }[] = [];
@@ -62,7 +68,7 @@ export class WaygateLayer {
 
   /** Map markers for the gates (Murat 2026-11-08: "where is the portal to Act 2?"): gold once awake, grey while asleep. */
   markers(): MapMarker[] {
-    return WAYGATES.map((g) => ({ x: g.x, y: g.y, glyph: "", gate: this.awake.get(g.id) ? "awake" as const : "asleep" as const, color: this.awake.get(g.id) ? (isMoorsGate(g) ? "#b8c4d8" : isBadlandsGate(g) ? "#ff9a60" : isSinkholesGate(g) ? "#a8d070" : "#ffb347") : "#9a8a74",
+    return WAYGATES.map((g) => ({ x: g.x, y: g.y, glyph: "", gate: this.awake.get(g.id) ? "awake" as const : "asleep" as const, color: this.awake.get(g.id) ? (isCrownGate(g) ? "#f0d080" : isMoorsGate(g) ? "#b8c4d8" : isBadlandsGate(g) ? "#ff9a60" : isSinkholesGate(g) ? "#a8d070" : "#ffb347") : "#9a8a74",
       label: nameFor(g) }));
   }
 
@@ -92,8 +98,9 @@ export class WaygateLayer {
     if (this.near && at) {
       const open = openOf(at);
       const home = homelandGate(at); // the moors' and the badlands' gates open by hero level
-      const shut = isSinkholesGate(at) ? "The Sinkway is caved in" : isBadlandsGate(at) ? "The Red Pass is held shut" : isMoorsGate(at) ? "The Moorgate is shut" : "The waygate is cold";
-      const html = `<kbd>E</kbd> ${open ? at.label : shut}${!open && home && (at.id === "moorsgate" || at.id === "redpass" || at.id === "sinkway") ? ` <span class="why">Opens at level ${home.level}</span>` : ""}`;
+      const sunLocked = isSunGate(at) && !!home && (me?.level ?? 0) >= home.level; // strong enough, Act 2 still locked
+      const shut = isCrownGate(at) ? (sunLocked ? "The road is barred until the Hollow King and the Hide-Mother fall" : "The road is barred") : isSinkholesGate(at) ? "The Sinkway is caved in" : isBadlandsGate(at) ? "The Red Pass is held shut" : isMoorsGate(at) ? "The Moorgate is shut" : "The waygate is cold";
+      const html = `<kbd>E</kbd> ${open ? at.label : shut}${!open && home && (at.id === "moorsgate" || at.id === "redpass" || at.id === "sinkway" || (isCrownGate(at) && !sunLocked)) ? ` <span class="why">Opens at level ${home.level}</span>` : ""}`;
       if (this.prompt.innerHTML !== html) this.prompt.innerHTML = html;
     }
     const dest = ahead && waygateById(ahead.to);
@@ -114,7 +121,7 @@ export class WaygateLayer {
       const { key, ox, oy } = texFor(this.scene, g, awake);
       img.setOrigin(ox, oy);
       if (awake) {
-        if (!this.scene.anims.exists(key)) this.scene.anims.create({ key, frames: this.scene.anims.generateFrameNumbers(key, { start: 0, end: (isMoorsGate(g) ? MOORGATE_FRAMES : isBadlandsGate(g) ? REDPASS_FRAMES : isSinkholesGate(g) ? SINKWAY_FRAMES : FRAMES) - 1 }), frameRate: 8, repeat: -1 });
+        if (!this.scene.anims.exists(key)) this.scene.anims.create({ key, frames: this.scene.anims.generateFrameNumbers(key, { start: 0, end: (isMoorsGate(g) ? MOORGATE_FRAMES : isBadlandsGate(g) ? REDPASS_FRAMES : isSinkholesGate(g) ? SINKWAY_FRAMES : isCrownGate(g) ? CROWNGATE_FRAMES : FRAMES) - 1 }), frameRate: 8, repeat: -1 });
         img.setTexture(key, 0).play(key);
         glow.setAlpha(0.3);
         this.scene.tweens.add({ targets: glow, alpha: 0.45, duration: 1400, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });

@@ -44,6 +44,16 @@ test("fog saved at 288x960 (before the sinkholes) keeps every cell, last row inc
   assert.equal(seen.reduce((a, b) => a + (b ? 1 : 0), 0), 4);
 });
 
+test("fog saved at 288x1144 (before the Crown) keeps every cell, last row included", () => {
+  assert.ok(OLD_FOG_SIZES.some(([w, h]) => w === 288 && h === 1144));
+  const old = new Uint8Array(288 * 1144);
+  old[0] = 1; old[1143 * 288 + 287] = 255; old[1143 * 288 + 3] = 77; old[900 * 288 + 100] = 9;
+  const seen = new Uint8Array(MAP_W * MAP_H);
+  assert.equal(loadFog([...old].map((c) => String.fromCharCode(c)).join(""), seen, MAP_W, MAP_H), true);
+  assert.equal(seen[0], 1); assert.equal(seen[1143 * MAP_W + 287], 255); assert.equal(seen[1143 * MAP_W + 3], 77); assert.equal(seen[900 * MAP_W + 100], 9);
+  assert.equal(seen.reduce((a, b) => a + (b ? 1 : 0), 0), 4);
+});
+
 test("fog RLE round-trips random and realistic data", () => {
   let st = 12345; const rnd = () => (st = (st * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
   const random = Uint8Array.from({ length: MAP_W * MAP_H }, () => Math.floor(rnd() * 256));

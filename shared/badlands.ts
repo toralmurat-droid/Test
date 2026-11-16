@@ -1,4 +1,5 @@
 import { BADLANDS_H, BADLANDS_Y0, MAP_W } from "./constants";
+import { crownwayDais, crownwayFrom } from "./crown";
 
 /**
  * Act 4: the Red Badlands, the Redfang bandit clan's homeland (Lv 25-40). Red mesas, canyons and dry riverbeds in
@@ -436,5 +437,9 @@ export function buildBadlands(T: BadlandsTiles, ground: number[][], objects: num
     }
     if (best) { setO(best[0], best[1], T.SIGNPOST); posts.push({ x: best[0], y: best[1] + Y0, to: p.to }); }
   }
+  // ---------- Last: the Red Gate, the Crownway to the Crown of the Marches (Act 6, shared/crown.ts): a dais of old
+  // flagstones on the sand south of Fangrock. Cut after the reachability pass, so the rest of the band stays exactly as it
+  // was (outside its CROWNWAYS box) ----------
+  crownwayDais(crownwayFrom("badlands"), ground, objects, EMPTY, T, 371);
   return { areas, roads, posts };
 }

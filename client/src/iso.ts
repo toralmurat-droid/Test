@@ -30,9 +30,10 @@ import { hiResTexture } from "./smooth";
 import { uprightTexture, UPRIGHT_OY } from "./smoothProps";
 import { ADOBE_PAD, ADOBE_WALL_H, adobeHead, adobeTexture, adobeWallTexture, bonesTexture, CLIFF_DEPTH, cliffDistance, cliffHeight, cliffTexture, cliffVariant, deadTreeTexture, desertRockTexture, sunStoneTexture, tentTexture } from "./desertArt";
 import { D, FURNACE, SUNSTONE } from "../../shared/desert";
-import { BADLANDS_H, BADLANDS_Y0, DESERT_H, DESERT_Y0, MOORS_H, MOORS_Y0, SINKHOLES_H, SINKHOLES_Y0 } from "../../shared/constants";
+import { BADLANDS_H, BADLANDS_Y0, DESERT_H, DESERT_Y0, MOORS_H, MOORS_Y0, SINKHOLES_H, SINKHOLES_Y0, CROWN_H, CROWN_Y0 } from "../../shared/constants";
 import { ARCHES, BR } from "../../shared/badlands";
 import { barrowTexture, birchTexture, boneHeapTexture, graniteCliffTexture, origin, standingStoneTexture } from "./moorsArt";
+import { BRAZIER_FRAMES, brazierTexture, crownCliffTexture, origin as crOrigin, spireTexture, statueTexture } from "./crownArt";
 import { burrowTexture, caveMouthTexture, origin as skOrigin, pitTexture, sinkCliffTexture } from "./sinkholesArt";
 import { archTexture, bleachedBonesTexture, boulderTexture, cactusTexture, origin as blOrigin, redCliffTexture, snagTexture } from "./badlandsArt";
 
@@ -714,15 +715,21 @@ export function isoStanding(scene: Phaser.Scene, objects: number[][]): number[][
   const mdist = cliffDistance(objects.map((r) => r.map(id)), T.CLIFF, MAP_W, M0, MAP_H, CLIFF_DEPTH + 1);
   const md = (x: number, y: number) => (x < 0 || x >= MAP_W || y < M0 || y >= MAP_H ? 9 : mdist[(y - M0) * MAP_W + x]);
   const B0 = BADLANDS_Y0 - 4; // Act 4's band (shared/badlands.ts): the rows from here down are never the moors'
-  const S0 = SINKHOLES_Y0 - 4; // Act 5's band (shared/sinkholes.ts): the rows from here down; the badlands end above
+  const S0 = SINKHOLES_Y0 - 4; // Act 5's band (shared/sinkholes.ts): rows S0..C0; the badlands end above
+  const C0 = CROWN_Y0 - 4; // Act 6's band (shared/crown.ts): the rows from here down
   const bdist = cliffDistance(objects.map((r) => r.map(id)), T.CLIFF, MAP_W, B0, S0, CLIFF_DEPTH + 1);
   const bd = (x: number, y: number) => (x < 0 || x >= MAP_W || y < B0 || y >= S0 ? 9 : bdist[(y - B0) * MAP_W + x]);
-  const sdist = cliffDistance(objects.map((r) => r.map(id)), T.CLIFF, MAP_W, S0, MAP_H, CLIFF_DEPTH + 1);
-  const sd = (x: number, y: number) => (x < 0 || x >= MAP_W || y < S0 || y >= MAP_H ? 9 : sdist[(y - S0) * MAP_W + x]);
+  const sdist = cliffDistance(objects.map((r) => r.map(id)), T.CLIFF, MAP_W, S0, C0, CLIFF_DEPTH + 1);
+  const sd = (x: number, y: number) => (x < 0 || x >= MAP_W || y < S0 || y >= C0 ? 9 : sdist[(y - S0) * MAP_W + x]);
+  const kdist = cliffDistance(objects.map((r) => r.map(id)), T.CLIFF, MAP_W, C0, MAP_H, CLIFF_DEPTH + 1);
+  const kd = (x: number, y: number) => (x < 0 || x >= MAP_W || y < C0 || y >= MAP_H ? 9 : kdist[(y - C0) * MAP_W + x]);
   for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
     const index = objects[ty][tx], t = id(index);
     if (t < 0) continue;
-    if (ty >= S0) { // the sinkholes band
+    if (ty >= C0) { // the Crown of the Marches
+      if (ty < CROWN_Y0 || ty >= CROWN_Y0 + CROWN_H) { out[ty][tx] = -1; continue; } // the solid rock strips round the Crown: ground paints them
+      if (isoCrown(scene, t, tx, ty, at, kd)) { out[ty][tx] = -1; continue; }
+    } else if (ty >= S0) { // the sinkholes band
       if (ty < SINKHOLES_Y0 || ty >= SINKHOLES_Y0 + SINKHOLES_H) { out[ty][tx] = -1; continue; } // the solid rock strips round the sinkholes: ground paints them
       if (isoSinkholes(scene, t, tx, ty, at, sd)) { out[ty][tx] = -1; continue; }
     } else if (ty >= B0) { // the badlands band
@@ -951,6 +958,35 @@ function isoSinkholes(scene: Phaser.Scene, t: number, tx: number, ty: number, at
   if (t === T.CAVE) {
     if (id(at(tx - 1, ty)) !== T.CAVE || id(at(tx + 1, ty)) !== T.CAVE) return true; // drawn once, from the mouth's middle tile
     return place(caveMouthTexture(scene, 1 + (v % 3)), cy - 1);
+  }
+  return false;
+}
+
+// ---------- Act 6: the Crown of the Marches (shared/crown.ts) ----------
+
+/**
+ * Crown objects that stand up: pale granite cliffs, broken statues, snapped spires and lit braziers (art in crownArt.ts).
+ * Returns false for anything drawn the usual way.
+ */
+function isoCrown(scene: Phaser.Scene, t: number, tx: number, ty: number, at: (x: number, y: number) => number, cd: (x: number, y: number) => number): boolean {
+  const cx = (tx + 0.5) * TILE, cy = (ty + 0.5) * TILE, v = Math.floor(hashXY(tx, ty) * 4);
+  if (t === T.CLIFF) {
+    const d = cd(tx, ty);
+    if (d > CLIFF_DEPTH) return true; // deep inside the massif: the ground paints the rock top
+    const H = (x: number, y: number) => (id(at(x, y)) !== T.CLIFF ? 0 : cliffHeight(Math.min(cd(x, y), CLIFF_DEPTH + 1), x, y));
+    const h = H(tx, ty), deep = (x: number, y: number) => id(at(x, y)) === T.CLIFF && cd(x, y) > CLIFF_DEPTH;
+    const key = crownCliffTexture(scene, h, (deep(tx, ty + 1) ? 0 : 1) | (deep(tx + 1, ty) ? 0 : 2), cliffVariant(tx, ty));
+    staticObj(scene, scene.add.image(cx, cy, key).setOrigin(0.5, (IH / 2 + h) / (IH + h)).setDepth(cy + d * 0.5));
+    return true;
+  }
+  const place = (s: Parameters<typeof crOrigin>[0] & { key: string }) => { const o = crOrigin(s); staticObj(scene, scene.add.image(cx, cy, s.key).setOrigin(o.x, o.y).setDepth(cy)); return true; };
+  if (t === T.STATUE) return place(statueTexture(scene, v));
+  if (t === T.SPIRE) return place(spireTexture(scene, v));
+  if (t === T.BRAZIER) {
+    const bv = v & 1, b = brazierTexture(scene, bv), anim = `cr_brazier_${bv}_burn`;
+    if (!scene.anims.exists(anim)) scene.anims.create({ key: anim, frames: scene.anims.generateFrameNumbers(b.key, { start: 0, end: BRAZIER_FRAMES - 1 }), frameRate: 8, repeat: -1 });
+    staticObj(scene, scene.add.sprite(cx, cy, b.key, 0).setOrigin(b.x, b.y).setDepth(cy).play({ key: anim, startFrame: (tx + ty) % BRAZIER_FRAMES }));
+    return true;
   }
   return false;
 }

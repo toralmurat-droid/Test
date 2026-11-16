@@ -8,6 +8,8 @@
  * from layered value noise, Voronoi stones and furrows.
  */
 
+import { crownCliffTopPixel, paintCrownGround } from "./crownPaint";
+
 export interface GroundData {
   w: number; h: number; tile: number;
   /** shared/map.ts TILE_COUNT: display grids hold row * TILE_COUNT + id. */
@@ -33,6 +35,8 @@ export interface GroundData {
   badlands?: { y0: number; y1: number };
   /** Act 5's sinkholes band (shared/sinkholes.ts), rows y0..y1: mossy damp earth, dark loam trails, green-brown grass; the loam cliffs' top is brown earth. */
   sinkholes?: { y0: number; y1: number };
+  /** Act 6's Crown band (shared/crown.ts), rows y0..y1: cream marble courts, pale granite flags, wild green gardens; the granite cliffs' top is pale rock. */
+  crown?: { y0: number; y1: number };
 }
 
 // Tile ids (shared/map.ts T)
@@ -46,6 +50,8 @@ let MOORS = false;
 let BADLANDS = false;
 /** Painting a sinkholes pixel: the grounds take their Act 5 looks (sinkholesMaterial). */
 let SINKHOLES = false;
+/** Painting a Crown pixel: the grounds take their Act 6 looks (crownMaterial). */
+let CROWN = false;
 const pal = (a: string[]) => a.map((h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]);
 const HEATHP = pal(["#2c2c36", "#3e3a4a", "#544c60", "#6c6078", "#84788f", "#9a90a4"]);
 const PEATP = pal(["#2a2824", "#3a3730", "#4c473d", "#605a4c", "#766f5e", "#8c846f"]);
@@ -64,7 +70,7 @@ const MOSSP = pal(["#1f2c1a", "#2c3d22", "#3b5029", "#4d6532", "#617c3d", "#7893
 const LOAMP = pal(["#2e2218", "#40301f", "#54402a", "#6a5236", "#81674a", "#977d5c"]);
 const DAMPGRASS = pal(["#26301a", "#34421f", "#455529", "#586a33", "#6d7f40", "#839650"]);
 const LOAMSTONE = pal(["#3a2e24", "#51412f", "#69553d", "#816b4e", "#9a8261", "#b09876"]);
-const NT = 64;
+const NT = 68; // shared/map.ts TILE_COUNT
 /** Kernel radius in tiles: how far grounds reach into each other. */
 const KR = 1.8;
 
@@ -152,6 +158,7 @@ function material(t: number, wx: number, wy: number, sx: number, sy: number, dep
   if (DESERT && t !== WATER && t !== BRIDGE) return desertMaterial(t, wx, wy, sx, sy);
   if (MOORS && t !== WATER && t !== BRIDGE) return moorsMaterial(t, wx, wy, sx, sy);
   if (BADLANDS && t !== WATER && t !== BRIDGE) return badlandsMaterial(t, wx, wy, sx, sy);
+  if (CROWN && t !== WATER && t !== BRIDGE) return crownMaterial(t, wx, wy, sx, sy);
   if (SINKHOLES && t !== WATER && t !== BRIDGE) return sinkholesMaterial(t, wx, wy, sx, sy);
   let r = 0, g = 0, b = 0, ht = 0.5;
   // big, slow grime and damp patches shared by every land material (muted, weathered look)
@@ -507,6 +514,13 @@ function sinkholesMaterial(t: number, wx: number, wy: number, sx: number, sy: nu
   }
 }
 
+/** Act 6's grounds: crownPaint.ts paints them (marble flags, paving, dust, wild grass) with this file's ramp and noise. */
+const CROWN_KIT = { ramp, fbm, vn, hash2 };
+function crownMaterial(t: number, wx: number, wy: number, sx: number, sy: number): number {
+  const kind = t === 64 ? "marble" : t === COBBLE || t === FLAGS || t === FLOOR || t === RUBBLE ? "paving" : t === DIRT || t === SAND || t === FIELD || t === CROPS ? "dust" : "grass";
+  return paintCrownGround(kind, wx, wy, sx, sy, CROWN_KIT);
+}
+
 /**
  * Act 2's grounds (Murat 2026-11-08: all desert themed), in the same dithered pixel style as the rest:
  * SAND = dunes with wind ripples, lit on the slopes facing the top-left sun; DIRT = baked red clay with polygon cracks
@@ -659,7 +673,7 @@ export function paintChunk(g: GroundData, f: Fields, sx0: number, sy0: number, c
   const c1 = new Float32Array(3), c2 = new Float32Array(3);
   const add = (t: number, k: number) => {
     if (k <= 0) return;
-    t %= g.tileCount ?? 64; // display grids carry art-row variants (shared/map.ts TILE_COUNT = 64; not imported: map.ts builds the world on load; tests/badlandsClient.test.ts keeps the literal in step)
+    t %= g.tileCount ?? 68; // display grids carry art-row variants (shared/map.ts TILE_COUNT = 68; not imported: map.ts builds the world on load; tests/badlandsClient.test.ts keeps the literal in step)
     if (t === BRIDGE) t = WATER;
     if (t === GRASS_DARK || t === TALL || t === FLOWERS || t === GRASS) { gw[t] += k; t = GRASS; } // one grass, see G_DARK
     if (wt[t] === 0) types.push(t);
@@ -673,6 +687,7 @@ export function paintChunk(g: GroundData, f: Fields, sx0: number, sy0: number, c
       MOORS = !!g.moors && wy / tile >= g.moors.y0 - 2 && wy / tile < g.moors.y1;
       BADLANDS = !!g.badlands && wy / tile >= g.badlands.y0 - 2 && wy / tile < g.badlands.y1;
       SINKHOLES = !!g.sinkholes && wy / tile >= g.sinkholes.y0 - 2 && wy / tile < g.sinkholes.y1;
+      CROWN = !!g.crown && wy / tile >= g.crown.y0 - 2 && wy / tile < g.crown.y1;
       DESERT = !!g.desert && wy / tile >= g.desert.y0 - 2 && wy / tile < g.desert.y1;
       // wavy borders: warp the lookup point
       const u = wx + (vn(wx / 45, wy / 45, 3) - 0.5) * 18 + (vn(wx / 15, wy / 15, 1) - 0.5) * 10 + (vn(wx / 4, wy / 4, 4) - 0.5) * 4;
@@ -742,7 +757,7 @@ export function paintChunk(g: GroundData, f: Fields, sx0: number, sy0: number, c
         const ao = field(f.ao, wx / tile - 0.5, wy / tile - 0.5);
         if (ao > 0) { const k = 1 - 0.45 * ao; r *= k; gg *= k; b *= k; }
       }
-      if (g.cave && wy / tile >= g.cave.y0 - 8 && !DESERT && !MOORS && !BADLANDS && !SINKHOLES) {
+      if (g.cave && wy / tile >= g.cave.y0 - 8 && !DESERT && !MOORS && !BADLANDS && !SINKHOLES && !CROWN) {
         const ty = wy / tile, cv = g.cave;
         const deep = !!cv.deep && ty >= cv.deep[0] - 0.5 && ty < cv.deep[1] + 0.5;
         if (cv.end !== undefined && ty >= cv.end && !deep) { r = VOID[0]; gg = VOID[1]; b = VOID[2]; } // the rock between the Mawdeep and the desert
@@ -789,6 +804,12 @@ export function paintChunk(g: GroundData, f: Fields, sx0: number, sy0: number, c
           const pit = hash2(Math.floor(wx * 1.3), Math.floor(wy * 1.3), 762);
           r = 0x6a; gg = 0x52; b = 0x36; // loam top (sinkholesArt.ts: keep in step)
           if (pit < 0.08) { r = 0x80; gg = 0x66; b = 0x44; } else if (pit > 0.93) { r = 0x52; gg = 0x3e; b = 0x28; }
+        }
+      }
+      if (CROWN && f.cliff) { // the granite cliffs' top: pale weathered rock
+        const ck = field(f.cliff, wx / tile - 0.5, wy / tile - 0.5) + (vn(wx / 5, wy / 5, 860) - 0.5) * 0.35;
+        if (ck > 0.55) {
+          [r, gg, b] = crownCliffTopPixel(wx, wy); // pale granite top (crownPaint.ts)
         }
       }
       if (lands.length) {

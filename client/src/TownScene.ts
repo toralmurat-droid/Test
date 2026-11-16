@@ -124,6 +124,7 @@ import { afterLoading, hideLoading, loadingActive, loadingFor, setLoading, showL
 import { WaygateLayer } from "./waygate";
 import { FerryLayer, FERRY_NO } from "./ferry";
 import { WAYGATE_RANGE, WAYGATES } from "../../shared/act2";
+import { CROWNWAYS } from "../../shared/crown";
 import { ISO, IsoView, isoAnchor, isoInput, isoX, isoY, screenDir, screenDir8, screenOf, setBaseDepth } from "./iso";
 import { hudOccludes, hudSlot } from "./hudSlots";
 import { setupChatToggle } from "./chatToggle";
@@ -828,9 +829,9 @@ export class TownScene extends Phaser.Scene {
       e.sprite.setPosition(x, y); e.tx = x; e.ty = y; e.lastX = x; e.lastY = y;
       if (id !== this.me) return;
       this.jumped(); this.snapCamera();
-      showLoading(to === "desert" ? "Crossing into the Sunscar…" : to === "moors" ? "Crossing into the Grey Barrow Moors…" : to === "badlands" ? "Crossing into the Red Badlands…" : to === "sinkholes" ? "Going down into the Mawdeep Sinkholes…" : to === "sinkway" ? "Climbing back up to Oakvale…" : "Crossing home to Oakvale…");
+      showLoading(to === "desert" ? "Crossing into the Sunscar…" : to === "moors" ? "Crossing into the Grey Barrow Moors…" : to === "badlands" ? "Crossing into the Red Badlands…" : to === "sinkholes" ? "Going down into the Mawdeep Sinkholes…" : to === "sinkway" ? "Climbing back up to Oakvale…" : to.startsWith("crown_") ? "Crossing into the Crown of the Marches…" : to.startsWith("crownway_") ? `Crossing home to ${CROWNWAYS.find((c) => `crownway_${c.from}` === to)?.land ?? "your homeland"}…` : "Crossing home to Oakvale…");
       this.settled = 0;
-      if (to === "moors") this.cameras.main.fadeIn(1200, 30, 36, 44); else if (to === "badlands") this.cameras.main.fadeIn(1200, 70, 28, 14); else if (to === "sinkholes") this.cameras.main.fadeIn(1200, 22, 30, 14); else this.cameras.main.fadeIn(1200, 60, 30, 8);
+      if (to === "moors") this.cameras.main.fadeIn(1200, 30, 36, 44); else if (to === "badlands") this.cameras.main.fadeIn(1200, 70, 28, 14); else if (to === "sinkholes") this.cameras.main.fadeIn(1200, 22, 30, 14); else if (to.startsWith("crown_")) this.cameras.main.fadeIn(1200, 44, 40, 34); else this.cameras.main.fadeIn(1200, 60, 30, 8);
     });
     // Down a rope or a stair in the Mawdeep (shared/dungeon.ts LINKS): a jump to the other end, a fade through the dark
     this.room.onMessage("descend", ({ id, x, y }) => {
@@ -3268,17 +3269,18 @@ export class TownScene extends Phaser.Scene {
   }
   /** The camera's colour grade (SMOOTH only): Oakvale drained and gloomy; the desert (Act 2) keeps a little more of its warm colour; the moors (Act 3) go cool grey; the badlands (Act 4) are warm, dusty and harsh (high contrast, red cast); the sinkholes (Act 5) are damp, earthy and dim (green-brown cast). */
   private grade?: Phaser.FX.ColorMatrix;
-  private gradeAct?: 1 | 2 | 3 | 4 | 5;
-  private setGrade(act: 1 | 2 | 3 | 4 | 5) {
+  private gradeAct?: 1 | 2 | 3 | 4 | 5 | 6;
+  private setGrade(act: 1 | 2 | 3 | 4 | 5 | 6) {
     if (!this.grade || this.gradeAct === act) return;
     this.gradeAct = act;
-    const desert = act === 2, moors = act === 3, badlands = act === 4, sink = act === 5;
+    const desert = act === 2, moors = act === 3, badlands = act === 4, sink = act === 5, crown = act === 6;
     this.grade.reset();
-    this.grade.saturate(sink ? -0.3 : moors ? -0.5 : badlands ? -0.12 : desert ? -0.22 : -0.4);
-    this.grade.contrast(sink ? 0.14 : badlands ? 0.22 : desert ? 0.12 : 0.16, true);
-    this.grade.brightness(sink ? 0.88 : moors ? 0.9 : badlands ? 0.97 : desert ? 0.92 : 0.86, true);
+    this.grade.saturate(crown ? -0.2 : sink ? -0.3 : moors ? -0.5 : badlands ? -0.12 : desert ? -0.22 : -0.4);
+    this.grade.contrast(crown ? 0.15 : sink ? 0.14 : badlands ? 0.22 : desert ? 0.12 : 0.16, true);
+    this.grade.brightness(crown ? 0.94 : sink ? 0.88 : moors ? 0.9 : badlands ? 0.97 : desert ? 0.92 : 0.86, true);
     if (moors) this.grade.multiply([0.93, 0, 0, 0, 0, 0, 0.98, 0, 0, 0, 0, 0, 1.08, 0, 0, 0, 0, 0, 1, 0], true); // the moors' cool grey cast (Act 3)
     if (sink) this.grade.multiply([0.95, 0, 0, 0, 0, 0, 1.04, 0, 0, 0, 0, 0, 0.93, 0, 0, 0, 0, 0, 1, 0], true); // the sinkholes' damp green-brown cast (Act 5)
+    if (crown) this.grade.multiply([1.02, 0, 0, 0, 0, 0, 0.98, 0, 0, 0, 0, 0, 1.0, 0, 0, 0, 0, 0, 1, 0], true); // the Crown's cool pale stone with a regal dusk-gold warmth (Act 6)
     if (badlands) this.grade.multiply([1.1, 0, 0, 0, 0, 0, 0.97, 0, 0, 0, 0, 0, 0.88, 0, 0, 0, 0, 0, 1, 0], true); // the badlands' hot dusty cast (Act 4)
   }
 
@@ -3286,7 +3288,7 @@ export class TownScene extends Phaser.Scene {
     if (this.camSnap > 0 && --this.camSnap === 0) this.cameras.main.setLerp(CAM_LERP, CAM_LERP);
     this.iso?.update(dtMs);
     this.updateCover();
-    { const me = this.entities?.get(this.me)?.state; if (me) this.setGrade(((a) => (a === 3 || a === 4 || a === 5 ? a : 0))(actOfTile(me.x / TILE, me.y / TILE)) || ( me.y >= DESERT_Y0 * TILE && me.y < (DESERT_Y0 + DESERT_H) * TILE ? 2 : 1)); }
+    { const me = this.entities?.get(this.me)?.state; if (me) this.setGrade(((a) => (a === 3 || a === 4 || a === 5 || a === 6 ? a : 0))(actOfTile(me.x / TILE, me.y / TILE)) || ( me.y >= DESERT_Y0 * TILE && me.y < (DESERT_Y0 + DESERT_H) * TILE ? 2 : 1)); }
     if (loadingActive()) this.checkLoaded();
     this.ambient?.update(this.time.now, dtMs);
     if (this.dungeon) { this.dungeon.torch = this.torch && !this.entities?.get(this.me)?.state?.dead; this.dungeon.night = this.details?.darkNow ?? 0; }
