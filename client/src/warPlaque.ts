@@ -4,12 +4,15 @@
  * it only shows the server's "war" snapshot (shared/war/view.ts).
  */
 import { CLANS, CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
+import { TERRITORIES } from "../../shared/war/territories";
 import { regionName } from "../../shared/war/regions";
 import { territoryAt, type WarView } from "../../shared/war/view";
 import type { SiegeView } from "../../shared/war/siege";
 import { holdIntel, viewTier } from "../../shared/war/intel";
 import { FORT } from "./holdNames";
 import { HOLD_TIER_KEYS } from "../../shared/war/holdTiers";
+import { fmtCountdown, CLAN_LABEL } from "./warMap";
+import type { WarColumns } from "./warColumns";
 import { hudSlot } from "./hudSlots";
 import "./warPlaque.css";
 
@@ -63,6 +66,10 @@ export class WarPlaque {
   /** Sacked Holds (client/src/warSack.ts): "Hold sacked by <clan>" or a banner going up, while the hero is in that land. */
   setSack(r: { line(t: number): string }) { this.sack = r; }
 
+  private cols?: WarColumns;
+  /** Marching columns (client/src/warColumns.ts): a "Column of the Redfang marching on X · 4:10" line (time to the war tick) while the hero is in a land one marches on or leaves. */
+  setColumns(c: WarColumns) { this.cols = c; }
+
   /** "Fronts n/m <clan>" for land t: the clan holding the most fronts (the holder on a tie), plus the ram's state if one rolls, or "". */
   private frontsLine(t: number, own: ClanKey): string {
     const m = this.siege;
@@ -88,8 +95,10 @@ export class WarPlaque {
     const sacked = this.sack?.line(t.id) ?? "";
     // the brakes (shared/war/rules.ts): the Night Raiders hunt the leading clan, the war rallies for the weakest
     const brake = v.raided?.includes(t.id) ? "Night Raiders struck here" : v.hunt === v.owner[t.id] ? "The Night Raiders hunt its holder" : v.rally === v.owner[t.id] ? `Rally for ${CLANS[own].name}` : "";
+    const col = this.cols?.touching(t.id, now);
+    const march = col ? `Column of the ${CLAN_LABEL[col.clan]} marching on ${TERRITORIES[col.to]?.name ?? "?"} · ${fmtCountdown(v.next - now)}` : "";
     const tier = viewTier(v, t.id); // (the guard count follows tier and Control, so it needs no key of its own)
-    const key = `${t.id}|${own}|${tier}|${ctl}|${line}|${standing}|${fronts}|${rite}|${brake}|${sacked}`;
+    const key = `${t.id}|${own}|${tier}|${ctl}|${line}|${standing}|${fronts}|${rite}|${brake}|${sacked}|${march}`;
     if (key === this.shown) return;
     this.shown = key;
     const cl = CLANS[own], guards = holdIntel(v, t.id).guards;
@@ -108,6 +117,7 @@ export class WarPlaque {
     if (fronts) { const fl = document.createElement("div"); fl.className = "wp-foot siege"; fl.textContent = fronts; text.append(fl); }
     if (rite) { const rl = document.createElement("div"); rl.className = "wp-foot"; rl.textContent = rite; text.append(rl); }
     if (sacked) { const sl = document.createElement("div"); sl.className = "wp-foot siege"; sl.textContent = sacked; text.append(sl); }
+    if (march) { const ml = document.createElement("div"); ml.className = "wp-foot siege"; ml.textContent = march; text.append(ml); }
     if (brake) { const bl = document.createElement("div"); bl.className = "wp-foot" + (v.rally === v.owner[t.id] && !v.raided?.includes(t.id) ? " rally" : " siege"); bl.textContent = brake; text.append(bl); }
     if (standing) { const me = document.createElement("div"); me.className = "wp-me" + (/cannot|^Swear/.test(standing) ? " no" : ""); me.textContent = standing; text.append(me); }
     this.el.replaceChildren(pennant(own), text);
