@@ -63,7 +63,7 @@ test("war roads: a reversed road is the road reversed; built once and cached", (
 });
 
 test("war roads: each waygate link has two legs (Hold to gate, gate to Hold), ending near the gates; reversed it is walked back", () => {
-  assert.equal(LAND_LINKS.length, 4);
+  assert.equal(LAND_LINKS.length, 9, "the four land gates and the five Crownways");
   for (const l of LAND_LINKS) {
     const legs = linkLegs(l.a, l.b), what = l.link.name;
     assert.ok(legs, `${what}: legs`);

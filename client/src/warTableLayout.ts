@@ -19,6 +19,8 @@ export interface Slot {
   plate: Pt;
   /** The home clan's banner standing in the land (centre of the cloth). */
   banner?: { clan: ClanKey; x: number; y: number };
+  /** A box (x0, y0, x1, y1) its territories keep out of: a name plate drawn inside the land (the Crown's, in the middle). */
+  keepOut?: [number, number, number, number];
 }
 
 // Shared corners: neighbouring lands list the same vertices, so their borders meet without gaps or overlaps.
@@ -37,7 +39,8 @@ export const SLOTS: Slot[] = [
     poly: [[900, 290], D, [1200, 840], [920, 840], [900, 700], [780, 650], [710, 585], [750, 515], M2, [900, 430]] },
   { key: "sinkholes", core: [560, 730], plate: [330, 756], banner: { clan: "hidekin", x: 480, y: 625 },
     poly: [[300, 580], [425, 500], [560, 570], [600, 600], [710, 585], [780, 650], [900, 700], [920, 840], [250, 840], [270, 740]] },
-  { key: "crown", core: [590, 470], plate: [470, 482],
+  // the Crown's plate stands in the middle of its land (a 1366 x 768 plate is about 190 x 40 sheet units): territories keep out
+  { key: "crown", core: [600, 530], plate: [490, 455], keepOut: [490, 455, 680, 495],
     poly: [M1, M2, [750, 515], [710, 585], [600, 600], [560, 570], [425, 500], [425, 425], [500, 400]] },
 ];
 
@@ -57,6 +60,8 @@ const roomy = (p: Pt, poly: readonly Pt[], m: number) =>
 export const SEP = 40, EDGE = 16;
 /** The box a standing banner and its name plate take on the sheet (relative to its centre): territories keep out of it. */
 export const BANNER_BOX = { x: 78, y0: -85, y1: 112 };
+/** How far (sheet units) a territory keeps from a slot's keepOut box: room for its marker. */
+export const KEEP_M = 14;
 export interface Placed { id: number; x: number; y: number }
 
 /** Where each territory stands on the sheet (sheet units), for the lands in `slots` that hold territories. */
@@ -82,8 +87,12 @@ export function layoutTerritories(ts: readonly Territory[], slots: readonly Slot
           if (d < SEP) { const k = (SEP - d) / 2 / d; pts[i].x -= dx * k; pts[i].y -= dy * k; pts[j].x += dx * k; pts[j].y += dy * k; }
         }
       }
-      const bn = s.banner;
+      const bn = s.banner, ko = s.keepOut;
       for (const p of pts) {
+        if (ko && p.x > ko[0] - KEEP_M && p.x < ko[2] + KEEP_M && p.y > ko[1] - KEEP_M && p.y < ko[3] + KEEP_M) { // out of the box by its nearest side
+          const m = [p.x - ko[0] + KEEP_M, ko[2] + KEEP_M - p.x, p.y - ko[1] + KEEP_M, ko[3] + KEEP_M - p.y], i = m.indexOf(Math.min(...m));
+          if (i === 0) p.x = ko[0] - KEEP_M; else if (i === 1) p.x = ko[2] + KEEP_M; else if (i === 2) p.y = ko[1] - KEEP_M; else p.y = ko[3] + KEEP_M;
+        }
         if (bn) { // out of the banner's box by its nearest side
           const dx = p.x - bn.x, dy = p.y - bn.y, ex = BANNER_BOX.x + 8, y0 = bn.y + BANNER_BOX.y0 - 8, y1 = bn.y + BANNER_BOX.y1 + 8;
           if (Math.abs(dx) < ex && p.y > y0 && p.y < y1) {

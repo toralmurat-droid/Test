@@ -139,7 +139,7 @@ export class WarPlaque {
     bar.append(fill, num);
     const foot = document.createElement("div"); foot.className = "wp-foot";
     if (sg) { foot.classList.add("siege"); foot.textContent = `${CLANS[CLAN_KEYS[sg[1]]].name} besiege it: ${mins(sg[2] - now)} min`; }
-    else foot.textContent = t.capitalOf ? "A capital never falls" : `Fronts move in ${mins(v.next - now)} min`;
+    else foot.textContent = t.capitalOf ? "A capital never falls" : t.reckoningOnly ? "Falls only at a Reckoning" : `Fronts move in ${mins(v.next - now)} min`;
     const text = document.createElement("div"); text.className = "wp-text"; text.append(name, held, tl, bar, foot);
     if (fronts) { const fl = document.createElement("div"); fl.className = "wp-foot siege"; fl.textContent = fronts; text.append(fl); }
     if (rite) { const rl = document.createElement("div"); rl.className = "wp-foot"; rl.textContent = rite; text.append(rl); }

@@ -83,7 +83,7 @@ import { WarTroops } from "./warTroops";
 import { WarStandards } from "./warStandards";
 import { WarSack } from "./warSack";
 import { WarTowns } from "./warTowns";
-import { CROWN_NODE, hereAt, nodeName } from "./warRoute";
+import { hereAt, nodeName } from "./warRoute";
 import { regionName } from "../../shared/war/regions";
 import { WarTabards } from "./warTabards";
 import { WarNotice } from "./warNotice";
@@ -3245,7 +3245,7 @@ export class TownScene extends Phaser.Scene {
   private updateLandLine(me?: { x: number; y: number }) {
     if (!me) return;
     const h = hereAt(Math.floor(me.x / TILE), Math.floor(me.y / TILE));
-    const txt = h.node === undefined ? "" : h.node === CROWN_NODE ? nodeName(h.node) : `${h.near ? "near " : ""}${nodeName(h.node)} · ${regionName(h.land!).replace(/^The /, "")}`;
+    const txt = h.node === undefined ? "" : `${h.near ? "near " : ""}${nodeName(h.node)} · ${regionName(h.land!).replace(/^The /, "")}`;
     if (txt === this.landText) return;
     this.landText = txt;
     document.getElementById("landline")!.textContent = txt;

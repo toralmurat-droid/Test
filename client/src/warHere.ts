@@ -6,7 +6,7 @@
  */
 import { regionName } from "../../shared/war/regions";
 import { TERRITORIES } from "../../shared/war/territories";
-import { CROWN_NODE, findRoute, hereAt, landOfNode, nodeName, routeLines, STONES, WAYS, type Here, type Step } from "./warRoute";
+import { findRoute, hereAt, landOfNode, nodeName, routeLines, STONES, WAYS, type Here, type Step } from "./warRoute";
 
 const GOLD = "#ffd166", CYAN = "#8fe0ff", INK = "rgba(10,8,6,0.9)";
 
@@ -86,7 +86,7 @@ export function drawHereOnMap(g: CanvasRenderingContext2D, v: HereView): ExitRow
   g.save(); g.imageSmoothingEnabled = false;
   // the territory you stand in, and the one you picked (when it is in this land)
   for (const [id, color, tag] of [[v.here.terr, GOLD, "You are here"], [v.sel, CYAN, "Picked"]] as const) {
-    if (id === undefined || id === CROWN_NODE || !TERRITORIES[id]) continue;
+    if (id === undefined || !TERRITORIES[id]) continue;
     const T = TERRITORIES[id], P = outline(g, v, T, color, t);
     const top = P.reduce((a, b) => (b[1] < a[1] ? b : a)), cx = P.reduce((a, b) => a + b[0], 0) / 4;
     if (onScreen(cx, top[1])) chip(g, cx, Math.max(14, top[1] + 12), [T.name, tag === "Picked" ? "Picked" : `You are here · ${short(regionName(T.region))}`], color, v.font);
@@ -108,7 +108,7 @@ export function drawHereOnMap(g: CanvasRenderingContext2D, v: HereView): ExitRow
     if (!onScreen(x, y)) continue;
     const lit = firstGate === w && landOfNode(mine) === v.here.land;
     if (lit) { g.strokeStyle = GOLD; g.lineWidth = 3; g.globalAlpha = 0.5 + 0.5 * pulse; g.beginPath(); g.arc(x, y, 16 + 4 * pulse, 0, Math.PI * 2); g.stroke(); g.globalAlpha = 1; }
-    const where = there === CROWN_NODE ? regionName("crown") : regionName(landOfNode(there));
+    const where = regionName(landOfNode(there));
     const req = mine === w.a ? w.req : "";
     chip(g, x, y + 30, [`${w.name}: to ${short(where)}`, `${nodeName(there)}${req ? " · " + req : ""}`], lit ? GOLD : "#96d7ff", v.font);
   }

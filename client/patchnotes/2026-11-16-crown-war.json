@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-16",
+  "title": "War in the Crown of the Marches",
+  "changes": [
+    "The Crown of the Marches joins the clan war: ten territories, and each of the five approaches starts with the clan whose Crownway leads into it.",
+    "The Crown Keep starts with the clan holding the least land and cannot be taken by sieges, raids or sacks: it changes hands only at a Reckoning, which is coming.",
+    "The war table now shows the Crown's territories, and routes lead through the Crownways to any of them."
+  ]
+}

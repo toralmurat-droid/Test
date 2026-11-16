@@ -7,7 +7,8 @@
  * upkeep, split their army between defending their borders and attacking the targets their leader chose. On each
  * attacked territory attack meets defence (defender's edge, forts, counter cycle, doctrine and time of day); the
  * difference moves Control. Below WAR.siegeAt a siege is announced, and when it comes due the territory flips if the
- * attacker still out-fights the defence there. Capitals never flip. Clans below a fair share get a rally bonus (the
+ * attacker still out-fights the defence there. Capitals never flip, nor does Reckoning-only ground (the Crown Keep: no
+ * clan may strike it at all, territories.ts reckoningOnly). Clans below a fair share get a rally bonus (the
  * weakest one also a Rally for its heroes' valor), and the Night Raiders hunt a clan that holds clearly the most land:
  * by night they bleed its army and strike its weakest border lands (roadmap M2: the brakes on a runaway clan).
  */
@@ -162,7 +163,7 @@ export function supplyMap(s: WarState): number[] {
   return hops.map((h) => (h === Infinity ? WAR.cutOff : 1 / (1 + WAR.supplyDecay * h)));
 }
 
-/** Enemy territories clan `k` can attack: next to its land (within WAR.tunnelReach for the Hide-Kin). */
+/** Enemy territories clan `k` can attack: next to its land (within WAR.tunnelReach for the Hide-Kin). Never Reckoning-only ground (a tunnel may pass under it). */
 export function targetsOf(s: Pick<WarState, "owner">, k: ClanKey): number[] {
   const reach = CLANS[k].doctrine === "tunnel" ? WAR.tunnelReach : 1;
   const seen = new Set<number>(), out = new Set<number>();
@@ -173,14 +174,14 @@ export function targetsOf(s: Pick<WarState, "owner">, k: ClanKey): number[] {
     for (const id of frontier) for (const n of TERRITORIES[id].near) {
       if (seen.has(n)) continue;
       seen.add(n);
-      if (s.owner[n] !== k) { out.add(n); next.push(n); }
+      if (s.owner[n] !== k) { if (!TERRITORIES[n]?.reckoningOnly) out.add(n); next.push(n); }
     }
     frontier = next;
   }
   return [...out];
 }
-/** Own territories that touch an enemy (where defenders stand). */
-export const bordersOf = (s: WarState, k: ClanKey) => TERRITORIES.filter((t) => s.owner[t.id] === k && t.near.some((n) => s.owner[n] !== k)).map((t) => t.id);
+/** Own territories that touch an enemy (where defenders stand). Reckoning-only ground is none: nobody can strike it. */
+export const bordersOf = (s: WarState, k: ClanKey) => TERRITORIES.filter((t) => s.owner[t.id] === k && !t.reckoningOnly && t.near.some((n) => s.owner[n] !== k)).map((t) => t.id);
 
 /** The doctrine's time-of-day bonus of clan `k` in phase `p` (night for the Host, noon for the Veiled; rituals.ts reads it). */
 export const timeBonus = (k: ClanKey, p: number) => {
@@ -243,11 +244,11 @@ export const valorForce = (v: number) => (v > 0 ? WAR.valorCap * (1 - Math.exp(-
  * by WAR.sackFort, half when `half` (an unsworn hero, a clan not at war with the holder, or one the war keeps out of the
  * land). When a full sack brings Control to WAR.siegeAt or below and no siege is announced, clan `k` lays siege, but only where the war lets it attack (targetsOf) and never at a
  * capital: the flip still waits for the siege (warTick). Mutates `s`. The live war (server/war.ts strikeHold) and the
- * war sim (tools/balance/war.ts --sack) share it. Undefined (nothing changed) for a bad land, the holder's own clan or a
- * land already under siege.
+ * war sim (tools/balance/war.ts --sack) share it. Undefined (nothing changed) for a bad land, Reckoning-only ground, the
+ * holder's own clan or a land already under siege.
  */
 export function sackHold(s: WarState, t: number, k: ClanKey | undefined, half: boolean): { control: number; siege?: Siege } | undefined {
-  if (!Number.isInteger(t) || t < 0 || t >= s.owner.length || s.siege[t] || (k && s.owner[t] === k)) return undefined;
+  if (!Number.isInteger(t) || t < 0 || t >= s.owner.length || TERRITORIES[t]?.reckoningOnly || s.siege[t] || (k && s.owner[t] === k)) return undefined;
   s.control[t] = Math.max(0, s.control[t] - WAR.sackControl * (half ? 0.5 : 1));
   s.fort[t] = Math.max(0, (s.fort[t] ?? 0) - WAR.sackFort * (half ? 0.5 : 1));
   const out: { control: number; siege?: Siege } = { control: s.control[t] };
@@ -362,7 +363,7 @@ export function warTick(s: WarState, orders: Partial<Record<ClanKey, Orders>>, e
       if (CLANS[k].doctrine === "raid") { const take = Math.min(s.army[own], v * WAR.raidSteal); s.army[own] -= take; s.army[k] += take / 2; }
     }
     s.control[id] = Math.max(0, Math.min(100, s.control[id] - Math.max(-WAR.maxShift, Math.min(WAR.maxShift, (total - def) / WAR.controlDiv))));
-    if (t.capitalOf === own) continue; // capitals never fall
+    if (t.capitalOf === own || t.reckoningOnly) continue; // capitals never fall, nor the Crown Keep (only a Reckoning moves it)
     const top = (Object.entries(atk) as [ClanKey, number][]).reduce((a, b) => (b[1] > a[1] ? b : a));
     const sg = s.siege[id];
     if (!sg && s.control[id] <= WAR.siegeAt) s.siege[id] = { by: top[0], at: s.tick + WAR.siegeWarnTicks };

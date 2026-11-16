@@ -114,7 +114,9 @@ test("tunnels: every possible mouth is deterministic, walkable, reachable and in
     assert.ok(!isSolidAt(m.x, m.y) && !caravanOffLimits(m.x, m.y), `${name}: walkable, not off limits`);
     assert.ok(reachOf(t).has(ty * MAP_W + tx), `${name}: reachable from the Hold gate`);
     // (W3: in a cramped land a fortress's outer works can fill the side facing the start; the mouth comes up nearby)
-    if ((m.x / TILE - T.cx) * (F.cx - T.cx) + (m.y / TILE - T.cy) * (F.cy - T.cy) <= 0) crampedN++;
+    // (a tunnel from another land, under a gate, has no side facing it: the lands lie in bands of the world map, the
+    // Crown's far below its neighbours since 2026-11-16)
+    if (T.region === F.region && (m.x / TILE - T.cx) * (F.cx - T.cx) + (m.y / TILE - T.cy) * (F.cy - T.cy) <= 0) crampedN++;
     // territory rects overlap (Saltwind Coast holds Gullrock Cove): no Hold's fort and no standard's ring of any land
     // (a cramped land, W3: outside the reach of every camp and off every fort's cells, a fortress's outer works included)
     for (const h of HOLDS) {

@@ -112,7 +112,7 @@ test("towns: the save field is cleaned on load (missing: the lands' holders), a 
 function mulberry(a: number) {
   return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
-/** tests/warbattles.test.ts golden: 600 seeded ticks with valor and march extras, plus a towns extra. */
+/** tests/warbattles.test.ts golden (refreshed with it for the Crown's map): 600 seeded ticks with valor and march extras, plus a towns extra. */
 function golden(towns?: TickExtra["towns"]): string {
   const s = newWar(), minds = newMinds(), rnd = mulberry(5005), trace: number[] = [];
   for (let i = 0; i < 600; i++) {
@@ -128,10 +128,10 @@ function golden(towns?: TickExtra["towns"]): string {
 }
 
 test("towns: warTick without towns (or with none held, or junk) plays exactly as before W6; held towns add WAR.townIncome", () => {
-  assert.equal(golden(), "b4c06ab7");
-  assert.equal(golden({}), "b4c06ab7");
-  assert.equal(golden({ wardens: 0, redfang: -3, host: NaN, nobody: 4 } as unknown as TickExtra["towns"]), "b4c06ab7");
-  assert.notEqual(golden({ redfang: 2 }), "b4c06ab7");
+  assert.equal(golden(), "524f2911");
+  assert.equal(golden({}), "524f2911");
+  assert.equal(golden({ wardens: 0, redfang: -3, host: NaN, nobody: 4 } as unknown as TickExtra["towns"]), "524f2911");
+  assert.notEqual(golden({ redfang: 2 }), "524f2911");
   const a = newWar(), b = newWar();
   warTick(a, {}, { phase: 0 }); warTick(b, {}, { phase: 0, towns: { redfang: 2, host: 99 } });
   assert.ok(Math.abs(b.army.redfang - a.army.redfang - 2 * WAR.townIncome) < 1e-9, "two towns: +1 troop");

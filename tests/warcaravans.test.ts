@@ -31,7 +31,9 @@ test("caravans: lines are supply-tree edges between neighbours of one clan in on
     const k = s.owner[t.id];
     if (t.capitalOf === k || !t.near.some((n) => s.owner[n] !== k) || supply[t.id] === WAR.cutOff) continue;
     const feeder = lines.find((l) => l.b === t.id);
-    if (!feeder) assert.ok(t.near.every((n) => s.owner[n] !== k || TERRITORIES[n].act !== t.act || supply[n] >= supply[t.id]), `${t.name} has a feeder`);
+    // (no cart crosses a gate: a land fed over one, like a Crown approach from its homeland's capital, needs no feeder)
+    const overGate = t.near.some((n) => s.owner[n] === k && TERRITORIES[n].region !== t.region && supply[n] > supply[t.id]);
+    if (!feeder && !overGate) assert.ok(t.near.every((n) => s.owner[n] !== k || TERRITORIES[n].act !== t.act || supply[n] >= supply[t.id]), `${t.name} has a feeder`);
   }
   // land with no road back to a capital carries no cart; a clan with no capital held has none
   const cut = [...s.owner] as ClanKey[], k = cut[lines[0].a];

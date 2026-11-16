@@ -12,7 +12,7 @@ import { caravanLines, caravanRoute } from "../shared/war/caravans";
 import { newWar, warTick, type WarState } from "../shared/war/rules";
 import { writOffers } from "../shared/war/writs";
 import { buildTerritories, builtRegions, initialOwners, isSanctuary, LAND_LINKS, TERRITORIES, territoryByName } from "../shared/war/territories";
-import { _resetWar, migrateWar, PRE_BADLANDS_NAMES, PRE_MOORS_NAMES, PRE_SINKHOLES_NAMES, startWar, stopWar, warLog, warState, type SavedWar } from "../server/war";
+import { _resetWar, migrateWar, PRE_BADLANDS_NAMES, PRE_CROWN_NAMES, PRE_MOORS_NAMES, PRE_SINKHOLES_NAMES, startWar, stopWar, warLog, warState, type SavedWar } from "../server/war";
 import type { Kv } from "../server/store";
 
 /**
@@ -24,9 +24,15 @@ import type { Kv } from "../server/store";
  * Refreshed on purpose again when the Mawdeep Sinkholes joined (2026-11-15): 10 sinkholes territories (ids 52-61), the
  * Sinkway border, the Hide-Kin's forward capitals stepped down (none are left), their seat at Hidehall, the Host's and
  * Redfang's Oakvale footholds (Stormbreak Crags, Heronwreck Strand), new starting owners in Oakvale and the Sunscar.
- * Acts 1-4 keep their ids (PRE_SINKHOLES_NAMES). Any other change to it must be on purpose too.
+ * Acts 1-4 keep their ids (PRE_SINKHOLES_NAMES). Refreshed on purpose again when the Crown of the Marches joined
+ * (2026-11-16, Crown PR3): 10 Crown territories (ids 62-71), the five Crownway borders (each joins a homeland's capital to
+ * a Crown approach), the approaches' wardens and the Reckoning-only Keep in the fingerprint. The five homelands are
+ * untouched: their part of the map (ids 0-61, borders among them, capitals, starting owners) still hashes to the
+ * pre-Crown fingerprint (PRE_CROWN_GOLDEN). Any other change to either must be on purpose too.
  */
-const GOLDEN = "49dad8f31e57c62b2b567a7826bda2042a5040a4723f832fab79aeda8ac9ad80";
+const GOLDEN = "17332b98cb0c71063d88548492d03973ed1864e7b8f363a99a153dadc9ea0bab";
+/** The pre-Crown map's fingerprint (the golden before 2026-11-16): the homelands' part of today's map must still match it. */
+const PRE_CROWN_GOLDEN = "49dad8f31e57c62b2b567a7826bda2042a5040a4723f832fab79aeda8ac9ad80";
 
 const names = () => TERRITORIES.map((t) => t.name);
 
@@ -34,24 +40,31 @@ test("regions: territory names are unique (the saved war is matched by name)", (
   assert.equal(new Set(TERRITORIES.map((t) => t.name)).size, TERRITORIES.length);
 });
 
-test("regions: today's war map is unchanged (golden fingerprint of borders, capitals and starting owners)", () => {
-  const s = JSON.stringify({ t: TERRITORIES.map((t) => [t.id, t.name, [...t.near].sort((a, b) => a - b), t.capitalOf ?? null]), o: initialOwners() });
+test("regions: today's war map is unchanged (golden fingerprint of borders, capitals, wardens, the Keep and starting owners)", () => {
+  const s = JSON.stringify({ t: TERRITORIES.map((t) => [t.id, t.name, [...t.near].sort((a, b) => a - b), t.capitalOf ?? null, t.wards ?? null, t.reckoningOnly ?? null]), o: initialOwners() });
   assert.equal(createHash("sha256").update(s).digest("hex"), GOLDEN);
 });
 
-test("regions: every territory lies in exactly one built land (Oakvale 21, Sunscar 10, Moors 11, Badlands 10, Sinkholes 10)", () => {
-  const byAct = { 1: "oakvale", 2: "sunscar", 3: "moors", 4: "badlands", 5: "sinkholes" } as const;
+test("regions: the homelands are as they were before the Crown joined (pre-Crown fingerprint of ids 0-61)", () => {
+  const n = PRE_CROWN_NAMES.length, old = TERRITORIES.slice(0, n);
+  const s = JSON.stringify({ t: old.map((t) => [t.id, t.name, t.near.filter((m) => m < n).sort((a, b) => a - b), t.capitalOf ?? null]), o: initialOwners().slice(0, n) });
+  assert.equal(createHash("sha256").update(s).digest("hex"), PRE_CROWN_GOLDEN);
+});
+
+test("regions: every territory lies in exactly one built land (Oakvale 21, Sunscar 10, Moors 11, Badlands 10, Sinkholes 10, the Crown 10)", () => {
+  const byAct = { 1: "oakvale", 2: "sunscar", 3: "moors", 4: "badlands", 5: "sinkholes", 6: "crown" } as const;
   for (const t of TERRITORIES) {
     assert.equal(REGIONS.filter((r) => r.contains?.(Math.floor(t.x + (t.w >> 1)), Math.floor(t.y + (t.h >> 1)))).length, 1, t.name);
     assert.equal(regionOf(t.x + (t.w >> 1), t.y + (t.h >> 1))?.key, t.region, t.name);
     assert.equal(t.region, byAct[t.act], `${t.name}: the acts are today's lands`);
   }
-  assert.deepEqual([...builtRegions(TERRITORIES)].sort(), ["badlands", "moors", "oakvale", "sinkholes", "sunscar"]);
+  assert.deepEqual([...builtRegions(TERRITORIES)].sort(), ["badlands", "crown", "moors", "oakvale", "sinkholes", "sunscar"]);
   assert.equal(TERRITORIES.filter((t) => t.region === "oakvale").length, 21);
   assert.equal(TERRITORIES.filter((t) => t.region === "sunscar").length, 10);
   assert.equal(TERRITORIES.filter((t) => t.region === "moors").length, 11);
   assert.equal(TERRITORIES.filter((t) => t.region === "badlands").length, 10);
   assert.equal(TERRITORIES.filter((t) => t.region === "sinkholes").length, 10);
+  assert.equal(TERRITORIES.filter((t) => t.region === "crown").length, 10);
   // the old lands keep their ids: a save's unnamed ids and the frozen pre-moors / pre-badlands / pre-sinkholes lists still
   // line up (Acts 1-4 are ids 0-51, the sinkholes come after)
   assert.deepEqual(TERRITORIES.slice(0, PRE_MOORS_NAMES.length).map((t) => t.name), [...PRE_MOORS_NAMES]);
@@ -59,8 +72,12 @@ test("regions: every territory lies in exactly one built land (Oakvale 21, Sunsc
   assert.equal(PRE_SINKHOLES_NAMES.length, 52);
   assert.deepEqual(TERRITORIES.slice(0, PRE_SINKHOLES_NAMES.length).map((t) => t.name), [...PRE_SINKHOLES_NAMES]);
   assert.ok(TERRITORIES.every((t) => (t.act <= 4) === (t.id < 52)), "Acts 1-4 keep ids 0-51, the sinkholes are 52 on");
+  assert.equal(PRE_CROWN_NAMES.length, 62);
+  assert.deepEqual(TERRITORIES.slice(0, PRE_CROWN_NAMES.length).map((t) => t.name), [...PRE_CROWN_NAMES]);
+  assert.ok(TERRITORIES.every((t) => (t.act <= 5) === (t.id < 62)), "Acts 1-5 keep ids 0-61, the Crown is 62-71");
   // every homeland built: each clan holds its seat at home; the Wardens and the Veiled their capitals in Oakvale and the
-  // Sunscar, the Wardens also the Grey Ring (the Cairnwatch garrison); the Host and Redfang an Oakvale foothold each
+  // Sunscar, the Wardens also the Grey Ring (the Cairnwatch garrison); the Host and Redfang an Oakvale foothold each; the
+  // Crown has none
   const caps: Record<ClanKey, string[]> = { wardens: ["moors", "oakvale", "sunscar"], redfang: ["badlands", "oakvale"], host: ["moors", "oakvale"],
     hidekin: ["sinkholes"], veiled: ["oakvale", "sunscar"] };
   for (const k of CLAN_KEYS) assert.deepEqual(TERRITORIES.filter((t) => t.capitalOf === k).map((t) => t.region).sort(), caps[k], k);
@@ -69,13 +86,16 @@ test("regions: every territory lies in exactly one built land (Oakvale 21, Sunsc
   assert.ok([...capitalsOf(builtRegions(TERRITORIES)).values()].every((c) => !c.forward));
 });
 
-test("regions: four borders cross lands, the Waygate's, the Barrowgate's, the Red Pass's and the Sinkway's", () => {
+test("regions: nine borders cross lands, the Waygate's, the Barrowgate's, the Red Pass's, the Sinkway's and the five Crownways'", () => {
   const cross = TERRITORIES.flatMap((t) => t.near.filter((n) => n > t.id && TERRITORIES[n].region !== t.region).map((n) => [t.id, n]));
-  assert.deepEqual(REGION_LINKS.map((l) => l.name), ["The Waygate", "The Barrowgate", "The Red Pass", "The Sinkway"]);
-  assert.equal(LAND_LINKS.length, 4);
+  assert.deepEqual(REGION_LINKS.map((l) => l.name), ["The Waygate", "The Barrowgate", "The Red Pass", "The Sinkway",
+    "The Greenward Gate", "The Mourning Gate", "The Red Gate", "The Deep Gate", "The Sun Gate"]);
+  assert.equal(LAND_LINKS.length, 9);
   assert.deepEqual(cross, LAND_LINKS.map((l) => [l.a, l.b]).sort((x, y) => x[0] - y[0]), "the borders are the links (listed by id here, by REGION_LINKS there)");
   assert.deepEqual(LAND_LINKS.map((l) => [TERRITORIES[l.a].name, TERRITORIES[l.b].name]),
-    [["Stonecrag Quarry", "The Glasswind Flats"], ["Rimewater Hollow", "Sorrow Mire"], ["Mirror Pond", "The Saltlick Flats"], ["Sunken Lake", "Hollowbrook Dells"]]);
+    [["Stonecrag Quarry", "The Glasswind Flats"], ["Rimewater Hollow", "Sorrow Mire"], ["Mirror Pond", "The Saltlick Flats"], ["Sunken Lake", "Hollowbrook Dells"],
+      ["Stormbreak Crags", "The Pilgrims' Way"], ["The Host's Muster", "The Spirefall"], ["Fangrock", "The Field of Statues"], ["Hidehall", "The Sunken Courts"],
+      ["The Veiled Sanctum", "The Ember Gardens"]]);
 });
 
 test("regions: the Grey Barrow Moors are the Host's homeland (seat at the Muster, the Wardens' Grey Ring, forward capitals step down)", () => {
@@ -103,8 +123,8 @@ test("regions: the Grey Barrow Moors are the Host's homeland (seat at the Muster
   const owner = initialOwners();
   // the Wardens (least land at the start since the sinkholes joined) claim Thane's Rest next to their Grey Ring; the rest is the Host's
   for (const t of TERRITORIES.filter((x) => x.region === "moors")) assert.equal(owner[t.id], ["The Grey Ring", "Thane's Rest"].includes(t.name) ? "wardens" : "host", `${t.name} starts with its clan`);
-  assert.ok(TERRITORIES.filter((x) => owner[x.id] === "host").every((t) => t.region === "moors" || t.region === "oakvale"),
-    "a new war: the Host starts at home and round its Oakvale foothold only");
+  assert.ok(TERRITORIES.filter((x) => owner[x.id] === "host").every((t) => t.region === "moors" || t.region === "oakvale" || t.region === "crown"),
+    "a new war: the Host starts at home, round its Oakvale foothold and in the Crown only");
 });
 
 test("regions: the Red Badlands are Redfang's homeland (seat at Fangrock, forward capitals step down, the Rustwater Post out of the war)", () => {
@@ -125,8 +145,8 @@ test("regions: the Red Badlands are Redfang's homeland (seat at Fangrock, forwar
     "Gallows Canyon", "Rattlesnake Gulch", "Talon Fort", "The Cinnabar Pits", "The Hanging Arches", "The Saltlick Flats", "Vulture's Roost"]);
   const owner = initialOwners();
   for (const t of TERRITORIES.filter((x) => x.region === "badlands")) assert.equal(owner[t.id], "redfang", `${t.name} starts with Redfang`);
-  assert.ok(TERRITORIES.filter((x) => owner[x.id] === "redfang").every((t) => t.region === "badlands" || t.region === "oakvale"),
-    "a new war: Redfang starts at home and round its Oakvale foothold only");
+  assert.ok(TERRITORIES.filter((x) => owner[x.id] === "redfang").every((t) => t.region === "badlands" || t.region === "oakvale" || t.region === "crown"),
+    "a new war: Redfang starts at home, round its Oakvale foothold and in the Crown only");
 });
 
 test("regions: the Mawdeep Sinkholes are the Hide-Kin's homeland (seat at Hidehall, no forward capitals left, Ropewell out of the war)", () => {
@@ -150,19 +170,19 @@ test("regions: the Mawdeep Sinkholes are the Hide-Kin's homeland (seat at Hideha
   assert.equal(by("Heronwreck Strand").capitalOf, "redfang"); assert.equal(by("Heronwreck Strand").forward, undefined);
   const owner = initialOwners();
   for (const t of TERRITORIES.filter((x) => x.region === "sinkholes")) assert.equal(owner[t.id], "hidekin", `${t.name} starts with the Hide-Kin`);
-  assert.ok(TERRITORIES.filter((x) => x.region !== "sinkholes").every((t) => owner[t.id] !== "hidekin"), "a new war: the Hide-Kin start at home only");
+  assert.ok(TERRITORIES.filter((x) => x.region !== "sinkholes" && x.region !== "crown").every((t) => owner[t.id] !== "hidekin"), "a new war: the Hide-Kin start at home (and in the Crown) only");
 });
 
-test("regions: the next land plugs in the same way (fake Crown of the Marches through buildTerritories); a forward capital still steps down", () => {
+test("regions: the next land plugs in the same way (a fake land through buildTerritories); a forward capital still steps down", () => {
   const zone = (name: string, x: number, y: number): SpawnZone => ({ name, x, y, w: 20, h: 20, mobs: { wolf: 3 } as SpawnZone["mobs"], levels: [20, 24], respawnMs: 30_000 });
-  const extra = [zone("Crown Hill", 2000, 0), zone("Kingsway", 2025, 0)];
-  const crown: Region = { ...REGIONS.find((r) => r.key === "crown")!, contains: (x) => x >= 2000, capitals: [{ clan: "veiled", zone: "Crown Hill" }] };
-  const regions = [crown, ...REGIONS.filter((r) => r.key !== "crown")]; // a new land's test comes before the acts' catch-all
-  const links = [...REGION_LINKS, { a: "crown", b: "oakvale", name: "The Crown Road", pa: { x: 2000, y: 10 }, pb: { x: 0, y: 10 } }];
+  const extra = [zone("Isle Hill", 2000, 0), zone("Isleway", 2025, 0)];
+  const isles: Region = { key: "isles", name: "The Far Isles", compass: "N", contains: (x) => x >= 2000, capitals: [{ clan: "veiled", zone: "Isle Hill" }] };
+  const regions = [isles, ...REGIONS]; // a new land's test comes before the acts' catch-all
+  const links = [...REGION_LINKS, { a: "isles", b: "oakvale", name: "The Isle Road", pa: { x: 2000, y: 10 }, pb: { x: 0, y: 10 } }];
   const ts = buildTerritories([...SPAWN_ZONES, ...extra], regions, links);
   assert.equal(ts.length, TERRITORIES.length + 2);
-  assert.equal(ts.find((t) => t.name === "Crown Hill")!.capitalOf, "veiled");
-  assert.ok(ts.find((t) => t.name === "Kingsway")!.near.some((n) => ts[n].region === "oakvale") || ts.find((t) => t.name === "Crown Hill")!.near.some((n) => ts[n].region === "oakvale"), "linked to Oakvale");
+  assert.equal(ts.find((t) => t.name === "Isle Hill")!.capitalOf, "veiled");
+  assert.ok(ts.find((t) => t.name === "Isleway")!.near.some((n) => ts[n].region === "oakvale") || ts.find((t) => t.name === "Isle Hill")!.near.some((n) => ts[n].region === "oakvale"), "linked to Oakvale");
   // the forward-capital rule is still there for lands to come: a forward capital in a built land drops out once its
   // clan's homeland is built, and is held while it is not
   const fwd: Region[] = REGIONS.map((r) => (r.key === "oakvale" ? { ...r, capitals: [...r.capitals, { clan: "hidekin" as const, zone: "Thornwood", forward: true }] } : r));
@@ -400,6 +420,80 @@ function assertCarriedSinkholes(m: SavedWar, w: SavedWar) {
   assert.equal(m.minds.redfang.feint, all.indexOf("The Saltlick Flats"));
   assert.deepEqual(m.log, w.log);
 }
+
+/**
+ * The live war on the sinkholes map, before the Crown joined (PRE_CROWN_NAMES order): the pre-sinkholes holders but the
+ * footholds (the Host's and Redfang's capitals since), the sinkholes the Hide-Kin's but Hollowbrook Dells (taken by the
+ * Wardens over the Sinkway) and the Old Warren (under siege).
+ */
+const LIVE_PRE_CROWN: [string, ClanKey][] = [...LIVE_PRE_SINKHOLES.map(([n, k]): [string, ClanKey] => [n, FOOTHOLDS[n] ?? k]),
+  ["Rootfall Slopes", "hidekin"], ["Hollowbrook Dells", "wardens"], ["The Old Warren", "hidekin"], ["Tunneltop", "hidekin"], ["Mosslight Fen", "hidekin"],
+  ["The Pitfields", "hidekin"], ["The Gnawed Bank", "hidekin"], ["Scratchroot Burrows", "hidekin"], ["Rushmere Hollows", "hidekin"], ["Hidehall", "hidekin"]];
+
+/** That war as the server saved it (named, as every save on that map is; or not, the unnamed fallback), mid-fight. */
+function livePreCrown(named: boolean): SavedWar {
+  const n = LIVE_PRE_CROWN.length, owner = LIVE_PRE_CROWN.map(([, k]) => k);
+  const control = owner.map((_, i) => 20 + ((i * 23) % 80)), fort = owner.map((_, i) => (i % 6) / 6), pressure = owner.map((_, i) => (i * 3) % 50);
+  const ow = LIVE_PRE_CROWN.findIndex(([x]) => x === "The Old Warren"), hd = LIVE_PRE_CROWN.findIndex(([x]) => x === "Hollowbrook Dells");
+  const siege: WarState["siege"] = Array(n).fill(null); siege[ow] = { by: "wardens", at: 4004 }; siege[hd] = { by: "hidekin", at: 4003, sack: true };
+  const minds = newMinds(); minds.wardens.target = ow; minds.wardens.since = 3990; minds.hidekin.feint = hd;
+  const army = Object.fromEntries(CLAN_KEYS.map((k, i) => [k, 280 - i * 15])) as Record<ClanKey, number>;
+  const log = [{ at: 4, tick: 3999, kind: "siege" as const, t: ow, by: "wardens" as const, from: "hidekin" as const, text: "The Wardens lay siege to the Old Warren" }];
+  return { v: 1, state: { tick: 4000, owner, control, fort, siege, pressure, army }, minds, next: 5_000_000_000_000, log, ...(named ? { names: LIVE_PRE_CROWN.map(([x]) => x) } : {}) };
+}
+
+/**
+ * Checks a pre-Crown war carried onto today's map: the homelands by name exactly as saved (ids 0-61 too: holder, Control,
+ * forts, pressure, sieges, the leaders' targets, the log); the Crown seeded as a new war would seed it round them: the
+ * approaches with their wardens, the inner lands claimed by the clans with the least land, the Keep with the clan holding
+ * the least of all, every one at Control 100 with no forts, sieges or pressure.
+ */
+function assertCarriedCrown(m: SavedWar, w: SavedWar) {
+  const all = names();
+  assert.deepEqual(m.names, all);
+  assert.equal(m.state.owner.length, 72);
+  LIVE_PRE_CROWN.forEach(([n], j) => {
+    assert.equal(all.indexOf(n), j, `${n} keeps its id`);
+    assert.equal(m.state.owner[j], w.state.owner[j], `${n} keeps its holder`); assert.equal(m.state.control[j], w.state.control[j], `${n} keeps its Control`);
+    assert.equal(m.state.fort[j], w.state.fort[j]); assert.equal(m.state.pressure[j], w.state.pressure[j]); assert.deepEqual(m.state.siege[j], w.state.siege[j]);
+  });
+  const crown = TERRITORIES.filter((t) => t.region === "crown");
+  assert.deepEqual(crown.map((t) => t.id), [62, 63, 64, 65, 66, 67, 68, 69, 70, 71]);
+  for (const t of crown) {
+    if (t.wards) assert.equal(m.state.owner[t.id], t.wards, `${t.name}: its warden's`);
+    assert.equal(m.state.control[t.id], 100, t.name); assert.equal(m.state.fort[t.id], 0); assert.equal(m.state.siege[t.id], null); assert.equal(m.state.pressure[t.id], 0);
+  }
+  const keep = territoryByName("The Crown Keep")!.id, without = m.state.owner.map((k, i) => (i === keep ? undefined : k));
+  const land = (k: ClanKey) => without.filter((o) => o === k).length;
+  assert.ok(CLAN_KEYS.every((k) => land(m.state.owner[keep]) <= land(k)), `the Keep (${m.state.owner[keep]}) to a clan with the least land`);
+  assert.deepEqual(m.state.owner, initialOwners(TERRITORIES, [...w.state.owner]), "seeded as a new war seeds the Crown round the save");
+  assert.equal(m.state.tick, w.state.tick);
+  assert.deepEqual(m.state.army, w.state.army);
+  assert.equal(m.minds.wardens.target, all.indexOf("The Old Warren"));
+  assert.equal(m.minds.hidekin.feint, all.indexOf("Hollowbrook Dells"));
+  assert.deepEqual(m.log, w.log);
+}
+
+test("migrateWar: the live pre-Crown war goes on (the homelands exactly as saved, the Crown seeded round them)", () => {
+  assert.deepEqual(LIVE_PRE_CROWN.map(([n]) => n), [...PRE_CROWN_NAMES], "the server's frozen list is the sinkholes-era map");
+  const w = livePreCrown(true);
+  assertCarriedCrown(migrateWar(w, w.names!, names()), w);
+});
+
+test("war save: the live pre-Crown save loads onto the Crown map (named or not), the old save kept aside", async () => {
+  try {
+    for (const named of [true, false]) {
+      const w = livePreCrown(named), store = memKv(w);
+      _resetWar(undefined); stopWar();
+      await startWar(store.kv);
+      assertCarriedCrown({ ...w, state: warState()!, names: names(), minds: w.minds, log: warLog() } as SavedWar, w);
+      const kept = [...store.m.keys()].filter((k) => k.startsWith("war-old-"));
+      assert.equal(kept.length, 1, "the old save is kept aside");
+      assert.deepEqual(JSON.parse(store.m.get(kept[0])!), w);
+      stopWar();
+    }
+  } finally { stopWar(); _resetWar(); }
+});
 
 test("migrateWar: the live pre-sinkholes war goes on (Acts 1-4 unchanged but the footholds, the sinkholes all the Hide-Kin's at Control 100)", () => {
   assert.deepEqual(LIVE_PRE_SINKHOLES.map(([n]) => n), [...PRE_SINKHOLES_NAMES], "the server's frozen list is the badlands-era map");

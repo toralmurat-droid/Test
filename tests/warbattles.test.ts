@@ -17,7 +17,8 @@ function mulberry(a: number) {
 const clone = (s: WarState): WarState => JSON.parse(JSON.stringify(s));
 const site = (a: ClanKey = "redfang", b: ClanKey = "wardens") => ({ t: 5, from: 6, a, b });
 
-/** 600 seeded ticks with valor and march extras: the hash was taken with shared/war/rules.ts as it was before W5. */
+/** 600 seeded ticks with valor and march extras: the hash was taken with shared/war/rules.ts as it was before W5 (refreshed
+ * on purpose for each new land on the map, last when the Crown joined: 72 territories, 2026-11-16). */
 function golden(battle?: BattleOutcome[]): string {
   const s = newWar(), minds = newMinds(), rnd = mulberry(5005), trace: number[] = [];
   for (let i = 0; i < 600; i++) {
@@ -33,12 +34,12 @@ function golden(battle?: BattleOutcome[]): string {
 }
 
 test("battles: warTick with no battle plays exactly as before W5 (golden), and an empty or invalid battle list changes nothing", () => {
-  assert.equal(golden(), "b4c06ab7");
-  assert.equal(golden([]), "b4c06ab7");
+  assert.equal(golden(), "524f2911");
+  assert.equal(golden([]), "524f2911");
   const junk = [{ kind: "duel", t: 1, att: "redfang", def: "wardens", result: "att", lostA: 0.5, lostB: 0.5 }, { kind: "pitched", t: 999, att: "redfang", def: "wardens", result: "att", lostA: 0, lostB: 1 },
     { kind: "pitched", t: 1, att: "redfang", def: "redfang", result: "att", lostA: 0, lostB: 1 }, { kind: "pitched", t: 1.5, att: "redfang", def: "wardens", result: "def", lostA: 1, lostB: 0 },
     { kind: "pitched", t: 1, att: "nobody", def: "wardens", result: "def", lostA: 1, lostB: 0 }] as unknown as BattleOutcome[];
-  assert.equal(golden(junk), "b4c06ab7");
+  assert.equal(golden(junk), "524f2911");
 });
 
 function warAt(ticks: number, seed = 11): { s: WarState; minds: ReturnType<typeof newMinds>; rnd: () => number } {

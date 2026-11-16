@@ -279,3 +279,18 @@ test("holds (room): a sworn hero whose clan is not at war with the holder (a gru
     await s.c.leave();
   } finally { setWarPairs(wars); await srv.stop(); }
 });
+
+test("holds (room): the Crown Keep's banner cannot be raised by anyone: it changes hands only at a Reckoning", async () => {
+  const srv = await startRoom();
+  freshWar();
+  try {
+    const keep = TERRITORIES.find((t) => t.reckoningOnly)!, at = bannerSpot(keep.id)!, holder = warState()!.owner[keep.id];
+    const c = await srv.join({ cls: "wizard" });
+    await wait(150);
+    const room = srv.room, p = room.state.players.get(c.sessionId);
+    p.level = 50; p.clan = CLAN_KEYS.find((k) => k !== holder); p.lastAct = Date.now(); p.x = at.x; p.y = at.y;
+    assert.match(room.holds.sack(c.sessionId, { t: keep.id }), /Reckoning/);
+    assert.equal(room.holds.count, 0);
+    assert.equal(warState()!.control[keep.id], 100);
+  } finally { await srv.stop(); }
+});

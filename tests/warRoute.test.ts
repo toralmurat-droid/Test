@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CITIES, CITY_TEMPLATE, cityTile } from "../shared/capitals";
 import { REGIONS } from "../shared/war/regions";
-import { CROWNWAYS, crownGateTile } from "../shared/crown";
+import { CR, CROWNWAYS, crownGateTile, TOLLCROSS_SQUARE } from "../shared/crown";
 import { TERRITORIES, territoryByName } from "../shared/war/territories";
-import { CROWN_NODE, CROWN_LAND, STONES, WAYS, findRoute, hereAt, hereCaption, nodeName, nodeTile, routeLines } from "../client/src/warRoute";
+import { CROWN_LAND, STONES, WAYS, findRoute, hereAt, hereCaption, nodeName, routeLines } from "../client/src/warRoute";
 
 const id = (name: string) => territoryByName(name)!.id;
 
@@ -23,18 +23,27 @@ test("hereAt: a village outside every zone counts as its nearest territory of th
   assert.match(hereCaption(h, "Market Square"), /^You: Market Square, near .+, The Oakvale Lands$/);
 });
 
-test("hereAt: the Crown is one node, underground has none", () => {
-  const g = crownGateTile(CROWNWAYS[0]);
-  const h = hereAt(g.x, g.y);
-  assert.equal(h.node, CROWN_NODE); assert.equal(h.land, CROWN_LAND); assert.equal(nodeName(CROWN_NODE), "The Crown of the Marches");
-  const keep = nodeTile(CROWN_NODE); assert.equal(hereAt(keep.x, keep.y).node, CROWN_NODE);
+test("hereAt: the Crown's territories are nodes like any other (since Crown PR3); Tollcross counts as its nearest; underground has none", () => {
+  const k = territoryByName("The Crown Keep")!, h = hereAt(Math.floor(k.cx), Math.floor(k.cy));
+  assert.equal(h.node, k.id); assert.equal(h.land, CROWN_LAND); assert.equal(h.near, false);
+  const sq = hereAt(TOLLCROSS_SQUARE.x + 2, CR(TOLLCROSS_SQUARE.y + 2)); // the safe hub, outside every zone
+  assert.equal(sq.land, CROWN_LAND); assert.equal(sq.near, true); assert.equal(TERRITORIES[sq.node!].region, CROWN_LAND);
+  assert.match(hereCaption(sq, "Tollcross Square"), /^You: Tollcross Square, near .+, The Crown of the Marches$/);
   assert.equal(hereAt(10, 250).node, undefined); // the underground band holds no land
 });
 
-test("WAYS: the four land links and five Crownways, each end in its own land", () => {
+test("WAYS: the four land links and five Crownways, each end in its own land; a Crownway leads into its approach", () => {
   assert.equal(WAYS.length, 9);
-  for (const w of WAYS) assert.notEqual(TERRITORIES[w.a]?.region, w.b === CROWN_NODE ? "crown" : TERRITORIES[w.b].region);
-  assert.equal(WAYS.filter((w) => w.b === CROWN_NODE).length, 5);
+  for (const w of WAYS) assert.notEqual(TERRITORIES[w.a].region, TERRITORIES[w.b].region);
+  const crown = WAYS.filter((w) => TERRITORIES[w.b].region === CROWN_LAND);
+  assert.deepEqual(crown.map((w) => w.id), CROWNWAYS.map((c) => `crownway_${c.from}`));
+  for (const c of CROWNWAYS) {
+    const w = crown.find((x) => x.name === c.name)!, g = crownGateTile(c);
+    assert.equal(TERRITORIES[w.a].region, c.from, `${c.name} starts in ${c.from}`);
+    assert.deepEqual(w.tb, g);
+    assert.equal(w.req, c.from === "sunscar" ? "Lv 40, after Act 1's bosses" : "Lv 40");
+    assert.equal(hereAt(g.x, g.y + 2).node, w.b, `${c.name}: the approach you arrive in`);
+  }
 });
 
 test("findRoute: inside a land it walks the borders, between lands it takes the gate", () => {
@@ -47,9 +56,9 @@ test("findRoute: inside a land it walks the borders, between lands it takes the 
   assert.match(routeLines(pass)[0], /Take The Red Pass at Mirror Pond \(Lv 25\), arriving in The Saltlick Flats/);
 });
 
-test("findRoute: every territory and the Crown can be reached from every other", () => {
+test("findRoute: every territory (the Crown's too) can be reached from every other", () => {
   const from = id("Goldenreach Farms");
-  for (let n = 0; n <= CROWN_NODE; n++) { const r = findRoute(from, n); assert.ok(r, `no route to ${nodeName(n)}`); if (r.length) assert.equal(r[r.length - 1].to, n); }
+  for (let n = 0; n < TERRITORIES.length; n++) { const r = findRoute(from, n); assert.ok(r, `no route to ${nodeName(n)}`); if (r.length) assert.equal(r[r.length - 1].to, n); }
   const back = findRoute(id("Fangrock"), id("Hidehall"))!;
   assert.ok(back.some((s) => s.via === "gate")); // the lands only meet through gates
   for (let i = 1; i < back.length; i++) assert.equal(back[i].from, back[i - 1].to);
@@ -77,9 +86,19 @@ test("routeLines: runs of borders merge into one line", () => {
 test("findRoute: a hero in Oakvale reaches the Badlands by the Red Pass, never by the Crown (Lv 40) or the Sunscar", () => {
   const r = findRoute(id("Stonecrag Quarry"), id("Fangrock"))!;
   assert.deepEqual(r.filter((s) => s.via === "gate").map((s) => s.way!.name), ["The Red Pass"]);
-  assert.ok(r.every((s) => s.to !== CROWN_NODE));
+  assert.ok(r.every((s) => TERRITORIES[s.to].region !== CROWN_LAND));
   const home = findRoute(id("Fangrock"), id("The Host's Muster"))!; // lands meet through Oakvale, not through the Crown
   assert.deepEqual(home.filter((s) => s.via === "gate").map((s) => s.way!.name), ["The Red Pass", "The Barrowgate"]);
+});
+
+test("findRoute: into the Crown by the nearest Crownway, then over its borders to the Keep", () => {
+  const r = findRoute(id("Hidehall"), id("The Crown Keep"))!;
+  assert.deepEqual(r.filter((s) => s.via === "gate").map((s) => s.way!.name), ["The Deep Gate"]);
+  assert.equal(r[r.length - 1].to, id("The Crown Keep"));
+  assert.match(routeLines(r)[0], /^Take The Deep Gate at Hidehall \(Lv 40\)/);
+  const out = findRoute(id("The Spirefall"), id("The Host's Muster"))!; // back home through the gate you came in by
+  assert.deepEqual(out.map((s) => s.via), ["gate"]);
+  assert.match(routeLines(out)[0], /^Take The Mourning Gate back from The Spirefall to The Host's Muster$/);
 });
 
 test("warRoute: inside a capital you stand where its city gate stands in its land (W7)", () => {

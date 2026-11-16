@@ -30,13 +30,15 @@ test("feuds: at war on the opening map = the pairs that can strike each other's 
   try {
     setWarRelations(newWar().owner, 0);
     const war = new Set(warPairs().map((p) => key(...clansOf(p)!)));
-    // the six pairs whose land touches...
-    for (const [a, b] of [["host", "veiled"], ["redfang", "wardens"], ["host", "wardens"], ["veiled", "wardens"], ["host", "redfang"], ["hidekin", "wardens"]] as [ClanKey, ClanKey][])
+    // the pairs whose land touches (since the Crown joined, 2026-11-16, its approaches and inner lands bring every clan
+    // to the others' borders: the Hide-Kin meet the Host and the Veiled there)...
+    for (const [a, b] of [["host", "veiled"], ["redfang", "wardens"], ["host", "wardens"], ["veiled", "wardens"], ["host", "redfang"], ["hidekin", "wardens"],
+      ["hidekin", "host"], ["hidekin", "veiled"]] as [ClanKey, ClanKey][])
       assert.ok(atWar(a, b) && atWar(b, a), `${a}-${b} at war`);
-    // ...and the Hide-Kin reach the Redfang two borders away by tunnel
+    // ...and the Hide-Kin reach the Redfang two borders away by tunnel (and over the Crown's Mourning Gardens)
     assert.ok(atWar("hidekin", "redfang"), "hidekin-redfang: within tunnel reach");
-    for (const [a, b] of [["hidekin", "host"], ["hidekin", "veiled"], ["redfang", "veiled"]] as [ClanKey, ClanKey][]) assert.ok(!atWar(a, b), `${a}-${b} at peace`);
-    assert.equal(war.size, 7);
+    for (const [a, b] of [["redfang", "veiled"]] as [ClanKey, ClanKey][]) assert.ok(!atWar(a, b), `${a}-${b} at peace`);
+    assert.equal(war.size, 9);
     assert.ok(!atWar("wardens", "wardens"));
   } finally { _resetWarRelations(); }
 });
