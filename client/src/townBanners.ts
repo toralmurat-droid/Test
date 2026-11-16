@@ -19,7 +19,7 @@ const lerp = (n: number, f: number) => {
 };
 
 /** Paints one banner at art px size TOWN_BANNER_W x TOWN_BANNER_H (drawn 2x on the texture). */
-function paintBanner(cloth: number, trim: number, sigil: number, neutral: boolean): HTMLCanvasElement {
+export function paintBanner(cloth: number, trim: number, sigil: number, neutral: boolean): HTMLCanvasElement {
   const W = TOWN_BANNER_W, H = TOWN_BANNER_H, c = document.createElement("canvas");
   c.width = W * 2; c.height = H * 2;
   const g = c.getContext("2d")!;

@@ -1,4 +1,5 @@
 import { icon as pxIcon } from "./pixelicons";
+import { CITIES, cityText } from "../../shared/capitals";
 /**
  * Background music.
  *
@@ -46,6 +47,8 @@ const TRACKS: Track[] = [
   // Act 6, the Crown: Tollcross and the open Marches (optional: without the files Tollcross plays the village tune, the rest the country tune)
   { id: "tollcross", name: "Tollcross tune", url: "/assets/music/tollcross-tune.mp3", optional: true },
   { id: "crown", name: "Crown of the Marches tune", url: "/assets/music/crown-of-the-marches.mp3", optional: true },
+  // W7 capital cities: one calm tune per city, named city-<clan> (optional: without the file a city plays its act's town tune, the village tune for the Wardens)
+  { id: "city-wardens", name: "Hearthhold tune", url: "/assets/music/city-wardens.mp3", optional: true },
   // Act 2, the Sunscar (optional until Murat's mp3s are added; file names in docs/music/act2-prompts.md)
   { id: "second-sun", name: "Song of the Second Sun", url: "/assets/music/song-of-the-second-sun.mp3", optional: true },
   { id: "kel-ashar", name: "Kel Ashar tune", url: "/assets/music/kel-ashar-tune.mp3", withSounds: true, desert: true, optional: true },
@@ -76,6 +79,8 @@ const SINKHOLES_TOWNS = ["Ropewell"];
 const SALTMERE = ["Saltmere"];
 /** Act 6 calm area that plays the Tollcross tune (the Truce Market outside the Keep), else the village tune. */
 const CROWN_TOWNS = ["Tollcross"];
+/** The clans' capital cities (shared/capitals.ts): every area name inside a plot (city and district names) -> the city's clan. */
+const CITY_AREAS = new Map<string, string>(CITIES.flatMap((c) => [cityText(c).name, ...Object.values(cityText(c).districts)].map((n) => [n, c.clan] as [string, string])));
 const OASES = ["Palmshade Oasis", "Mirage Wells", "Jackal Springs"];
 const BURIED = ["Kharsun, the Buried City", "The Veiled Sanctum"];
 const FURNACE = "The Sun Furnace";
@@ -351,6 +356,9 @@ export function setMusicZone(zone: string | undefined, mobs: Partial<Record<stri
     if (calm === "village" && actNowRaw === 1 && SALTMERE.includes(area)) calm = firstOf("saltmere") ?? "village";
     if (actNowRaw === 6) calm = !zone && CROWN_TOWNS.includes(area) ? firstOf("tollcross", "village") ?? "village" : firstOf("crown") ?? "country";
   }
+  // Inside a capital city: its own tune if the file is there, else its homeland's town tune (no monsters, no battle songs)
+  const cityClan = zone ? undefined : CITY_AREAS.get(area);
+  if (cityClan) calm = firstOf(`city-${cityClan}`) ?? (actNow === 2 ? firstOf("kel-ashar") ?? "desert-sounds" : "village");
   // Back to the valley while the theme plays: it fades with the calm change below
   if (actNow !== act) { act = actNow; if (arrival === "playing") arrival = "done"; }
   if (calm === pendingCalm) return;

@@ -198,3 +198,7 @@ body #npcdialog .sh-cant { display: block; color: #e0584e; margin-top: 1px; }
 @media (max-height: 520px) { #npcdialog.lm { top: 6px; bottom: auto; max-height: calc(100vh - 92px); } }
 #ferrymenu { width: min(380px, calc(100% - 32px)); }
 #ferrymenu .pt-row span { white-space: nowrap; }
+/* capital cities (capitals.ts): a leader's, oath-keeper's or trainer's note under the page */
+#npcdialog .cp-ok, #npcdialog .cp-err { font: 18px var(--pixel-font); }
+body #npcdialog .cp-ok { color: #c8f59a; }
+body #npcdialog .cp-err { color: #ff9d7a; }

@@ -152,6 +152,8 @@ export class Player extends Schema {
   renown = 0; // clan war renown (shared/war/renown.ts; saved, sent with the "clan" message)
   claimDay = 0; // UTC day of the last feud bounty this hero claimed, and how many that day (FEUD.bounty.perDay; saved)
   claims = 0;
+  home?: ClanKey; // the capital this hero bound as home (shared/capitals.ts, server/warCapitals.ts; saved, sent as "city", never synced)
+  capPaid = 0; // the highest renown rank a capital's leader has paid this hero for (shared/capitals.ts CITY.rankGold; saved)
   feud: FeudState = {}; // grudges, kill points and the bounty day per clan (shared/war/feuds.ts; saved, sent as "feud" / "wanted", never synced)
   writ?: WritState; // war writ in progress (server/warWrits.ts; saved, sent by message)
   writDay = 0; // UTC day of the last finished war writ, and how many were finished that day (the daily limit)

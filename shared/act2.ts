@@ -6,6 +6,9 @@ import { REDPASS_BADLANDS, REDPASS_OAKVALE, BR, RUSTWATER_SQUARE } from "./badla
 import { ROPEWELL_SQUARE, SINKWAY_OAKVALE, SINKWAY_SINKHOLES, SR } from "./sinkholes";
 import { CR, crownGateTile, CROWNWAYS, TOLLCROSS_SQUARE } from "./crown";
 import { SALT_SQUARE } from "./saltmere";
+import { CITIES, CITY, CITY_TEMPLATE, cityOf, cityText, cityTile, type City } from "./capitals";
+import { CITY_LINES, cityLine } from "./war/cityText";
+import type { ClanKey } from "./war/clans";
 import { underground } from "./dungeon";
 import { isSolidAt, randomSpawn, SAFE_ZONE } from "./map";
 import { roomyTile } from "./npcs";
@@ -27,8 +30,10 @@ import { roomyTile } from "./npcs";
  */
 export type WaygateId = "oakvale" | "desert" | "moorsgate" | "moors" | "redpass" | "badlands" | "sinkway" | "sinkholes"
   | "crownway_oakvale" | "crown_oakvale" | "crownway_moors" | "crown_moors" | "crownway_badlands" | "crown_badlands"
-  | "crownway_sinkholes" | "crown_sinkholes" | "crownway_sunscar" | "crown_sunscar";
-export interface Waygate { id: WaygateId; x: number; y: number; to: WaygateId; label: string }
+  | "crownway_sinkholes" | "crown_sinkholes" | "crownway_sunscar" | "crown_sunscar"
+  | `citygate_${ClanKey}` | `cityexit_${ClanKey}`;
+/** `out`: where a hero coming out of this gate stands, in tiles south of it (negative: north; default 2.4). */
+export interface Waygate { id: WaygateId; x: number; y: number; to: WaygateId; label: string; out?: number }
 const px = (t: { x: number; y: number }) => ({ x: (t.x + 0.5) * TILE, y: (t.y + 0.5) * TILE });
 export const WAYGATES: Waygate[] = [
   { id: "oakvale", ...px(WAYGATE_OAKVALE), to: "desert", label: "Step through the waygate to the Sunscar" },
@@ -44,12 +49,23 @@ export const WAYGATES: Waygate[] = [
     { id: `crownway_${c.from}`, ...px(c.home), to: `crown_${c.from}`, label: "Take the Crownway to the Crown of the Marches" },
     { id: `crown_${c.from}`, ...px(crownGateTile(c)), to: `crownway_${c.from}`, label: `Go back through ${c.name.replace(/^The /, "the ")} home to ${c.land}` },
   ]),
+  // the clans' capitals (W7, shared/capitals.ts): the city gate beside the seat ("citygate_<clan>") and the city's main
+  // gate inside its south wall ("cityexit_<clan>", heroes come out north of it, into the gate square)
+  ...CITIES.flatMap((c): Waygate[] => [
+    { id: `citygate_${c.clan}`, ...px(c.outer), to: `cityexit_${c.clan}`, label: cityText(c).enter },
+    { id: `cityexit_${c.clan}`, ...px(cityTile(c, CITY_TEMPLATE.gate)), to: `citygate_${c.clan}`, label: cityText(c).leave, out: -2.4 },
+  ]),
 ];
 /** How close a hero must stand to use a waygate (click it or press E), like a portal stone's PORTAL_RANGE. */
 export const WAYGATE_RANGE = 1.6 * TILE;
 export const waygateById = (id: string) => WAYGATES.find((g) => g.id === id);
 /** Where a hero coming out of gate `g` stands: a few steps south of it, off the gate. */
-export const waygateArrival = (g: Waygate) => ({ x: g.x, y: g.y + 2.4 * TILE });
+export const waygateArrival = (g: Waygate) => ({ x: g.x, y: g.y + (g.out ?? 2.4) * TILE });
+/** The capital a gate belongs to, and whether it is the city's own (inner) gate or the city gate out in the land. */
+export function cityGateOf(g: Waygate): { city: City; inner: boolean } | undefined {
+  const m = /^city(gate|exit)_(\w+)$/.exec(g.id), city = m ? cityOf(m[2]) : undefined;
+  return city && { city, inner: m![1] === "exit" };
+}
 /**
  * The homelands' gate pairs (Acts 3 and up): each wakes at its act's minimum hero level, no quest, and says `shut`
  * (then "Return at level N.") while it is cold. A new homeland is one row here (an act reached by several pairs, like
@@ -93,11 +109,14 @@ export const badlandsOpen = (p: { level: number } | undefined) => !!p && p.level
 export const isSunGate = (g: Waygate) => g.id === "crown_sunscar" || g.id === "crownway_sunscar";
 /** Whether gate `g` is awake for this hero. */
 export const gateOpen = (g: Waygate, p: (Quester & { level: number }) | undefined) => {
+  const cg = cityGateOf(g);
+  if (cg) return cg.inner || (!!p && p.level >= CITY.minLevel); // a capital's own gate always lets heroes out
   const h = homelandGate(g);
   return h ? !!p && p.level >= h.level && (!isSunGate(g) || act2Open(p)) : act2Open(p);
 };
 /** The note a hero gets at a cold gate. */
 export function gateColdNote(g: Waygate, p: Quester | undefined): string {
+  if (cityGateOf(g)) return cityLine(CITY_LINES.shutLevel, { level: CITY.minLevel });
   const h = homelandGate(g);
   if (h && (!isSunGate(g) || ((p as { level?: number } | undefined)?.level ?? 0) < h.level)) return `${h.shut} Return at level ${h.level}.`;
   const miss = act2Missing(p);

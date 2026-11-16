@@ -47,6 +47,10 @@ export interface HeroSave {
   clan?: string; clanAt?: number;
   /** Clan war renown (shared/war/renown.ts); kept when the hero changes clan. */
   renown?: number;
+  /** The capital bound as home (W7, a shared/war/clans.ts key with a built city in shared/capitals.ts); missing = none. */
+  home?: string;
+  /** The highest renown rank a capital's leader paid this hero for (shared/capitals.ts CITY.rankGold); missing = none paid. */
+  capPaid?: number;
   /** Feuds per clan (shared/war/feuds.ts): grudge end, kill points and their last step (ms), UTC day a bounty was paid on them; missing = none. */
   feud?: Partial<Record<string, { until?: number; pts?: number; at?: number; paid?: number }>>;
   /** Feud bounties this hero claimed: the UTC day and how many that day (shared/war/feuds.ts FEUD.bounty.perDay); missing = none. */

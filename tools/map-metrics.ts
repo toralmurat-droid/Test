@@ -2,11 +2,12 @@
  * Navigation metrics for the world map: how open it is and how direct travel feels.
  * Run: npx tsx tools/map-metrics.ts
  */
-import { CROWN_H, CROWN_Y0, DEEP_END, DEEP_Y0, DESERT_H, DESERT_Y0, BADLANDS_H, BADLANDS_Y0, MAP_H, MAP_W, MOORS_H, MOORS_Y0, SINKHOLES_H, SINKHOLES_Y0, TILE, UNDER_END, WORLD_H } from "../shared/constants";
+import { CITIES_H, CITIES_Y0, CROWN_H, CROWN_Y0, DEEP_END, DEEP_Y0, DESERT_H, DESERT_Y0, BADLANDS_H, BADLANDS_Y0, MAP_H, MAP_W, MOORS_H, MOORS_Y0, SINKHOLES_H, SINKHOLES_Y0, TILE, UNDER_END, WORLD_H } from "../shared/constants";
 import { DOORS, isSolidTile, randomSpawn } from "../shared/map";
 import { FLOORS, LANDING } from "../shared/dungeon";
 import { waygateArrival, waygateById } from "../shared/act2";
 import { CROWNWAYS } from "../shared/crown";
+import { CITIES } from "../shared/capitals";
 
 const N = MAP_W * MAP_H;
 // dungeon gates count as open (a hero opens them), so the floors behind them are reachable
@@ -43,6 +44,8 @@ const bands: { name: string; y0: number; y1: number; from: [number, number][] }[
   { name: "Act 5 sinkholes (Sinkway)", y0: SINKHOLES_Y0, y1: SINKHOLES_Y0 + SINKHOLES_H, from: [px(waygateArrival(waygateById("sinkholes")!))] },
   // the Crown: one entry per Crownway, so each gate's arrival is shown to reach the whole land on its own
   ...CROWNWAYS.map((c) => ({ name: `Act 6 Crown (${c.name.replace(/^The /, "")})`, y0: CROWN_Y0, y1: CROWN_Y0 + CROWN_H, from: [px(waygateArrival(waygateById(`crown_${c.from}`)!))] })),
+  // the clans' capitals (shared/capitals.ts): each city floods from its own main gate's arrival (its city gate's far end)
+  { name: "Capitals (city gates)", y0: CITIES_Y0, y1: CITIES_Y0 + CITIES_H, from: CITIES.map((c) => px(waygateArrival(waygateById(`cityexit_${c.clan}`)!))) },
 ];
 const bandLines: string[] = [];
 let allReach = true;

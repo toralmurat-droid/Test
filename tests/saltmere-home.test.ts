@@ -70,7 +70,7 @@ test("act1Home: the nearer town once Saltmere's waystone is woken, Oakvale under
 });
 
 test("stash chests: Oakvale's first (STASH kept), Saltmere's on the harbour square at SALT_STASH, both on free tiles", () => {
-  assert.equal(STASHES.length, 2);
+  assert.equal(STASHES.length, 3, "Oakvale's, Saltmere's and Hearthhold's (W7, shared/capitals.ts)");
   assert.deepEqual(STASHES[0], STASH);
   const s = STASHES[1];
   assert.equal(Math.floor(s.x / TILE), SALT_STASH.x);

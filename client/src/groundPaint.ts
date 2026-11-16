@@ -37,6 +37,12 @@ export interface GroundData {
   sinkholes?: { y0: number; y1: number };
   /** Act 6's Crown band (shared/crown.ts), rows y0..y1: cream marble courts, pale granite flags, wild green gardens; the granite cliffs' top is pale rock. */
   crown?: { y0: number; y1: number };
+  /**
+   * The capitals' band (shared/capitals.ts), rows y0 down: the usual Oakvale grounds (not the dark Mawdeep ones), each city tinted in its
+   * clan's stone colour (`tints`, one [r, g, b] multiplier per plot; plot = floor((tile x - x0 + 2) / stride)); `rock` marks the solid
+   * rock round the plots (black).
+   */
+  cities?: { y0: number; x0: number; stride: number; tints: number[][]; rock: Uint8Array };
 }
 
 // Tile ids (shared/map.ts T)
@@ -52,6 +58,8 @@ let BADLANDS = false;
 let SINKHOLES = false;
 /** Painting a Crown pixel: the grounds take their Act 6 looks (crownMaterial). */
 let CROWN = false;
+/** Painting a capital-city pixel (set per pixel in paintChunk): no cave darkness, the city stone tint, black rock round the plots. */
+let CITY = false;
 const pal = (a: string[]) => a.map((h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]);
 const HEATHP = pal(["#2c2c36", "#3e3a4a", "#544c60", "#6c6078", "#84788f", "#9a90a4"]);
 const PEATP = pal(["#2a2824", "#3a3730", "#4c473d", "#605a4c", "#766f5e", "#8c846f"]);
@@ -126,6 +134,10 @@ export function makeFields(g: GroundData): Fields {
     rock = new Float32Array(w * h);
     for (let y = g.cave.rock; y < (g.cave.end ?? h); y++) for (let x = 0; x < w; x++) rock[y * w + x] = solid[y * w + x];
     if (g.cave.deep) for (let y = g.cave.deep[0]; y < g.cave.deep[1]; y++) for (let x = 0; x < w; x++) rock[y * w + x] = solid[y * w + x]; // the deep band under the desert
+  }
+  if (g.cities) { // the rock round the capitals' plots
+    rock ??= new Float32Array(w * h);
+    for (let y = g.cities.y0 - 4; y < h; y++) for (let x = 0; x < w; x++) rock[y * w + x] = g.cities.rock[y * w + x];
   }
   const cliff = g.cliff ? Float32Array.from(g.cliff) : undefined;
   return { depth, ao, rock, cliff };
@@ -688,6 +700,7 @@ export function paintChunk(g: GroundData, f: Fields, sx0: number, sy0: number, c
       BADLANDS = !!g.badlands && wy / tile >= g.badlands.y0 - 2 && wy / tile < g.badlands.y1;
       SINKHOLES = !!g.sinkholes && wy / tile >= g.sinkholes.y0 - 2 && wy / tile < g.sinkholes.y1;
       CROWN = !!g.crown && wy / tile >= g.crown.y0 - 2 && wy / tile < g.crown.y1;
+      CITY = !!g.cities && wy / tile >= g.cities.y0 - 2;
       DESERT = !!g.desert && wy / tile >= g.desert.y0 - 2 && wy / tile < g.desert.y1;
       // wavy borders: warp the lookup point
       const u = wx + (vn(wx / 45, wy / 45, 3) - 0.5) * 18 + (vn(wx / 15, wy / 15, 1) - 0.5) * 10 + (vn(wx / 4, wy / 4, 4) - 0.5) * 4;
@@ -757,7 +770,12 @@ export function paintChunk(g: GroundData, f: Fields, sx0: number, sy0: number, c
         const ao = field(f.ao, wx / tile - 0.5, wy / tile - 0.5);
         if (ao > 0) { const k = 1 - 0.45 * ao; r *= k; gg *= k; b *= k; }
       }
-      if (g.cave && wy / tile >= g.cave.y0 - 8 && !DESERT && !MOORS && !BADLANDS && !SINKHOLES && !CROWN) {
+      if (CITY) { // a capital: Oakvale's grounds in the clan's stone tint; the rock round the plots is bare black
+        const c = g.cities!, pl = Math.max(0, Math.min(c.tints.length - 1, Math.floor((wx / tile - c.x0 + 2) / c.stride))), tn = c.tints[pl];
+        if (tn) { r *= tn[0]; gg *= tn[1]; b *= tn[2]; }
+        const rk = field(f.rock!, wx / tile - 0.5, wy / tile - 0.5) + (vn(wx / 6, wy / 6, 352) - 0.5) * 0.3, k = sstep(0.3, 0.62, rk);
+        r += (VOID[0] - r) * k; gg += (VOID[1] - gg) * k; b += (VOID[2] - b) * k;
+      } else if (g.cave && wy / tile >= g.cave.y0 - 8 && !DESERT && !MOORS && !BADLANDS && !SINKHOLES && !CROWN) {
         const ty = wy / tile, cv = g.cave;
         const deep = !!cv.deep && ty >= cv.deep[0] - 0.5 && ty < cv.deep[1] + 0.5;
         if (cv.end !== undefined && ty >= cv.end && !deep) { r = VOID[0]; gg = VOID[1]; b = VOID[2]; } // the rock between the Mawdeep and the desert
