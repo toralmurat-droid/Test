@@ -15,6 +15,8 @@ export interface BeastFxHost {
   ent: (id: string) => Ent | undefined;
   say: (x: number, y: number, text: string, color: string) => void;
   squash: (id: string, kx: number, ky: number, ms: number) => void;
+  /** Lifts a body off the ground along an arc while its shadow stays down (castShadows.ts). */
+  hop?: (id: string, ms: number, h: number) => void;
 }
 
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
@@ -167,7 +169,7 @@ export function bindBeastFx(room: Room, h: BeastFxHost) {
     const e = h.ent(id);
     if (!e) return;
     e.leapUntil = scene.time.now + ms + 250;
-    if (kind === "pounce") h.squash(id, 0.85, 1.25, ms / 2);
+    if (kind === "pounce") { h.squash(id, 0.85, 1.25, ms / 2); h.hop?.(id, ms, 18); }
     if (kind === "swoop") return;
     const n = Math.ceil(ms / 50);
     for (let i = 0; i < n; i++) scene.time.delayedCall(i * 50, () => dust(e.sprite.x, e.sprite.y + 1, kind === "stampede" ? 3 : 2, 16, 12));

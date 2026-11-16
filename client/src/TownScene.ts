@@ -92,6 +92,7 @@ import type { WarView } from "../../shared/war/view";
 import { ART_K, CHAR_GROW, CHAR_SCALE, CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, ensureCharSheet, HD_CHARS, playCharAnim, preloadArt } from "./artAssets";
 import { Ambient } from "./ambient";
 import { Details, dayPhase, dayTime } from "./details";
+import { CastShadows } from "./castShadows";
 import { activeOf, GearLayer, reqInfoOf, statsOf, GearMenu, iconCanvas, itemColor, preloadGear, RARITY_HEX, showItemCard } from "./gear";
 import { hideCard } from "./gearCard";
 /** pickSlot value while the slot list is choosing the left-click action. */
@@ -401,6 +402,8 @@ export class TownScene extends Phaser.Scene {
   private dial?: DayDial;
   private signPanel = new SignPanel();
   private ambient?: Ambient;
+  /** Heroes' and monsters' cast shadows and their hops off the ground (castShadows.ts) */
+  private shadows!: CastShadows;
   private details?: Details;
   private siege!: SiegeWork;
   private champFx?: ChampionFx; // champions (shared/champions.ts): tint, glow, icons, painted details, their moments
@@ -495,6 +498,7 @@ export class TownScene extends Phaser.Scene {
       map.createBlankLayer("objects", tiles)!.putTilesAt(displayGrid(Ambient.objectLayerData()), 0, 0).setDepth(-1);
     }
     this.ambient = new Ambient(this); // trees, shadows, smoke, wildlife… (cosmetic only)
+    this.shadows = new CastShadows(this, () => !!this.details?.underground);
     this.details = new Details(this); // roof shading, ground detail, ducks, lanterns, day/night
     this.details.onDarkness((d) => this.ambient?.setDarkness(d));
     addWorldProps(this, (x, y, lift, dx) => this.details?.addLight(x, y, 0xffb347, 2.2, 0.75, 0.08, lift, dx)); // spear racks, pennants, dummies, lantern poles...
@@ -1085,6 +1089,7 @@ export class TownScene extends Phaser.Scene {
       scene: this, fx: this.fx, ent: (id) => this.entities.get(id),
       say: (x, y, text, color) => this.floatText(x, y, text, color, PIXEL_FONT),
       squash: (id, kx, ky, ms) => { const e = this.entities.get(id); if (e) this.squash(e, kx, ky, ms / 2); },
+      hop: (id, ms, h) => this.shadows.hop(id, ms, h),
     });
     // The Night Raiders (client/src/raiderFx.ts): smoke, dust and their coming and going
     bindRaiderFx(this.room, {
@@ -1410,6 +1415,7 @@ export class TownScene extends Phaser.Scene {
       if (!e) return;
       e.leapUntil = this.time.now + ms + 300;
       e.tx = x; e.ty = y;
+      this.shadows.hop(id, ms, 30);
       const sx = e.sprite.scaleX, sy = e.sprite.scaleY;
       this.tweens.add({ targets: e.sprite, scaleX: sx * 1.3, scaleY: sy * 1.3, duration: ms / 2, yoyo: true, ease: "Sine.easeOut", onComplete: () => e.sprite.setScale(sx, sy) });
     });
@@ -1448,6 +1454,7 @@ export class TownScene extends Phaser.Scene {
       e.tx = x; e.ty = y; e.snaps = [{ t: patchTime(), x, y }];
       e.leapUntil = this.time.now + ms + 300;
       this.floatText(x0, y0 - e.top - 10, "!", "#ff5252", PIXEL_FONT);
+      this.shadows.hop(id, ms, 22); // down out of the branches
       const b = this.bodyScale(e);
       this.tweens.add({ targets: e.sprite, scaleX: { from: b * 0.85, to: b * 1.25 }, scaleY: { from: b * 1.2, to: b * 1.25 }, duration: ms / 2, yoyo: true, ease: "Sine.easeOut", onComplete: () => e.sprite.setScale(b) });
       this.time.delayedCall(ms, () => { this.burst(x, y, 4, 0x8d6e63, 300); this.squash(e, 1.2, 0.8, 110, 1); });
@@ -1561,6 +1568,7 @@ export class TownScene extends Phaser.Scene {
       e.sprite.setTintFill(0xffffff);
       this.time.delayedCall(dot ? 40 : 70, () => e.sprite.clearTint());
       if (!dot && !blocked) this.flinch(e, kx ?? 0, ky ?? 0, crit);
+      if (crit && !dot && !blocked && e.mob && !e.state.dead) this.shadows.hop(id, 220, 6); // a hard blow knocks it off its feet a moment
       // A flinch never cuts a swing short: the attack you started keeps playing, so the fight stays readable
       const cur = e.sprite.anims.currentAnim?.key ?? "";
       const busy = e.sprite.anims.isPlaying && /_(swing|attack|cast)/.test(cur);
@@ -2151,6 +2159,7 @@ export class TownScene extends Phaser.Scene {
     this.siege?.clear(id);
     this.champFx?.drop(id);
     this.forms?.drop(id);
+    this.shadows?.drop(id);
     this.lastMineHit.delete(id);
     if (e.mob && e.state.kind === "trooper" && e.state.dead && e.artOn && !e.culled) this.trooperCorpse(e);
     e.sprite.destroy(); e.label?.destroy(); e.titleLabel?.destroy(); e.pennant?.destroy(); e.stripe?.destroy(); e.feudMark?.destroy(); e.bar.destroy(); e.parts?.destroy(); e.bubble?.destroy(); e.gear?.destroy();
@@ -3062,6 +3071,7 @@ export class TownScene extends Phaser.Scene {
     if (ev.ev === "move" || ev.ev === "countered") {
       const e = this.entities.get(ev.id);
       if (e) { e.tx = ev.x; e.ty = ev.y; e.chaseUntil = this.time.now + 250; }
+      if (e && ev.ev === "move" && (ev.kind === "leap" || ev.kind === "back")) this.shadows.hop(ev.id, ev.kind === "leap" ? 380 : 260, ev.kind === "leap" ? 24 : 9);
       if (ev.ev === "move") this.moves.onMove(ev.id, ev);
       // A dash glides (skillfx no longer snaps it): hold our prediction off while the sprite catches up
       if (ev.ev === "move" && ev.kind === "dash" && ev.id === this.me) this.rootUntil = Math.max(this.rootUntil, this.time.now + 140);
@@ -3353,6 +3363,7 @@ export class TownScene extends Phaser.Scene {
     stepInterpDelay(step);
     // An easing written for 60 fps (k per frame), adjusted so it pulls just as hard at 30, 120 or 144 fps
     const ease = (k: number) => 1 - Math.pow(1 - k, step / (1000 / 60));
+    this.shadows.begin(now);
     for (const [id, e] of this.entities) {
       const p = e.state;
       const rooted = (typeof p.fx === "string" && p.fx.includes("charge")) || (id === this.me && this.time.now < this.rootUntil); // a buildup roots the hero, a dash glides
@@ -3482,6 +3493,7 @@ export class TownScene extends Phaser.Scene {
         // A vampire's thrall (Bite, shared/devour.ts): drained pale with a blood-red cast
         e.sprite.setTint(0xe0a8b4); e.statusTint = true;
       } else if (e.statusTint) { e.sprite.clearTint(); e.statusTint = false; }
+      this.shadows.sync(id, e, now); // its shadow, and its lift in a leap (before the gear copies the sprite)
       e.gear?.sync(e.sprite, p);
       if (e.gear) this.gearFx.tick(e, dtMs, moving);
       if (e.hero) { // the beast trait (took the Hide-Mother's bargain): hide-bound mantle, only for heroes that carry it
@@ -3587,6 +3599,7 @@ export class TownScene extends Phaser.Scene {
       shot.g.y += (py - shot.g.y) * 0.6;
     }
 
+    this.shadows.end();
     const meEnt = this.entities.get(this.me);
     // Other heroes for the minimap (a plain loop: the entity list holds thousands of monsters, no per-frame copies)
     const others: { x: number; y: number; name: string | undefined }[] = [];
