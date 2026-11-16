@@ -1079,3 +1079,5 @@ in every act.
 ## W7 capital cities (in progress)
 
 City band below the Crown, one walled city per clan behind a city gate beside its seat (Murat 2026-11-16). Wardens first (gate at Goldenreach Farms). Plan: see the PR.
+
+W7 part 2: the other four capital cities (Veiled, Host, Redfang, Hide-Kin) in progress.
