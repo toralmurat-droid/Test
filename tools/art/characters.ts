@@ -970,11 +970,45 @@ const alewife = human({
   name: "alewife", skin: 0xeab08a, hair: 0xb8501e, hairStyle: "long",
   hat: { kind: "bandana", col: 0xe4dcc4, trim: 0xb8aa88 }, shirt: 0xd8c8a8, apron: 0xe8e0cc, vest: 0x7a3a2a, pants: 0x7a3a2a, boots: 0x3a281a, belt: 0x5a3a22, weapon: "none", gait: "stroll", hipHand: true,
 });
+// Clan war W6 (capturable towns): one steward sheet per clan, shared by every town the clan holds, plus a neutral one
+const steward_wardens = human({
+  name: "steward_wardens", skin: 0xc49a76, hair: 0x8a8a84, hairStyle: "short", beard: 0x8a8a84,
+  hat: { kind: "hood", col: 0x6a6e6c, trim: 0xd9822b }, shirt: 0x4a5238, pants: 0x3a3e34, boots: 0x2a2018, belt: 0x2a1e14,
+  tabard: { col: 0x3b4a2c, emblem: 0xf0b44a }, weapon: "staff", gait: "march",
+});
+const steward_redfang = human({
+  name: "steward_redfang", skin: 0xd0a07c, hair: 0x2a1a14, hairStyle: "short", beard: 0x2a1a14,
+  hat: { kind: "cap", col: 0x5a1812, trim: 0x1a1414 }, shirt: 0x7e1d16, vest: 0x3a2018, pants: 0x2a2224, boots: 0x1a1414, belt: 0x1a1414,
+  weapon: "none", gait: "march", hipHand: true,
+});
+const steward_host = human({
+  name: "steward_host", skin: 0xb8b0a0, hair: 0xd8cfb2, hairStyle: "bald",
+  hat: { kind: "hood", col: 0x1f2422, trim: 0x4f7d6a }, shirt: 0x2a302e, apron: 0x3a4440, pants: 0x1c2020, boots: 0x121616, belt: 0x4f7d6a,
+  weapon: "staff", gait: "stroll",
+});
+const steward_hidekin = human({
+  name: "steward_hidekin", skin: 0xa07a58, hair: 0x2a1c12, hairStyle: "long", beard: 0x2a1c12,
+  hat: { kind: "horned", col: 0x8a5f2a, trim: 0xe2c79a }, shirt: 0x6a4a2a, vest: 0x8a5f2a, pants: 0x5a3e24, boots: 0x3a281a, belt: 0x6e1d18,
+  weapon: "hammer", gait: "march",
+});
+const steward_veiled = human({
+  name: "steward_veiled", skin: 0xd8b898, hair: 0x1a1a2a, hairStyle: "long",
+  hat: { kind: "hood", col: 0x2a2a5a, trim: 0xe0a030 }, shirt: 0x34346a, apron: 0x2a2a5a, pants: 0x20204a, boots: 0x14143a, belt: 0xe0a030,
+  weapon: "staff", gait: "stroll",
+});
+const steward_neutral = human({
+  name: "steward_neutral", skin: 0xc8a284, hair: 0x6a5a48, hairStyle: "short",
+  hat: { kind: "cap", col: 0x5a5448, trim: 0x3a342c }, shirt: 0x6a6458, vest: 0x4a4438, pants: 0x3a3830, boots: 0x2a2218, belt: 0x2a1e14,
+  weapon: "none", gait: "stroll", hipHand: true,
+});
+/** Town stewards: key `steward_<clan>` per war clan, `steward_neutral` for a town with no holder. */
+export const STEWARD_NPCS = ["steward_wardens", "steward_redfang", "steward_host", "steward_hidekin", "steward_veiled", "steward_neutral"] as const;
 export const QUEST_NPCS = ["sexton", "mourner1", "mourner2", "mourner3", "ilka", "quartermaster", "smuggler", "alewife"] as const;
 
 export const NPCS: Hero[] = [blacksmith, merchant, villager, guard, druid, witch, watchman, ...FOLK.map((n) => folk(n)), wellkeeper, sandcaptain, spicetrader, desertsmith, armourer, saltarmourer, sandarmourer,
   huntsman, miller, forester, beachcomber, prospector, caravaneer, hermit, dunescout, defector, monk, tombrobber,
-  sexton, mourner1, mourner2, mourner3, ilka, quartermaster, smuggler, alewife, lutemaker, cairncaptain, moorherbalist, moorarmourer, rustmarshal, rustarmourer, rusthealer, ropewarden, ropearmourer, ropehealer];
+  sexton, mourner1, mourner2, mourner3, ilka, quartermaster, smuggler, alewife, lutemaker, cairncaptain, moorherbalist, moorarmourer, rustmarshal, rustarmourer, rusthealer, ropewarden, ropearmourer, ropehealer,
+  steward_wardens, steward_redfang, steward_host, steward_hidekin, steward_veiled, steward_neutral];
 /** Pose data for monsters painted with the character painter (paint/mobs.ts); never drawn as pixel art. */
 const mobPose = (name: string, weapon: HumanOpts["weapon"]) => human({ name, skin: 0, hair: 0, hairStyle: "bald", shirt: 0, pants: 0, boots: 0, weapon });
 export const MOB_POSES: Record<string, Hero> = {
