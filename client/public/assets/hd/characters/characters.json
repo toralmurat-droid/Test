@@ -63,7 +63,10 @@
   "steward_host",
   "steward_hidekin",
   "steward_veiled",
-  "steward_neutral"
+  "steward_neutral",
+  "cap_wardens_leader",
+  "cap_wardens_oathkeeper",
+  "cap_wardens_trainer"
  ],
  "image": "{name}.webp",
  "frameWidth": 48,
