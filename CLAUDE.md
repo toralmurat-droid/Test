@@ -73,7 +73,8 @@ build or test for it.
   `shared/` module (like `server/champions.ts`, `server/mobGrid.ts`) and call them from the room.
 
 ## Before you open a PR
-All of these must pass (CI runs 1–3 and the Postgres smoke test):
+All of these must pass (CI runs 1–3 and the Postgres smoke test; to save paid minutes CI runs only the test files the PR
+can affect, traced by imports in `tools/ci/affected-tests.mjs`, so a test that reads a file from disk always runs):
 1. `npm test` (unit tests + `tools/ideas-check.ts`)
 2. `npm run build` (typecheck + client + server bundle)
 3. `node tools/smoke.mjs` (after the build: server boots, a hero logs in)

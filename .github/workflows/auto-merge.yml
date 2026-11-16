@@ -144,7 +144,8 @@ jobs:
           fi
           echo "Testing the PR on top of the default branch at $base"
           npm ci --no-audit --no-fund
-          npm test
+          # CI already ran every test this PR can affect; here only tests the commits that landed since can affect
+          bash tools/ci/test-affected.sh "$SHA"
           npm run build
           node tools/smoke.mjs
           DATABASE_URL="$TEST_DATABASE_URL" node tools/smoke.mjs
