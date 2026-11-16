@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-16",
+  "patch": 288,
+  "title": "The Vampire takes shape",
+  "changes": [
+    "The Vampire is now modelled in 3D and turned into pixel art: real volume, light from the same side in every facing, and glints on metal.",
+    "The Nightcoat's long cape and coat skirts hang as cloth and stream behind you when you walk and run.",
+    "All Vampire armour, hats and boots were remade the same way. Weapons, shields and books look as before."
+  ]
+}
