@@ -360,6 +360,67 @@ export const MOB_LOOKS: Record<string, Look> = {
     torso: "bare", torsoCol: 0x54483e, trim: 0x3a3a26, belt: 0x241a14, buckle: 0xe2d8bc, harness: true, legs: "fur", legCol: 0x3e342a, boots: 0x2a2018, bootStyle: "bare",
     sleeve: 0x54483e, arms: "bare", bracer: 0x3a3a26, glove: 0x54483e, weapon: "hammer", bladeCol: 0x8a8070, fx: 0xffb070, back: "pelt", capeCol: 0x3e3226, claws: 0xe2d8bc, fetishes: 0xe2d8bc, stoop: 1.0, build: 1.6, tail: 0xc09a8a, notched: true,
   },
+  // ---- Act 6, the Crown of the Marches: the last High King's court gone wrong in its ruins. Tarnished gold, royal blue
+  // and crimson faded by three hundred years, rust in the joints, a cold gold light behind every visor.
+  oathbreaker: { // an Oathbroken Knight: rust-eaten plate, a faded blue tabard with the king's sun split down the middle, a cracked kite shield
+    skin: 0x8a8a7e, hairStyle: "none", eyeGlow: 0xf0d878, head: "greathelm", headCol: 0x6a6258, headTrim: 0x8a6a3a, plume: 0x3a3a5a,
+    torso: "plate", torsoCol: 0x6e665a, trim: 0x8a5a2a, tabard: { col: 0x2e3a6a, trim: 0x8a7a50, emblem: 0xd8b050 }, belt: 0x2a2018, buckle: 0x9a7a3c,
+    legs: "mail", legCol: 0x5a5448, boots: 0x4a443a, bootStyle: "greave",
+    sleeve: 0x6e665a, arms: "plate", glove: 0x3a362e, weapon: "sword", bladeCol: 0x9a948a, notched: true, fx: 0xf0d878,
+    shield: { col: 0x2e3a6a, trim: 0x6a6258, emblem: 0xd8b050, style: "kite" }, back: "cape", capeCol: 0x2a2e4a, capeShort: true, build: 1.15,
+  },
+  crownguard: { // a Crownguard: the household halberdiers in dulled gilt plate and crimson, a tall tower shield, nobody inside the helm
+    skin: 0x6a6a70, hairStyle: "none", eyeGlow: 0xa6e8ff, head: "helm", headCol: 0xa89050, headTrim: 0x7a1a1a, plume: 0x8a1a1a,
+    torso: "plate", torsoCol: 0xa89050, trim: 0x7a1a1a, tabard: { col: 0x7a1a1a, trim: 0xd8b860, emblem: 0xe8c860 }, belt: 0x2a1a14, buckle: 0xe8c860,
+    legs: "mail", legCol: 0x7a6a44, boots: 0x5a4a30, bootStyle: "greave",
+    sleeve: 0xa89050, arms: "plate", glove: 0x4a3a24, weapon: "spear", bladeCol: 0xc8c0a8, bladeLen: 1.2, fx: 0xa6e8ff,
+    shield: { col: 0x7a1a1a, trim: 0xd8b860, emblem: 0xe8c860, style: "tower" }, build: 1.25,
+  },
+  hollowherald: { // a Hollow Herald: a skull under the College's blue hood, a herald's tabard gone to rags, a staff with a cold lantern, grave-mist at its feet
+    skin: 0xd6ceb4, skull: true, eyeGlow: 0x9ad8ff, head: "hood", headCol: 0x3a4a7a, headTrim: 0xd8b860,
+    torso: "robe", torsoCol: 0x3a4a7a, trim: 0xd8b860, tabard: { col: 0xe0d8c0, trim: 0x3a4a7a, emblem: 0xd8b050 }, belt: 0x2a2418, buckle: 0xd8b860,
+    legs: "robe", legCol: 0x2e3a60, boots: 0x2a2826, bootStyle: "shoe",
+    sleeve: 0x3a4a7a, arms: "cloth", glove: 0x9a9a8a, rags: 0x8a90a0, weapon: "staff", orb: 0x9ad8ff, lantern: 0x9ad8ff, fx: 0x9ad8ff, mist: 0xb4d8ee,
+    back: "cape", capeCol: 0x2a3458, build: 0.95,
+  },
+  courtmagus: { // a Court Magus: a silver-bearded mage of the old court in violet and gold, a tall hat, a staff with a crackling blue stone
+    skin: 0xd8b494, hair: 0xc8c4d8, hairStyle: "long", beard: 0xd0ccd8, beardStyle: "long", eye: 0x2a2440, eyeGlow: 0x8ab8ff,
+    head: "wizardhat", headCol: 0x3a2a6a, headTrim: 0xd8b860,
+    torso: "robe", torsoCol: 0x3a2a6a, trim: 0xd8b860, vest: 0x5a3a8a, sash: 0xd8b860, belt: 0x2a1a3a, buckle: 0xe8c860,
+    legs: "robe", legCol: 0x2e2258, boots: 0x2a1e30, bootStyle: "shoe",
+    sleeve: 0x4a3a7a, arms: "cloth", glove: 0xd8b494, weapon: "staff", orb: 0x8ab8ff, fx: 0x8ab8ff, back: "cape", capeCol: 0x2a1e4a, collar: 0xd8b860, build: 0.95,
+  },
+  pretender: { // a Pretender: a young claimant in wine-red velvet and a gilt paper crown, an ermine-collared cape, a duellist's sword
+    skin: 0xe0b896, hair: 0xd8b060, hairStyle: "short", eye: 0x2a3a5a,
+    head: "crown", headCol: 0xe0c050, headTrim: 0xb03030,
+    torso: "jerkin", torsoCol: 0x6a1a3a, trim: 0xe0c050, sash: 0xf0ece0, belt: 0x2a1418, buckle: 0xe0c050,
+    legs: "trousers", legCol: 0x3a1a2a, boots: 0x2a1418, bootStyle: "leather",
+    sleeve: 0x6a1a3a, arms: "cloth", glove: 0xf0ece0, weapon: "sword", bladeCol: 0xd8d8e0, bladeLen: 1.05, fx: 0xffe080,
+    back: "cape", capeCol: 0x8a1a2a, collar: 0xf0ece0, build: 0.95,
+  },
+  thronewarden: { // a Thronewarden: the throne's own armour, walking: black and gold plate twice a man's size, a crowned great helm, a great maul
+    skin: 0x3a3632, hairStyle: "none", eyeGlow: 0xffd870, head: "greathelm", headCol: 0x8a7440, headTrim: 0xe0c050, plume: 0xe0c050,
+    torso: "plate", torsoCol: 0x4a4440, trim: 0xd8b050, tabard: { col: 0x2a2440, trim: 0xd8b050, emblem: 0xe8c860 }, belt: 0x1e1a18, buckle: 0xe8c860,
+    legs: "mail", legCol: 0x3a3632, boots: 0x2a2826, bootStyle: "greave",
+    sleeve: 0x4a4440, arms: "plate", glove: 0x2a2826, weapon: "hammer", bladeCol: 0x8a8070, bladeLen: 1.3, fx: 0xffd870,
+    back: "cape", capeCol: 0x2a2440, build: 1.5,
+  },
+  rivenking: { // the Riven King: a grey, gaunt old king, long white hair and beard, a gold crown cracked in two, black-and-gold plate, royal purple and ermine, a greatsword
+    skin: 0x9aa0a8, hair: 0xe0e0e8, hairStyle: "long", beard: 0xe8e8ee, beardStyle: "long", eye: 0xffe8a0, eyeGlow: 0xffe8a0,
+    head: "crown", headCol: 0xe0b840, headTrim: 0x5a1a2a,
+    torso: "plate", torsoCol: 0x3a3440, trim: 0xd8b050, tabard: { col: 0x4a2a6a, trim: 0xd8b050, emblem: 0xe8c860 }, belt: 0x1e1a22, buckle: 0xe8c860,
+    legs: "mail", legCol: 0x2e2a34, boots: 0x22202a, bootStyle: "greave",
+    sleeve: 0x3a3440, arms: "plate", glove: 0x22202a, weapon: "sword", bladeLen: 1.5, bladeCol: 0xc8d0e0, notched: true, fx: 0xffe8a0,
+    back: "cape", capeCol: 0x4a2a6a, collar: 0xf0ece0, build: 1.4, mist: 0xd8c8ff,
+  },
+  // Tollcross, the Truce Market: Herald-Marshal Ysmay Corrant of the Heralds' College
+  crownherald: {
+    skin: 0xd0a080, hair: 0x3a2a20, hairStyle: "ponytail", eye: 0x2a1c10,
+    head: "cap", headCol: 0x2a3a6a, headTrim: 0xd8b860, plume: 0xf0ece0,
+    torso: "jerkin", torsoCol: 0x4a3a2a, trim: 0xd8b860, tabard: { col: 0x2a3a6a, trim: 0xd8b860, emblem: 0xf0ece0 }, belt: 0x2a1e14, buckle: 0xd8b860,
+    legs: "trousers", legCol: 0x3a3028, boots: 0x2a1e14, bootStyle: "leather",
+    sleeve: 0x2a3a6a, arms: "cloth", glove: 0x2a1e14, weapon: "staff", orb: 0xe8c860, fx: 0xffffff, back: "cape", capeCol: 0x2a3a6a, build: 1.0,
+  },
   // Ropewell, the lodge-town on the lip of the sinkholes: Lodge-Warden Brannoc Tull, Hesta Coil the armourer, Mother Fennick the herb-wife
   ropewarden: {
     skin: 0xb48862, hair: 0x4a3a2a, hairStyle: "short", beard: 0x5a4a38, beardStyle: "full", eye: 0x2a1c10,

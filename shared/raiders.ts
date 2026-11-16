@@ -1,7 +1,7 @@
 // The Night Raiders (Murat 2026-11-08): seven named riders in great black cloaks on dark horses, each with a massive
 // weapon. They come out of the night, ride across the land looking for what they lost, cut down every living thing in
 // their way (never the dead: they are half dead themselves), and are gone again in a cloud of dust.
-import type { MobKind } from "./constants";
+import { CROWN_DEAD, type MobKind } from "./constants";
 import { MAX_LEVEL } from "./classes";
 
 export type RaiderWeapon = "greatsword" | "scythe" | "greataxe" | "flail" | "lance" | "maul" | "glaive";
@@ -79,7 +79,8 @@ export const raiderByKey = (k: string) => RAIDERS.find((r) => r.key === k);
 
 /** Never touched by the riders, and they never fight back against them: the dead. */
 export const RAIDER_SPARES: MobKind[] = ["skeleton", "skeletonmage", "necromancer", "crawler", "demon", "hollowking", "sanddead",
-  "wight", "bonehound", "mistwraith", "legionary", "cairnlord", "barrowking"];
+  "wight", "bonehound", "mistwraith", "legionary", "cairnlord", "barrowking",
+  ...CROWN_DEAD]; // Act 6: the Crown's cursed court
 /** Not living things (the Summoner's golems): the riders pass them by. */
 export const raiderIgnores = (kind: MobKind) => RAIDER_SPARES.includes(kind) || kind.startsWith("golem") || kind === "nightraider";
 

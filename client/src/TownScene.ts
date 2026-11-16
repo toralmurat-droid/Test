@@ -154,6 +154,7 @@ import { ResourceBars } from "./resourceBars";
 import { OverloadGauge } from "./overloadGauge";
 import { bindElemFx } from "./elemFx";
 import { bindHidekinFx } from "./hidekinFx";
+import { bindCrownFx } from "./crownFx";
 import { ChampionFx } from "./championFx";
 import { bindBeastFx } from "./beastFx";
 import { bindRaiderFx, raiderTrail } from "./raiderFx";
@@ -1086,6 +1087,12 @@ export class TownScene extends Phaser.Scene {
     });
     // The Hide-Kin's burrows, stitches and pit worms (client/src/hidekinFx.ts)
     bindHidekinFx(this.room, {
+      scene: this, fx: this.fx, ent: (id) => this.entities.get(id),
+      say: (x, y, text, color) => this.floatText(x, y, text, color, PIXEL_FONT),
+      squash: (id, kx, ky, ms) => { const e = this.entities.get(id); if (e) this.squash(e, kx, ky, ms / 2); },
+    });
+    // The Crown court's shields, decrees and the Riven King's telegraphs (client/src/crownFx.ts)
+    bindCrownFx(this.room, {
       scene: this, fx: this.fx, ent: (id) => this.entities.get(id),
       say: (x, y, text, color) => this.floatText(x, y, text, color, PIXEL_FONT),
       squash: (id, kx, ky, ms) => { const e = this.entities.get(id); if (e) this.squash(e, kx, ky, ms / 2); },

@@ -1082,6 +1082,7 @@ City band below the Crown, one walled city per clan behind a city gate beside it
 
 W7 part 2: the other four capital cities (Duskveil, Marrowkeep, Scarwall, Deepden) built, each with its outer gate in its homeland and a 10-tile no-spawn ring (CITY.gateClear).
 
+Crown of the Marches PR2 (monsters, the Riven King, The Riven Throne chain): see [crown-progress.md](crown-progress.md).
 ## Map clarity (2026-11-16)
 
 War table: "You are here", gates between lands, routes to any territory (client/src/warRoute.ts). Zone map: land title, where-you-are caption, labelled exits, "Ways out" and route cards (client/src/warHere.ts). One button switches maps and keeps the pick.

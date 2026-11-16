@@ -78,7 +78,8 @@
   "cap_redfang_trainer",
   "cap_hidekin_leader",
   "cap_hidekin_oathkeeper",
-  "cap_hidekin_trainer"
+  "cap_hidekin_trainer",
+  "crownherald"
  ],
  "image": "{name}.webp",
  "frameWidth": 48,

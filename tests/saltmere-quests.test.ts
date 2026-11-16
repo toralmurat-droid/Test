@@ -47,9 +47,9 @@ const inRect = (r: { x: number; y: number; w: number; h: number }, px: number, p
 /** A test hero: tutorial done, the Redfang chain at `red` (quest index), the arc at `arc`. */
 const hero = (red: number, at = 0, level = 17) => ({ level, quests: { tut: packQuest(TUT, 0, 0), red: packQuest(red, 0, 0), saltways: at } }) as any;
 
-test("Saltmere Ways: the last side arc (no chain index moves), its own quests-map key, two quests from Bess Tanner", () => {
-  assert.equal(SIDE_ARCS[SIDE_ARCS.length - 1], arc, "appended at the end of SIDE_ARCS");
-  assert.equal(ci, CHAINS.length - 1);
+test("Saltmere Ways: a side arc after the sinkholes' (no chain index moves), its own quests-map key, two quests from Bess Tanner", () => {
+  assert.equal(SIDE_ARCS.indexOf(arc), SIDE_ARCS.findIndex((a) => a.id === "sinkholes") + 1, "appended after the sinkholes' arc (later arcs follow it)");
+  assert.equal(ci, CHAINS.length - SIDE_ARCS.length + SIDE_ARCS.indexOf(arc));
   assert.ok(ci >= ZONE_ARCS.length);
   assert.equal(CHAINS.filter((c) => c.packed === "saltways").length, 1, "one chain on the key");
   const others = CHAINS.filter((c) => c.id !== "saltways").flatMap((c) => [c.packed, c.verKey, ...c.keys]);

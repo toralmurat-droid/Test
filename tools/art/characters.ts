@@ -932,6 +932,13 @@ const ropehealer = human({
   hat: { kind: "hood", col: 0x6a7a44, trim: 0xd8cc9c }, shirt: 0x5e6a3a, vest: 0x7a5a38, apron: 0xe0d6b8, pants: 0x4a5430, boots: 0x3a2c1c, belt: 0x4a3a24, weapon: "none", gait: "stroll", hipHand: true,
 });
 export const SINKHOLE_NPCS = ["ropewarden", "ropearmourer", "ropehealer"] as const;
+// Tollcross, Act 6 (shared/npcs.ts): the Herald-Marshal of the Heralds' College
+const crownherald = human({
+  name: "crownherald", skin: 0xd0a080, hair: 0x3a2a20, hairStyle: "ponytail",
+  hat: { kind: "cap", col: 0x2a3a6a, trim: 0xd8b860 }, shirt: 0x4a3a2a, pants: 0x3a3028, boots: 0x2a1e14, belt: 0x2a1e14,
+  tabard: { col: 0x2a3a6a, emblem: 0xf0ece0 }, sleeve: 0x2a3a6a, weapon: "staff", gait: "march",
+});
+export const CROWN_NPCS = ["crownherald"] as const;
 export const BADLAND_NPCS = ["rustmarshal", "rustarmourer", "rusthealer"] as const;
 export const MOOR_NPCS = ["cairncaptain", "moorherbalist", "moorarmourer"] as const;
 export const ZONE_NPCS = ["huntsman", "miller", "forester", "beachcomber", "prospector", "caravaneer", "hermit", "dunescout", "defector", "monk", "tombrobber"] as const;
@@ -1094,7 +1101,7 @@ export const NPCS: Hero[] = [blacksmith, merchant, villager, guard, druid, witch
   sexton, mourner1, mourner2, mourner3, ilka, quartermaster, smuggler, alewife, lutemaker, cairncaptain, moorherbalist, moorarmourer, rustmarshal, rustarmourer, rusthealer, ropewarden, ropearmourer, ropehealer,
   steward_wardens, steward_redfang, steward_host, steward_hidekin, steward_veiled, steward_neutral,
   cap_wardens_leader, cap_wardens_oathkeeper, cap_wardens_trainer,
-  cap_veiled_leader, cap_veiled_oathkeeper, cap_veiled_trainer, cap_host_leader, cap_host_oathkeeper, cap_host_trainer, cap_redfang_leader, cap_redfang_oathkeeper, cap_redfang_trainer, cap_hidekin_leader, cap_hidekin_oathkeeper, cap_hidekin_trainer];
+  cap_veiled_leader, cap_veiled_oathkeeper, cap_veiled_trainer, cap_host_leader, cap_host_oathkeeper, cap_host_trainer, cap_redfang_leader, cap_redfang_oathkeeper, cap_redfang_trainer, cap_hidekin_leader, cap_hidekin_oathkeeper, cap_hidekin_trainer, crownherald];
 /** Pose data for monsters painted with the character painter (paint/mobs.ts); never drawn as pixel art. */
 const mobPose = (name: string, weapon: HumanOpts["weapon"]) => human({ name, skin: 0, hair: 0, hairStyle: "bald", shirt: 0, pants: 0, boots: 0, weapon });
 export const MOB_POSES: Record<string, Hero> = {
@@ -1116,6 +1123,8 @@ export const MOB_POSES: Record<string, Hero> = {
   outrider: mobPose("outrider", "dagger"), crossbowman: mobPose("crossbowman", "bow"), firebrand: mobPose("firebrand", "none"), redcaptain: mobPose("redcaptain", "axe"), rourke: mobPose("rourke", "axe"),
   delver: mobPose("delver", "none"), cackler: mobPose("cackler", "dagger"), stagkin: mobPose("stagkin", "spear"), quillback: mobPose("quillback", "dagger"),
   stitcher: mobPose("stitcher", "spear"), hidechief: mobPose("hidechief", "hammer"), mawfather: mobPose("mawfather", "hammer"),
+  oathbreaker: mobPose("oathbreaker", "axe"), crownguard: mobPose("crownguard", "spear"), hollowherald: mobPose("hollowherald", "staff"), courtmagus: mobPose("courtmagus", "staff"),
+  pretender: mobPose("pretender", "dagger"), thronewarden: mobPose("thronewarden", "hammer"), rivenking: mobPose("rivenking", "axe"),
   veiled: mobPose("veiled", "staff"), camelfolk: mobPose("camelfolk", "spear"), sphinx: mobPose("sphinx", "axe"), sunwright: mobPose("sunwright", "staff"),
 };
 /** Poses for the humanoid champions' sheets (paint/look.ts CHAMP_WEAPONS): the grip follows their champion weapon. */

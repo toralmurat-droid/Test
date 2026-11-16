@@ -88,4 +88,15 @@ export const LOOT: Record<MobKind, LootDef> = {
   sinkworm: { gold: [5, 11], potionChance: 0.25 },
   hidechief: { gold: [95, 170], potionChance: 1, mats: mat("bone", 1, 2, 4) },
   mawfather: { gold: [400, 640], potionChance: 1, mats: mat("bone", 1, 4, 6) },
+  // Act 6, the Crown (Lv 40-50): the old court's coin and the dead knights' bones (brass comes only from breaking); the Thronewardens and
+  // the Riven King a royal hoard
+  oathbreaker: { gold: [16, 32], potionChance: 0.34, mats: mat("bone", 0.06) },
+  crownguard: { gold: [16, 34], potionChance: 0.36, mats: mat("bone", 0.08) },
+  hollowherald: { gold: [15, 30], potionChance: 0.36 },
+  gildhound: { gold: [6, 13], potionChance: 0.22, mats: mat("bone", 0.06) },
+  courtmagus: { gold: [16, 32], potionChance: 0.36 },
+  crowncrow: { gold: [6, 12], potionChance: 0.22, mats: mat("horn", 0.04) },
+  pretender: { gold: [20, 40], potionChance: 0.38 },
+  thronewarden: { gold: [110, 190], potionChance: 1, mats: mat("bone", 1, 2, 4) },
+  rivenking: { gold: [460, 720], potionChance: 1, mats: mat("sunglass", 1, 2, 3) },
 };

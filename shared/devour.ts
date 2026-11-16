@@ -19,6 +19,8 @@ export const FAMILY: Partial<Record<MobKind, Family>> = {
   warhound: "beast", vulture: "beast", rattler: "beast",
   // Act 5: the Hide-Kin are beast-folk like their Mawdeep kin; the Gullet Worms plain beasts
   delver: "beast", cackler: "beast", stagkin: "beast", quillback: "beast", stitcher: "beast", sinkworm: "beast", hidechief: "beast", mawfather: "beast",
+  // Act 6: the court's living (its hounds, its crows, its magi and the pretenders) have flesh; its dead (CROWN_DEAD) none
+  gildhound: "beast", crowncrow: "beast", courtmagus: "outlaw", pretender: "outlaw",
 };
 export const familyOf = (kind: string): Family | undefined => FAMILY[kind as MobKind];
 

@@ -152,6 +152,10 @@ export type MobKind = "slime" | "skeleton" | "motherblob" | "blobling" | "shoote
   // Act 5, the Mawdeep Sinkholes (shared/sinkholes.ts): the Hide-Kin's diggers, hyena packs, stag-chargers, quill-throwers
   // and hide-stitching shamans, the Gullet Worms in the pit floors, the Hide-Chieftains, and the Maw-Father in the Great Maw
   | "delver" | "cackler" | "stagkin" | "quillback" | "stitcher" | "sinkworm" | "hidechief" | "mawfather"
+  // Act 6, the Crown of the Marches (shared/crown.ts): the last High King's court gone wrong in its ruins: oath-broken
+  // knights, his household guard, a dead herald still crying his decrees, the royal hunt's gilded hounds, the throne's
+  // living armour, court magi, the crows of the empty courts, a pretender to the throne, and the Riven King himself
+  | "oathbreaker" | "crownguard" | "hollowherald" | "gildhound" | "thronewarden" | "courtmagus" | "crowncrow" | "pretender" | "rivenking"
   // clan troops of the war (shared/war/troops.ts): the clan rides in Mob.weapon; art comes per clan (shared/war/patrols.ts TROOP_LOOK)
   | "trooper"
   // summoned by heroes (shared/summons.ts): they fight for their owner
@@ -268,13 +272,26 @@ export const MOBS: Record<MobKind, MobDef> = {
   // the Hide-Chieftains (elite) and the Maw-Father, the Hide-Kin's first father, in the Great Maw (a living boss: about by day and night)
   hidechief: { name: "Hide-Chieftain", maxHp: 780, speed: 58, damage: 27, attackCooldownMs: 1250, aggroRange: 180, leash: 320, xp: 380 },
   mawfather: { name: "The Maw-Father", maxHp: 2000, speed: 54, damage: 32, attackCooldownMs: 1250, aggroRange: 240, leash: 460, xp: 1400 },
+  // Act 6, the Crown of the Marches (Lv 40-50): base numbers set with tools/balance/pve.ts --crown so the Crown plays a
+  // step harder than the sinkholes for a hero of its level (CROWN_KINDS below; moves in BEAST_MOVES, CROWN_AI, server/crownMobs.ts)
+  oathbreaker: { name: "Oathbroken Knight", maxHp: 210, speed: 56, damage: 22, attackCooldownMs: 1100, aggroRange: 140, leash: 240, xp: 44 },
+  crownguard: { name: "Crownguard", maxHp: 245, speed: 52, damage: 23, attackCooldownMs: 1250, aggroRange: 130, leash: 220, xp: 46 },
+  hollowherald: { name: "Hollow Herald", maxHp: 140, speed: 54, damage: 19, attackCooldownMs: 1700, aggroRange: 170, leash: 240, xp: 44 },
+  gildhound: { name: "Gildhound", maxHp: 130, speed: 86, damage: 11, attackCooldownMs: 800, aggroRange: 150, leash: 260, xp: 32 },
+  courtmagus: { name: "Court Magus", maxHp: 135, speed: 54, damage: 21, attackCooldownMs: 1700, aggroRange: 170, leash: 240, xp: 44 },
+  crowncrow: { name: "Crown Crow", maxHp: 110, speed: 72, damage: 14, attackCooldownMs: 1000, aggroRange: 160, leash: 280, xp: 30 },
+  pretender: { name: "Pretender", maxHp: 200, speed: 60, damage: 22, attackCooldownMs: 1050, aggroRange: 150, leash: 250, xp: 50 },
+  // the Thronewardens (elite: the throne's own armour, walking) and the Riven King on his broken throne in the Throne Hall
+  // (a living curse: about by day and night)
+  thronewarden: { name: "Thronewarden", maxHp: 820, speed: 52, damage: 28, attackCooldownMs: 1300, aggroRange: 180, leash: 320, xp: 420 },
+  rivenking: { name: "The Riven King", maxHp: 1900, speed: 54, damage: 33, attackCooldownMs: 1250, aggroRange: 260, leash: 480, xp: 2600 },
 };
 
 /** Elite monsters: much tougher than the rest of their zone, with a bigger look and an "Elite" tag. */
 export const ELITE: Partial<Record<MobKind, true>> = { necromancer: true, demon: true, banditchief: true, hollowking: true, packlord: true, hornbrute: true, hidemother: true, gnasher: true, weaver: true, sunwright: true, cairnlord: true, barrowking: true,
-  redcaptain: true, rourke: true, hidechief: true, mawfather: true };
+  redcaptain: true, rourke: true, hidechief: true, mawfather: true, thronewarden: true, rivenking: true };
 /** Bosses: elites that lead a whole camp (tagged "Boss" instead of "Elite"). */
-export const BOSS: Partial<Record<MobKind, true>> = { banditchief: true, hollowking: true, hidemother: true, sunwright: true, barrowking: true, rourke: true, mawfather: true };
+export const BOSS: Partial<Record<MobKind, true>> = { banditchief: true, hollowking: true, hidemother: true, sunwright: true, barrowking: true, rourke: true, mawfather: true, rivenking: true };
 
 /**
  * Skeleton casters. Distances in px.
@@ -594,6 +611,17 @@ export const BEAST_MOVES: Partial<Record<MobKind, BeastMove[]>> = {
   stagkin: ["stampede", "gore"],
   hidechief: ["howl", "maul"],
   mawfather: ["rockfall", "brood", "roar", "maul"],
+  // Act 6: an Oathbroken Knight rushes behind its broken shield; a Crownguard sweeps its halberd; the Gildhounds leap;
+  // the crows drop out of the sky and drink; a Thronewarden stamps and cleaves (and cries war, CROWN_AI.warlords); a
+  // Pretender calls his sworn knights when hurt; the Riven King calls his guard, stamps and cleaves (and the rest of his
+  // fight, RIVEN_KING, server/crownMobs.ts)
+  oathbreaker: ["gore"],
+  crownguard: ["maul"],
+  gildhound: ["pounce"],
+  crowncrow: ["swoop"],
+  thronewarden: ["stomp", "maul"],
+  pretender: ["brood"],
+  rivenking: ["brood", "stomp", "maul"],
 };
 /** Damage over time after a plain blow (BEAST.plague / bleed / venom). */
 /**
@@ -647,11 +675,13 @@ export const SUNWRIGHT = {
 };
 export const BEAST_RIDER: Partial<Record<MobKind, "plague" | "bleed" | "venom">> = { gnawkin: "plague", packlord: "bleed", silkwretch: "venom", hidemother: "bleed", gnasher: "plague", weaver: "venom", scorpion: "venom", bonehound: "bleed", boghag: "venom",
   warhound: "bleed", rattler: "venom",
-  cackler: "bleed" };
+  cackler: "bleed",
+  gildhound: "bleed" };
 /** Who answers a beast's Brood or Howl (default BEAST.brood.kinds / BEAST.howl.summon). */
 export const BEAST_BROOD: Partial<Record<MobKind, MobKind[]>> = { gnasher: ["gnawkin", "gnawkin", "gnawkin"], weaver: ["silkwretch", "silkwretch"], sunwright: ["veiled", "veiled", "veiled"],
   cairnlord: ["wight", "wight"], barrowking: ["wight", "legionary", "bonehound", "bonehound"],
-  hidechief: ["cackler", "cackler"], mawfather: ["delver", "cackler", "cackler", "stagkin"] };
+  hidechief: ["cackler", "cackler"], mawfather: ["delver", "cackler", "cackler", "stagkin"],
+  pretender: ["oathbreaker", "oathbreaker"], rivenking: ["crownguard", "crownguard", "oathbreaker", "oathbreaker"] };
 /**
  * Half-folk variants (Mob.weapon "folk", Murat 2026-11-05): a man's face under the flayed animal head, the body gone
  * over to the beast. Gnawkin bone-slingers throw stones from range; the rest fight like their kind.
@@ -722,8 +752,73 @@ export const SINKHOLES_AI = {
 export const SINKHOLES_KINDS: MobKind[] = ["delver", "cackler", "stagkin", "quillback", "stitcher", "sinkworm", "hidechief", "mawfather"];
 /** The Hide-Kin themselves (the Gullet Worms are only beasts of their pits): they answer the horn, the war cries and the stitch. */
 export const HIDEKIN_KINDS: MobKind[] = ["delver", "cackler", "stagkin", "quillback", "stitcher", "hidechief", "mawfather"];
+/**
+ * The Crown's moves (server/crownMobs.ts, TownRoom, pve.ts). Distances in px, times in ms, damage as a multiple of the
+ * monster's own.
+ * - decree: the Hollow Herald's shot, a cold word thrown from range (MOB_SHOT_ELEMENT); arcane: the Court Magus's bolt
+ *   (shock).
+ * - oath: an Oathbroken Knight that falls below `hpFrac` breaks its last oath, once: faster and harder to the end.
+ * - ward: a Crownguard plants its tower shield toward its foe for `ms`: blows from the front (within `arc`, a cosine)
+ *   take `mult`; go round it, or wait.
+ * - proclaim: a Hollow Herald reads out a decree (a cast, broken by a stun or a poise break): every Crown monster in
+ *   `range` is rallied like a war cry for `buffMs`. Interrupt it, or kill the herald first.
+ * - blink: a Court Magus with a hero closer than `near` steps through the air `dist` away from them.
+ * - hunt: when a Gildhound falls, every other Gildhound in `range` goes wild (rallied) for `rallyMs` and turns on the killer.
+ * - rampart: a Thronewarden throws its ward over the most hurt Crown monster in `range` under `hpFrac`: it takes
+ *   `mult` for `ms`.
+ * - usurp: a Pretender below `hpFrac` trades places with the nearest of its court in `range` (one of them takes the blow).
+ * - warlords: a Thronewarden's war cry rallies the Crown round him like a Redfang Captain's (BADLANDS_AI.warlords).
+ */
+export const CROWN_AI = {
+  decree: { range: 140, keepAway: 70, shotSpeed: 165, shotRadius: 3, mult: 1 },
+  arcane: { range: 150, keepAway: 80, shotSpeed: 205, shotRadius: 3, mult: 1.05 },
+  oath: { hpFrac: 0.4, speed: 1.25, dmg: 1.3, cooldown: 0.8 },
+  ward: { firstMs: 2500, everyMs: 9000, ms: 2600, minDist: 0, maxDist: 150, arc: 0.35, mult: 0.25 },
+  proclaim: { firstMs: 3000, everyMs: 15000, castMs: 1100, range: 8 * 32, buffMs: 8000 },
+  blink: { near: 64, dist: 130, cooldownMs: 7000 },
+  hunt: { range: 8 * 32, rallyMs: 7000 },
+  rampart: { everyMs: 12000, range: 7 * 32, hpFrac: 0.45, ms: 5000, mult: 0.5 },
+  usurp: { hpFrac: 0.5, everyMs: 12000, range: 6 * 32 },
+  warlords: {
+    thronewarden: { cooldownMs: 20000, range: 10 * 32, buffMs: 9000 },
+  } as Partial<Record<MobKind, { cooldownMs: number; range: number; buffMs: number; reinforce?: { hpFrac: number; count: number; kind: MobKind } }>>,
+};
+/** Act 6's monsters (the Crown of the Marches): levels from CROWN_LEVEL. */
+export const CROWN_KINDS: MobKind[] = ["oathbreaker", "crownguard", "hollowherald", "gildhound", "thronewarden", "courtmagus", "crowncrow", "pretender", "rivenking"];
+/** The Crown's dead (the cursed court in its armour): no flesh to devour, the Night Raiders pass them by. */
+export const CROWN_DEAD: MobKind[] = ["oathbreaker", "crownguard", "hollowherald", "thronewarden", "rivenking"];
+/**
+ * The Riven King (Act 6's final boss, in the Throne Hall; the Crown plan of 2026-11-15): Aldemar, the last High King of the Marches,
+ * who would not let the realm go when it split and broke his own crown to keep a piece of every land. He holds court
+ * still, on a throne of the shards, and he is courteous about killing you. Three phases: the King (blade and court),
+ * the Shards (below `phase[0]`: pieces of the crown fall where heroes stand), Kingsfall (below `phase[1]`: he quickens and
+ * now and then brings the hall down round himself: only far from him is safe). His Riven Edge cuts down a marked lane
+ * all fight long. Distances in px, damage as a multiple of his own.
+ */
+export const RIVEN_KING = {
+  phase: [0.66, 0.33] as const,
+  edge: { min: 30, max: 260, firstMs: 3500, everyMs: 7000, windupMs: 900, reach: 260, width: 22, dmgMult: 1.7, knockback: 1.5 },
+  shards: { firstMs: 1500, everyMs: 9000, range: 280, count: 4, spread: 56, radius: 28, windupMs: 1300, dmgMult: 1.5, stunMs: 300 },
+  kingsfall: { firstMs: 2500, everyMs: 18000, windupMs: 2000, radius: 104, dmgMult: 1.8, knockback: 3 },
+  wrath: { speed: 1.2, cooldown: 0.8 },
+  tauntMs: [11000, 17000] as const,
+  /** Words for a Riven King with no quest voice (the one on the throne any hero can walk in on). */
+  voice: {
+    wake: ["Kneel, or do not. The court is in session either way."],
+    taunt: ["Every land took a shard of my crown. I have come to collect.", "I was the last High King. I will be the last of everything.",
+      "The heralds still cry my name. Can you not hear them?", "A realm does not end because its people stop believing in it."],
+    half: ["You mistake me for a man. I am a kingdom, and kingdoms take a long time to fall."],
+    death: ["The crown... was always... too heavy..."],
+  },
+  lines: {
+    shards: ["Every shard a province. Let them fall on you.", "Here. Have a piece of the Marches."],
+    kingsfall: ["Then let the hall come down. I have outlived worse roofs."],
+    edge: ["Kneel.", "By my hand.", "The law of the realm."],
+    kill: ["Dismissed.", "The court thanks you for your service.", "Another name for the heralds."],
+  },
+};
 /** Pack hunters: one that has prey bays, and every one of its own kind near with nobody to chase runs in (BADLANDS_AI.pack). */
-export const PACK_KINDS: MobKind[] = ["warhound", "cackler"];
+export const PACK_KINDS: MobKind[] = ["warhound", "cackler", "gildhound", "crowncrow"];
 /** Beast-folk that fly (drawn hovering, client textures.ts). */
-export const BEAST_FLYERS: MobKind[] = ["duskwing", "crowseer", "vulture"];
+export const BEAST_FLYERS: MobKind[] = ["duskwing", "crowseer", "vulture", "crowncrow"];
 export const BEAST_KINDS: MobKind[] = ["gnawkin", "tuskborn", "silkwretch", "duskwing", "packlord", "hornbrute", "hidemother", "crowseer", "gnasher", "weaver"];
