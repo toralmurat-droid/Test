@@ -66,3 +66,14 @@ test("a nudge is soft, never through a wall, and big monsters are wider", () => 
   assert.equal(spreadCrowd(g, c, () => false), false, "nowhere to stand: stays");
   assert.ok(bodyRadius(new Unit(0, 0, "demon")) > bodyRadius(new Unit(0, 0, "skeleton")));
 });
+
+test("a big monster holds its ground: the small ones step round it", () => {
+  const [x, y] = openSpot();
+  const g = new MobGrid<Unit>();
+  const boss = new Unit(x, y, "hidemother");
+  g.set("boss", boss);
+  const brood = Array.from({ length: 4 }, (_, i) => { const u = new Unit(x + (i - 1.5) * 3, y + 2); g.set("b" + i, u); return u; });
+  for (let t = 0; t < 120; t++) { spreadCrowd(g, boss, anywhere); for (const u of brood) spreadCrowd(g, u, anywhere); }
+  assert.equal(boss.x, x); assert.equal(boss.y, y);
+  for (const u of brood) assert.ok(Math.hypot(u.x - x, u.y - y) >= (bodyRadius(boss) + CROWD.r) * 0.9, "brood stepped out of her body");
+});

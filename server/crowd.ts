@@ -1,7 +1,8 @@
 // Monsters in a fight keep their bodies apart (CROWD): without it a pack closing on one hero ends up as one pile of
 // overlapping sprites, which reads flat and wrong in the isometric view. Each fighting monster looks only at the
 // monsters in its own grid squares (MobGrid) and steps half the overlap away from each, capped per tick; its partner
-// does the other half on its own turn. The target pulls everyone in, so the pack settles into a ring round the hero.
+// does the other half on its own turn. A bigger body (a boss among its brood) holds its ground and the smaller one
+// steps the whole way round it. The target pulls everyone in, so the pack settles into a ring round the hero.
 import { CROWD, type MobKind } from "../shared/constants";
 import { blocked } from "../shared/movement";
 import { MOB_CELL, type GridUnit, type MobGrid } from "./mobGrid";
@@ -37,8 +38,11 @@ export function spreadCrowd<T extends CrowdUnit>(grid: MobGrid<T>, m: T, canStan
     if (!cell) continue;
     for (const o of cell.values()) {
       if (o === m || o.dead || o.hidden) continue;
+      const ro = bodyRadius(o);
+      if (ro < r) continue; // the bigger body holds its ground: the smaller one steps the whole way round it
+      const share = ro > r ? 1 : 0.5; // same size: each takes half the overlap on its own turn
       const dx = x - o.x, dy = y - o.y;
-      const min = r + bodyRadius(o);
+      const min = r + ro;
       if (dx > min || dx < -min || dy > min || dy < -min) continue;
       const d2 = dx * dx + dy * dy;
       if (d2 >= min * min) continue;
@@ -46,9 +50,9 @@ export function spreadCrowd<T extends CrowdUnit>(grid: MobGrid<T>, m: T, canStan
       if (d < 0.01) {
         // exactly on top of each other: split along a fixed direction picked from the pair's order in the map
         const a = (m._gs > o._gs ? 1 : -1) * (0.7 + (m._gs % 7) * 0.8);
-        px += Math.cos(a) * min * 0.5; py += Math.sin(a) * min * 0.5;
+        px += Math.cos(a) * min * share; py += Math.sin(a) * min * share;
       } else {
-        const k = (min - d) * 0.5 / d;
+        const k = (min - d) * share / d;
         px += dx * k; py += dy * k;
       }
       if (++n >= CROWD.maxNear) break;
