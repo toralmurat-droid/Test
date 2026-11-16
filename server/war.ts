@@ -5,9 +5,10 @@
  * every tick (Postgres table kv, or data/war.json) so a deploy never resets the war. The save names its territories, so
  * a new land or zone remaps the war by name (migrateWar) instead of restarting it.
  */
+import { TILE } from "../shared/constants";
 import { CLANS, CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import { newMinds, scriptedOrders, type Mind } from "../shared/war/doctrine";
-import { deployments, newWar, nightRaid, rallyClan, sackHold, WAR, warTick, type Orders, type TickExtra, type WarState } from "../shared/war/rules";
+import { deployments, newWar, nightRaid, rallyClan, sackHold, supplyMap, WAR, warTick, type Orders, type TickExtra, type WarState } from "../shared/war/rules";
 import { TERRITORIES, type Territory } from "../shared/war/territories";
 import { regionByKey } from "../shared/war/regions";
 import { tunnelStrikes, type TunnelStrike } from "../shared/war/tunnels";
@@ -19,6 +20,11 @@ import { bannerSpot } from "../shared/war/holdSack";
 import { atWar, setWarRelations, warPairs, warRelations } from "../shared/war/feuds";
 import { COLUMN, marchesOf, marchMult, meetingOf, plansOf, type March, type Meeting } from "../shared/war/marches";
 import { pathKnown, warPath, type WarPath } from "../shared/war/roads";
+import {
+  BATTLE, battleDay, battleField, battleOutcome, battleStep, cleanBattle, isDecisive, meetSite, newBattle, pickMeetings, pickPitched, pitchedSlot, pitchedTimes,
+  setMen, siteForces, stormField, type Battle, type BattleSite,
+} from "../shared/war/battles";
+import { frontStep, type Side } from "../shared/war/siege";
 import { openKv, type Kv } from "./store";
 
 /**
@@ -39,11 +45,15 @@ const GROW_NEWS = 3;
  * `ahead` (W4): the leaders' orders for the next tick, given right after each tick (missing: computed on load).
  * `cols` (W4): the marching columns of the current interval by id: soldiers fallen, ms halted by heroes, and how a
  * meeting was settled ("live" fought in a room, "sim" by the formula). Both optional: wellFormed ignores them.
+ * `battles` (W5): the big battles announced, being fought or just over (`list`), and the local day's counts (`day`,
+ * `n` battles, `meets` meeting battles) and the last pitched slot handled (`pitched`, ms). Optional; read through
+ * cleanBattle, so old and new builds read each other's saves.
  */
 export interface ColSave { fallen: number; halt: number; met?: "live" | "sim" }
+export interface BattleSave { list: Battle[]; day: number; n: number; meets: number; pitched: number }
 interface Saved {
   v: 1; state: WarState; minds: Record<ClanKey, Mind>; next: number; log: WarEvent[]; names?: string[]; rel?: (number | null)[];
-  ahead?: Partial<Record<ClanKey, Orders>>; cols?: Record<string, ColSave>;
+  ahead?: Partial<Record<ClanKey, Orders>>; cols?: Record<string, ColSave>; battles?: BattleSave;
 }
 
 const KEY = "war";
@@ -136,7 +146,7 @@ export function migrateWar(saved: Saved, oldNames: readonly string[], names: rea
   })) as Record<ClanKey, Mind>;
   const log = saved.log.flatMap((e) => { const t = re(e.t); return t === undefined ? [] : [{ ...e, t }]; });
   const out: Saved = { ...saved, state, minds, log, names: [...names] };
-  if (oldNames.length !== names.length || oldNames.some((n, i) => n !== names[i])) { delete out.ahead; delete out.cols; } // (orders and columns name territory ids: given afresh on load)
+  if (oldNames.length !== names.length || oldNames.some((n, i) => n !== names[i])) { delete out.ahead; delete out.cols; delete out.battles; } // (orders, columns and battles name territory ids: given afresh on load)
   return out;
 }
 
@@ -196,6 +206,7 @@ export async function startWar(store?: Kv) {
     console.log(`War: tick ${saved.state.tick}, next in ${Math.max(0, Math.round((saved.next - Date.now()) / 1000))} s`);
   }
   relate(saved.rel ?? []);
+  cleanBattles();
   try { lookAhead(saved.next - WAR.tickMs); } catch (e) { console.error("War: the orders ahead could not be given:", e); } // (the next tick tries again)
   timer = setInterval(() => { step(Date.now()).catch((e) => console.error("War: tick failed:", e)); }, 15_000);
   timer.unref?.();
@@ -207,6 +218,7 @@ export function stopWar() { if (timer) clearInterval(timer); timer = undefined; 
 export async function step(now: number) {
   if (!saved) return;
   settleMeetings(now);
+  try { battleClock(now); } catch (e) { console.error("War: battles failed:", e); } // (with no room open, the battles go on here)
   if (now < saved.next) { if (dirtyAt && now - lastSave >= COLUMN.saveMs) await save(now); return; }
   const late = Math.floor((now - saved.next) / WAR.tickMs);
   if (late >= CATCH_UP) saved.next = now - (CATCH_UP - 1) * WAR.tickMs;
@@ -241,13 +253,15 @@ function tickOnce(at: number, news: WarNews): WarEvent[] {
   lastRaided = raid?.ts ?? [];
   if (raid?.ts.length) news.raid = { clan: raid.clan, ts: [...raid.ts] };
   settleMeetings(Infinity); // (marks the meetings not yet marked; they cost no men)
-  warTick(s, orders, { phase, valor, march: marchMults() });
+  const battle = battleOutcomes(at);
+  warTick(s, orders, { phase, valor, march: marchMults(), ...(battle.length ? { battle } : {}) });
   lastOrders = orders;
   valor = TERRITORIES.map(() => ({}));
   // the orders for the next tick, at once (same leaders, same seed as if given then): their columns march now
   saved!.cols = {};
   try { saved!.ahead = scriptedOrders(s, saved!.minds, rng(s.tick * 2654435761 + 1)); lookAhead(at); }
   catch (e) { delete saved!.ahead; marches = []; console.error("War: the orders ahead could not be given (the next tick gives them):", e); }
+  try { planBattles(at); } catch (e) { console.error("War: battles could not be planned:", e); }
   const out: WarEvent[] = [];
   const name = (k: ClanKey) => CLANS[k].name;
   for (const t of TERRITORIES) {
@@ -423,6 +437,220 @@ export const _marchMults = () => marchMults();
 /** Tests: the save would be written at the next step (columns changed since the last save). */
 export const _warDirty = () => dirtyAt > 0;
 
+// ---- Big battles (W5: shared/war/battles.ts has the rules, server/warBattles.ts the live lines) --------------------
+
+/** Live deaths rooms reported since a battle's last step (attacker, defender): they fill that step's quota. */
+const pendingLive = new Map<string, [number, number]>();
+/** Men each room fields per battle (room -> [attackers, defenders], when reported): no two rooms field the same men. */
+const fielded = new Map<string, Map<unknown, { n: [number, number]; at: number }>>();
+/** Per battle: per hero name the kill valor and the renown it paid; per clan the valor (BATTLE caps). Memory only. */
+const heroCaps = new Map<string, Map<string, { kill: number; renown: number }>>();
+const clanCaps = new Map<string, Map<ClanKey, number>>();
+/** What happened to the battles since the rooms last looked: announced, started, ended, called off (the rooms announce it). */
+export interface BattleNews { kind: "announce" | "start" | "end" | "off"; b: Battle }
+const battleNews: BattleNews[] = [];
+let battleVer = 0;
+
+/** The war save's battles, cleaned (on load and reset): malformed ones are dropped. */
+function cleanBattles() {
+  if (!saved) return;
+  const raw = saved.battles as Partial<BattleSave> | undefined;
+  if (!raw || typeof raw !== "object") { delete saved.battles; return; }
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  saved.battles = { list: (Array.isArray(raw.list) ? raw.list : []).flatMap((b) => { const c = cleanBattle(b); return c ? [c] : []; }), day: num(raw.day), n: num(raw.n), meets: num(raw.meets), pitched: num(raw.pitched) };
+}
+function book(now: number): BattleSave {
+  const bs = (saved!.battles ??= { list: [], day: battleDay(now), n: 0, meets: 0, pitched: 0 }), d = battleDay(now);
+  if (bs.day !== d) { bs.day = d; bs.n = 0; bs.meets = 0; }
+  return bs;
+}
+const changed = (now: number) => { battleVer++; dirtyAt ||= now; };
+/** Is the time [start, end] free of every battle not yet over (one battle at a time)? */
+const free = (bs: BattleSave, start: number, end: number) => bs.list.every((b) => !!b.result || b.end <= start || b.start >= end);
+/** Pitched battles still to come today (they keep their places under BATTLE.perDay). */
+const pitchedLeft = (bs: BattleSave, now: number) => pitchedTimes(battleDay(now)).filter((t) => t > now && t > bs.pitched).length;
+
+/**
+ * The battles' clock (every room each second, and the war's own timer): announces the pitched battle BATTLE.noticeMs
+ * before its slot, sets each battle's pools at its start, and steps every battle being fought in whole BATTLE.stepMs
+ * steps up to `now` (by time, so any number of callers step it once), the live deaths reported meanwhile filling each
+ * step's quota. Idempotent.
+ */
+export function battleClock(now = Date.now()) {
+  if (!saved || !BATTLE.live) return;
+  const bs = book(now), s = saved.state;
+  const slot = pitchedSlot(now);
+  if (slot.at - now <= BATTLE.noticeMs && slot.at > bs.pitched) {
+    bs.pitched = slot.at; changed(now);
+    const taken = new Set(bs.list.filter((b) => !b.result).map((b) => b.t));
+    const site = bs.n < BATTLE.perDay && free(bs, slot.at, slot.at + BATTLE.maxMs) ? pickPitched(s, (t) => taken.has(t)) : undefined;
+    const f = site && battleField(site.from, site.t);
+    if (site && f) add(newBattle(site, "pitched", f.x, f.y, slot.at, 0, 0), now);
+  }
+  for (const b of [...bs.list]) {
+    if (b.result || now < b.start) continue;
+    if (!b.begun && !begin(b, now)) continue;
+    const step = BATTLE.stepMs;
+    while (!b.result && b.start + b.el * 1000 + step <= now + 1e-6) {
+      const live = pendingLive.get(b.id) ?? [0, 0];
+      pendingLive.delete(b.id);
+      battleStep(b, step / 1000, live);
+      changed(now);
+    }
+    if (b.result && b.done === undefined) { b.done = now; pendingLive.delete(b.id); battleNews.push({ kind: "end", b }); }
+  }
+  trimNews();
+}
+function add(b: Battle, now: number) {
+  const bs = book(now);
+  bs.list.push(b); bs.n++;
+  if (b.kind === "meet") bs.meets++;
+  battleNews.push({ kind: "announce", b }); changed(now);
+}
+/** A battle's start: the pools from the forces of the orders for the tick it feeds (false: called off, the land changed hands or the siege lifted). */
+function begin(b: Battle, now: number): boolean {
+  const s = saved!.state, bs = book(now);
+  const off = s.owner[b.t] !== b.b || (b.kind === "pitched" && s.owner[b.from] !== b.a) || (b.kind === "storm" && s.siege[b.t]?.by !== b.a);
+  if (off) { bs.list.splice(bs.list.indexOf(b), 1); battleNews.push({ kind: "off", b }); changed(now); return false; }
+  const phase = warPhase(saved!.next), dep = deployments(s, saved!.ahead ?? {}, phase);
+  let fa: number, fd: number;
+  const col = (k: ClanKey, from: number, to: number) => marches.find((m) => m.clan === k && m.from === from && m.to === to)?.force;
+  if (b.kind === "meet" && col(b.a, b.from, b.t) !== undefined) { fa = col(b.a, b.from, b.t)!; fd = col(b.b, b.t, b.from) ?? dep.defence[b.t]; }
+  else [fa, fd] = siteForces(s, b.kind, b.t, b.a, dep.attack[b.t], dep.defence[b.t], phase);
+  setMen(b, fa, fd);
+  battleNews.push({ kind: "start", b }); changed(now);
+  return true;
+}
+
+/**
+ * After a tick: a storming for a siege due at the next tick on a close margin (the closest), else the largest meeting
+ * of two big columns of clans at war (at most BATTLE.meetPerDay a day), each fought inside this interval and only when
+ * no other battle overlaps it and the day's cap (less the pitched battles still to come) allows.
+ */
+function planBattles(at: number) {
+  if (!saved || !BATTLE.live) return;
+  const bs = book(at), s = saved.state, next = at + WAR.tickMs, latest = next - BATTLE.tickSlackMs;
+  if (bs.n + pitchedLeft(bs, at) >= BATTLE.perDay) return;
+  const phase = warPhase(next), dep = deployments(s, saved.ahead ?? {}, phase), supply = supplyMap(s);
+  let best = -1, bm = Infinity;
+  for (let t = 0; t < s.owner.length; t++) {
+    if (!isDecisive(s, t, dep.attack[t], dep.defence[t], phase, supply)) continue;
+    const [x, y] = siteForces(s, "storm", t, s.siege[t]!.by, dep.attack[t], dep.defence[t], phase, supply), m = Math.abs(Math.log(Math.max(1e-9, x) / Math.max(1e-9, y)));
+    if (m < bm) { bm = m; best = t; }
+  }
+  const start = at + BATTLE.stormLeadMs, end = Math.min(start + BATTLE.shortMs, latest);
+  if (best >= 0 && free(bs, start, end)) {
+    const by = s.siege[best]!.by, q = stormField(s.owner, best, by) ?? { x: TERRITORIES[best].cx * TILE, y: TERRITORIES[best].cy * TILE };
+    const near = TERRITORIES[best].near.find((n) => s.owner[n] === by) ?? best;
+    add(newBattle({ t: best, from: near, a: by, b: s.owner[best] }, "storm", q.x, q.y, start, 0, 0, end - start), at);
+    return;
+  }
+  if (bs.meets >= BATTLE.meetPerDay) return;
+  const pairs = warMeetings().flatMap((mt) => { const a = marchOf(mt.a), b = marchOf(mt.b); return a && b ? [{ a, b, mt }] : []; });
+  for (const { a, b, mt } of pickMeetings(pairs, pairs.length)) {
+    const site = meetSite(a, b), e = Math.min(mt.at + BATTLE.shortMs, latest);
+    if (!site || e - mt.at < BATTLE.minMs || !free(bs, mt.at, e)) continue;
+    add(newBattle({ t: site.t, from: site.from, a: site.a, b: site.b }, "meet", mt.x, mt.y, mt.at, site.forceA, site.forceB, e - mt.at), at);
+    return;
+  }
+}
+
+/** The tick's battle outcomes (rules.ts TickExtra.battle): every battle over and not yet fed, once; old ones are dropped. */
+function battleOutcomes(at: number): NonNullable<TickExtra["battle"]> {
+  const bs = saved?.battles;
+  if (!bs) return [];
+  const out: NonNullable<TickExtra["battle"]> = [];
+  for (const b of bs.list) if (b.result && !b.fed) { const o = battleOutcome(b); if (o) out.push(o); b.fed = true; }
+  bs.list = bs.list.filter((b) => !(b.fed && at - (b.done ?? 0) > BATTLE.keepMs));
+  for (const id of [...heroCaps.keys()]) if (!bs.list.some((b) => b.id === id)) { heroCaps.delete(id); clanCaps.delete(id); fielded.delete(id); }
+  if (out.length) battleVer++;
+  lastFed = out;
+  return out;
+}
+let lastFed: NonNullable<TickExtra["battle"]> = [];
+/** Tests: the battle outcomes the last war tick was given. */
+export const _battleFed = () => lastFed;
+
+/** The battles announced, being fought or just over (oldest first). */
+export const warBattles = (): readonly Battle[] => saved?.battles?.list ?? [];
+/** Bumped on every battle change rooms pass on ("battle"). */
+export const battlesVersion = () => battleVer;
+/** The battle news since the last call (each room keeps its own read position: `from`), and the new position. */
+export function battleNewsSince(from: number): { news: BattleNews[]; at: number } {
+  return { news: Number.isFinite(from) ? battleNews.slice(Math.max(0, from - newsBase)) : [], at: newsBase + battleNews.length };
+}
+let newsBase = 0;
+/** Keeps the last 64 news entries (a room more than 64 behind skips the oldest). */
+function trimNews() { if (battleNews.length > 64) { const n = battleNews.length - 64; battleNews.splice(0, n); newsBase += n; } }
+const byId = (id: string) => saved?.battles?.list.find((b) => b.id === id);
+const fighting = (id: string) => { const b = byId(id); return b && b.begun && !b.result ? b : undefined; };
+
+/** `n` men of side `side` (0 attacker, 1 defender) fell in a room: they fill the next step's quota (only the excess costs extra). */
+export function battleDeath(id: string, side: 0 | 1, n = 1): boolean {
+  if (!fighting(id) || !(n > 0) || (side !== 0 && side !== 1)) return false;
+  const p = pendingLive.get(id) ?? [0, 0];
+  p[side] += n; pendingLive.set(id, p);
+  return true;
+}
+/**
+ * Room `room` fields `n` men a side of battle `id` now: what it may field, its share of the pools left after what other
+ * rooms (reported within 5 s) field. Every room calls it each second for the battle it has live.
+ */
+export function battleFielded(id: string, room: unknown, n: [number, number], now = Date.now()): [number, number] {
+  const b = fighting(id);
+  if (!b) return [0, 0];
+  let m = fielded.get(id);
+  if (!m) fielded.set(id, (m = new Map()));
+  m.set(room, { n: [Math.max(0, n[0]), Math.max(0, n[1])], at: now });
+  const others: [number, number] = [0, 0];
+  for (const [r, f] of m) { if (now - f.at > 5000) { m.delete(r); continue; } if (r !== room) { others[0] += f.n[0]; others[1] += f.n[1]; } }
+  return [Math.max(0, b.men[0] - others[0]), Math.max(0, b.men[1] - others[1])];
+}
+/** A room counted banner `i`'s ring (siege.ts frontStep, the siege fronts' hysteresis): true when its holder changed. */
+export function battleFront(id: string, i: number, atk: number, def: number, now = Date.now()): Side | undefined {
+  const b = fighting(id), f = b?.banners[i];
+  if (!f || !frontStep(f, atk, def, now)) return undefined;
+  changed(now);
+  return f.holder;
+}
+/** A captain of side `side` fell: that side kills slower for the rest of the battle. False when it has none left. */
+export function battleCaptain(id: string, side: 0 | 1, now = Date.now()): boolean {
+  const b = fighting(id);
+  if (!b || b.captains[side] >= BATTLE.captains) return false;
+  b.captains[side]++; changed(now);
+  return true;
+}
+/**
+ * What a hero may still take from battle `id`: `kill` valor (BATTLE.killValorCap) or `renown` (BATTLE.renownCap).
+ * Books and returns the share of `amount` granted.
+ */
+export function battleGrant(id: string, name: string, kind: "kill" | "renown", amount: number): number {
+  if (!byId(id) || !(amount > 0)) return 0;
+  let m = heroCaps.get(id);
+  if (!m) heroCaps.set(id, (m = new Map()));
+  const c = m.get(name) ?? { kill: 0, renown: 0 }, cap = kind === "kill" ? BATTLE.killValorCap : BATTLE.renownCap;
+  const add = Math.max(0, Math.min(amount, cap - c[kind]));
+  c[kind] += add; m.set(name, c);
+  return add;
+}
+/** Valor clan `k` may still bring in from battle `id` (BATTLE.valorCap a clan): booked and returned. */
+export function battleClanValor(id: string, k: ClanKey, amount: number): number {
+  if (!byId(id) || !(amount > 0)) return 0;
+  let m = clanCaps.get(id);
+  if (!m) clanCaps.set(id, (m = new Map()));
+  const add = Math.max(0, Math.min(amount, BATTLE.valorCap - (m.get(k) ?? 0)));
+  m.set(k, (m.get(k) ?? 0) + add);
+  return add;
+}
+/** Tests and the bench: a battle of this kind at `site` starting at `start` (ms), placed at once, whatever the schedule. */
+export function _forceBattle(site: BattleSite, kind: Battle["kind"], start: number, x: number, y: number, ms?: number): Battle | undefined {
+  if (!saved) return undefined;
+  const b = newBattle(site, kind, x, y, start, 0, 0, ms);
+  add(b, Date.now());
+  return b;
+}
+
+
 export const warLog = (n = 50): WarEvent[] => (saved ? saved.log.slice(-n) : []);
 export const warState = (): WarState | undefined => saved?.state;
 /** The orders the leaders gave in the last war tick (not saved), or undefined before the first tick of this process. */
@@ -448,6 +676,7 @@ export function flushWar() { if (saved && kv?.setSync) try { kv.setSync(KEY, sav
 export function _resetWar(s?: Saved, store?: Kv) {
   stopWar(); saved = s ?? fresh(Date.now()); saved.names ??= namesNow(); kv = store; valor = TERRITORIES.map(() => ({})); lastOrders = undefined; lastStrikes = []; lastPlans = {}; lastRaided = []; relate(saved.rel ?? []);
   marches = []; paths.clear(); meets = undefined; seenLive.clear(); halting.clear(); joined.clear(); dirtyAt = 0; colVersion++;
+  pendingLive.clear(); fielded.clear(); heroCaps.clear(); clanCaps.clear(); battleNews.length = 0; cleanBattles(); battleVer++;
   if (saved.ahead) lookAhead(saved.next - WAR.tickMs); // (no orders ahead: given at the first tick, as before W4)
 }
 /** Tests: set the last tick's orders; they are the orders ahead too (the plan and the columns follow them). */

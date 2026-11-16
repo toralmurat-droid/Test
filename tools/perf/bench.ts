@@ -14,6 +14,7 @@
 //   TUNNEL=1 (with WAR=1): the Hide-Kin are ordered through a tunnel and the last bot stands at its mouth (server/warTunnels.ts)
 //   HOLDFIGHT=1 (with WAR=1): the bots, sworn to the Redfang, hop about the courtyards of three Wardens Holds; the troopers chase them round the walls (shared/war/holdRoutes.ts)
 //   COLUMN=1 (with WAR=1): a clan is ordered to attack along a war road and its column (shared/war/marches.ts) marches past the first bot, kept live the whole run (server/warMarches.ts)
+//   BATTLE=1 (with WAR=1): a pitched battle (shared/war/battles.ts) is fought at an Act 1 front, full pools (300 a side), with the first bot (sworn to the defender) in the middle of the field the whole run (server/warBattles.ts)
 //   RITUAL=1 (with WAR=1): the rituals run on a clock shifted to noon and the second bot stands at the circle (server/warRituals.ts)
 //   CAST=1 SPREAD=1: the Summoner bots cast wisps, blades, black holes and the Void Arsenal non-stop (tools/perf/bots.ts)
 //   TIDE=1: a Gloam Tide march is out the whole time, its last wave all at once (TIDE.maxAlive marchers, server/tide.ts)
@@ -148,6 +149,27 @@ async function main() {
       break outer;
     }
   }
+  let battleId = "";
+  if (process.env.BATTLE && process.env.WAR) {
+    // a pitched battle at the first Act 1 front with a field, started a second ago with full pools; bot 0, sworn to the defender, stands in the middle
+    const { warState, _forceBattle, battleClock } = await import("../../server/war"), { battleField } = await import("../../shared/war/battles");
+    const { TERRITORIES } = await import("../../shared/war/territories");
+    const st = warState()!;
+    outer: for (const t of TERRITORIES) {
+      if (t.act !== 1 || t.capitalOf || t.id === siegeLand || t.id === tunnelLand) continue;
+      for (const n of t.near) {
+        const f = st.owner[n] !== st.owner[t.id] ? battleField(n, t.id) : undefined;
+        if (!f) continue;
+        const b = _forceBattle({ t: t.id, from: n, a: st.owner[n], b: st.owner[t.id] }, "pitched", Date.now() - 1000, f.x, f.y, 60 * 60_000)!;
+        battleClock(Date.now());
+        b.men0 = [300, 300]; b.men = [300, 300]; // (full pools: the battle lasts the whole run)
+        battleId = b.id;
+        const p0 = [...room.state.players.values()][0], pin = () => { if (!p0) return; p0.clan = b.b; p0.level = Math.max(p0.level, 30); p0.hp = p0.maxHp = 1e7; p0.x = f.x; p0.y = f.y; };
+        pin(); setInterval(pin, 300).unref();
+        break outer;
+      }
+    }
+  }
   if (process.env.HOLDFIGHT && process.env.WAR) {
     // heroes sworn to another clan stand about in the courtyards of three Act 1 Holds (moving tile to tile); the holders' troopers chase them
     const { warState } = await import("../../server/war"), { TERRITORIES } = await import("../../shared/war/territories");
@@ -183,6 +205,7 @@ async function main() {
     ...(siegeLand >= 0 ? { siege: siegeLand, siegeTroopers: room.sieges.count } : {}),
     ...(tunnelLand >= 0 ? { tunnel: tunnelLand, tunnelTroopers: room.tunnels.count } : {}),
     ...(columnId ? { column: columnId, columnTroopers: room.marches.count } : {}),
+    ...(battleId ? { battle: battleId, battleTroopers: room.battles.count, battleFighting: (() => { let n = 0; room.state.mobs.forEach((m: any, id: string) => { if (room.battles.owns(id) && !m.dead && m.target) n++; }); return n; })() } : {}),
     ...(ritualLand >= 0 ? { ritual: ritualLand, ritualTroopers: room.rituals.count, ritualState: room.rituals._ritual?.state } : {}),
   }));
   if (dropped) console.error(`BENCH INVALID: ${dropped} of ${BOTS} bots lost their connection during the run, so the numbers above are not a measurement`);

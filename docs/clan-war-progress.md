@@ -992,10 +992,42 @@ in every act.
   lost it fails the siege, a draw leaves the usual check. Numbers in `WAR.battle*`. No battle: the tick is identical
   (golden hash over 600 seeded ticks with valor and march extras, `tests/warbattles.test.ts`).
 - **Sim** (`npx tsx tools/balance/war.ts 200 30`): without `--battles` identical (21.8 / 22.0 / 19.9 / 16.2 / 20.0 %,
-  5.59 flips a day, domination 0.0 %). `--battles`: Wardens 22.0 / Redfang 21.8 / Host 19.8 / Hide-Kin 16.3 / Veiled
-  20.1 %, 5.73 flips a day (+2.5 %), domination 0.0 %; per war day 2.87 pitched (attacker 54.9 / defender 42.2 / draw
-  2.9 %), 2.45 stormings (35.9 / 56.6 / 7.5 %, 0.88 flips), 0.59 meetings; 171 men a side, 6.1 min fought.
-  `--battle-heroes=redfang:1.3`: Redfang 22.0 %, 6.56 flips, domination 0.0 %.
+  5.59 flips a day, domination 0.0 %). `--battles` (stormings and meetings fought for at most `shortMs` 8 min, inside
+  one tick interval): Wardens 22.0 / Redfang 21.9 / Host 19.8 / Hide-Kin 16.3 / Veiled 20.0 %, 5.92 flips a day
+  (+5.9 %), domination 0.0 %; per war day 2.87 pitched (attacker 54.5 / defender 42.5 / draw 3.0 %), 2.43 stormings
+  (36.4 / 54.3 / 9.3 %, 0.88 flips), 0.61 meetings; 171 men a side, 6.0 min fought. `--battle-heroes=redfang:1.3`:
+  Redfang 22.0 %, 6.62 flips, domination 0.0 %.
 - **The live war follows the `--battles` numbers**: battles are on by default (`BATTLE.live`) and are fought with no
   players too, so the no-player goal is now judged on the `--battles` run (accepted by the orchestrator as long as the
   gate holds: domination 0 %, top clan <= 23 %, flips within +-15 % of 5.59).
+- **Step 2, server** (`server/war.ts`, `server/warBattles.ts`, 9 one-line hooks in `TownRoom.ts`):
+  - War: `battles?: {list, day, n, meets, pitched}` in the war save (`v` stays 1, read through `cleanBattle`, dropped
+    on a map change like `ahead` / `cols`). `battleClock(now)` (each room's second and the war's 15 s timer; by time,
+    so idempotent) announces the pitched battle 30 min ahead (`pickPitched`), sets the pools at the start from the
+    deployments of the orders ahead (`setMen`; a meeting from its columns' forces), calls a battle off if the land
+    changed hands or the siege lifted, and steps every battle in whole 2 s steps. After each tick `planBattles`: a
+    storming (the closest decisive siege due next tick, 30 s after the tick, done 20 s before the next) or else the
+    largest meeting of columns of 6+ men of clans at war (at most 2 a day). One battle at a time, 6 a day (the
+    pitched ones keep their places). Outcomes go into the next `warTick` once (`_battleFed`); finished battles stay
+    listed a minute. Room API: `warBattles`, `battlesVersion`, `battleNewsSince`, `battleDeath` (live deaths fill the
+    next step's quota), `battleFielded` (each room's share of the pools: no two rooms field the same men),
+    `battleFront` (banner hysteresis), `battleCaptain`, `battleGrant` (kill valor 30, renown 60 per hero per battle),
+    `battleClanValor` (60 per clan per battle), `_forceBattle` (tests, bench).
+  - Room (`WarBattles` behind `BattleHost`): within 30 tiles of a living hero above ground, up to 70 troopers a side
+    in two lines across the field's axis, the first 2 of each side captains (`Mob.title` "Captain of the ...", 3x HP);
+    reserves from the rear every 20 s; banners counted every 2 s (troopers + 2 x active sworn heroes, `frontStep`).
+    Battle soldiers fight each other at `BATTLE.troopDmg` 0.2 (the pools decide, the lines show it). Their slots are
+    their own (`BATTLE.extraTroops` 140 on top of `WAR_TROOPS.maxTroops`), so the patrols, sieges and columns keep
+    theirs and the cap is back to normal when the men go. Kills: `killPts` (+5 for a captain) under the battle's cap
+    instead of the war tick's; the room pays no other kill valor for them. End: sworn heroes of either side in the
+    field 2 min or more (moved in the last 15 s) get 15 / 5 valor (clan cap 60) and 25 / 10 renown (hero cap 60), the
+    winner's also gold (`battleGold`). Herald lines at the announcement, 5 min before, the start, a captain's fall,
+    the end and a call-off.
+  - Messages: `"battle"` = `BattleMsg { now, list: BattleView[] }` (on join, after each tick, on any change at most
+    every 2 s); sfx `battle_horn {id, x, y, a, b}`, `battle_banner {id, i, x, y, clan}`, `battle_officer {id, x, y,
+    clan}`, `battle_end {id, x, y, result}` (client sounds and the battle-din loop: art-audio, step 5).
+  - Bench (`npm run bench`, noisy 4-core container): `WAR=1` 5 bots 4.37 ms avg / 7.3 p95; `WAR=1 BATTLE=1` 6.96 /
+    15.7 (138 battle troopers, 118 fighting); 20 bots `SPREAD=1 BATTLE=1` 13.63 / 23.0, 19.8 ticks/s, no drops;
+    `DEFLATE=1 BATTLE=1` 13.5 kB/s on the wire per player.
+  - Open: leader lines (`WarMoment` battle moments, content step 3), captain names, the client (step 4), sounds
+    (step 5), the patch note; per-battle caps are memory only (a restart mid-battle resets them).

@@ -117,6 +117,7 @@ import { WarCaravans } from "./warCaravans";
 import { WarSieges } from "./warSieges";
 import { WarTunnels } from "./warTunnels";
 import { WarMarches } from "./warMarches";
+import { WarBattles } from "./warBattles";
 import { WarRituals } from "./warRituals";
 import { WarHolds } from "./warHolds";
 import { WarOaths } from "./warOaths";
@@ -692,7 +693,7 @@ export class TownRoom extends Room<TownState> {
       const s = this.state.projectiles.get(`s${this.shotSeq}`);
       if (s) { s.damage = dmg; s.mobName = by; s.troop = clan; }
     },
-    strikeMob: (mid, tid, dmg) => { const m = this.state.mobs.get(mid), o = this.state.mobs.get(tid); if (m && o && !o.dead) { this.broadcast("swing", { id: mid }); this.mobHitsMob(m, mid, o, tid, dmg); } },
+    strikeMob: (mid, tid, dmg) => { const m = this.state.mobs.get(mid), o = this.state.mobs.get(tid); if (m && o && !o.dead) { this.broadcast("swing", { id: mid }); this.mobHitsMob(m, mid, o, tid, dmg * this.battles.dmgMult(mid, tid)); } }, // (battle lines on each other: BATTLE.troopDmg)
     ranked: (pid, rank) => { const c = this.clients.getById(pid), p = this.state.players.get(pid); if (c && p) { c.send("clan", clanView(p)); c.send("chat", { id: "", name: "Herald", text: `Your renown grows: you are now ${rank}.` }); } },
     reserved: (): number => this.caravans.count + this.sieges.count + this.tunnels.count + this.rituals.count + this.feuds.count + this.marches.count, // caravans, sieges, tunnels, rituals, manhunters, columns, then patrols
   });
@@ -754,6 +755,15 @@ export class TownRoom extends Room<TownState> {
     ranked: (pid, rank) => { const c = this.clients.getById(pid), p = this.state.players.get(pid); if (c && p) { c.send("clan", clanView(p)); c.send("chat", { id: "", name: "Herald", text: `Your renown grows: you are now ${rank}.` }); } },
   }, this.warTroops);
 
+  /** Big battles (server/warBattles.ts, W5): both armies' lines near heroes, in BATTLE.extraTroops slots of their own; the "battle" message. */
+  private battles: WarBattles = new WarBattles({
+    spawn: (id, level, x, y, weapon) => { this.spawnMob("trooper", -1, id, { x, y, level }); const m = this.state.mobs.get(id); if (m) m.weapon = weapon; return m; },
+    remove: (id) => { this.state.mobs.delete(id); }, mob: (id) => this.state.mobs.get(id),
+    heroes: () => this.state.players.entries(), hero: (id) => this.state.players.get(id), broadcast: (type, msg) => this.broadcast(type, msg),
+    tell: (pid, text) => this.clients.getById(pid)?.send("chat", { id: "", name: "Herald", text }), pay: (pid, gold) => this.payHero(pid, gold),
+    ranked: (pid, rank) => { const c = this.clients.getById(pid), p = this.state.players.get(pid); if (c && p) { c.send("clan", clanView(p)); c.send("chat", { id: "", name: "Herald", text: `Your renown grows: you are now ${rank}.` }); } },
+  }, this.warTroops);
+
   /** Sacking Holds (server/warHolds.ts): a hero the holder fights raises their banner in an unguarded Hold. */
   private holds = new WarHolds({
     heroes: () => this.state.players.entries(), hero: (id) => this.state.players.get(id), mobsInBox: (x, y, r) => this.state.mobs.inBox(x, y, r),
@@ -783,7 +793,7 @@ export class TownRoom extends Room<TownState> {
     liveRooms.add(this);
     const offNews = attachWar(this), offTroops = onWar((v, _e, news) => {
       this.holdWalls.syncWar(warState()); // a land that changed hands raises its new holder's fort at once, a Hold that grew its new tier's
-      this.sieges.tick(Date.now()); this.marches.onWar(); this.warTroops.onWar(v); this.writs.onWar(v);
+      this.sieges.tick(Date.now()); this.marches.onWar(); this.battles.onWar(); this.warTroops.onWar(v); this.writs.onWar(v);
       planAll(this.state.players.entries(), (id) => this.clients.getById(id)); // each clan's new plan to its sworn only (server/warIntel.ts)
       const r = news.rally?.clan; // the Rally came to a clan: its sworn heroes here hear what it means for them
       if (r) for (const [id, p] of this.state.players.entries()) if (p.clan === r) this.clients.getById(id)?.send("chat", { id: "", name: "Herald", text: rallyTell(r) });
@@ -859,6 +869,7 @@ export class TownRoom extends Room<TownState> {
       this.rituals.tick(Date.now());
       relate(); this.feuds.tick(Date.now()); // the clans at war (shared/war/feuds.ts), feuds decay, manhunters out and home
       this.marches.tick(Date.now()); // marching columns near heroes (server/warMarches.ts), before the patrols take what is left
+      this.battles.tick(Date.now()); // big battles: the clock, and the lines near heroes in slots of their own (server/warBattles.ts)
       this.holds.tick(Date.now()); // banners going up in sacked Holds; a sacked Hold's guards stay down (server/warHolds.ts)
       this.warTroops.tick(Date.now());
       this.oaths.sync(); // a rank up from any source (standards, kills, writs, caravans) reaches the tabards
@@ -1220,6 +1231,7 @@ export class TownRoom extends Room<TownState> {
     client.send("siege", this.sieges.view()); // the live siege battle's fronts (server/warSieges.ts)
     client.send("tunnels", this.tunnels.view()); // Hide-Kin tunnel mouths (server/warTunnels.ts)
     this.marches.join(client, p); // the war roads and the marching columns (server/warMarches.ts)
+    this.battles.join(client); // the big battles announced and fought (server/warBattles.ts)
     client.send("rituals", this.rituals.view()); // the Veiled noon ritual circle (server/warRituals.ts)
     client.send("holds", this.holds.view()); // sacked Holds and banners going up (server/warHolds.ts)
     client.send("clan", clanView(p));
@@ -1250,7 +1262,7 @@ export class TownRoom extends Room<TownState> {
     this.tradeStop(client.sessionId, "The other hero left: trade cancelled.");
     this.tradeAsks.delete(client.sessionId);
     this.state.players.delete(client.sessionId);
-    this.warTroops.forget(client.sessionId); this.holds.forget(client.sessionId); this.caravans.forget(client.sessionId); this.sieges.forget(client.sessionId); this.tunnels.forget(client.sessionId); this.rituals.forget(client.sessionId); this.marches.forget(client.sessionId);
+    this.warTroops.forget(client.sessionId); this.holds.forget(client.sessionId); this.caravans.forget(client.sessionId); this.sieges.forget(client.sessionId); this.tunnels.forget(client.sessionId); this.rituals.forget(client.sessionId); this.marches.forget(client.sessionId); this.battles.forget(client.sessionId);
     this.oaths.leave(client.sessionId); // (after players.delete) the tabard goes for everyone
     this.feuds.forget(client.sessionId); this.feuds.leave(client.sessionId); // (likewise) the Wanted mark goes, the manhunters go home
     this.unsummon(client.sessionId);
@@ -3468,7 +3480,7 @@ export class TownRoom extends Room<TownState> {
     if (m.dead) { m.moving = false; m.winding = false; m.windUntil = 0; return; }
     if (m.owner) return this.updateSummon(m, id, dt, now);
     if (this.dummies.has(id)) { m.moving = false; m.winding = false; return; } // skill clip targets stand still
-    if (m.kind === "trooper") return this.caravans.owns(id) ? this.caravans.step(m, id, dt, now) : this.sieges.owns(id) ? this.sieges.step(m, id, dt, now) : this.tunnels.owns(id) ? this.tunnels.step(m, id, dt, now) : this.rituals.owns(id) ? this.rituals.step(m, id, dt, now) : this.marches.owns(id) ? this.marches.step(m, id, dt, now) : this.feuds.owns(id) ? this.feuds.step(m, id, dt, now) : this.warTroops.step(m, id, dt, now); // clan troops and caravans (server/warTroops.ts, server/warCaravans.ts)
+    if (m.kind === "trooper") return this.caravans.owns(id) ? this.caravans.step(m, id, dt, now) : this.sieges.owns(id) ? this.sieges.step(m, id, dt, now) : this.tunnels.owns(id) ? this.tunnels.step(m, id, dt, now) : this.rituals.owns(id) ? this.rituals.step(m, id, dt, now) : this.marches.owns(id) ? this.marches.step(m, id, dt, now) : this.battles.owns(id) ? this.battles.step(m, id, dt, now) : this.feuds.owns(id) ? this.feuds.step(m, id, dt, now) : this.warTroops.step(m, id, dt, now); // clan troops and caravans (server/warTroops.ts, server/warCaravans.ts)
     if (m.banishAt && now >= m.banishAt && !m.specialAt) {
       // the summoned demon's time is up: it sinks back into the ground
       this.broadcast("banish", { id, x: Math.round(m.x), y: Math.round(m.y) });
@@ -5563,7 +5575,7 @@ export class TownRoom extends Room<TownState> {
     const m = this.state.mobs.get(targetId);
     if (!m || m.dead) return;
     if (a && !this.canHurtMob(attackerId, m)) return;
-    if (a && m.kind === "trooper") { this.warTroops.hit(attackerId, m); this.caravans.hit(attackerId, targetId); this.sieges.hit(attackerId, targetId); this.tunnels.hit(attackerId, targetId); this.rituals.hit(attackerId, targetId); this.marches.hit(attackerId, targetId); const tc = parseTroop(m.weapon)?.clan; if (tc) this.feuds.struck(attackerId, tc); } // an enemy hero's blow (a grudge with its clan starts over): the trooper (and a caravan's escort) turns on them
+    if (a && m.kind === "trooper") { this.warTroops.hit(attackerId, m); this.caravans.hit(attackerId, targetId); this.sieges.hit(attackerId, targetId); this.tunnels.hit(attackerId, targetId); this.rituals.hit(attackerId, targetId); this.marches.hit(attackerId, targetId); this.battles.hit(attackerId, targetId); const tc = parseTroop(m.weapon)?.clan; if (tc) this.feuds.struck(attackerId, tc); } // an enemy hero's blow (a grudge with its clan starts over): the trooper (and a caravan's escort) turns on them
     if (m.owner && a) dmg = Math.max(1, Math.round(dmg / SUMMON.pvp.hp)); // a hero's blow on someone's creature (SUMMON.pvp)
     const def = mobDef(m);
     if (a && (m.camp || m.kind === "banditchief")) this.banditShout(m, targetId, attackerId, Date.now());
@@ -5726,11 +5738,12 @@ export class TownRoom extends Room<TownState> {
       this.rituals.killed(m, targetId, attackerId); // an acolyte falls; the last one breaks the ritual (server/warRituals.ts)
       this.marches.killed(m, targetId, attackerId); // a column soldier: one man fewer reaches the target (server/warMarches.ts)
       const tr = parseTroop(m.weapon), kid = this.state.players.has(attackerId) ? attackerId : this.state.mobs.get(attackerId)?.owner || undefined; // (a hero's creature kills in their name)
+      const inBattle = this.battles.killed(m, targetId, kid); // a battle soldier: the pools' quota, kill valor under the battle's cap (server/warBattles.ts)
       const patrol = this.warTroops.owns(targetId), k = this.warTroops.killed(m, targetId, kid ?? attackerId); // (a patrol's kill valor is paid there)
       if (k) this.writs.trooperKilled(kid ?? attackerId, k.t, k.clan);
       this.feuds.killed(targetId); // a manhunter (server/warFeuds.ts)
       if (tr && kid) this.feuds.onKill(kid, tr.clan, tr.part); // kill points with its clan: Wanted, Hunted, Marked
-      if (tr && kid && !patrol && !tr.object) this.warTroops.killValor(kid, tr.clan, tr.officer ? "officer" : "soldier"); // siege, escort, tunnel, acolyte, manhunter: valor for a clan at war (W2c)
+      if (tr && kid && !patrol && !inBattle && !tr.object) this.warTroops.killValor(kid, tr.clan, tr.officer ? "officer" : "soldier"); // siege, escort, tunnel, acolyte, manhunter: valor for a clan at war (W2c)
     }
     if (m.champ) this.champs.died(m, targetId); // its ballista falls with it
     m.dead = true; m.hp = 0;
@@ -6634,7 +6647,7 @@ export class TownRoom extends Room<TownState> {
     }
     if (riseAgain(this.host, tid)) return false; // Blood Pact: a killing blow leaves the vampire standing
     t.dead = true;
-    this.warTroops.forget(tid); this.caravans.forget(tid); this.sieges.forget(tid); this.tunnels.forget(tid); this.rituals.forget(tid); this.marches.forget(tid); this.feuds.forget(tid); // the troops are done with a fallen hero
+    this.warTroops.forget(tid); this.caravans.forget(tid); this.sieges.forget(tid); this.tunnels.forget(tid); this.rituals.forget(tid); this.marches.forget(tid); this.battles.forget(tid); this.feuds.forget(tid); // the troops are done with a fallen hero
     { // feuds (server/warFeuds.ts): who killed them (a hero, a hero's creature, a clan's trooper or its javelin)
       const fm = opts.from ? this.state.mobs.get(opts.from) : undefined, hero = opts.from && this.state.players.has(opts.from) ? opts.from : fm?.owner || undefined;
       this.feuds.onHeroDeath(tid, { hero, clan: opts.troop ?? (fm?.kind === "trooper" ? parseTroop(fm.weapon)?.clan : undefined) });

@@ -232,7 +232,9 @@ test("live war (W4 review B1): with no players the server war plays exactly the 
   const { warOrders, warState, warMeetings } = await import("../server/war");
   const { COLUMN } = await import("../shared/war/marches");
   const { warPhase } = await import("../shared/war/view");
-  const t0 = 10_000_000_000_000, N = 300;
+  const { BATTLE } = await import("../shared/war/battles");
+  const t0 = 10_000_000_000_000, N = 300, battlesWere = BATTLE.live;
+  BATTLE.live = false; // (W5 battles off: they move the war with no players too, tests/warbattles-room.test.ts checks them)
   const run = async (check: boolean) => {
     _resetWar(saved(t0));
     const owners: string[] = [];
@@ -256,7 +258,7 @@ test("live war (W4 review B1): with no players the server war plays exactly the 
     Object.assign(COLUMN, { clashLoss: 0, clashCap: 0 });
     const b = await run(false);
     assert.deepEqual(b.owners, a.owners, "the clash formula plays no part");
-  } finally { Object.assign(COLUMN, saved2); }
+  } finally { Object.assign(COLUMN, saved2); BATTLE.live = battlesWere; }
   assert.ok(a.meetings > 0, `columns met (${a.meetings}) and cost nothing`);
 });
 

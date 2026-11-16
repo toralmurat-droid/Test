@@ -44,6 +44,12 @@ export const BATTLE = {
   startBanners: ["atk", "def", "atk"] as Side[],
   /** A side below breakAt of its starting men breaks; after maxMs it ends anyway. The higher share left wins, within drawWithin a draw. */
   breakAt: 0.3, maxMs: 12 * 60_000, drawWithin: 0.05,
+  /** Stormings and meeting battles are fought inside one war-tick interval: at most this long (ms), and done this long before the tick. */
+  shortMs: 8 * 60_000, tickSlackMs: 20_000,
+  /** A storming starts this long after the tick that finds its siege due (the notice: the siege's own hour, and a horn). */
+  stormLeadMs: 30_000,
+  /** A storming or meeting battle with less than this left before the tick is not fought (ms); a finished battle stays in the list this long (ms). */
+  minMs: 3 * 60_000, keepMs: 60_000,
   // ---- the field ----
   /** The clear walkable box (tiles; the long side across the road) sought within fieldReach tiles of the war road's middle. */
   fieldLong: 20, fieldShort: 12, fieldReach: 24,
@@ -56,8 +62,12 @@ export const BATTLE = {
   wakeTiles: 30,
   /** Real troopers at most (both sides), and per side; reserves walk in from behind the lines this often (ms). */
   liveMax: 140, perSide: 70, reserveMs: 20_000,
-  /** A battle trooper fights within this of its place (px). */
+  /** A battle trooper strays at most this far from its place unseen before it is put back (px); it fights anywhere on the field. */
   leashPx: 6 * TILE,
+  /** The lines stand this far either side of the field's centre (tiles); the banners are counted this often (ms). */
+  lineGapTiles: 3, scoreMs: 2000,
+  /** A battle soldier's blow on one of the other side counts this much (the pools decide the battle; the live lines show it). */
+  troopDmg: 0.2,
   /** While a battle is live in a room, its trooper cap is WAR_TROOPS.maxTroops + extraTroops. */
   extraTroops: 140,
   /** Captains per side (officers with captainHp x the officer's HP); each one killed pays its killer captainValor. */
@@ -266,6 +276,32 @@ export function pickMeetings<T extends { a: March; b: March }>(ms: readonly T[],
 
 // ---- the battle --------------------------------------------------------------------------------------------------
 
+/** Re-reckons a battle's pools at its start (the forces of the orders for the tick it feeds), before any step. */
+export function setMen(b: Battle, forceA: number, forceB: number) {
+  b.men0 = [battleMen(forceA), battleMen(forceB)]; b.men = [b.men0[0], b.men0[1]]; b.acc = [0, 0]; b.begun = true;
+}
+
+const side01 = (v: unknown): v is Side => v === "atk" || v === "def";
+const pair = (v: unknown, lo: number, hi: number): v is [number, number] => Array.isArray(v) && v.length === 2 && v.every((x) => typeof x === "number" && Number.isFinite(x) && x >= lo && x <= hi);
+/**
+ * A battle read back from the war save (never trusted): undefined unless every field is whole and in range, so a save
+ * from an older or newer build only ever loses a battle, never breaks the war.
+ */
+export function cleanBattle(raw: unknown): Battle | undefined {
+  const b = raw as Battle | undefined, n = TERRITORIES.length;
+  if (!b || typeof b !== "object" || typeof b.id !== "string" || !["pitched", "storm", "meet"].includes(b.kind)) return undefined;
+  if (![b.t, b.from].every((x) => Number.isInteger(x) && x >= 0 && x < n) || !CLAN_KEYS.includes(b.a) || !CLAN_KEYS.includes(b.b) || b.a === b.b) return undefined;
+  if (![b.x, b.y, b.start, b.end, b.el].every((x) => typeof x === "number" && Number.isFinite(x)) || b.end <= b.start || b.el < 0) return undefined;
+  if (!pair(b.men0, 0, 1e4) || !pair(b.men, 0, 1e4) || !pair(b.acc, 0, 1e4) || !pair(b.captains, 0, BATTLE.captains)) return undefined;
+  if (!Array.isArray(b.banners) || b.banners.length !== BATTLE.startBanners.length || !b.banners.every((f) => f && side01(f.holder) && Number.isFinite(f.since) && (f.lead === undefined || side01(f.lead)))) return undefined;
+  if (b.result !== undefined && !["att", "def", "draw"].includes(b.result)) return undefined;
+  return {
+    id: b.id, kind: b.kind, t: b.t, from: b.from, a: b.a, b: b.b, x: b.x, y: b.y, start: b.start, end: b.end,
+    men0: [b.men0[0], b.men0[1]], men: [b.men[0], b.men[1]], acc: [b.acc[0], b.acc[1]], el: b.el,
+    banners: b.banners.map((f) => ({ holder: f.holder, since: f.since, ...(f.lead ? { lead: f.lead } : {}) })), captains: [b.captains[0], b.captains[1]],
+    ...(b.result ? { result: b.result } : {}), ...(b.begun ? { begun: true as const } : {}), ...(Number.isFinite(b.done) ? { done: b.done } : {}), ...(b.fed ? { fed: true as const } : {}),
+  };
+}
 /** Men a side brings for `force` (an attack, or a defence): clamp(round(force / perMan), menMin, menMax). */
 export function battleMen(force: number): number {
   const B = BATTLE, f = Number.isFinite(force) && force > 0 ? force : 0;
@@ -277,7 +313,7 @@ export interface Battle extends BattleSite {
   id: string; kind: BattleKind;
   /** Where (px): the field's centre, the storming's gate approach, the meeting point. */
   x: number; y: number;
-  /** Start and latest end (ms). */
+  /** Start and latest end (ms): the time limit is end - start (BATTLE.maxMs for a pitched battle, at most shortMs for the others). */
   start: number; end: number;
   /** Men at the start and now; the fractional losses not yet taken; seconds fought. */
   men0: [number, number]; men: [number, number]; acc: [number, number]; el: number;
@@ -286,12 +322,14 @@ export interface Battle extends BattleSite {
   /** Captains each side has lost. */
   captains: [number, number];
   result?: BattleResult;
+  /** Server bookkeeping (saved): the pools were set at the start (setMen); when it ended (ms); its outcome went into a war tick. */
+  begun?: true; done?: number; fed?: true;
 }
 
 /** A battle at its start: pools from the forces, the banners at their start holders. */
-export function newBattle(site: BattleSite, kind: BattleKind, x: number, y: number, start: number, forceA: number, forceB: number): Battle {
+export function newBattle(site: BattleSite, kind: BattleKind, x: number, y: number, start: number, forceA: number, forceB: number, ms = kind === "pitched" ? BATTLE.maxMs : BATTLE.shortMs): Battle {
   const men0: [number, number] = [battleMen(forceA), battleMen(forceB)];
-  return { ...site, id: `${kind}-${site.t}-${start}`, kind, x, y, start, end: start + BATTLE.maxMs, men0, men: [men0[0], men0[1]], acc: [0, 0], el: 0,
+  return { ...site, id: `${kind}-${site.t}-${start}`, kind, x, y, start, end: start + Math.max(BATTLE.stepMs, ms), men0, men: [men0[0], men0[1]], acc: [0, 0], el: 0,
     banners: BATTLE.startBanners.map((h) => ({ holder: h, since: start })), captains: [0, 0] };
 }
 
@@ -311,7 +349,7 @@ export function battleResult(b: Pick<Battle, "men0" | "men">): BattleResult {
  * One step of `dt` seconds (the server and the sim use BATTLE.stepMs): each side's quota of losses is k x the other's
  * men x the other's mult x dt, kept in fractional accumulators; `live` are the deaths the live ring had meanwhile
  * (attacker, defender): they count toward the quota and only those beyond it take extra men. Then a side under breakAt
- * of its start, or maxMs fought, ends it (sets `result`). Returns the men taken per side. A finished battle stays put.
+ * of its start, or its time limit (end - start) fought, ends it (sets `result`). Returns the men taken per side. A finished battle stays put.
  */
 export function battleStep(b: Battle, dt: number, live: readonly [number, number] = [0, 0], kMult: readonly [number, number] = [1, 1]): [number, number] {
   if (b.result || !(dt > 0)) return [0, 0];
@@ -324,7 +362,7 @@ export function battleStep(b: Battle, dt: number, live: readonly [number, number
     b.men[i] -= take; took[i] = take;
   }
   b.el += dt;
-  if (b.men[0] < B.breakAt * b.men0[0] || b.men[1] < B.breakAt * b.men0[1] || b.el * 1000 >= B.maxMs - 1e-6) b.result = battleResult(b);
+  if (b.men[0] < B.breakAt * b.men0[0] || b.men[1] < B.breakAt * b.men0[1] || b.el * 1000 >= b.end - b.start - 1e-6) b.result = battleResult(b);
   return took;
 }
 
