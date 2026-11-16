@@ -23,8 +23,10 @@ import { RENOWN_RANKS, rankOf } from "../shared/war/renown";
 import { TERRITORIES } from "../shared/war/territories";
 import { columnLead, parseTroop, troopLevel, troopStats, troopName, troopStance, troopWeapon, WAR_TROOPS, type TroopStance } from "../shared/war/troops";
 import type { WarView } from "../shared/war/view";
-import { rallyRenown } from "../shared/war/rules";
-import { FEUD, wantedTier, type FeudState } from "../shared/war/feuds";
+import { rallyRenown, targetsOf } from "../shared/war/rules";
+import { atWar, FEUD, wantedTier, type FeudState } from "../shared/war/feuds";
+import { STANDARD } from "../shared/war/standards";
+import { territoryAt } from "../shared/war/view";
 import { addValor, warNow, warState } from "./war";
 
 /** The parts of a hero this module reads (TownRoom's Player). */
@@ -83,6 +85,8 @@ export class WarTroops {
   private troops = new Map<string, Troop>();
   /** Kill valor per hero name in the current war tick (WAR_TROOPS.killValorPerTick). */
   private valor = new Map<string, { tick: number; n: number }>();
+  /** Lands whose Hold guards stay down until a war tick (holdGuardsOff). */
+  private guardsOff = new Map<number, number>();
   private seq = 0;
 
   constructor(private h: WarTroopsHost) {}
@@ -113,30 +117,66 @@ export class WarTroops {
     if (tr && this.stance(tr.clan, heroId) === "enemy") m.target = heroId;
   }
 
+  /** Is this one of the patrol troopers (a land's column or guards)? */
+  owns(id: string): boolean { return this.troops.has(id); }
+
   /**
-   * A trooper died (by any hand). A hero sworn to another clan standing in its land earns valor for their clan (capped
-   * per war tick). Returns the land and the trooper's clan when the killer was such a hero (war writs count it, cap or not).
+   * A patrol trooper died (by any hand). A hero sworn to another clan standing in its land gets the writ credit (returned:
+   * the land and the trooper's clan, cap or not), and kill valor when the clans are at war (killValor).
    */
   killed(m: TroopMob, id: string, killerId: string, now = Date.now()): { t: number; clan: ClanKey } | undefined {
     const tr = this.troops.get(id);
     if (!tr) return undefined;
     this.troops.delete(id);
     tr.slot.id = ""; tr.slot.fellAt = now;
-    const p = this.h.hero(killerId), t = TERRITORIES[tr.t], v = warNow();
-    if (!p || !p.clan || p.clan === tr.clan || !t || !v) return undefined;
+    const p = this.h.hero(killerId), t = TERRITORIES[tr.t];
+    if (!p || !p.clan || p.clan === tr.clan || !t || !warNow()) return undefined;
     const tx = p.x / TILE, ty = p.y / TILE;
     if (tx < t.x || ty < t.y || tx >= t.x + t.w || ty >= t.y + t.h) return undefined;
-    const out = { t: tr.t, clan: tr.clan };
+    this.killValor(killerId, tr.clan, tr.officer ? "officer" : "soldier", tr.t);
+    return { t: tr.t, clan: tr.clan };
+  }
+
+  /**
+   * Kill valor (W2c: valor comes from fighting): a hero of oath level sworn to a clan at war with `victim` who fells one
+   * of its soldiers or officers, or a hero sworn to it, earns WAR_TROOPS.killPts for their clan in land `t` (default: the
+   * land the killer stands in; none in a village or a lair) if the war lets that clan fight there (it holds it or may
+   * attack it: targetsOf), at most killValorPerTick per hero per war tick, and as much
+   * renown (more under the Rally). Returns the valor paid. The room calls it for every trooper that is not a patrol's
+   * (sieges, escorts, tunnels, acolytes, manhunters) and for heroes; killed() calls it for the patrols.
+   */
+  killValor(killerId: string, victim: ClanKey, part: "soldier" | "officer" | "hero", t?: number): number {
+    const p = this.h.hero(killerId), v = warNow();
+    if (!p || !p.clan || !v || p.dead || p.level < STANDARD.minLevel || p.clan === victim || !atWar(p.clan, victim)) return 0;
+    const land = t ?? territoryAt(Math.floor(p.x / TILE), Math.floor(p.y / TILE))?.id, st = warState();
+    if (land === undefined || !st || !(st.owner[land] === p.clan || targetsOf(st, p.clan).includes(land))) return 0; // only where the war lets that clan fight (as the rituals' and caravans' valor)
     for (const [k, c] of this.valor) if (c.tick !== v.tick) this.valor.delete(k); // counts of past war ticks are done with
     const c = this.valor.get(p.name), used = c && c.tick === v.tick ? c.n : 0;
-    const add = Math.min(WAR_TROOPS.killValor, WAR_TROOPS.killValorPerTick - used);
-    if (add <= 0) return out;
+    const add = Math.min(WAR_TROOPS.killPts[part], WAR_TROOPS.killValorPerTick - used);
+    if (add <= 0) return 0;
     this.valor.set(p.name, { tick: v.tick, n: used + add });
     const was = rankOf(p.renown);
-    if (addValor(tr.t, p.clan, add)) p.renown += add * rallyRenown(warState(), p.clan); // effort the war counted earns renown, as at the standards (server/warHeroes.ts)
+    if (!addValor(land, p.clan, add)) return 0;
+    p.renown += add * rallyRenown(warState(), p.clan); // effort the war counted earns renown (shared/war/renown.ts)
     const rank = rankOf(p.renown);
     if (rank > was) this.h.ranked(killerId, RENOWN_RANKS[rank].name);
-    return out;
+    return add;
+  }
+
+  /** Living guards of territory t's Hold (the guard slots of its patrol force), only those where `near(x, y)` when given. */
+  guardsAlive(t: number, near?: (x: number, y: number) => boolean): number {
+    let n = 0;
+    for (const s of this.lands.get(t)?.slots ?? []) {
+      if (s.role !== "guard" || !s.id) continue;
+      const m = this.h.mob(s.id);
+      if (m && !m.dead && (!near || near(m.x, m.y))) n++;
+    }
+    return n;
+  }
+
+  /** Territory t's Hold fields no guards until war tick `untilTick` (a sacked Hold, server/warHolds.ts): the next tick() trims them. */
+  holdGuardsOff(t: number, untilTick: number) {
+    this.guardsOff.set(t, Math.max(this.guardsOff.get(t) ?? -Infinity, untilTick));
   }
 
   /** A hero left or died: no trooper keeps chasing them. */
@@ -184,7 +224,9 @@ export class WarTroops {
       const fresh = !land.clan || flipped;
       land.clan = clan;
       const control = v!.control[t] ?? 100, siege = v!.sieges.some((s) => s[0] === t);
-      const marchers = siege ? 0 : patrolCount(control), guards = Math.min(garrisonCount(control), garrisonSpots(t, TROOP.garrisonMax).length);
+      const off = this.guardsOff.get(t);
+      if (off !== undefined && v!.tick >= off) this.guardsOff.delete(t);
+      const marchers = siege ? 0 : patrolCount(control), guards = this.guardsOff.has(t) ? 0 : Math.min(garrisonCount(control), garrisonSpots(t, TROOP.garrisonMax).length); // (a sacked Hold's guards stay down)
       const want = Math.min(marchers + guards, budget);
       budget -= want;
       const slots: Slot[] = [];

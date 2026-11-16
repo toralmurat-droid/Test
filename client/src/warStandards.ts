@@ -1,7 +1,8 @@
 /**
- * Clan war standards in the world (shared/war/standards.ts): a banner pole in the holder's colours with its capture
- * ring on the ground, an "E" prompt when close, and the oath panel (swear to one of the five clans). Cosmetic: the
- * server decides the oath ("clan" message) and counts the minutes in the ring.
+ * Clan war standards in the world (shared/war/standards.ts): a banner pole in the holder's colours with its ring on the
+ * ground, an "E" prompt when close, and the oath panel (swear to one of the five clans). Since W2c the ring adds no valor
+ * by itself: valor comes from fighting. Also the Holds, and the sacker's banner over a sacked one (client/src/warSack.ts).
+ * Cosmetic: the server decides the oath ("clan" message).
  */
 import Phaser from "phaser";
 import { CLANS, CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
@@ -9,6 +10,7 @@ import { RENOWN_RANKS, rankOf } from "../../shared/war/renown";
 import { HOLDS, STANDARD, STANDARDS, type Standard } from "../../shared/war/standards";
 import { ensureHold, HoldDraw, HOLD_KEEP, HOLD_RANGE } from "./holdAssets";
 import { fortOf } from "../../shared/war/holdWalls";
+import { bannerSpot } from "../../shared/war/holdSack";
 import { TILE } from "../../shared/constants";
 import { targetsOf, type WarState } from "../../shared/war/rules";
 import { TERRITORIES } from "../../shared/war/territories";
@@ -47,8 +49,31 @@ function standardTexture(scene: Phaser.Scene, k: ClanKey): string {
   return key;
 }
 
+/** The plain banner an unsworn hero raises over a sacked Hold: a torn grey rag on the same pole. */
+function rogueTexture(scene: Phaser.Scene): string {
+  const key = "warstd_rogue";
+  if (scene.textures.exists(key)) return key;
+  const W = 22, H = POLE_H, c = document.createElement("canvas");
+  c.width = W * 2; c.height = H * 2;
+  const g = c.getContext("2d")!;
+  g.imageSmoothingEnabled = false;
+  g.scale(2, 2);
+  g.fillStyle = "#1a1008"; g.fillRect(10, 1, 3, H - 1);
+  g.fillStyle = "#6a4a28"; g.fillRect(11, 1, 1, H - 2);
+  g.fillStyle = "#1a1008"; g.fillRect(2, 4, 18, 2);
+  for (let y = 6; y < 26; y++) for (let x = 3; x < 19; x++) {
+    if ((y > 20 && (x * 7 + y * 3) % 5 < 2) || (y > 23 && x % 4 === 0)) continue; // a ragged hem
+    g.fillStyle = x === 3 || x === 18 || y === 6 ? "#3a3632" : (x + y) % 7 === 0 ? "#5c5650" : "#77706a"; g.fillRect(x, y, 1, 1);
+  }
+  g.fillStyle = "rgba(0,0,0,0.35)"; g.fillRect(8, H - 2, 7, 2);
+  scene.textures.addCanvas(key, c);
+  return key;
+}
+
 export class WarStandards {
   private poles = new Map<number, Phaser.GameObjects.Image>();
+  /** The sacker's banner over each Hold sacked this war tick (client/src/warSack.ts). */
+  private sackBanners = new Map<number, Phaser.GameObjects.Image>();
   private holds = new Map<number, HoldDraw | Phaser.GameObjects.Graphics>();
   private holdClan = new Map<number, ClanKey>();
   /** Holds shown as flat blocks for now (the atlas is loading, or the top-down view): solid cells are never left bare. */
@@ -108,6 +133,25 @@ export class WarStandards {
   private tint(id: number, k: ClanKey) {
     const cl = CLANS[k], col = k === "redfang" ? cl.sigil : cl.trim, front = this.fronts.has(id);
     this.rings.get(id)?.setVisible(true).setFillStyle(col, front ? 0.14 : 0.07).setStrokeStyle(front ? 3 : 2, col, front ? 0.8 : 0.45);
+  }
+
+  /**
+   * The Holds sacked this war tick (territory -> the sacker's clan index, -1 unsworn): the sacker's banner flies in the
+   * middle of the courtyard until the next war tick. Look only: the walls stay the holder's.
+   */
+  setSacked(sacked: ReadonlyMap<number, number>) {
+    for (const [t, img] of this.sackBanners) if (!sacked.has(t)) { img.destroy(); this.sackBanners.delete(t); }
+    for (const [t, by] of sacked) {
+      const at = bannerSpot(t), k = CLAN_KEYS[by];
+      if (!at) continue;
+      const key = k ? standardTexture(this.scene, k) : rogueTexture(this.scene);
+      let img = this.sackBanners.get(t);
+      if (!img) {
+        img = this.scene.add.image(at.x, at.y, key).setOrigin(0.5, 1).setDepth(at.y);
+        isoAnchor(img, { x: at.x, y: at.y });
+        this.sackBanners.set(t, img);
+      } else if (img.texture.key !== key) img.setTexture(key);
+    }
   }
 
   /** The server's live siege battle: each front's ring takes its holder's colour (the gate front has no ring). */
@@ -174,11 +218,11 @@ export class WarStandards {
   standing(me: { x: number; y: number } | undefined): string {
     const s = me && this.ringAt(me.x, me.y), v = this.view;
     if (!s || !v) return "";
-    if (!this.clan) return "Swear to a clan to hold this standard";
+    if (!this.clan) return "Swear here · fight for valor";
     const own = CLAN_KEYS[v.owner[s.t]];
-    if (own === this.clan) return "You hold the standard: defending";
+    if (own === this.clan) return "Your clan's land: fight its foes for valor";
     const st = { owner: v.owner.map((i) => CLAN_KEYS[i]) } as unknown as WarState;
-    return targetsOf(st, this.clan).includes(s.t) ? "You hold the standard: attacking" : "Your clan cannot reach this land yet";
+    return targetsOf(st, this.clan).includes(s.t) ? "You can push here: fight, raid, sack its Hold" : "Your clan cannot reach this land yet";
   }
 
   private ringAt(x: number, y: number) { return STANDARDS.find((s) => Math.hypot(s.x - x, s.y - y) <= STANDARD.range); }
@@ -201,8 +245,8 @@ export class WarStandards {
     const h = document.createElement("h2"); h.textContent = t ? `Standard of ${t.name}` : "Clan oath";
     const help = document.createElement("p"); help.className = "help";
     help.textContent = this.clan
-      ? `Sworn to ${CLANS[this.clan].name}. Every minute in a ring counts at the next war tick.`
-      : `Swear (level ${this.minLevel}+), then stand in a ring: you defend your clan's land and attack next to it.`;
+      ? `Sworn to ${CLANS[this.clan].name}. Swear here · fight for valor: soldiers of clans at war with yours, their caravans and Holds, sieges. It counts at the next war tick.`
+      : `Swear here (level ${this.minLevel}+) · fight for valor: defend your clan's land and push into the lands next to it.`;
     this.el.append(h, help);
     if (this.clan || this.renown > 0) {
       const r = rankOf(this.renown), up = RENOWN_RANKS[r + 1], rk = document.createElement("p");
@@ -239,7 +283,7 @@ export class WarStandards {
     if (me && !blocked) near = this.ringAt(me.x, me.y);
     if (near !== this.near) { this.near = near; if (!near) this.close(); }
     this.prompt.classList.toggle("open", !!near && !this.open);
-    const html = near ? `<kbd>E</kbd> ${this.clan ? "Clan oath" : "Swear to a clan"}` : "";
+    const html = near ? `<kbd>E</kbd> ${this.clan ? "Clan oath" : "Swear here · fight for valor"}` : "";
     if (this.prompt.innerHTML !== html) this.prompt.innerHTML = html;
     for (const [id, r] of this.rings) r.setAlpha(near?.id === id && this.clan ? 0.75 + 0.25 * Math.sin(now / 220) : 1);
   }

@@ -172,19 +172,25 @@ test("live war: the Rally is announced when it ends (or passes to another clan)"
   assert.ok(sent.some(([t, m]) => t === "chat" && m.name === "Herald" && /Rally/.test(m.text)), "the Herald tells the room");
 });
 
-test("presence: a hero sworn to the rallied clan earns rallyRenown x renown at a standard", () => {
+test("kill valor: a hero sworn to the rallied clan earns rallyRenown x renown for the same kill", async () => {
+  const { WarTroops } = await import("../server/warTroops");
+  const { atWar } = await import("../shared/war/feuds");
+  const { WAR_TROOPS } = await import("../shared/war/troops");
   const s = rallyWar(), r = rallyClan(s)!;
   assert.ok(r);
   _resetWar({ v: 1, state: s, minds: newMinds(), next: Date.now() + 1e9, log: [] });
-  const std = STANDARDS.find((x) => s.owner[x.t] === r || targetsOf(s, r).includes(x.t))!;
-  const other = CLAN_KEYS.find((k) => k !== r && (s.owner[std.t] === k || targetsOf(s, k).includes(std.t)));
+  // a land of a clan at war with the rallied clan that it may attack, and another clan at war with the holder that may too
+  const land = TERRITORIES.find((t) => s.owner[t.id] !== r && atWar(r, s.owner[t.id]) && targetsOf(s, r).includes(t.id))!;
+  assert.ok(land);
+  const foe = s.owner[land.id], other = CLAN_KEYS.find((k) => k !== r && k !== foe && atWar(k, foe) && targetsOf(s, k).includes(land.id));
+  const at = { x: (land.x + land.w / 2) * 32, y: (land.y + land.h / 2) * 32 };
   const earn = (clan: ClanKey) => {
-    const pr = new Presence(), t0 = 1_000_000;
-    const p: WarHero = { clan, clanAt: 0, dead: false, level: 1, x: std.x, y: std.y, lastAct: t0, renown: 0 };
-    for (let i = 0; i < 60; i++) { p.lastAct = t0 + i * 1000; pr.tick([["a", p]], t0 + i * 1000); }
+    const p = { name: `h-${clan}`, clan, level: 20, x: at.x, y: at.y, dead: false, renown: 0 };
+    const wt = new WarTroops({ hero: () => p, ranked: () => {} } as never);
+    assert.equal(wt.killValor("a", foe, "soldier"), WAR_TROOPS.killPts.soldier);
     return p.renown;
   };
   const mine = earn(r);
   assert.ok(mine > 0);
-  if (other) assert.ok(Math.abs(mine - earn(other) * WAR.rallyRenown) < 1e-9, "the Rally multiplies the same minute's renown");
+  if (other) assert.ok(Math.abs(mine - earn(other) * WAR.rallyRenown) < 1e-9, "the Rally multiplies the same kill's renown");
 });

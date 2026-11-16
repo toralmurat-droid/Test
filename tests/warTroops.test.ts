@@ -7,7 +7,7 @@ import { CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import { newMinds } from "../shared/war/doctrine";
 import { garrisonCount, garrisonSpots, patrolCount, patrolOf, TROOP, TROOP_LOOK, troopLook } from "../shared/war/patrols";
 import { atWar, _resetWarRelations, setWarRelations } from "../shared/war/feuds";
-import { newWar } from "../shared/war/rules";
+import { newWar, targetsOf } from "../shared/war/rules";
 import { STANDARD } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
 import { parseTroop, troopLevel, troopName, troopStance, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
@@ -124,33 +124,46 @@ test("WarTroops: lower control fields fewer men, a siege leaves only the guards,
   } finally { WAR_TROOPS.maxTroops = cap; }
 });
 
-test("WarTroops: kill valor goes to sworn heroes of another clan in the land, capped per hero per war tick", () => {
+test("WarTroops: kill valor goes to sworn heroes of a clan at war in the land (officers count double), capped per hero per war tick", () => {
   const s = newWar();
   _resetWar({ v: 1, state: s, minds: newMinds(), next: Date.now() + 1e9, log: [] });
   const { wt, mobs, heroes } = fake(), gate = patrolOf(LAND.id)!.pts[0], owner = s.owner[LAND.id];
-  const foe = CLAN_KEYS.find((k) => k !== owner)!;
+  const foe = CLAN_KEYS.find((k) => k !== owner && atWar(k, owner) && targetsOf(s, k).includes(LAND.id))!, calm = CLAN_KEYS.find((k) => k !== owner && !atWar(k, owner));
+  assert.ok(foe, "a clan at war that may attack the land");
   const at = { x: (LAND.x + LAND.w / 2) * TILE, y: (LAND.y + LAND.h / 2) * TILE };
   heroes.set("a", hero(at.x, at.y, { clan: foe }));
   heroes.set("own", hero(at.x, at.y, { clan: owner }));
   heroes.set("free", hero(at.x, at.y));
+  if (calm) heroes.set("calm", hero(at.x, at.y, { clan: calm }));
   heroes.set("gate", hero(gate.x, gate.y));
   wt.tick(1000);
-  const kill = (by: string) => {
-    const [id, m] = [...mobs].find(([, m]) => !m.dead && parseTroop(m.weapon)?.clan === owner)!;
+  const P = WAR_TROOPS.killPts, respawn = WAR_TROOPS.respawnMs;
+  let pts = 0, now = Date.now() + 1000; // (killed() stamps the fall with the wall clock)
+  const kill = (by: string) => { // (the fallen come straight back: the land holds fewer men than the test kills)
+    for (const [id, m] of mobs) if (m.dead) mobs.delete(id);
+    WAR_TROOPS.respawnMs = 0; try { wt.tick(now += 10); } finally { WAR_TROOPS.respawnMs = respawn; }
+    const m = troopsOf(mobs, LAND.id, wt).find((x) => !x.dead)!, id = [...mobs].find(([, x]) => x === m)![0];
+    pts = parseTroop(m.weapon)!.officer ? P.officer : P.soldier;
     m.dead = true; return wt.killed(m, id, by);
   };
   assert.equal(kill("own"), undefined, "no writ credit for the own clan"); assert.equal(kill("free"), undefined, "nor for the unsworn");
   assert.equal(heroes.get("own")!.renown + heroes.get("free")!.renown, 0, "own clan and unsworn heroes earn nothing");
-  for (let i = 0; i < WAR_TROOPS.killValorPerTick + 3; i++) assert.deepEqual(kill("a"), { t: LAND.id, clan: owner }, "a rival in the land: writ credit, cap or not");
-  assert.equal(heroes.get("a")!.renown, WAR_TROOPS.killValorPerTick * WAR_TROOPS.killValor, "capped this war tick");
+  if (calm) { kill("calm"); assert.equal(heroes.get("calm")!.renown, 0, "a clan at peace with the holder earns no kill valor"); }
+  let want = 0;
+  for (let i = 0; i < WAR_TROOPS.killValorPerTick + 3; i++) {
+    assert.deepEqual(kill("a"), { t: LAND.id, clan: owner }, "a rival in the land: writ credit, cap or not");
+    want = Math.min(WAR_TROOPS.killValorPerTick, want + pts);
+    assert.equal(heroes.get("a")!.renown, want, `kill ${i}: a soldier ${P.soldier}, an officer ${P.officer}`);
+  }
+  assert.equal(heroes.get("a")!.renown, WAR_TROOPS.killValorPerTick, "capped this war tick");
   s.tick++; // the next war tick
-  wt.tick(2000); // (fills nothing: the fallen wait respawnMs)
-  for (const [id, m] of mobs) if (m.dead) mobs.delete(id);
   kill("a");
-  assert.equal(heroes.get("a")!.renown, WAR_TROOPS.killValorPerTick * WAR_TROOPS.killValor + WAR_TROOPS.killValor, "a new tick, new valor");
+  const after = WAR_TROOPS.killValorPerTick + pts;
+  assert.equal(heroes.get("a")!.renown, after, "a new tick, new valor");
   heroes.get("a")!.x = 0; heroes.get("a")!.y = 0; // outside the land
   assert.equal(kill("a"), undefined, "no writ credit from outside the land");
-  assert.equal(heroes.get("a")!.renown, WAR_TROOPS.killValorPerTick * WAR_TROOPS.killValor + WAR_TROOPS.killValor, "only inside the land");
+  assert.equal(heroes.get("a")!.renown, after, "only inside the land");
+  assert.equal(P.hero, 3); assert.equal(WAR_TROOPS.killValorPerTick, 12);
 });
 
 test("WarTroops: the fallen come back at the Hold gate after respawnMs; a new owner replaces the whole force", () => {

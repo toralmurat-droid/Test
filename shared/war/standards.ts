@@ -1,7 +1,7 @@
 /**
- * Standards and swearing (roadmap M1): a hero sworn to a clan who stands in a standard's ring adds valor to the war
- * there (server/war.ts addValor -> rules.ts valorForce): for the holder it defends, for a clan that can reach the
- * land it attacks. Standards sit on free ground inside each territory, the same on server and client (from the map).
+ * Standards and swearing (roadmap M1): heroes swear their oath at a standard, and a besieged land's standards are its
+ * siege fronts (siege.ts). Since W2c a standard's ring adds no valor by itself (STANDARD.valorPerMin 0): valor comes from
+ * fighting. Standards sit on free ground inside each territory, the same on server and client (from the map).
  */
 import { TILE } from "../constants";
 import { isSolidAt, PORTAL_SPOTS } from "../map";
@@ -11,13 +11,16 @@ import { TERRITORIES } from "./territories";
 export const STANDARD = {
   /** Ring radius (px): stand inside to hold the standard. */
   range: 3 * TILE,
-  /** Valor a hero brings per minute in a ring (WAR.valorPerAdd caps one report). */
-  valorPerMin: 1,
+  /** Valor a hero brings per minute in a ring: none since W2c (Murat found standing at a standard clunky). Valor comes from
+   * fighting now (kills of clans at war, Hold sacks, fronts, caravans, rams, tunnels, rituals, writs, bounties); the
+   * standards stay as oath points and siege fronts (siege.ts siegeFronts), and an old `hold` writ still counts minutes. */
+  valorPerMin: 0,
   /** Heroes below this level cannot swear (the war is for heroes who know the world a little). */
   minLevel: 5,
   /** Changing clan after the first oath waits this long. */
   swearCooldownMs: 24 * 60 * 60_000,
-  /** A hero who has not moved, attacked or cast for this long adds nothing (no parking a hero in a ring). */
+  /** A hero who has not moved, attacked or cast for this long counts as idle: no weight at a siege front, a ritual circle,
+   * a ram or a tunnel mouth, and no defender at a Hold (the standards' own minutes no longer check it: they pay nothing). */
   idleMs: 3 * 60_000,
   /** Heroes this many levels above a territory's monsters bring only `overLevelShare` of their valor there. */
   overLevel: 5, overLevelShare: 0.25,

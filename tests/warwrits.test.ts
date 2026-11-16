@@ -40,8 +40,7 @@ test("war writs: at most 3 offers, one land each, legal land per kind, the board
         assert.ok(targetsOf(s, k).includes(w.t) && s.owner[w.t] !== k && !!patrolOf(w.t));
         assert.ok(w.goal >= WRIT.routMin && w.goal <= WRIT.routMax);
       } else if (w.kind === "hold") {
-        assert.ok([...bordersOf(s, k), ...targetsOf(s, k)].includes(w.t) && STANDARDS.some((st) => st.t === w.t));
-        assert.equal(w.goal, WRIT.holdMin);
+        assert.fail("the boards no longer offer hold writs (W2c: standing at a standard pays nothing)");
       } else {
         assert.equal(s.owner[w.t], k, "clear: own land");
         assert.equal(w.goal, WRIT.clearN); assert.equal(w.minLevel, T.levels[0]);
@@ -84,7 +83,7 @@ test("war writs: rally pays the underdog more, never less than the base", () => 
 });
 
 test("war writs: cleanWrit round-trips a writ and drops junk", () => {
-  const o = writOffers(s, "wardens", L, 1, 3)[0] ?? writOffers(s, "redfang", L, 1, 3)[0];
+  const o = [...writOffers(s, "wardens", L, 1, 3), ...writOffers(s, "redfang", L, 1, 3)].find((w) => w.goal > 2); // (progress 2 must fit below the goal)
   assert.ok(o);
   const st: WritState = { ...o, n: 2 };
   assert.deepEqual(cleanWrit(JSON.parse(JSON.stringify(st)), o.clan), st);

@@ -7,7 +7,7 @@
  */
 import { CLANS, CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import { newMinds, scriptedOrders, type Mind } from "../shared/war/doctrine";
-import { cleanOrders, newWar, nightRaid, rallyClan, supplyMap, targetsOf, WAR, warTick, type Orders, type WarState } from "../shared/war/rules";
+import { cleanOrders, newWar, nightRaid, rallyClan, sackHold, supplyMap, targetsOf, WAR, warTick, type Orders, type WarState } from "../shared/war/rules";
 import { TERRITORIES, type Territory } from "../shared/war/territories";
 import { regionByKey } from "../shared/war/regions";
 import { tunnelStrikes, type TunnelStrike } from "../shared/war/tunnels";
@@ -22,7 +22,8 @@ import { openKv, type Kv } from "./store";
  * clan, and the Rally when the clan it is for changed (`rally` undefined: nobody is rallied any more).
  */
 export interface WarNews { raid?: { clan: ClanKey; ts: number[] }; rally?: { clan?: ClanKey; was?: ClanKey } }
-export interface WarEvent { at: number; tick: number; kind: "siege" | "flip" | "held"; t: number; by: ClanKey; from: ClanKey; text: string }
+/** `sack` (server/warHolds.ts): a hero sacked the Hold of t; `by` is the sacker's clan, or the holder itself when the hero was unsworn. */
+export interface WarEvent { at: number; tick: number; kind: "siege" | "flip" | "held" | "sack"; t: number; by: ClanKey; from: ClanKey; text: string }
 /** `names`: the territory names in id order (optional: saves before 2026-11-15 have none, and their ids are today's). */
 /** `rel`: the last war tick each pair of clans shared a border (shared/war/feuds.ts warRelations; optional: older saves have none). */
 interface Saved { v: 1; state: WarState; minds: Record<ClanKey, Mind>; next: number; log: WarEvent[]; names?: string[]; rel?: (number | null)[] }
@@ -221,6 +222,28 @@ export function addValor(t: number, k: ClanKey, amount: number): boolean {
   return true;
 }
 
+/**
+ * A hero sacked territory t's Hold between war ticks (server/warHolds.ts, which settles it once per land per war tick
+ * for every room): rules.ts sackHold loosens the holder's grip (half when `half`) and may call a siege by clan `k`. The
+ * news goes out at once like a tick's (a "sack" event, and a "siege" event when one was called), every room gets the new
+ * snapshot, and the war is saved. `hero`: the sacker's name for the log. Undefined when nothing changed.
+ */
+export function strikeHold(t: number, k: ClanKey | undefined, half: boolean, hero = "A hero", now = Date.now()): { control: number; siege: boolean } | undefined {
+  if (!saved) return undefined;
+  const s = saved.state, from = s.owner[t], r = from && sackHold(s, t, k, half);
+  if (!r) return undefined;
+  const land = TERRITORIES[t].name, name = (c: ClanKey) => CLANS[c].name;
+  const events: WarEvent[] = [{ at: now, tick: s.tick, kind: "sack", t, by: k ?? from, from, text: `${hero}${k ? ` of ${name(k)}` : ""} sacked the Hold of ${land}, held by ${name(from)}` }];
+  if (r.siege) events.push({ at: now, tick: s.tick, kind: "siege", t, by: r.siege.by, from, text: `${name(r.siege.by)} lay siege to ${land}, held by ${name(from)}` });
+  saved.log.push(...events);
+  if (saved.log.length > LOG_MAX) saved.log.splice(0, saved.log.length - LOG_MAX);
+  if (!process.env.NODE_TEST_CONTEXT) for (const e of events) console.log(`War: ${e.text}`);
+  const view = viewOf(saved);
+  listeners.forEach((f) => { try { f(view, events, {}); } catch (e) { console.error("War listener:", e); } });
+  kv?.set(KEY, saved).catch((e) => console.error("War: could not save:", e));
+  return { control: r.control, siege: !!r.siege };
+}
+
 /** The snapshot players get, with the clans at war (shared/war/feuds.ts: the client takes them as they are). */
 const viewOf = (s: Saved): WarView => ({ ...warView(s.state, s.next, lastRaided), wars: warPairs() });
 export const warNow = (): WarView | undefined => (saved ? viewOf(saved) : undefined);
@@ -293,7 +316,7 @@ export function attachWar(room: { broadcast(type: string, msg: unknown): void })
     for (const e of events) {
       room.broadcast("chat", { id: "", name: "Herald", text: e.text });
       const v = eventVoice(e.kind, e.by, e.from), line = leaderLine(v.k, v.moment, TERRITORIES[e.t].name, v.foe, e.tick);
-      room.broadcast("chat", { id: "", name: line.name, text: line.text });
+      if (e.by !== e.from) room.broadcast("chat", { id: "", name: line.name, text: line.text }); // (an unsworn hero's sack: no clan to answer)
       room.broadcast("warev", { kind: e.kind, t: e.t, by: e.by, from: e.from }); // horn and notice (client/src/warNotice.ts)
     }
     if (news.raid) {

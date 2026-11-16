@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-16",
+  "title": "Storm the Holds",
+  "changes": [
+    "Storm a clan camp: cut down its guards, step into the courtyard and press E at its middle to raise your banner. It takes 12 seconds, a defender nearby holds it up and a blow starts it over.",
+    "A sacked Hold loses its grip on the land, drops a war chest and has no guards until the next war tick. Your banner flies over it, and a land pushed low enough comes under siege by your clan.",
+    "Valor now comes from fighting: soldiers of clans at war with yours, their heroes, caravans, rams, tunnels, rituals, sieges and sacked Holds.",
+    "Standards are for oaths now: swear there, then go and fight. Standing in a ring no longer earns valor, and the boards no longer hand out hold writs."
+  ]
+}

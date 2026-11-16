@@ -60,9 +60,16 @@ export const WAR = {
   siegeValor: 1.5, // players count more at a territory under siege (the hour's notice is for them)
   valorPerAdd: 10, // most valor one hero can bring in one report (ten minutes at a standard)
   valorCap: 60, // troops players can add to one territory per clan per tick (x siegeValor during a siege) (a clan's army is ~150-600)
+  // A sacked Hold (shared/war/holdSack.ts, sackHold below): the holder's Control loses this much (half for an unsworn hero
+  // or a clan the war keeps out of the land); at most once per land per war tick (server/warHolds.ts)
+  sackControl: 8,
+  // A siege a sack called (Siege.sack) that fails when it comes due leaves Control where it is, plus this (an army's failed
+  // siege resets it to 50): a raid on the Hold should not end up strengthening the holder
+  sackSiegeFail: 2,
 };
 
-export interface Siege { by: ClanKey; at: number }
+/** `sack`: called by a sacked Hold (sackHold), not by the armies (optional: older saves have none). */
+export interface Siege { by: ClanKey; at: number; sack?: true }
 export interface WarState {
   tick: number;
   owner: ClanKey[];
@@ -190,6 +197,23 @@ export interface TickExtra { phase?: number; valor?: Partial<Record<ClanKey, num
 /** Troops that `v` valor is worth: each point counts, but a crowd adds less and less (WAR.valorCap at most). */
 export const valorForce = (v: number) => (v > 0 ? WAR.valorCap * (1 - Math.exp(-v / WAR.valorScale)) : 0);
 
+/**
+ * A hero sacked territory t's Hold (shared/war/holdSack.ts): the holder's grip loosens by WAR.sackControl, half when
+ * `half` (an unsworn hero, or a clan the war keeps out of the land). When that brings Control to WAR.siegeAt or below
+ * and no siege is announced, clan `k` lays siege, but only where the war lets it attack (targetsOf) and never at a
+ * capital: the flip still waits for the siege (warTick). Mutates `s`. The live war (server/war.ts strikeHold) and the
+ * war sim (tools/balance/war.ts --sack) share it. Undefined (nothing changed) for a bad land, the holder's own clan or a
+ * land already under siege.
+ */
+export function sackHold(s: WarState, t: number, k: ClanKey | undefined, half: boolean): { control: number; siege?: Siege } | undefined {
+  if (!Number.isInteger(t) || t < 0 || t >= s.owner.length || s.siege[t] || (k && s.owner[t] === k)) return undefined;
+  s.control[t] = Math.max(0, s.control[t] - WAR.sackControl * (half ? 0.5 : 1));
+  const out: { control: number; siege?: Siege } = { control: s.control[t] };
+  if (k && CLANS[k] && s.control[t] <= WAR.siegeAt && TERRITORIES[t]?.capitalOf !== s.owner[t] && targetsOf(s, k).includes(t))
+    out.siege = s.siege[t] = { by: k, at: s.tick + WAR.siegeWarnTicks, sack: true };
+  return out;
+}
+
 /** One war tick. Mutates and returns `s`. A clan missing from `orders` (or with broken orders) only defends. */
 export function warTick(s: WarState, orders: Partial<Record<ClanKey, Orders>>, extra: TickExtra = {}): WarState {
   const supply = supplyMap(s), phase = extra.phase ?? phaseOf(s.tick), rally = rallyClan(s);
@@ -270,7 +294,7 @@ export function warTick(s: WarState, orders: Partial<Record<ClanKey, Orders>>, e
     else if (sg && s.tick >= sg.at) {
       const by = atk[sg.by] ?? 0, mult = CLANS[sg.by].doctrine === "siege" ? WAR.hostSiege : WAR.siegeBonus;
       if (by * mult > def * WAR.siegeHold) { s.owner[id] = sg.by; s.fort[id] = 0; s.control[id] = 60; }
-      else s.control[id] = 50;
+      else s.control[id] = sg.sack ? Math.min(100, s.control[id] + WAR.sackSiegeFail) : 50; // (a sack's siege does not hand the holder its grip back)
       s.siege[id] = null;
     }
   }

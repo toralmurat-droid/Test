@@ -56,6 +56,10 @@ export class WarPlaque {
   /** The Veiled ritual circle (client/src/warRituals.ts): a "Ritual n%" line while the hero is in its land. */
   setRitual(r: { line(t: number): string }) { this.ritual = r; }
 
+  private sack?: { line(t: number): string };
+  /** Sacked Holds (client/src/warSack.ts): "Hold sacked by <clan>" or a banner going up, while the hero is in that land. */
+  setSack(r: { line(t: number): string }) { this.sack = r; }
+
   /** "Fronts n/m <clan>" for land t: the clan holding the most fronts (the holder on a tie), plus the ram's state if one rolls, or "". */
   private frontsLine(t: number, own: ClanKey): string {
     const m = this.siege;
@@ -78,9 +82,10 @@ export class WarPlaque {
     const line = sg ? `siege:${sg[1]}:${mins(sg[2] - now)}` : `tick:${mins(v.next - now)}`;
     const fronts = sg ? this.frontsLine(t.id, own) : "";
     const rite = this.ritual?.line(t.id) ?? "";
+    const sacked = this.sack?.line(t.id) ?? "";
     // the brakes (shared/war/rules.ts): the Night Raiders hunt the leading clan, the war rallies for the weakest
     const brake = v.raided?.includes(t.id) ? "Night Raiders struck here" : v.hunt === v.owner[t.id] ? "The Night Raiders hunt its holder" : v.rally === v.owner[t.id] ? `Rally for ${CLANS[own].name}` : "";
-    const key = `${t.id}|${own}|${ctl}|${line}|${standing}|${fronts}|${rite}|${brake}`;
+    const key = `${t.id}|${own}|${ctl}|${line}|${standing}|${fronts}|${rite}|${brake}|${sacked}`;
     if (key === this.shown) return;
     this.shown = key;
     const cl = CLANS[own];
@@ -97,8 +102,9 @@ export class WarPlaque {
     const text = document.createElement("div"); text.className = "wp-text"; text.append(name, held, bar, foot);
     if (fronts) { const fl = document.createElement("div"); fl.className = "wp-foot siege"; fl.textContent = fronts; text.append(fl); }
     if (rite) { const rl = document.createElement("div"); rl.className = "wp-foot"; rl.textContent = rite; text.append(rl); }
+    if (sacked) { const sl = document.createElement("div"); sl.className = "wp-foot siege"; sl.textContent = sacked; text.append(sl); }
     if (brake) { const bl = document.createElement("div"); bl.className = "wp-foot" + (v.rally === v.owner[t.id] && !v.raided?.includes(t.id) ? " rally" : " siege"); bl.textContent = brake; text.append(bl); }
-    if (standing) { const me = document.createElement("div"); me.className = "wp-me" + (standing.startsWith("You hold") ? "" : " no"); me.textContent = standing; text.append(me); }
+    if (standing) { const me = document.createElement("div"); me.className = "wp-me" + (/cannot|^Swear/.test(standing) ? " no" : ""); me.textContent = standing; text.append(me); }
     this.el.replaceChildren(pennant(own), text);
     this.el.hidden = false;
   }

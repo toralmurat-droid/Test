@@ -11,7 +11,8 @@ import { play } from "./sfx";
 import { hudSlot } from "./hudSlots";
 import "./warPlaque.css";
 
-export interface WarEv { kind: "siege" | "flip" | "held"; t: number; by: ClanKey; from: ClanKey }
+/** `sack`: a hero sacked the Hold of t (server/warHolds.ts); `by` is the holder itself when the hero was unsworn. */
+export interface WarEv { kind: "siege" | "flip" | "held" | "sack"; t: number; by: ClanKey; from: ClanKey }
 /** Server "warraid": the Night Raiders struck these lands of the clan they hunt (server/war.ts attachWar). */
 export interface WarRaid { clan: ClanKey; ts: number[] }
 
@@ -30,6 +31,7 @@ export class WarNotice {
     const land = TERRITORIES[e.t]?.name ?? "?", by = CLANS[e.by]?.name ?? "?";
     if (e.kind === "siege") return `Siege! ${by} march on ${land}. ${Math.round((WAR.siegeWarnTicks * WAR.tickMs) / 60_000)} min to the walls.`;
     if (e.kind === "flip") return `${land} falls to ${by}!`;
+    if (e.kind === "sack") return e.by === e.from ? `The Hold of ${land} is sacked!` : `${by} sack the Hold of ${land}!`;
     return `${land} holds against ${by}!`;
   }
 
