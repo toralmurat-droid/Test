@@ -127,7 +127,7 @@ export class WarBattles {
       } else if (n.kind === "end") {
         const won = b.result === "att" ? A : b.result === "def" ? D : "";
         this.herald(won ? `${won} won the battle for ${land}.` : `The battle for ${land} ends in a draw.`);
-        this.h.broadcast("sfx", { ev: "battle_end", id: b.id, x: Math.round(b.x), y: Math.round(b.y), result: b.result });
+        this.h.broadcast("sfx", { ev: "battle_end", id: b.id, x: Math.round(b.x), y: Math.round(b.y), a: b.a, b: b.b, result: b.result });
         if (won) { const w = b.result === "att" ? b.a : b.b, l = b.result === "att" ? b.b : b.a; this.say(w, "battle_won", b, l); this.say(l, "battle_lost", b, w); }
       } else this.herald(`The battle for ${land} is called off.`);
     }

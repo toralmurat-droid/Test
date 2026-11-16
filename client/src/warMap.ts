@@ -17,6 +17,7 @@ import { HOLD_TIER_KEYS } from "../../shared/war/holdTiers";
 import type { WritKind } from "../../shared/war/writs";
 import { COLUMN_ICON, drawClashIcon, drawColumnIcon, drawGateGlyph, ROAD_STYLE } from "./columnArt";
 import type { WarBattle } from "./warBattle";
+import { drawBattleMarker } from "./battleArt";
 import { columnTip, type ColView, type WarColumns } from "./warColumns";
 
 /** Bright map colours per clan (as on the war table). */
@@ -394,16 +395,15 @@ function drawBattles(g: CanvasRenderingContext2D, d: WarMapData, v: WarMapView) 
     const [x, y] = pxs(v, b.x, b.y);
     if (v.mini && outOfView(g, x, y, x, y)) continue;
     g.save(); g.translate(Math.round(x), Math.round(y)); v.upright(g);
-    g.fillStyle = "rgba(13,10,7,0.85)"; g.beginPath(); g.arc(0, 0, 5.5 * k, 0, Math.PI * 2); g.fill();
-    g.lineWidth = v.mini ? 1.5 : 2.5; g.strokeStyle = CLAN_COL[b.a]; g.beginPath(); g.arc(0, 0, 5.5 * k, Math.PI * 0.5, Math.PI * 1.5); g.stroke();
-    g.strokeStyle = CLAN_COL[b.b]; g.beginPath(); g.arc(0, 0, 5.5 * k, -Math.PI * 0.5, Math.PI * 0.5); g.stroke();
-    g.scale(k * pulse, k * pulse); drawClashIcon(g, -4.5, -4.5);
+    g.lineWidth = v.mini ? 1.5 : 2.5; g.strokeStyle = CLAN_COL[b.a]; g.beginPath(); g.arc(0, 0, 7.5 * k, Math.PI * 0.5, Math.PI * 1.5); g.stroke();
+    g.strokeStyle = CLAN_COL[b.b]; g.beginPath(); g.arc(0, 0, 7.5 * k, -Math.PI * 0.5, Math.PI * 0.5); g.stroke();
+    g.imageSmoothingEnabled = false; g.scale(k * pulse, k * pulse); drawBattleMarker(g, -6.5, -6.5);
     g.restore();
     if (!v.mini) {
       g.save(); g.translate(Math.round(x), Math.round(y)); v.upright(g);
       const text = `${b.state === 0 ? "Battle" : "Fighting"} ${fmtCountdown(b.ms)}`;
       g.font = `bold 12px ${PF}`; g.textAlign = "center"; g.textBaseline = "middle";
-      const w = Math.ceil(g.measureText(text).width) + 10, by0 = -5.5 * k - 12;
+      const w = Math.ceil(g.measureText(text).width) + 10, by0 = -7.5 * k - 12;
       g.fillStyle = "rgba(13,10,7,0.92)"; g.fillRect(-w / 2, by0 - 9, w, 18);
       g.strokeStyle = b.state === 0 ? "#ffd98a" : "#ff6b5e"; g.lineWidth = 2; g.strokeRect(-w / 2 + 1, by0 - 8, w - 2, 16);
       g.fillStyle = "#ffe8a3"; g.fillText(text, 0, by0 + 1);

@@ -10,6 +10,8 @@ import { TERRITORIES } from "../../shared/war/territories";
 import { TILE } from "../../shared/constants";
 import { CLAN_COL } from "./warMap";
 import { setMusicWar } from "./music";
+import { setBattleDin, stopBattleDin } from "./sfx";
+import { BANNER_FLUTTER, BANNER_FRAME, ensureBattleBannerTextures } from "./battleArt";
 import "./warBattle.css";
 
 const KIND_NAME = { pitched: "Pitched battle", storm: "Storming", meet: "Meeting battle" } as const;
@@ -44,11 +46,43 @@ export class WarBattle {
   private sig = "";
   /** The hero stands in the field of a battle being fought (the scene thins labels and corpses; music plays). */
   inField = false;
+  private scene?: Phaser.Scene;
+  private poles = new Map<string, Phaser.GameObjects.Sprite>();
+  private dinOn = false;
 
   constructor(private say: (text: string) => void) {
     this.el.id = "warbattle";
     this.el.hidden = true;
     (document.getElementById("hud") ?? document.body).append(this.el);
+  }
+
+  /** Gives the module the scene to place the world banner poles in. */
+  attach(scene: Phaser.Scene) { this.scene = scene; ensureBattleBannerTextures(scene); }
+
+  /** The three banner poles of battles announced or fought, flapping; gone with the battle. */
+  private drawPoles(wall: number) {
+    const sc = this.scene, live = new Set<string>();
+    if (sc) for (const b of this.list) {
+      if (b.state === 2) continue;
+      b.banners.forEach(([x, y, holder], i) => {
+        const key = `${b.id}:${i}`; live.add(key);
+        let sp = this.poles.get(key);
+        if (!sp) { sp = sc.add.sprite(x, y, "battle_banner", 0).setOrigin(0.5, 1).setDepth(y); this.poles.set(key, sp); }
+        sp.setPosition(x, y).setDepth(y);
+        sp.setFrame((holder ? BANNER_FRAME.defender : BANNER_FRAME.attacker) + (Math.floor(wall / 280 + i) % 2 ? BANNER_FLUTTER : 0));
+      });
+    }
+    for (const [k, sp] of this.poles) if (!live.has(k)) { sp.destroy(); this.poles.delete(k); }
+  }
+
+  /** Din volume at the hero: full inside the field box, fading to nothing 30 tiles out. */
+  private dinVol(b: BattleView, me: { x: number; y: number }): number {
+    let d: number;
+    if (b.box) {
+      const [tx, ty, w, h] = b.box, px = me.x / TILE, py = me.y / TILE;
+      d = Math.hypot(Math.max(tx - px, 0, px - (tx + w)), Math.max(ty - py, 0, py - (ty + h)));
+    } else d = Math.max(0, Math.hypot(me.x - b.x, me.y - b.y) / TILE - 14);
+    return Math.max(0, Math.min(1, 1 - d / 30));
   }
 
   setMsg(m: BattleMsg, wall = Date.now()) {
@@ -90,7 +124,8 @@ export class WarBattle {
   /** Per frame: notices, the bar, the result banner and the music flag. `me` is the living hero in world px. */
   update(me: { x: number; y: number } | undefined, wall = Date.now()) {
     const now = wall + this.offset;
-    let bar: BattleView | undefined, field = false;
+    let bar: BattleView | undefined, field = false, din = 0;
+    this.drawPoles(wall);
     for (const b of this.list) {
       const st = this.stage.get(b.id) ?? 0, want = this.stageOf(b, now);
       if (b.state === 2 && !this.done.has(b.id)) {
@@ -99,10 +134,12 @@ export class WarBattle {
       }
       if (want > st && b.state !== 2) { this.stage.set(b.id, want); if (st < want) this.say(battleText(b, want as 1 | 2 | 3, now)); }
       if (b.state === 1 && me) {
+        din = Math.max(din, this.dinVol(b, me));
         if (this.inside(b, me)) field = true;
         if (field || Math.hypot(me.x - b.x, me.y - b.y) <= BATTLE.barTiles * TILE) bar = b;
       }
     }
+    if (din > 0.01) { setBattleDin(din); this.dinOn = true; } else if (this.dinOn) { stopBattleDin(); this.dinOn = false; }
     if (this.inField !== field) { this.inField = field; setMusicWar(field); }
     if (this.resultUntil && wall < this.resultUntil) return;
     if (this.resultUntil) { this.resultUntil = 0; this.sig = ""; }

@@ -20,7 +20,7 @@ import { moveStep } from "../../shared/movement";
 import { SPAWN_ZONES, zoneAt } from "../../shared/spawns";
 import { musicCombat, setMusicZone } from "./music";
 import { bindSfx, play as playSfx, sfxFrame } from "./sfx";
-import { songweaverSfx } from "./sfx";
+import { songweaverSfx, setSwornClan } from "./sfx";
 import { DI_EVENTS, diEvent } from "./songbookFx";
 import { setSongbook } from "./songbookData";
 import { matOfItem } from "../../shared/lutemaker";
@@ -1661,6 +1661,7 @@ export class TownScene extends Phaser.Scene {
       if (first || !own || !v) return; // the join message only fills the map; later new columns on the clan's land are announced
       for (const [id, ci, , to] of m.cols) if (!known.has(id) && CLAN_KEYS[ci] !== own && v.owner[to] === CLAN_KEYS.indexOf(own)) { this.warNotice?.column(CLAN_KEYS[ci], to); break; }
     }); // W4: the marching columns (shared/war/marches.ts ColumnsMsg)
+    this.warBattle.attach(this); setSwornClan(() => this.warStd?.clan || undefined);
     this.room.onMessage("battle", (m) => { this.warBattle.setMsg(m); this.warTroops?.setBattle(this.warBattle.fighting()); }); // W5: big battles (shared/war/battles.ts BattleMsg)
     this.room.onMessage("warplan", (m) => { if (this.minimap && m && Array.isArray(m.march)) this.minimap.plan = m; }); // the own clan's attacks of the last war tick (server/warIntel.ts)
     const warNotice = this.warNotice = new WarNotice(document.getElementById("hud")!);

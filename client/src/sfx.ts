@@ -796,7 +796,7 @@ const R: Record<string, Recipe> = {
     thud(o, t, 58, 0.75 * v, 0.4); clank(o, t + 0.05, 0.22 * v, 1000); clank(o, t + 0.17, 0.12 * v, 1500);
     [1, 2, 3].forEach((m, i) => tone(o, t + 0.25, { type: "sawtooth", f: 98 * m, f2: 82 * m, dur: 1.2, vol: (0.2 / (1 + i)) * v, att: 0.08, vib: 1.2 * m, vibHz: 5 }));
   },
-  // The battle ends: a victory (major, brass rising over a drum roll) or defeat (minor, falling and slow). `arg` is "win" | "lose" | else a draw.
+  // The battle ends: a victory (major, brass rising over a drum roll) or defeat (minor, falling and slow). `arg` is "win" | "lose" | else neutral (see battleOutcome).
   battle_end: (o, t, v, a) => {
     const win = a === "win" || a === "attacker" || a === "victory", lose = a === "lose" || a === "defeat";
     const notes = win ? [262, 330, 392, 523] : lose ? [330, 294, 262, 196] : [294, 294, 262];
@@ -1073,6 +1073,16 @@ function loopTones(freqs: number[], type: OscillatorType, tremHz: number): Bed {
 
 let din: { g: GainNode; timer: number; src: AudioBufferSourceNode } | null = null;
 let dinVol = 0;
+
+let sworn: () => string | undefined = () => undefined;
+/** The scene tells the sound which clan the local hero is sworn to (for the battle_end motif). */
+export function setSwornClan(fn: () => string | undefined) { sworn = fn; }
+/** The battle_end motif for the local hero: "win" or "lose" when their clan fought, else a neutral "draw". */
+function battleOutcome(result: string, a: string, b: string): "win" | "lose" | "draw" {
+  const mine = sworn(), won = result === "att" ? a : result === "def" ? b : "";
+  if (!mine || !won || (mine !== a && mine !== b)) return "draw";
+  return mine === won ? "win" : "lose";
+}
 
 /** Starts the din loop (silent until setBattleDin gives it a volume). Safe to call twice or before sound is on. */
 export function startBattleDin() {
@@ -1437,7 +1447,7 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
       case "battle_horn": pos("battle_horn", 1, undefined, { key: "bh" + (ev.id ?? ""), minGap: 2500, reach: 3 }); break;
       case "battle_banner": pos("battle_banner", 1, undefined, { key: "bb" + (ev.id ?? "") + ":" + (ev.i ?? ""), minGap: 1200, reach: 2.2 }); break;
       case "battle_officer": pos("battle_officer", 1, undefined, { key: "bo" + (ev.id ?? "") + ":" + (ev.x ?? ""), minGap: 1000, reach: 2.2 }); break;
-      case "battle_end": pos("battle_end", 1, ev.result, { key: "be" + (ev.id ?? ""), minGap: 3000, reach: 3 }); break;
+      case "battle_end": pos("battle_end", 1, battleOutcome(ev.result, ev.a, ev.b), { key: "be" + (ev.id ?? ""), minGap: 3000, reach: 3 }); break;
       case "ritual_done": pos("ritual_done", 1, undefined, { key: "rd" + (ev.x ?? "") + ":" + (ev.y ?? ""), minGap: 1500, reach: 2 }); break;
       case "caravan_arrived": case "caravan_delivered": pos("caravan_arrived", 1, undefined, { key: "ca" + (ev.id ?? ev.clan ?? ""), minGap: 500, reach: 2 }); break;
       case "ferry": { // off at the jetty it left, then the landing (the rider hears both; others only what is near them)
