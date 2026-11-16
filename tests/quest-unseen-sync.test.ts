@@ -301,8 +301,7 @@ test("sync: a summoner's golem by the other seal turns it", async () => {
     g.x = seals[1].x + 10; g.y = seals[1].y;
     S.c.send("use", { id: seals[0].id });
     await until(() => stage(S.p, H).questId === 1, "the golem at seal B turned it");
-    assert.equal(sfxCount(S, "sealturn"), 2, "both seals turn");
-    assert.equal(sfxCount(S, "sealsync"), 1);
+    await until(() => sfxCount(S, "sealturn") === 2 && sfxCount(S, "sealsync") === 1, "both seals turn, one sync (sfx can land after the stage)");
     await S.c.leave();
   } finally { await srv.stop(); }
 });

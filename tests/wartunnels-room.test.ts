@@ -6,6 +6,7 @@ import { SAFE_ZONE } from "../shared/map";
 import { CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import { newMinds } from "../shared/war/doctrine";
 import { newWar, targetsOf, type Orders } from "../shared/war/rules";
+import { atWar } from "../shared/war/feuds";
 import { STANDARD } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
 import { parseTroop, troopLevel, WAR_TROOPS } from "../shared/war/troops";
@@ -136,7 +137,13 @@ test("tunnels (room): only heroes hostile to the Hide-Kin hurt the mouth (no XP)
     assert.equal(m.hp, hp0, "under the oath level: 0 damage");
     p.level = 30;
     for (const clan of [DEF, OUT]) {
-      p.clan = clan;
+      p.clan = clan; p.feud = {};
+      if (!atWar(clan, HK)) { // since feuds (shared/war/feuds.ts) a clan not at war with the Hide-Kin needs a grudge first
+        const before = m.hp;
+        room.hitTarget(id, mid, 50, [0, 0], {});
+        assert.equal(m.hp, before, `${clan}: not at war with the Hide-Kin, no grudge: 0 damage`);
+        p.feud = { [HK]: { until: Date.now() + 60_000 } };
+      }
       const h = m.hp;
       room.hitTarget(id, mid, 50, [0, 0], {});
       assert.ok(m.hp < h, `${clan}: hurts it`);
@@ -199,6 +206,7 @@ test("tunnels (room): a clan the war keeps out of the land collapses it for reno
   try {
     tunnelWar();
     const { room, id, p, at, mouth, tn } = await setup(srv, OUT);
+    if (!atWar(OUT, HK)) p.feud = { [HK]: { until: Date.now() + 60_000 } }; // a clan not at war with the Hide-Kin fights them on a grudge (shared/war/feuds.ts)
     at(MOUTH);
     room.tunnels.tick(Date.now());
     const m = mouth();

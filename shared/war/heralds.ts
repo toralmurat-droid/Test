@@ -87,3 +87,44 @@ export function gateLine(k: ClanKey, retook: boolean, land: string, foe: ClanKey
   const t = opts[Math.abs(Math.floor(seed)) % opts.length].replace(/\{land\}/g, land).replace(/\{foe\}/g, FOE_NAME[foe]);
   return { name: LEADERS[k].name, text: t.charAt(0).toUpperCase() + t.slice(1) };
 }
+
+/** Feuds (shared/war/feuds.ts): what a leader says when a hero becomes Wanted, Hunted or Marked by the clan, and when a bounty on one is claimed ({hero}). */
+export type FeudMoment = "wanted" | "hunted" | "marked" | "bounty";
+export const FEUD_LINES: Record<ClanKey, Record<FeudMoment, string[]>> = {
+  wardens: {
+    wanted: ["{hero} has Warden blood on their hands. The watch will know that face.", "Write down the name {hero}. The watch does not forget."],
+    hunted: ["Enough. Send riders after {hero}.", "{hero} answers to the Wardens now. Bring them in."],
+    marked: ["Every Warden spear is turned on {hero}.", "No hearth in the Marches will hide {hero} from us."],
+    bounty: ["{hero} has paid at last. The watch sleeps easier.", "Justice for our fallen: {hero} is down."],
+  },
+  redfang: {
+    wanted: ["Who is this {hero}, cutting down my lads?", "{hero} owes the Redfang. We always collect."],
+    hunted: ["Get the dogs. {hero} runs, we follow.", "A purse of red gold for {hero}'s ears."],
+    marked: ["Every knife in the Compact wants {hero}.", "{hero} won't see the next moon. I swear it on my fang."],
+    bounty: ["Ha! {hero}'s ears are on my belt.", "{hero} paid in blood. Pour the wine."],
+  },
+  host: {
+    wanted: ["{hero} breaks what the Host has raised. Remember them.", "The dead have learned the name {hero}."],
+    hunted: ["Let the patient ones walk after {hero}.", "{hero} will tire. We do not."],
+    marked: ["Every grave in the Marches waits for {hero}.", "The Host marches for {hero} alone."],
+    bounty: ["{hero} joins our ranks at last.", "{hero} fell. The Host is patient, and the Host is paid."],
+  },
+  hidekin: {
+    wanted: ["{hero} smells of our blood, children.", "The burrows whisper the name {hero}."],
+    hunted: ["Dig after {hero}. Wherever they stand, come up under them.", "Bite {hero}'s heels, my children."],
+    marked: ["{hero} has no ground left that is not ours.", "Every tunnel leads to {hero}."],
+    bounty: ["{hero} is in the earth now. Feast.", "We came up under {hero}. It is done."],
+  },
+  veiled: {
+    wanted: ["The omens turn dark around {hero}.", "{hero} stands against the Circle. It is seen."],
+    hunted: ["The sun points to {hero}. Follow its light.", "Send the seekers after {hero}."],
+    marked: ["{hero}'s fate is written in every star.", "The Circle will chant until {hero} falls."],
+    bounty: ["{hero} has met the fate we foretold.", "The veil closes over {hero}. As it was written."],
+  },
+};
+/** The leader line of `k` for a feud moment about hero `hero`, picked by `seed`. */
+export function feudLine(k: ClanKey, moment: FeudMoment, hero: string, seed: number): { name: string; text: string } {
+  const opts = FEUD_LINES[k][moment];
+  const t = opts[Math.abs(Math.floor(seed)) % opts.length].replace(/\{hero\}/g, hero);
+  return { name: LEADERS[k].name, text: t.charAt(0).toUpperCase() + t.slice(1) };
+}
