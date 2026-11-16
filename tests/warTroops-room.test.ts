@@ -58,7 +58,8 @@ test("war troops (room): a land near a hero fields its holder's troops; they van
     await wait(400);
     room.warTroops.tick(Date.now());
     let left = 0;
-    room.state.mobs.forEach((m: any) => { if (m.kind === "trooper") left++; });
+    // only the lands' own troops (wt*): battles, marches and caravans field troopers of their own on their own clocks
+    room.state.mobs.forEach((m: any, mid: string) => { if (m.kind === "trooper" && mid.startsWith("wt")) left++; });
     assert.equal(left, 0, "every land asleep");
   } finally { WAR_TROOPS.sleepMs = sleep; await srv.stop(); }
 });

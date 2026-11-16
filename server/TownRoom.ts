@@ -1,4 +1,5 @@
 import { addHeat, coolHeat, isOverheated, OVERLOAD } from "../shared/overload";
+import { spreadCrowd } from "./crowd";
 import { MOB_CELL, MobGrid, trackSchemaMoves } from "./mobGrid";
 import { fastFields } from "./schemaFast";
 import { type AuthContext, Client, Room } from "colyseus";
@@ -619,6 +620,7 @@ export class TownRoom extends Room<TownState> {
   private mobView = new MobView();
   /** Skill clip capture (stageCapture): blobs that only stand and take the hits. */
   private dummies = new Set<string>();
+  private crowdStand = (m: Mob, x: number, y: number) => this.canStep(m, x, y); // spreadCrowd's wall/safe-zone test
   /** Champions (shared/champions.ts, server/champions.ts): the room lends them a few of its powers. */
   private champs = new Champions({
     mob: (id) => this.state.mobs.get(id),
@@ -3177,6 +3179,8 @@ export class TownRoom extends Room<TownState> {
         if (m.fx !== fx) m.fx = fx;
         this.updateMob(m, id, dt, now);
         if (m.perch) { m.x = m.homeX; m.y = m.homeY; m.moving = false; } // lookouts never leave their tower
+        // In a fight: keep its body out of the others' (server/crowd.ts), so packs ring their target instead of stacking
+        else if ((m.target || m.foe) && !m.dead && !m.hidden && now >= m.rushUntil && !this.dummies.has(id)) spreadCrowd(mobs, m, this.crowdStand);
         // Position history for lag-forgiving swings (only kept while it moves)
         const h = m.hist, n = h.length;
         if (m.dead) { if (n) h.length = 0; }
