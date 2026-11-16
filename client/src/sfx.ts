@@ -36,7 +36,7 @@ let voices = 0;
 const MAX_VOICES = 28;
 const lastPlay = new Map<string, number>();
 /** Sounds that ring for seconds (kept connected longer). */
-const LONG = new Set(["lootRare", "lootLegendary", "horn", "ritual", "ritualCall", "demonRise", "demonRoar", "shrine", "portalTravel", "portalWake", "ferryOff", "ferryOn", "necroWind", "heroDie", "levelup", "owl", "chime", "warcry", "motherInflate", "demonFire", "skelDie", "lutePluck", "swResonate", "swShatter", "swBounce", "swSnap", "swSwell", "caravan_raided", "caravan_arrived", "siege_front", "ram_wrecked", "ram_at_gate", "tunnel_open", "tunnel_collapse", "ritual_broken", "ritual_done", "wanted_up", "bounty_claimed", "hold_sacked", "hold_grow", "column_clash", "column_march", "column_gate"]);
+const LONG = new Set(["lootRare", "lootLegendary", "horn", "ritual", "ritualCall", "demonRise", "demonRoar", "shrine", "portalTravel", "portalWake", "ferryOff", "ferryOn", "necroWind", "heroDie", "levelup", "owl", "chime", "warcry", "motherInflate", "demonFire", "skelDie", "lutePluck", "swResonate", "swShatter", "swBounce", "swSnap", "swSwell", "caravan_raided", "caravan_arrived", "siege_front", "ram_wrecked", "ram_at_gate", "tunnel_open", "tunnel_collapse", "ritual_broken", "ritual_done", "wanted_up", "bounty_claimed", "hold_sacked", "hold_grow", "column_clash", "column_march", "column_gate", "battle_horn", "battle_banner", "battle_officer", "battle_end"]);
 const AMBIENT = new Set(["crackle", "bird", "cricket", "chime", "owl", "step", "skelIdle", "blobGurgle", "crawl"]);
 
 const TOWNS = ["Oakvale", "Market Square", "Chapel of the Dawn", "The Rusty Tankard", "The Smithy", "Saltmere", "Hunter's Camp"];
@@ -778,6 +778,32 @@ const R: Record<string, Recipe> = {
     noise(o, t + 0.1, { type: "bandpass", f: 600, f2: 2800, q: 2, dur: 0.7, vol: 0.12 * v, att: 0.3 });
     bell(o, t + 0.6, 1046, 0.7, 0.06 * v);
   },
+  // Big battles (server broadcast("sfx", { ev: "battle_horn" | "battle_banner" | "battle_officer" | "battle_end", ... }), W5).
+  // Horn: a pair of deep war horns, a low fifth blown twice, the second answering a step lower
+  battle_horn: (o, t, v) => {
+    for (const [dt, f0, f1] of [[0, 82, 87], [0.9, 123, 110]] as const)
+      [1, 2, 3, 4].forEach((m, i) => tone(o, t + dt, { type: "sawtooth", f: f0 * m, f2: f1 * m, dur: 1.5, vol: (0.2 / (1 + i)) * v, att: 0.18, vib: 1.1 * m, vibHz: 4.5, detune: i * 5 }));
+    noise(o, t, { type: "bandpass", f: 400, q: 1.5, dur: 1.8, vol: 0.05 * v, att: 0.2 });
+    thud(o, t, 55, 0.4 * v, 0.3);
+  },
+  // Banner taken: cloth snapping in the wind, then a short bright brass fanfare (three rising notes)
+  battle_banner: (o, t, v) => {
+    noise(o, t, { type: "highpass", f: 1800, dur: 0.07, vol: 0.3 * v }); noise(o, t + 0.1, { type: "bandpass", f: 1300, q: 3, dur: 0.18, vol: 0.14 * v });
+    [[0, 294], [0.16, 370], [0.32, 440]].forEach(([d, f], i) => [1, 2].forEach((m, j) => tone(o, t + 0.2 + d, { type: "sawtooth", f: f * m, f2: f * m * 1.01, dur: i === 2 ? 0.7 : 0.2, vol: (0.1 / (1 + j)) * v, att: 0.02, vib: 1, vibHz: 5 })));
+  },
+  // A captain falls: a heavy body-and-armour thud, a clank of dropped steel and a low brass sting sinking
+  battle_officer: (o, t, v) => {
+    thud(o, t, 58, 0.75 * v, 0.4); clank(o, t + 0.05, 0.22 * v, 1000); clank(o, t + 0.17, 0.12 * v, 1500);
+    [1, 2, 3].forEach((m, i) => tone(o, t + 0.25, { type: "sawtooth", f: 98 * m, f2: 82 * m, dur: 1.2, vol: (0.2 / (1 + i)) * v, att: 0.08, vib: 1.2 * m, vibHz: 5 }));
+  },
+  // The battle ends: a victory (major, brass rising over a drum roll) or defeat (minor, falling and slow). `arg` is "win" | "lose" | else a draw.
+  battle_end: (o, t, v, a) => {
+    const win = a === "win" || a === "attacker" || a === "victory", lose = a === "lose" || a === "defeat";
+    const notes = win ? [262, 330, 392, 523] : lose ? [330, 294, 262, 196] : [294, 294, 262];
+    for (let i = 0; i < 6; i++) thud(o, t + i * 0.07, 85, 0.12 * v, 0.06);
+    notes.forEach((f, i) => [1, 2].forEach((m, j) => tone(o, t + 0.4 + i * (win ? 0.22 : 0.4), { type: "sawtooth", f: f * m, f2: f * m * (win ? 1 : 0.97), dur: i === notes.length - 1 ? 1.4 : 0.35, vol: (0.12 / (1 + j)) * v, att: 0.03, vib: 1, vibHz: 5 })));
+    if (win) bell(o, t + 1.3, 1047, 1.0, 0.05 * v); else thud(o, t + 1.6, 50, 0.4 * v, 0.4);
+  },
   // Raising: rope creaking through a pulley and cloth flapping, short; client/src/warSack.ts repeats it while a banner goes up near
   banner_raise: (o, t, v) => {
     tone(o, t, { type: "sawtooth", f: rnd(380, 420), f2: rnd(520, 560), dur: 0.32, vol: 0.035 * v, att: 0.05, vib: 9, vibHz: 14 });
@@ -1039,6 +1065,51 @@ function loopTones(freqs: number[], type: OscillatorType, tremHz: number): Bed {
   });
   trem.connect(g).connect(bedBus!);
   return { g };
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// Battle din (W5): the roar of a big battle, started by a client module while the hero is near one. A looping
+// band-passed noise bed (the crowd) plus sparse scheduled clashes and far shouts, all through one gain.
+
+let din: { g: GainNode; timer: number; src: AudioBufferSourceNode } | null = null;
+let dinVol = 0;
+
+/** Starts the din loop (silent until setBattleDin gives it a volume). Safe to call twice or before sound is on. */
+export function startBattleDin() {
+  if (din || !ctx || !bedBus || !noiseBuf) return;
+  const c = ctx;
+  const g = c.createGain(); g.gain.value = 0; g.connect(bedBus);
+  const src = c.createBufferSource(); src.buffer = noiseBuf; src.loop = true; src.playbackRate.value = 0.7;
+  const lp = c.createBiquadFilter(); lp.type = "bandpass"; lp.frequency.value = 650; lp.Q.value = 0.7;
+  const bg = c.createGain(); bg.gain.value = 0.35;
+  src.connect(lp).connect(bg).connect(g); src.start();
+  const timer = window.setInterval(() => {
+    if (!ctx || dinVol < 0.03 || document.hidden) return;
+    const t = ctx.currentTime + 0.02, n = Math.random() < 0.5 + dinVol * 0.5 ? 1 + (Math.random() < dinVol * 0.5 ? 1 : 0) : 0;
+    for (let i = 0; i < n; i++) {
+      const tt = t + rnd(0, 0.3);
+      if (Math.random() < 0.7) { clank(g, tt, rnd(0.05, 0.12), rnd(1100, 2400)); if (Math.random() < 0.4) noise(g, tt + 0.03, { type: "lowpass", f: 500, dur: 0.12, vol: 0.12 }); }
+      else voice(g, tt, { f: rnd(110, 170), f2: rnd(90, 150), dur: rnd(0.35, 0.7), vol: 0.035, vowel: [650, 1100], vowel2: [500, 900], att: 0.08, rough: 0.02 });
+    }
+  }, 380);
+  din = { g, timer, src };
+}
+
+/** Din volume 0..1 (eased over about a second). Starts the loop if it is not running. */
+export function setBattleDin(vol: number) {
+  dinVol = Math.max(0, Math.min(1, vol || 0));
+  if (!din) startBattleDin();
+  if (din && ctx) din.g.gain.setTargetAtTime(dinVol * 0.9, ctx.currentTime, 0.5);
+}
+
+/** Fades the din out and tears it down. */
+export function stopBattleDin() {
+  const d = din;
+  if (!d) return;
+  din = null; dinVol = 0;
+  window.clearInterval(d.timer);
+  if (ctx) d.g.gain.setTargetAtTime(0, ctx.currentTime, 0.3);
+  window.setTimeout(() => { d.src.stop(); d.g.disconnect(); }, 2000);
 }
 
 function makeBeds() {
@@ -1363,6 +1434,10 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
       case "column_march": pos("column_march", 0.9, undefined, { key: "cm" + (ev.id ?? ""), minGap: 4000, reach: 1.8 }); break;
       case "column_clash": pos("column_clash", 1, undefined, { key: "cc" + (ev.x ?? "") + ":" + (ev.y ?? ""), minGap: 1500, reach: 2 }); break;
       case "column_gate": pos("column_gate", 1, undefined, { key: "cg" + (ev.id ?? ""), minGap: 1500, reach: 1.6 }); break;
+      case "battle_horn": pos("battle_horn", 1, undefined, { key: "bh" + (ev.id ?? ""), minGap: 2500, reach: 3 }); break;
+      case "battle_banner": pos("battle_banner", 1, undefined, { key: "bb" + (ev.id ?? "") + ":" + (ev.i ?? ""), minGap: 1200, reach: 2.2 }); break;
+      case "battle_officer": pos("battle_officer", 1, undefined, { key: "bo" + (ev.id ?? "") + ":" + (ev.x ?? ""), minGap: 1000, reach: 2.2 }); break;
+      case "battle_end": pos("battle_end", 1, ev.result, { key: "be" + (ev.id ?? ""), minGap: 3000, reach: 3 }); break;
       case "ritual_done": pos("ritual_done", 1, undefined, { key: "rd" + (ev.x ?? "") + ":" + (ev.y ?? ""), minGap: 1500, reach: 2 }); break;
       case "caravan_arrived": case "caravan_delivered": pos("caravan_arrived", 1, undefined, { key: "ca" + (ev.id ?? ev.clan ?? ""), minGap: 500, reach: 2 }); break;
       case "ferry": { // off at the jetty it left, then the landing (the rider hears both; others only what is near them)
