@@ -61,6 +61,7 @@ test("intel (W3): holdIntel names the Hold's tier and counts its guards by tier,
   for (const [fort, tier] of [[0, 0], [0.3, 1], [0.7, 2]] as const) {
     const s = newWar();
     s.fort[t] = fort;
+    for (const n of TERRITORIES[t].near) s.owner[n] = s.owner[t]; // an inner land (a front land is a camp at most)
     _resetWar({ v: 1, state: s, minds: newMinds(), next: Date.now() + 1e9, log: [] });
     const got = holdIntel(warNow()!, t);
     assert.equal(got.tier, tier, `fort ${fort}`);

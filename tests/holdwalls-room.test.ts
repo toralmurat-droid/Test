@@ -8,6 +8,7 @@ import { newMinds } from "../shared/war/doctrine";
 import { BLOCKING, FORT_PLANS, fortOf, liveTier, setHoldOwners, touchesHoldWall } from "../shared/war/holdWalls";
 import { newWar } from "../shared/war/rules";
 import { HOLDS } from "../shared/war/standards";
+import { TERRITORIES } from "../shared/war/territories";
 import { _resetWar, warState } from "../server/war";
 import { rememberLive } from "../server/handoff";
 
@@ -101,6 +102,7 @@ test("hold walls (room, W3): when a Hold grows, heroes where the outer works ris
     p.x = sx; p.y = sy;
     await wait(1200);
     assert.ok(Math.hypot(p.x - sx, p.y - sy) < 1 && liveTier(HOLD.t) === 1, "a camp: nothing stands there yet");
+    for (const n of TERRITORIES[HOLD.t].near) warState()!.owner[n] = "wardens"; // an inner land (a front land is a camp at most)
     warState()!.fort[HOLD.t] = 0.7; // built up to a fortress
     assert.ok(await until(() => liveTier(HOLD.t) === 2 && !touchesHoldWall(p.x, p.y, PLAYER_RADIUS), 2500), "the outer palisade rose and the hero is out of it within the next sweep");
     assert.ok(!blocked(p.x, p.y) && Math.hypot(p.x - sx, p.y - sy) <= 1.5 * TILE, `on free ground next to it (${((p.x - sx) / TILE).toFixed(1)} tiles)`);

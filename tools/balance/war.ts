@@ -22,7 +22,8 @@
  */
 import { CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
 import { newMinds, scriptedOrders } from "../../shared/war/doctrine";
-import { holdTier } from "../../shared/war/holdTiers";
+import { HOLD_TIER, holdTier } from "../../shared/war/holdTiers";
+import { setWarRelations } from "../../shared/war/feuds";
 import { landOf, newWar, nightRaid, phaseOf, rallyClan, sackHold, targetsOf, WAR, warTick, type TickExtra } from "../../shared/war/rules";
 import { HOLD_SACK } from "../../shared/war/holdSack";
 import { TERRITORIES } from "../../shared/war/territories";
@@ -47,6 +48,7 @@ const SACK_PER_DAY = Number(sackN || 6);
 if (args.includes("--old-brakes")) Object.assign(WAR, { huntShare: 2, huntLands: 0, rallyValor: 1 });
 const TIERS = args.includes("--tiers");
 if (flag("sack-fort") !== undefined) WAR.sackFort = Number(flag("sack-fort"));
+if (flag("camp-fort") !== undefined) HOLD_TIER.camp.fort = Number(flag("camp-fort")); // (--tiers: try another camp threshold)
 const SETTLE_DAYS = 7, STREAK_DAYS = 3;
 
 function mulberry(a: number) {
@@ -61,7 +63,7 @@ interface Result {
   /** Sacks per war day that landed (legal target, no siege), and the sieges they called. */
   sacks: number; sackSieges: number;
   /** --tiers: per clan the share of its Holds at each tier (sampled daily after settling); front lands that are outposts. */
-  tiers: Record<ClanKey, [number, number, number]>; frontOutpost: number;
+  tiers: Record<ClanKey, [number, number, number]>; frontOutpost: number; front: [number, number, number];
 }
 
 /** Plays RUNS wars of DAYS days (same seeds for every call, so a run with and without the ruse can be compared). */
@@ -72,6 +74,7 @@ function play(clever?: ClanKey): Result {
   const rally = Object.fromEntries(CLAN_KEYS.map((k) => [k, 0])) as Record<ClanKey, number>;
   const tiers = Object.fromEntries(CLAN_KEYS.map((k) => [k, [0, 0, 0]])) as Record<ClanKey, [number, number, number]>;
   let front = 0, frontOut = 0;
+  const frontTiers: [number, number, number] = [0, 0, 0];
   let samples = 0, dominatedRuns = 0, flips = 0, nights = 0, hunts = 0, ticks = 0, sacks = 0, sackSieges = 0;
   for (let r = 0; r < RUNS; r++) {
     const rnd = mulberry(SEED * 7919 + r), s = newWar(), minds = newMinds();
@@ -99,6 +102,7 @@ function play(clever?: ClanKey): Result {
           if (phaseOf(s.tick) === 2) { nights++; const h = nightRaid(s, 2); if (h) { hunts++; hunted[h.clan]++; } }
         }
         warTick(s, orders, extra);
+        if (TIERS) setWarRelations(s.owner, s.tick, d === 0 && i === 0 ? [] : undefined); // (display only, for the tiers: the clans at war as the live server keeps them)
         for (let j = 0; j < N; j++) if (s.owner[j] !== prev[j]) flips++;
         prev = s.owner.slice();
       }
@@ -111,7 +115,7 @@ function play(clever?: ClanKey): Result {
       if (TIERS) for (const t of TERRITORIES) {
         const tier = holdTier(s, t.id);
         tiers[s.owner[t.id]][tier]++;
-        if (t.near.some((n) => s.owner[n] !== s.owner[t.id])) { front++; if (tier === 0) frontOut++; }
+        if (t.near.some((n) => s.owner[n] !== s.owner[t.id])) { front++; frontTiers[tier]++; if (tier === 0) frontOut++; }
       }
     }
     if (dominated) dominatedRuns++;
@@ -119,7 +123,7 @@ function play(clever?: ClanKey): Result {
   }
   for (const k of CLAN_KEYS) avg[k] /= Math.max(1, samples);
   for (const k of CLAN_KEYS) { hunted[k] /= Math.max(1, nights); rally[k] /= Math.max(1, ticks); }
-  return { avg, worst, dominated: dominatedRuns / RUNS, flips: flips / (RUNS * DAYS), hunts: hunts / Math.max(1, nights), hunted, rally, sacks: sacks / (RUNS * DAYS), sackSieges: sackSieges / (RUNS * DAYS), tiers, frontOutpost: frontOut / Math.max(1, front) };
+  return { avg, worst, dominated: dominatedRuns / RUNS, flips: flips / (RUNS * DAYS), hunts: hunts / Math.max(1, nights), hunted, rally, sacks: sacks / (RUNS * DAYS), sackSieges: sackSieges / (RUNS * DAYS), tiers, frontOutpost: frontOut / Math.max(1, front), front: frontTiers };
 }
 
 const t0 = Date.now();
@@ -140,7 +144,9 @@ if (TIERS) {
     const [a, b, c] = base.tiers[k], n = Math.max(1, a + b + c);
     console.log(`${k.padEnd(10)}${" ".repeat(52)}${pct(a / n).padStart(7)} ${pct(b / n).padStart(6)} ${pct(c / n).padStart(9)}   ${((b + 2 * c) / n).toFixed(2).padStart(7)}`);
   }
-  console.log(`front-line lands that are outposts: ${pct(base.frontOutpost)}`);
+  const all = CLAN_KEYS.reduce((a, k) => a.map((x, i) => x + base.tiers[k][i]), [0, 0, 0]), n = Math.max(1, all[0] + all[1] + all[2]), fn = Math.max(1, base.front[0] + base.front[1] + base.front[2]);
+  console.log(`all Holds: ${all.map((x) => pct(x / n)).join(" / ")} (outpost / camp / fortress); front-line lands (a neighbour held by another clan): ${base.front.map((x) => pct(x / fn)).join(" / ")}`);
+  console.log(`front-line lands that are outposts: ${pct(base.frontOutpost)} (camp threshold: fort ${HOLD_TIER.camp.fort})`);
 }
 if (ruse && CLEVER) {
   console.log(`with the ${CLEVER} ruse (feint by day, push at night): ${CLEVER} averages ${pct(ruse.avg[CLEVER])} of the land vs ${pct(base.avg[CLEVER])} without; domination ${pct(ruse.dominated)}`);

@@ -1,11 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { CLAN_KEYS } from "../shared/war/clans";
-import { HOLD_TIER, holdGrew, holdTier, holdTiers } from "../shared/war/holdTiers";
+import { frontLand, HOLD_TIER, holdGrew, holdTier, holdTiers } from "../shared/war/holdTiers";
+import { _resetWarRelations, atWar, setWarRelations } from "../shared/war/feuds";
 import { viewTier } from "../shared/war/intel";
 import { newWar, sackHold, targetsOf, WAR, warTick, type WarState } from "../shared/war/rules";
 import { TERRITORIES } from "../shared/war/territories";
 import { warView } from "../shared/war/view";
+
+_resetWarRelations(); // (no clan at war unless a test says so: no front lands)
 
 /** A land that is nobody's capital, and a capital held by its clan, in a fresh war. */
 const plain = TERRITORIES.find((t) => !t.capitalOf)!.id;
@@ -87,6 +90,36 @@ test("hold tiers: the Herald hears of growth only when the works cross a tier (n
   a.fort[plain] = 0.19; a.control[plain] = 20; b.fort[plain] = 0.2; b.control[plain] = 21;
   assert.equal(holdGrew(a, b, plain), undefined);
   assert.equal(holdGrew(a, a, capital), undefined, "a capital never grows");
+});
+
+test("hold tiers: a front land (bordering a clan its holder is at war with) is a camp at most; inner lands and capitals keep their fortress", () => {
+  const s = newWar(), peace = () => false, war = () => true;
+  const front = TERRITORIES.find((t) => !t.capitalOf && t.near.some((n) => s.owner[n] !== s.owner[t.id]))!.id;
+  const inner = TERRITORIES.find((t) => !t.capitalOf && t.near.every((n) => s.owner[n] === s.owner[t.id]))!.id;
+  const cap = TERRITORIES.find((t) => t.capitalOf && t.near.some((n) => s.owner[n] !== s.owner[t.id]))!.id;
+  for (const t of [front, inner]) { s.fort[t] = 0.9; s.control[t] = 100; }
+  assert.ok(frontLand(s, front, war) && !frontLand(s, front, peace) && !frontLand(s, inner, war));
+  assert.equal(holdTier(s, front, war), 1, "a fortress-built front land shows a camp");
+  assert.equal(holdTier(s, front, peace), 2, "at peace with its neighbours: a fortress");
+  assert.equal(holdTier(s, inner, war), 2, "an inner land: a fortress");
+  assert.equal(holdTier(s, cap, war), 2, "a capital on the front: still a fortress");
+  s.control[front] = 20;
+  assert.equal(holdTier(s, front, war), 0, "a besieged front land: an outpost");
+  // the live relations (feuds.ts) by default: neighbours of different clans are at war on the opening map
+  try {
+    setWarRelations(s.owner, 0, []);
+    s.control[front] = 100;
+    const other = s.owner[TERRITORIES[front].near.find((n) => s.owner[n] !== s.owner[front])!];
+    assert.ok(atWar(s.owner[front], other));
+    assert.equal(holdTier(s, front), 1);
+    assert.equal(holdTiers(s)[inner], 2);
+    assert.equal(warView(s, 0).tier![front], 1, "the snapshot shows it");
+    // the front moving away: the Hold shows its fortress again (no Herald: its works did not grow)
+    const before = { owner: [...s.owner], fort: [...s.fort], control: [...s.control] };
+    for (const n of TERRITORIES[front].near) s.owner[n] = s.owner[front];
+    assert.equal(holdTier(s, front), 2);
+    assert.equal(holdGrew(before, s, front), undefined);
+  } finally { _resetWarRelations(); }
 });
 
 test("hold tiers: WarView.tier has one tier (0..2) per land, matching holdTiers; older snapshots read as camps", () => {

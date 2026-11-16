@@ -263,6 +263,7 @@ test("war troops (room, W3): the guards follow the Hold's tier: 3 at an outpost,
   try {
     const { room } = await setup(srv);
     const guards = () => landTroops(room).filter(([id]) => room.warTroops._land(LAND.id).slots.some((s: any) => s.id === id && s.role === "guard"));
+    for (const n of LAND.near) warState()!.owner[n] = warState()!.owner[LAND.id]; // an inner land (a front land is a camp at most)
     for (const [fort, tier] of [[0, 0], [0.3, 1], [0.7, 2], [0.1, 0]] as const) {
       warState()!.fort[LAND.id] = fort;
       room.warTroops.tick(Date.now());
