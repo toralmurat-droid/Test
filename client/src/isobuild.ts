@@ -2,7 +2,7 @@ import { col, Iso, planks, rng, stones, type Pt as IPt } from "./smoothProps";
 import { hiResTexture } from "./smooth";
 import { pixelize } from "./pixelize";
 import { SMOOTH } from "./isoflag";
-import { staticObj } from "./staticChunks";
+import { StaticChunks, staticObj } from "./staticChunks";
 import Phaser from "phaser";
 import { TILE } from "../../shared/constants";
 import { AREAS, BARNS, OBJECTS, T, TILE_COUNT } from "../../shared/map";
@@ -411,6 +411,9 @@ function house(scene: Phaser.Scene, x0: number, y0: number, x1: number, yb: numb
   const topY = P(X0, Y0, top + 26).y - 4, bottom = P(X1 + o, Y1 + o).y + 4;
   const cw = Math.ceil(right - left), ch = Math.ceil(bottom - topY);
   const key = `house_${x0}_${y0}`;
+  // Saltmere's buildings register gull perches and smoke while painted (ambient.ts reads them at start): paint those now
+  if (salt || !lazyBake(scene, left, topY, cw, ch, () => paintHouse())) paintHouse();
+  function paintHouse() {
   const tex = scene.textures.createCanvas(key, cw, ch)!;
   const ctx = tex.getContext();
   ctx.imageSmoothingEnabled = false;
@@ -536,6 +539,32 @@ function house(scene: Phaser.Scene, x0: number, y0: number, x1: number, yb: numb
   tex.refresh();
 
   sliced(scene, key, X0, Y0, X1, Y1, left, topY, cw, ch, true);
+  }
+}
+
+/** How far (screen px) round the view a building is baked ahead, so it is ready before it scrolls in. */
+const BAKE_AHEAD = 640;
+/**
+ * Iso view: defers `bake` (canvas painting, GPU upload, slices) until the building's screen box comes near the
+ * camera, through a stand-in registered with the static chunks. The world holds about 200 houses, most of them in
+ * lands a hero rarely visits (the capital cities alone were ~30 MB of textures); baking them all at start cost load
+ * time, heap and GPU memory. Returns false (bake now) in the top-down view.
+ */
+function lazyBake(scene: Phaser.Scene, left: number, topY: number, cw: number, ch: number, bake: () => void): boolean {
+  const chunks = StaticChunks.of(scene);
+  if (!chunks) return false;
+  const proxy = scene.add.zone(0, 0, 1, 1).setVisible(false);
+  let done = false;
+  chunks.add(proxy, {
+    box: [left - BAKE_AHEAD, topY - BAKE_AHEAD, left + cw + BAKE_AHEAD, topY + ch + BAKE_AHEAD],
+    onLive: (on) => {
+      if (!on || done) return;
+      done = true;
+      bake();
+      scene.time.delayedCall(0, () => proxy.destroy()); // not from inside the chunks' own pass
+    },
+  });
+  return true;
 }
 
 /**

@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-16",
+  "title": "Smoother frames",
+  "changes": [
+    "Buildings are now prepared only when you come near them, so the game loads faster and uses less graphics memory (the capital cities were the biggest part).",
+    "Lamps, lit windows and fire glows far from your view are no longer drawn, which keeps nights smoother."
+  ]
+}
