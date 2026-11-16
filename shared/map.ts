@@ -167,6 +167,9 @@ export const riverCenter = (y: number) => Math.round(118 + 3 * Math.sin(y / 11) 
 const WALKABLE_OBJECTS = new Set<number>([T.BUSH]);
 /** Solid flag per tile (1 = blocks the whole tile, 2 = only a small core in its middle), filled once the world is built: the hot collision check reads one byte. */
 let SOLID: Uint8Array | null = null;
+/** Plain copies of the map size and tile size for the hot tile checks below: run under tsx (the tests), every use of
+ *  an imported constant is a getter call, which made isSolidAt/isSolidTile a large share of each test file's load. */
+const MW = MAP_W, MH = FULL_H, TS = TILE;
 /**
  * Cut trees (stumps, dead trunks) only block a small core round the trunk, not their whole tile (Murat 2026-11-08:
  * hard to get through where there are cut trees). Heroes and monsters walk round them, slip between a stump and a
@@ -1127,10 +1130,10 @@ function carveFloor(f: Floor, ground: number[][], objects: number[][]) {
 export const WORLD = buildWorld();
 export const GROUND = WORLD.ground;
 export const OBJECTS = WORLD.objects;
-SOLID = new Uint8Array(MAP_W * FULL_H);
-for (let ty = 0; ty < FULL_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
+SOLID = new Uint8Array(MW * MH);
+for (let ty = 0; ty < MH; ty++) for (let tx = 0; tx < MW; tx++) {
   const o = OBJECTS[ty][tx];
-  SOLID[ty * MAP_W + tx] = GROUND[ty][tx] === T.WATER ? 1 : o === EMPTY || WALKABLE_OBJECTS.has(o) ? 0 : SMALL_OBJECTS.has(o) ? 2 : 1;
+  SOLID[ty * MW + tx] = GROUND[ty][tx] === T.WATER ? 1 : o === EMPTY || WALKABLE_OBJECTS.has(o) ? 0 : SMALL_OBJECTS.has(o) ? 2 : 1;
 }
 export const AREAS = WORLD.areas;
 
@@ -1247,14 +1250,14 @@ function buildSignpost(p: { x: number; y: number; to: string[] }): Signpost {
   let cx = p.x + 0.5, cy = p.y + 0.5, cd = Infinity;
   for (let j = -3; j <= 3; j++) for (let i = -3; i <= 3; i++) {
     const x = p.x + i, y = p.y + j;
-    if (roads.has(y * MAP_W + x) && Math.hypot(i, j) < cd) { cd = Math.hypot(i, j); cx = x + 0.5; cy = y + 0.5; }
+    if (roads.has(y * MW + x) && Math.hypot(i, j) < cd) { cd = Math.hypot(i, j); cx = x + 0.5; cy = y + 0.5; }
   }
-  const dist = (k: number) => Math.hypot((k % MAP_W) + 0.5 - cx, ((k / MAP_W) | 0) + 0.5 - cy);
+  const dist = (k: number) => Math.hypot((k % MW) + 0.5 - cx, ((k / MW) | 0) + 0.5 - cy);
   // Road tiles on a ring around the post, grouped into arcs: each arc is one road leaving the spot
   const ring: { k: number; a: number }[] = [];
   for (let j = -5; j <= 5; j++) for (let i = -5; i <= 5; i++) {
-    const x = Math.floor(cx) + i, y = Math.floor(cy) + j, k = y * MAP_W + x;
-    if (x < 0 || y < 0 || x >= MAP_W || y >= FULL_H || !roads.has(k)) continue;
+    const x = Math.floor(cx) + i, y = Math.floor(cy) + j, k = y * MW + x;
+    if (x < 0 || y < 0 || x >= MW || y >= MH || !roads.has(k)) continue;
     const d = dist(k);
     if (d >= 2.5 && d <= 4) ring.push({ k, a: Math.atan2((y + 0.5) - cy, (x + 0.5) - cx) });
   }
@@ -1268,7 +1271,7 @@ function buildSignpost(p: { x: number; y: number; to: string[] }): Signpost {
   // Walk each road outwards to see which places it reaches first
   const named = AREAS.filter((a) => !(p.x >= a.x && p.x < a.x + a.w && p.y >= a.y && p.y < a.y + a.h));
   const broad = (name: string) => (AREAS.find((a) => a.name === name)!.w * AREAS.find((a) => a.name === name)!.h) >= 2500;
-  const inArea = (k: number, a: Area) => { const x = k % MAP_W, y = (k / MAP_W) | 0; return x >= a.x && x < a.x + a.w && y >= a.y && y < a.y + a.h; };
+  const inArea = (k: number, a: Area) => { const x = k % MW, y = (k / MW) | 0; return x >= a.x && x < a.x + a.w && y >= a.y && y < a.y + a.h; };
   const branches = arcs.map((arc) => {
     const reach = new Map<string, number>();
     const seen = new Set<number>(arc.map((r) => r.k));
@@ -1276,7 +1279,7 @@ function buildSignpost(p: { x: number; y: number; to: string[] }): Signpost {
     for (let step = 0; frontier.length && step < 400; step++) {
       for (const k of frontier) for (const a of named) if (!reach.has(a.name) && inArea(k, a)) reach.set(a.name, step);
       const next: number[] = [];
-      for (const k of frontier) for (const n of [k + 1, k - 1, k + MAP_W, k - MAP_W, k + MAP_W + 1, k + MAP_W - 1, k - MAP_W + 1, k - MAP_W - 1]) {
+      for (const k of frontier) for (const n of [k + 1, k - 1, k + MW, k - MW, k + MW + 1, k + MW - 1, k - MW + 1, k - MW - 1]) {
         if (seen.has(n) || !roads.has(n) || dist(n) < 2.5) continue;
         seen.add(n); next.push(n);
       }
@@ -1312,8 +1315,8 @@ export function signpostNear(px: number, py: number, reach = 1.6): Signpost | un
 }
 
 export function isSolidTile(tx: number, ty: number): boolean {
-  if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= FULL_H) return true;
-  if (SOLID && (tx | 0) === tx && (ty | 0) === ty) return SOLID[ty * MAP_W + tx] !== 0;
+  if (tx < 0 || ty < 0 || tx >= MW || ty >= MH) return true;
+  if (SOLID && (tx | 0) === tx && (ty | 0) === ty) return SOLID[ty * MW + tx] !== 0;
   const o = OBJECTS[ty][tx];
   return (o !== EMPTY && !WALKABLE_OBJECTS.has(o)) || GROUND[ty][tx] === T.WATER;
 }
@@ -1324,9 +1327,9 @@ export function isSmallObstacleTile(tx: number, ty: number): boolean {
 }
 
 export function isSolidAt(px: number, py: number): boolean {
-  const tx = Math.floor(px / TILE), ty = Math.floor(py / TILE);
-  if (SOLID && tx >= 0 && ty >= 0 && tx < MAP_W && ty < FULL_H && SOLID[ty * MAP_W + tx] === 2)
-    return Math.abs(px - (tx + 0.5) * TILE) < SMALL_CORE && Math.abs(py - (ty + 0.5) * TILE) < SMALL_CORE;
+  const tx = Math.floor(px / TS), ty = Math.floor(py / TS);
+  if (SOLID && tx >= 0 && ty >= 0 && tx < MW && ty < MH && SOLID[ty * MW + tx] === 2)
+    return Math.abs(px - (tx + 0.5) * TS) < SMALL_CORE && Math.abs(py - (ty + 0.5) * TS) < SMALL_CORE;
   return isSolidTile(tx, ty);
 }
 
@@ -1357,7 +1360,7 @@ export function randomSpawn(): { x: number; y: number } {
 
 /** The market squares (Oakvale's, Saltmere's harbour square, Kel Ashar's, Cairnwatch's, the Rustwater Post's, Ropewell's, Tollcross's) are safe zones: no damage there, and monsters will not enter. */
 export function isSafeZone(px: number, py: number): boolean {
-  const tx = Math.floor(px / TILE), ty = Math.floor(py / TILE);
+  const tx = Math.floor(px / TS), ty = Math.floor(py / TS);
   const z = SAFE_ZONE;
   if (tx >= z.x && ty >= z.y && tx < z.x + z.w && ty < z.y + z.h) return true;
   const h = SALT_SAFE; // Act 1: Saltmere's harbour square

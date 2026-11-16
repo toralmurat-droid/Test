@@ -247,8 +247,13 @@ const inRect = (r: { x: number; y: number; w: number; h: number }, tx: number, t
 const BROAD_AREAS = ["Whispering Woods", "River Ashwell", "The Sunscar", "The Grey Barrow Moors", "The Red Badlands", "The Dry Ashwell", "The Mawdeep Sinkholes", "The Crown of the Marches"];
 /** Named areas (and Oakvale's surroundings) a wild zone leaves alone: its monsters stay in their own biome. */
 function claimedByArea(name: string, tx: number, ty: number): boolean {
-  return AREAS.some((a) => a.name !== name && !BROAD_AREAS.includes(a.name) && inRect(a, tx, ty));
+  let list = claimCache.get(name);
+  if (!list) claimCache.set(name, list = AREAS.filter((a) => a.name !== name && !BROAD_AREAS.includes(a.name)));
+  for (const a of list) if (inRect(a, tx, ty)) return true;
+  return false;
 }
+/** Per zone, the areas that keep it out (filtered once: this runs for every tile of every wild zone at start-up). */
+const claimCache = new Map<string, { x: number; y: number; w: number; h: number }[]>();
 /** Tiles where this zone may spawn a monster. */
 function spawnable(z: { name: string; wild?: boolean }, tx: number, ty: number): boolean {
   const v = VILLAGE;
@@ -256,8 +261,9 @@ function spawnable(z: { name: string; wild?: boolean }, tx: number, ty: number):
   if (z.wild && claimedByArea(z.name, tx, ty)) return false;
   if (LAIRS.some((l) => l.name !== z.name && inRect(l, tx, ty))) return false; // a lair is its elite's alone (and the boss bed nobody's)
   const x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE;
-  if (isSafeZone(x, y) || noMobsAt(x, y)) return false;
-  return !isSolidAt(x - 6, y - 6) && !isSolidAt(x + 6, y + 6) && !isSolidAt(x - 6, y + 6) && !isSolidAt(x + 6, y - 6);
+  if (noMobsAt(x, y) || isSafeZone(x, y)) return false;
+  const solid = isSolidAt; // one getter call under tsx (the tests), not four
+  return !solid(x - 6, y - 6) && !solid(x + 6, y + 6) && !solid(x - 6, y + 6) && !solid(x + 6, y - 6);
 }
 
 export const SPAWN_ZONES: SpawnZone[] = ZONE_MOBS.flatMap((z) => {

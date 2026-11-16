@@ -76,6 +76,8 @@ export const HOLD_FORT_PX = (HOLD_RADIUS + 0.5) * TILE;
 /** Where each territory's Hold stands (px, the middle of its fort). */
 function buildHolds(): Hold[] {
   const out: Hold[] = [];
+  // local copies: under tsx (the tests) each use of an import is a getter call, slow in these tile loops
+  const TILE_ = TILE, solidAt = isSolidAt, portals = PORTAL_SPOTS;
   const INNER = 2; // the inner 5x5 must hold no solid tile at all: the ground layer paints over map objects there
   for (const t of TERRITORIES) {
     const mine = STANDARDS.filter((s) => s.t === t.id);
@@ -83,12 +85,12 @@ function buildHolds(): Hold[] {
     // only the outer ring of the 7x7 clearing may relax and the fort may hang over the land's edge by a tile before the land gets none
     for (const [ringMax, edge] of [[3, HOLD_RADIUS + 1], [8, HOLD_RADIUS + 1], [24, HOLD_RADIUS + 1], [24, INNER + 1], [24, 1]]) {
       for (let ty = t.y + edge; ty < t.y + t.h - edge; ty++) for (let tx = t.x + edge; tx < t.x + t.w - edge; tx++) {
-        if (PORTAL_SPOTS.some((p) => Math.hypot(p.x - tx, p.y - ty) < KEEP_CLEAR)) continue; // leave the portal stone room
+        if (portals.some((p) => Math.hypot(p.x - tx, p.y - ty) < KEEP_CLEAR)) continue; // leave the portal stone room
         let inner = 0, ring = 0;
         for (let dy = -HOLD_RADIUS; dy <= HOLD_RADIUS; dy++) for (let dx = -HOLD_RADIUS; dx <= HOLD_RADIUS; dx++)
-          if (isSolidAt((tx + dx + 0.5) * TILE, (ty + dy + 0.5) * TILE)) { if (Math.max(Math.abs(dx), Math.abs(dy)) <= INNER) inner++; else ring++; }
+          if (solidAt((tx + dx + 0.5) * TILE_, (ty + dy + 0.5) * TILE_)) { if (Math.max(Math.abs(dx), Math.abs(dy)) <= INNER) inner++; else ring++; }
         if (inner || ring > ringMax) continue;
-        const x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE;
+        const x = (tx + 0.5) * TILE_, y = (ty + 0.5) * TILE_;
         const far = Math.min(Infinity, ...mine.map((s) => Math.hypot(s.x - x, s.y - y))) / TILE;
         // away from the rings first (up to 8 tiles counts), then close to the middle, then clear ground
         if (far * TILE <= STANDARD.range + 2 * TILE) continue; // never inside a standard's ring or right at it
