@@ -827,6 +827,30 @@ export const LOOKS: Record<string, Look> = {
     legs: "trousers", legCol: 0x3a3e34, boots: 0x2a2018, bootStyle: "leather",
     sleeve: 0x5a5e54, arms: "cloth", glove: 0x2a1e14, weapon: "staff", fx: 0xffffff, back: "cape", capeCol: 0x6a6e6c, build: 1.08,
   },
+  // W7 clan capitals: Hearthhold (Wardens). The Lord-Marshal: scarred plate, blue-and-gold tabard, a heavy cloak
+  cap_wardens_leader: {
+    skin: 0xc8a07c, hair: 0x9a9a98, hairStyle: "short", beard: 0x9a9a98, beardStyle: "full", eye: 0x3a4a5a,
+    head: "greathelm", headCol: 0x9aa4ae, headTrim: 0xd9a93a, plume: 0x23468f,
+    torso: "plate", torsoCol: 0x98a2ae, trim: 0xd9a93a, tabard: { col: 0x23468f, trim: 0xd9a93a, emblem: 0xf0c75a }, belt: 0x3a2618, buckle: 0xd9a93a,
+    legs: "mail", legCol: 0x6f7883, boots: 0x7a838e, bootStyle: "greave",
+    sleeve: 0x98a2ae, arms: "plate", glove: 0x4a3a2a, weapon: "sword", fx: 0xffffff, back: "cape", capeCol: 0x1c3470, build: 1.14,
+  },
+  // the oath-hall keeper: ivory robe, blue sash, a candle-lit staff
+  cap_wardens_oathkeeper: {
+    skin: 0xe0b894, hair: 0xd8d4cc, hairStyle: "long", eye: 0x4a5a6a,
+    head: "hood", headCol: 0xd8d0bc, headTrim: 0xd9a93a,
+    torso: "robe", torsoCol: 0xd8d0bc, trim: 0xd9a93a, sash: 0x23468f, belt: 0x23468f, buckle: 0xd9a93a,
+    legs: "robe", legCol: 0xb8b0a0, boots: 0x3a2e22, bootStyle: "shoe",
+    sleeve: 0xd8d0bc, arms: "cloth", weapon: "staff", orb: 0xffd070, fx: 0xffd070,
+  },
+  // the drillmaster: padded gambeson, leather bracers, a wooden practice sword, a blue drill-sergeant bandana
+  cap_wardens_trainer: {
+    skin: 0xc4906a, hair: 0x4a3a2a, hairStyle: "short", beard: 0x4a3a2a, beardStyle: "stubble", eye: 0x3a2a1a,
+    head: "bandana", headCol: 0x23468f, headTrim: 0x16306a,
+    torso: "jerkin", torsoCol: 0xb8a078, trim: 0x8a7050, vest: 0x8a7050, belt: 0x3a2618, buckle: 0x8a7a5a, sash: 0x23468f,
+    legs: "trousers", legCol: 0x4a3e30, boots: 0x2a2018, bootStyle: "wrap",
+    sleeve: 0xb8a078, arms: "cloth", glove: 0x3a2618, bracer: 0x5a3a22, weapon: "sword", bladeCol: 0xa8804e, fx: 0xffffff, build: 1.1,
+  },
   steward_redfang: { // a scarred quartermaster in red leather
     skin: 0xd0a07c, hair: 0x2a1a14, hairStyle: "short", beard: 0x2a1a14, beardStyle: "stubble", eye: 0x3a2a1a,
     head: "cap", headCol: 0x5a1812, headTrim: 0x1a1414,

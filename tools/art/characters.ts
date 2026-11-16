@@ -1001,14 +1001,33 @@ const steward_neutral = human({
   hat: { kind: "cap", col: 0x5a5448, trim: 0x3a342c }, shirt: 0x6a6458, vest: 0x4a4438, pants: 0x3a3830, boots: 0x2a2218, belt: 0x2a1e14,
   weapon: "none", gait: "stroll", hipHand: true,
 });
+// W7 clan capitals (shared/capitals.ts): the Wardens' Hearthhold leader, oath-keeper and drillmaster
+const cap_wardens_leader = human({
+  name: "cap_wardens_leader", skin: 0xc8a07c, hair: 0x9a9a98, hairStyle: "short", beard: 0x9a9a98,
+  hat: { kind: "helm", col: 0x9aa4ae, trim: 0xd9a93a }, shirt: 0x9aa4ae, pants: 0x3a4250, boots: 0x2a2624, belt: 0x4a2f1c,
+  tabard: { col: 0x23468f, emblem: 0xf0c75a }, weapon: "spear", gait: "march",
+});
+const cap_wardens_oathkeeper = human({
+  name: "cap_wardens_oathkeeper", skin: 0xe0b894, hair: 0xd8d4cc, hairStyle: "long",
+  hat: { kind: "hood", col: 0xd8d0bc, trim: 0xd9a93a }, shirt: 0xd8d0bc, pants: 0xb8b0a0, boots: 0x3a2e22, belt: 0x23468f,
+  weapon: "staff", fxCol: 0xffd070, gait: "stroll",
+});
+const cap_wardens_trainer = human({
+  name: "cap_wardens_trainer", skin: 0xc4906a, hair: 0x4a3a2a, hairStyle: "short", beard: 0x4a3a2a,
+  hat: { kind: "bandana", col: 0x23468f, trim: 0x16306a }, shirt: 0xb8a078, vest: 0x8a7050, pants: 0x4a3e30, boots: 0x2a2018, belt: 0x3a2618,
+  weapon: "hammer", gait: "swagger",
+});
 /** Town stewards: key `steward_<clan>` per war clan, `steward_neutral` for a town with no holder. */
 export const STEWARD_NPCS = ["steward_wardens", "steward_redfang", "steward_host", "steward_hidekin", "steward_veiled", "steward_neutral"] as const;
+/** W7 capital NPCs (shared/capitals.ts City.sprites). */
+export const CAPITAL_NPCS = ["cap_wardens_leader", "cap_wardens_oathkeeper", "cap_wardens_trainer"] as const;
 export const QUEST_NPCS = ["sexton", "mourner1", "mourner2", "mourner3", "ilka", "quartermaster", "smuggler", "alewife"] as const;
 
 export const NPCS: Hero[] = [blacksmith, merchant, villager, guard, druid, witch, watchman, ...FOLK.map((n) => folk(n)), wellkeeper, sandcaptain, spicetrader, desertsmith, armourer, saltarmourer, sandarmourer,
   huntsman, miller, forester, beachcomber, prospector, caravaneer, hermit, dunescout, defector, monk, tombrobber,
   sexton, mourner1, mourner2, mourner3, ilka, quartermaster, smuggler, alewife, lutemaker, cairncaptain, moorherbalist, moorarmourer, rustmarshal, rustarmourer, rusthealer, ropewarden, ropearmourer, ropehealer,
-  steward_wardens, steward_redfang, steward_host, steward_hidekin, steward_veiled, steward_neutral];
+  steward_wardens, steward_redfang, steward_host, steward_hidekin, steward_veiled, steward_neutral,
+  cap_wardens_leader, cap_wardens_oathkeeper, cap_wardens_trainer];
 /** Pose data for monsters painted with the character painter (paint/mobs.ts); never drawn as pixel art. */
 const mobPose = (name: string, weapon: HumanOpts["weapon"]) => human({ name, skin: 0, hair: 0, hairStyle: "bald", shirt: 0, pants: 0, boots: 0, weapon });
 export const MOB_POSES: Record<string, Hero> = {

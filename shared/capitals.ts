@@ -129,7 +129,7 @@ export const CITIES: readonly City[] = [
   {
     clan: "wardens", act: 1, plot: 0, outer: { x: 13, y: 47 }, outerBox: { x0: 8, x1: 18, y0: 43, y1: 52 },
     style: { wall: "WALL_STONE", roof: "ROOF_SLATE", roof2: "ROOF_RED", street: "COBBLE" },
-    sprites: { leader: "guard", quartermaster: "steward_wardens", oathkeeper: "monk", trainer: "watchman" },
+    sprites: { leader: "cap_wardens_leader", quartermaster: "steward_wardens", oathkeeper: "cap_wardens_oathkeeper", trainer: "cap_wardens_trainer" },
   },
 ];
 export const cityOf = (clan: unknown): City | undefined => CITIES.find((c) => c.clan === clan);
