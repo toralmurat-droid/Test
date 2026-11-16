@@ -1024,17 +1024,84 @@ const cap_wardens_trainer = human({
   hat: { kind: "bandana", col: 0x23468f, trim: 0x16306a }, shirt: 0xb8a078, vest: 0x8a7050, pants: 0x4a3e30, boots: 0x2a2018, belt: 0x3a2618,
   weapon: "hammer", gait: "swagger",
 });
+// W7 clan capitals, the other four cities: each clan's leader, oath-keeper and drillmaster (looks in paint/look.ts)
+// Duskveil (Veiled Circle): the Oracle's masked Regent, the silent Witness, the Blade-Mistress
+const cap_veiled_leader = human({
+  name: "cap_veiled_leader", skin: 0xd8b898, hair: 0x1a1a2a, hairStyle: "long",
+  hat: { kind: "hood", col: 0x2a2a5a, trim: 0xe0a030 }, shirt: 0x4a3a8a, apron: 0x2a2a5a, pants: 0x20204a, boots: 0x14143a, belt: 0xe0a030,
+  weapon: "staff", fxCol: 0xf6d26b, gait: "stroll",
+});
+const cap_veiled_oathkeeper = human({
+  name: "cap_veiled_oathkeeper", skin: 0xe0c4a8, hair: 0xd8d4e8, hairStyle: "long",
+  hat: { kind: "hood", col: 0xd8d4e8, trim: 0xe0a030 }, shirt: 0xd8d4e8, pants: 0xb8b4cc, boots: 0x2a2a4a, belt: 0x4a3a8a,
+  weapon: "staff", fxCol: 0xb090ff, gait: "stroll",
+});
+const cap_veiled_trainer = human({
+  name: "cap_veiled_trainer", skin: 0xc8946a, hair: 0x1a1414, hairStyle: "ponytail",
+  hat: { kind: "bandana", col: 0x4a3a8a, trim: 0x2a2a5a }, shirt: 0x34346a, vest: 0x20204a, pants: 0x2a2a4a, boots: 0x1a1a2a, belt: 0xe0a030,
+  weapon: "hammer", gait: "swagger",
+});
+// Marrowkeep (Ossuary Host): the Lord-Ossuary in black plate and bone, the Reader of the Roll, the drill-sergeant
+const cap_host_leader = human({
+  name: "cap_host_leader", skin: 0xc8bcae, hair: 0xd8cfb2, hairStyle: "short", beard: 0xd8cfb2,
+  hat: { kind: "helm", col: 0x2a302e, trim: 0x4f7d6a }, shirt: 0x3a4442, pants: 0x1c2020, boots: 0x2a302e, belt: 0x4f7d6a,
+  tabard: { col: 0x1f2422, emblem: 0xd8cfb2 }, weapon: "spear", gait: "march",
+});
+const cap_host_oathkeeper = human({
+  name: "cap_host_oathkeeper", skin: 0xd0c8bc, hair: 0xe8e2d0, hairStyle: "long",
+  hat: { kind: "hood", col: 0xd8cfb2, trim: 0x4f7d6a }, shirt: 0x2a302e, pants: 0x1c2020, boots: 0x121616, belt: 0x4f7d6a,
+  weapon: "staff", fxCol: 0x8affd0, gait: "stroll",
+});
+const cap_host_trainer = human({
+  name: "cap_host_trainer", skin: 0xb8a898, hair: 0x3a3a38, hairStyle: "short", beard: 0x3a3a38,
+  hat: { kind: "helm", col: 0x5a625e, trim: 0x4f7d6a }, shirt: 0x5a625e, pants: 0x2a302e, boots: 0x1c2020, belt: 0x2a1e14,
+  weapon: "hammer", gait: "march",
+});
+// Scarwall (Redfang Compact): the Warlord, the old ledger-keeper with her bloody quill, the pit-boss with his fists
+const cap_redfang_leader = human({
+  name: "cap_redfang_leader", skin: 0xc8946a, hair: 0x1a1414, hairStyle: "short", beard: 0x1a1414,
+  hat: { kind: "horned", col: 0x3a3434, trim: 0x7e1d16 }, shirt: 0x4a4444, pants: 0x2a2224, boots: 0x1a1414, belt: 0x1a1414,
+  tabard: { col: 0x7e1d16, emblem: 0xe3d6b8 }, weapon: "axe", gait: "swagger",
+});
+const cap_redfang_oathkeeper = human({
+  name: "cap_redfang_oathkeeper", skin: 0xd0a07c, hair: 0x9a9690, hairStyle: "long",
+  hat: { kind: "hood", col: 0x5a1812, trim: 0x1a1414 }, shirt: 0x3a2a24, apron: 0x7e1d16, pants: 0x2a2224, boots: 0x1a1414, belt: 0x1a1414,
+  weapon: "dagger", gait: "stroll",
+});
+const cap_redfang_trainer = human({
+  name: "cap_redfang_trainer", skin: 0xc48a5e, hair: 0x2a1a14, hairStyle: "bald", beard: 0x2a1a14, bareChest: true,
+  hat: { kind: "bandana", col: 0x7e1d16, trim: 0x1a1414 }, shirt: 0xc48a5e, pants: 0x3a2a24, boots: 0x1a1414, belt: 0x1a1414,
+  weapon: "none", gait: "swagger", hipHand: true,
+});
+// Deepden (Hide-Kin): the Den-Father under a wolf's hide, Grandmother Thistle with her needle-staff, the Clawmaster
+const cap_hidekin_leader = human({
+  name: "cap_hidekin_leader", skin: 0xa07a58, hair: 0x8a8278, hairStyle: "long", beard: 0x8a8278,
+  hat: { kind: "horned", col: 0x5a4a3a, trim: 0xe2c79a }, shirt: 0x6a4a2a, vest: 0x8a5f2a, pants: 0x5a3e24, boots: 0x3a281a, belt: 0x6e1d18,
+  weapon: "hammer", gait: "march",
+});
+const cap_hidekin_oathkeeper = human({
+  name: "cap_hidekin_oathkeeper", skin: 0xb08a68, hair: 0xe8e4dc, hairStyle: "long",
+  hat: { kind: "hood", col: 0x8a5f2a, trim: 0xe2c79a }, shirt: 0x6a4a2a, apron: 0xe2c79a, pants: 0x5a3e24, boots: 0x3a281a, belt: 0x6e1d18,
+  weapon: "staff", fxCol: 0xffc070, gait: "stroll",
+});
+const cap_hidekin_trainer = human({
+  name: "cap_hidekin_trainer", skin: 0xa8805c, hair: 0x2a1c12, hairStyle: "short", bareChest: true,
+  hat: { kind: "bandana", col: 0x6e1d18, trim: 0x3a1410 }, shirt: 0xa8805c, pants: 0x5a3e24, boots: 0x3a281a, belt: 0x3a281a,
+  weapon: "none", gait: "swagger",
+});
 /** Town stewards: key `steward_<clan>` per war clan, `steward_neutral` for a town with no holder. */
 export const STEWARD_NPCS = ["steward_wardens", "steward_redfang", "steward_host", "steward_hidekin", "steward_veiled", "steward_neutral"] as const;
 /** W7 capital NPCs (shared/capitals.ts City.sprites). */
-export const CAPITAL_NPCS = ["cap_wardens_leader", "cap_wardens_oathkeeper", "cap_wardens_trainer"] as const;
+export const CAPITAL_NPCS = ["cap_wardens_leader", "cap_wardens_oathkeeper", "cap_wardens_trainer",
+  "cap_veiled_leader", "cap_veiled_oathkeeper", "cap_veiled_trainer", "cap_host_leader", "cap_host_oathkeeper", "cap_host_trainer", "cap_redfang_leader", "cap_redfang_oathkeeper", "cap_redfang_trainer", "cap_hidekin_leader", "cap_hidekin_oathkeeper", "cap_hidekin_trainer"] as const;
 export const QUEST_NPCS = ["sexton", "mourner1", "mourner2", "mourner3", "ilka", "quartermaster", "smuggler", "alewife"] as const;
 
 export const NPCS: Hero[] = [blacksmith, merchant, villager, guard, druid, witch, watchman, ...FOLK.map((n) => folk(n)), wellkeeper, sandcaptain, spicetrader, desertsmith, armourer, saltarmourer, sandarmourer,
   huntsman, miller, forester, beachcomber, prospector, caravaneer, hermit, dunescout, defector, monk, tombrobber,
   sexton, mourner1, mourner2, mourner3, ilka, quartermaster, smuggler, alewife, lutemaker, cairncaptain, moorherbalist, moorarmourer, rustmarshal, rustarmourer, rusthealer, ropewarden, ropearmourer, ropehealer,
   steward_wardens, steward_redfang, steward_host, steward_hidekin, steward_veiled, steward_neutral,
-  cap_wardens_leader, cap_wardens_oathkeeper, cap_wardens_trainer, crownherald];
+  cap_wardens_leader, cap_wardens_oathkeeper, cap_wardens_trainer,
+  cap_veiled_leader, cap_veiled_oathkeeper, cap_veiled_trainer, cap_host_leader, cap_host_oathkeeper, cap_host_trainer, cap_redfang_leader, cap_redfang_oathkeeper, cap_redfang_trainer, cap_hidekin_leader, cap_hidekin_oathkeeper, cap_hidekin_trainer, crownherald];
 /** Pose data for monsters painted with the character painter (paint/mobs.ts); never drawn as pixel art. */
 const mobPose = (name: string, weapon: HumanOpts["weapon"]) => human({ name, skin: 0, hair: 0, hairStyle: "bald", shirt: 0, pants: 0, boots: 0, weapon });
 export const MOB_POSES: Record<string, Hero> = {

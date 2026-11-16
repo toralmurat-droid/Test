@@ -14,8 +14,8 @@ import { TITLES } from "./cosmetics";
  * Every city is the same plan (CITY_TEMPLATE, local tiles 0..w-1 x 0..h-1, the gate in the south wall) dressed in its
  * clan's style (walls, roofs, ground): gate square with the waystone and the stash, market with the quartermaster,
  * barracks yard with the trainer, oath hall with the altar and its keeper, houses, and the keep with the clan's leader
- * and the war table. Only the Wardens' city is built so far; the other plots stay rock until their PR adds a row to
- * CITIES. Tile ids are passed in (shared/map.ts T) so this file does not import map.ts.
+ * and the war table. All five are built: Hearthhold (Wardens), Duskveil (Veiled), Marrowkeep (Host), Scarwall (Redfang)
+ * and Deepden (Hide-Kin). Tile ids are passed in (shared/map.ts T) so this file does not import map.ts.
  */
 export const CITY_CLANS: readonly ClanKey[] = ["wardens", "veiled", "host", "redfang", "hidekin"];
 
@@ -23,6 +23,8 @@ export const CITY_CLANS: readonly ClanKey[] = ["wardens", "veiled", "host", "red
 export const CITY = {
   /** Heroes below this level find the outer gate barred (the oath's own minimum, shared/war/standards.ts STANDARD.minLevel). */
   minLevel: 5,
+  /** Spawn zones place no monster within this many tiles of a city's outer gate (shared/spawns.ts; wanderers may still pass). */
+  gateClear: 10,
   /** Shop and trainer discount for heroes sworn to the city's clan (W6's town discount, shared/war/towns.ts TOWN.discount). */
   discount: 0.1,
   /** Gold the leader pays once per hero for each renown rank reached (index: shared/war/renown.ts RENOWN_RANKS; Sworn pays nothing). */
@@ -106,8 +108,18 @@ export const CITY_TEMPLATE = {
   ] as readonly CityProp[],
 } as const;
 
-/** A city's look: which tiles its walls, roofs and streets are (the client recolours them per city). */
-export interface CityStyle { wall: "WALL_STONE" | "PALISADE" | "ADOBE_WALL" | "CLIFF"; roof: "ROOF_RED" | "ROOF_SLATE" | "ROOF_THATCH"; roof2: "ROOF_RED" | "ROOF_SLATE" | "ROOF_THATCH"; street: "COBBLE" | "FLAGS" | "MARBLE" | "CLAY" }
+/** Walkable ground tiles a city may be laid in (existing tile ids only: the client restyles them per city). */
+export type CityGround = "GRASS" | "GRASS_DARK" | "FLOWERS" | "TALL_GRASS" | "DIRT" | "SAND" | "HEATHER" | "CLAY" | "GRAVEL" | "MOSS" | "RUBBLE";
+/**
+ * A city's look: which tiles its walls, roofs and streets are (the client paints a city's ground like its homeland's and
+ * recolours it per clan). `ground` is the open ground inside the walls [main, patches (a quarter), rare specks], `yard` the
+ * market's and the barracks yard's earth. Pick grounds the homeland's painter knows (client/src/groundPaint.ts).
+ */
+export interface CityStyle {
+  wall: "WALL_STONE" | "PALISADE" | "ADOBE_WALL" | "CLIFF"; roof: "ROOF_RED" | "ROOF_SLATE" | "ROOF_THATCH"; roof2: "ROOF_RED" | "ROOF_SLATE" | "ROOF_THATCH";
+  street: "COBBLE" | "FLAGS" | "MARBLE" | "CLAY" | "GRAVEL" | "DIRT";
+  ground: readonly [CityGround, CityGround, CityGround]; yard: CityGround;
+}
 
 /** One capital. `outer` is the city gate in the clan's land (map tiles), carved only inside `outerBox`. */
 export interface City {
@@ -128,8 +140,36 @@ export const CITIES: readonly City[] = [
   // farm's Hold (26, 58) and standards (30, 49 / 34, 68).
   {
     clan: "wardens", act: 1, plot: 0, outer: { x: 13, y: 47 }, outerBox: { x0: 8, x1: 18, y0: 43, y1: 52 },
-    style: { wall: "WALL_STONE", roof: "ROOF_SLATE", roof2: "ROOF_RED", street: "COBBLE" },
+    style: { wall: "WALL_STONE", roof: "ROOF_SLATE", roof2: "ROOF_RED", street: "COBBLE", ground: ["GRASS", "GRASS_DARK", "FLOWERS"], yard: "DIRT" },
     sprites: { leader: "cap_wardens_leader", quartermaster: "steward_wardens", oathkeeper: "cap_wardens_oathkeeper", trainer: "cap_wardens_trainer" },
+  },
+  // The Veiled Circle's Duskveil: its city gate stands on the open sand of the Thornspire Heights west of the Veiled
+  // Sanctum, clear of the Sanctum's walls, its Hold (228, 358) and standard (233, 344). Mud-brick walls, sandstone streets.
+  {
+    clan: "veiled", act: 2, plot: 1, outer: { x: 217, y: 350 }, outerBox: { x0: 212, x1: 222, y0: 346, y1: 355 },
+    style: { wall: "ADOBE_WALL", roof: "ROOF_SLATE", roof2: "ROOF_THATCH", street: "COBBLE", ground: ["SAND", "DIRT", "RUBBLE"], yard: "DIRT" },
+    sprites: { leader: "cap_veiled_leader", quartermaster: "steward_veiled", oathkeeper: "cap_veiled_oathkeeper", trainer: "cap_veiled_trainer" },
+  },
+  // The Ossuary Host's Marrowkeep: its city gate stands on the heather west of the Host's Muster, a dozen tiles from the
+  // war camp, outside every territory (Kingsbarrow is north, the Drowned Hollow south-west). Black stone and bone.
+  {
+    clan: "host", act: 3, plot: 2, outer: { x: 236, y: 674 }, outerBox: { x0: 231, x1: 241, y0: 670, y1: 679 },
+    style: { wall: "WALL_STONE", roof: "ROOF_SLATE", roof2: "ROOF_SLATE", street: "COBBLE", ground: ["HEATHER", "GRASS_DARK", "RUBBLE"], yard: "DIRT" },
+    sprites: { leader: "cap_host_leader", quartermaster: "steward_host", oathkeeper: "cap_host_oathkeeper", trainer: "cap_host_trainer" },
+  },
+  // The Redfang Compact's Scarwall: its city gate stands on the open sand north of Fangrock's stockade (which has no
+  // north gate), thirty tiles and more from every post of the garrison. A red palisade, clay streets.
+  {
+    clan: "redfang", act: 4, plot: 3, outer: { x: 20, y: 821 }, outerBox: { x0: 15, x1: 25, y0: 817, y1: 826 },
+    style: { wall: "PALISADE", roof: "ROOF_RED", roof2: "ROOF_THATCH", street: "CLAY", ground: ["SAND", "GRAVEL", "CLAY"], yard: "GRAVEL" },
+    sprites: { leader: "cap_redfang_leader", quartermaster: "steward_redfang", oathkeeper: "cap_redfang_oathkeeper", trainer: "cap_redfang_trainer" },
+  },
+  // The Hide-Kin's Deepden: its city gate stands in the mossy hollow north-west of Hidehall, off the back way and out of
+  // sight of the warren's posts, patrols and burrow ambushers (24 tiles and more). Hide roofs, a palisade, moss and earth.
+  {
+    clan: "hidekin", act: 5, plot: 4, outer: { x: 206, y: 1080 }, outerBox: { x0: 201, x1: 211, y0: 1076, y1: 1085 },
+    style: { wall: "PALISADE", roof: "ROOF_THATCH", roof2: "ROOF_THATCH", street: "COBBLE", ground: ["MOSS", "GRASS_DARK", "TALL_GRASS"], yard: "DIRT" },
+    sprites: { leader: "cap_hidekin_leader", quartermaster: "steward_hidekin", oathkeeper: "cap_hidekin_oathkeeper", trainer: "cap_hidekin_trainer" },
   },
 ];
 export const cityOf = (clan: unknown): City | undefined => CITIES.find((c) => c.clan === clan);
@@ -204,7 +244,8 @@ export const cleanCapPaid = (v: unknown): number => (typeof v === "number" && Nu
 export const cleanHome = (v: unknown): ClanKey | undefined => (cityOf(v) ? (v as ClanKey) : undefined);
 
 export interface CityTiles {
-  GRASS: number; GRASS_DARK: number; FLOWERS: number; DIRT: number; COBBLE: number; FLAGS: number; MARBLE: number; CLAY: number; ROCK: number;
+  GRASS: number; GRASS_DARK: number; FLOWERS: number; TALL_GRASS: number; DIRT: number; SAND: number; HEATHER: number; GRAVEL: number; MOSS: number; RUBBLE: number;
+  COBBLE: number; FLAGS: number; MARBLE: number; CLAY: number; ROCK: number; WATER: number;
   WALL_STONE: number; PALISADE: number; ADOBE_WALL: number; CLIFF: number; ROOF_RED: number; ROOF_SLATE: number; ROOF_THATCH: number;
   WALL_TIMBER: number; WINDOW_TIMBER: number; WINDOW_STONE: number; DOOR: number; STALL_RED: number; STALL_BLUE: number; CRATE: number; BARREL: number; WELL: number;
 }
@@ -231,11 +272,11 @@ export function buildCities(T: CityTiles, ground: number[][], objects: number[][
     // open ground inside the wall, the wall round the plot's edge, the main gate's gap onto the rock
     rect({ x: 0, y: 0, w: b.w, h: b.h }, (x, y) => {
       const edge = x === 0 || y === 0 || x === b.w - 1 || y === b.h - 1, h = hash(b.x + x, b.y + y, 701);
-      setG(x, y, h < 0.25 ? T.GRASS_DARK : h > 0.97 ? T.FLOWERS : T.GRASS);
+      setG(x, y, T[h < 0.25 ? S.ground[1] : h > 0.97 ? S.ground[2] : S.ground[0]]);
       setO(x, y, edge ? T[S.wall] : EMPTY);
     });
     for (let x = P.gateGap[0]; x <= P.gateGap[1]; x++) { setO(x, b.h - 1, EMPTY); setG(x, b.h - 1, T.FLAGS); }
-    for (const r of P.yards) rect(r, (x, y) => setG(x, y, hash(b.x + x, b.y + y, 702) < 0.15 ? T.GRASS_DARK : T.DIRT));
+    for (const r of P.yards) rect(r, (x, y) => setG(x, y, T[hash(b.x + x, b.y + y, 702) < 0.15 ? S.ground[1] : S.yard]));
     for (const r of P.courts) rect(r, (x, y) => setG(x, y, T.FLAGS));
     for (const r of P.streets) rect(r, (x, y) => setG(x, y, T[S.street]));
     // the keep's courtyard wall: the front row (a gap for the main street) and the two sides
@@ -260,6 +301,21 @@ export function buildCities(T: CityTiles, ground: number[][], objects: number[][
     areas.push({ name: txt.name, x: b.x, y: b.y, w: b.w, h: b.h });
   }
   return { areas };
+}
+
+/**
+ * Cuts a city's outer gate dais into its land (shared/map.ts sections 14f / 20b, and the land tests that rebuild a band):
+ * a disk of old flagstones and rubble round `outer`, clearing nature (`nature`: trees, bushes, boulders) and never
+ * touching water, and only inside `outerBox`, so nothing else in the land changes. Deterministic.
+ */
+export function cityGateDais(c: City, T: Pick<CityTiles, "FLAGS" | "RUBBLE" | "WATER">, ground: number[][], objects: number[][], EMPTY: number, nature: (o: number) => boolean) {
+  const G = c.outer, B = c.outerBox;
+  for (let y = B.y0; y <= B.y1; y++) for (let x = B.x0; x <= B.x1; x++) {
+    const dx = (x - G.x - 0.5) / 3.6, dy = (y - G.y - 0.5) / 3.2, d = dx * dx + dy * dy;
+    if (d >= 1) continue;
+    if (nature(objects[y][x])) objects[y][x] = EMPTY;
+    if (objects[y][x] === EMPTY && ground[y][x] !== T.WATER) ground[y][x] = d < 0.5 ? (hash(x, y, 361) < 0.8 ? T.FLAGS : T.RUBBLE) : d < 0.8 && hash(x, y, 362) < 0.5 ? T.RUBBLE : ground[y][x];
+  }
 }
 
 /** True when the plots fit the band side by side (a guard for the numbers in shared/constants.ts). */

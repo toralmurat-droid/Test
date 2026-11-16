@@ -46,7 +46,8 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           git fetch -q --depth=1 origin "$BASE_SHA" || true
-          bash tools/ci/test-affected.sh "$BASE_SHA"
+          # a branch made before the script existed runs everything
+          if [ -f tools/ci/test-affected.sh ]; then bash tools/ci/test-affected.sh "$BASE_SHA"; else npm test; fi
       - name: Typecheck and build (same as the Dockerfile)
         run: npm run build
       - name: Smoke test (the built server boots and a hero can log in)

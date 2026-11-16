@@ -732,7 +732,15 @@ export function isoStanding(scene: Phaser.Scene, objects: number[][]): number[][
     const index = objects[ty][tx], t = id(index);
     if (t < 0) continue;
     if (ty >= Y0) { // the capital cities: the rock round the plots is the ground's; walls, roofs and stalls inside are drawn the usual way below
-      if (!cityAt(tx, ty)) { out[ty][tx] = -1; continue; }
+      const cty = cityAt(tx, ty);
+      if (!cty) { out[ty][tx] = -1; continue; }
+      if (t === T.ADOBE_WALL) { // Duskveil's mud-brick walls: the desert's wall pieces, never crumbled, in the city's wall tint
+        const same = (x: number, y: number) => id(at(x, y)) === T.ADOBE_WALL;
+        const mask = (same(tx, ty - 1) ? 1 : 0) | (same(tx + 1, ty) ? 2 : 0) | (same(tx, ty + 1) ? 4 : 0) | (same(tx - 1, ty) ? 8 : 0);
+        const cx = (tx + 0.5) * TILE, cy = (ty + 0.5) * TILE, h = ADOBE_WALL_H + 10, v = Math.floor(hashXY(tx, ty) * 4);
+        staticObj(scene, scene.add.image(cx, cy, adobeWallTexture(scene, mask, v % 2, false)).setOrigin(0.5, (IH / 2 + h) / (IH + h + ADOBE_PAD)).setDepth(cy).setTint(CITY_LOOK[cty.clan].wall));
+        out[ty][tx] = -1; continue;
+      }
     } else if (ty >= C0) { // the Crown of the Marches
       if (ty < CROWN_Y0 || ty >= CROWN_Y0 + CROWN_H) { out[ty][tx] = -1; continue; } // the solid rock strips round the Crown: ground paints them
       if (isoCrown(scene, t, tx, ty, at, kd)) { out[ty][tx] = -1; continue; }
@@ -759,7 +767,10 @@ export function isoStanding(scene: Phaser.Scene, objects: number[][]): number[][
       const variant = t === T.PALISADE ? ((tx * 73856093) ^ (ty * 19349663)) >>> 0 : 0;
       const key = stakesTexture(scene, t !== T.PALISADE, mask, broken, outDir, variant % 6);
       const H = t === T.PALISADE ? 30 : 12;
-      staticObj(scene, scene.add.image(cx, cy, key).setOrigin(0.5, (H + IH / 2) / (IH + H)).setDepth(cy));
+      const stakes = scene.add.image(cx, cy, key).setOrigin(0.5, (H + IH / 2) / (IH + H)).setDepth(cy);
+      const pcity = ty >= Y0 ? cityAt(tx, ty) : undefined;
+      if (pcity) stakes.setTint(CITY_LOOK[pcity.clan].wall); // a capital's palisade in its clan's colour (cityArt.ts)
+      staticObj(scene, stakes);
       out[ty][tx] = -1;
     } else if (h !== undefined) {
       let key: string;
@@ -780,7 +791,7 @@ export function isoStanding(scene: Phaser.Scene, objects: number[][]): number[][
       // origin = the centre of the footprint diamond, so the block stands on its tile
       const blk = scene.add.image(cx, cy, key).setOrigin(0.5, (IH / 2 + h) / (IH + h)).setDepth(cy);
       const cty = cityAt(tx, ty);
-      if (cty) blk.setTint(CITY_LOOK[cty.clan].stone); // a capital's walls take its clan's stone colour (cityArt.ts)
+      if (cty) blk.setTint(CITY_LOOK[cty.clan].wall); // a capital's walls take its clan's stone colour (cityArt.ts)
       staticObj(scene, blk);
       out[ty][tx] = -1;
     } else if (t === T.WHEEL) {

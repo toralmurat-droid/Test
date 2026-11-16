@@ -249,6 +249,12 @@ export const SHOPS: Record<string, Shop> = {
     buys: ARMOUR_SLOTS,
     levelHeads: true,
   },
+  // The other capitals' quartermasters (W7): each sells exactly what its land's own town sells, the armour steps of the
+  // land's armourer and Medium and Greater flasks; no new power, and the city's sworn pay CITY.discount less
+  cap_veiled: { greeting: CITY_TEXT.veiled!.shopGreeting, stock: [...armourStock("sandarmourer"), ...potionStock("potion", [1, 2]), ...potionStock("mpotion", [1, 2])], buys: ARMOUR_SLOTS, levelHeads: true },
+  cap_host: { greeting: CITY_TEXT.host!.shopGreeting, stock: [...armourStock("moorarmourer"), ...potionStock("potion", [1, 2]), ...potionStock("mpotion", [1, 2])], buys: ARMOUR_SLOTS, levelHeads: true },
+  cap_redfang: { greeting: CITY_TEXT.redfang!.shopGreeting, stock: [...armourStock("rustarmourer"), ...potionStock("potion", [1, 2]), ...potionStock("mpotion", [1, 2])], buys: ARMOUR_SLOTS, levelHeads: true },
+  cap_hidekin: { greeting: CITY_TEXT.hidekin!.shopGreeting, stock: [...armourStock("ropearmourer"), ...potionStock("potion", [1, 2]), ...potionStock("mpotion", [1, 2])], buys: ARMOUR_SLOTS, levelHeads: true },
   witch: {
     greeting: "Fresh from the still, darling. Red for your blood, blue for your magic. Try not to stare. Found a carved stone out there? I pay well for runes, or fuse four alike into a stronger one.",
     stock: [

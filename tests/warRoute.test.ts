@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { CITIES, CITY_TEMPLATE, cityTile } from "../shared/capitals";
+import { REGIONS } from "../shared/war/regions";
 import { CR, CROWNWAYS, crownGateTile, TOLLCROSS_SQUARE } from "../shared/crown";
 import { TERRITORIES, territoryByName } from "../shared/war/territories";
 import { CROWN_LAND, STONES, WAYS, findRoute, hereAt, hereCaption, nodeName, routeLines } from "../client/src/warRoute";
@@ -97,4 +99,12 @@ test("findRoute: into the Crown by the nearest Crownway, then over its borders t
   const out = findRoute(id("The Spirefall"), id("The Host's Muster"))!; // back home through the gate you came in by
   assert.deepEqual(out.map((s) => s.via), ["gate"]);
   assert.match(routeLines(out)[0], /^Take The Mourning Gate back from The Spirefall to The Host's Muster$/);
+});
+
+test("warRoute: inside a capital you stand where its city gate stands in its land (W7)", () => {
+  for (const c of CITIES) {
+    const t = cityTile(c, CITY_TEMPLATE.gate), h = hereAt(t.x, t.y - 3);
+    assert.deepEqual(h, hereAt(c.outer.x, c.outer.y), c.clan);
+    assert.ok(h.node !== undefined && h.land === REGIONS.find((r) => r.home === c.clan)?.key, `${c.clan}: its own homeland`);
+  }
 });

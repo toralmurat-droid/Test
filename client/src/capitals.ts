@@ -47,7 +47,8 @@ export class CityLayer {
   /** The war table the hero stands at. */
   nearTable = false;
   private men: Man[] = [];
-  private made = false;
+  /** The cities whose props and people are placed (by clan). */
+  private built = new Set<ClanKey>();
   private prompt = document.createElement("div");
   private tables: { x: number; y: number }[] = [];
   /** Animated props (flames, cloth): stepped about 6 times a second. */
@@ -57,7 +58,6 @@ export class CityLayer {
     this.prompt.id = "cityprompt";
     this.prompt.onclick = () => this.interact();
     hudSlot("promptstack").append(this.prompt);
-    for (const c of CITIES) this.props(c);
   }
 
   /** The server's "city" message. */
@@ -80,12 +80,13 @@ export class CityLayer {
   /** Where the war tables are (px), for clicking them. */
   tablesPx() { return this.tables; }
 
+  /** A city's props in its clan's colours, baked and placed the first time the hero comes near it (update). */
   private props(c: City) {
-    cityPropTextures(this.scene);
+    cityPropTextures(this.scene, c.clan);
     for (const p of CITY_TEMPLATE.props) {
       if (p.kind === "stash") continue; // the account stash chest is drawn by trade.ts
       const s = p.solid, fx = s ? s[0] + s[2] / 2 : p.x + 0.5, fy = s ? s[1] + s[3] : p.y + 0.9, at = cityPx(c, fx, fy), a = CITY_PROPS[p.kind];
-      const spr = this.scene.add.sprite(at.x, at.y, cityPropKey(p.kind), 0).setOrigin(a.ox / a.w, a.oy / a.h).setDepth(at.y);
+      const spr = this.scene.add.sprite(at.x, at.y, cityPropKey(p.kind, c.clan), 0).setOrigin(a.ox / a.w, a.oy / a.h).setDepth(at.y);
       if (a.frames > 1) this.anim.push({ spr, frames: a.frames, ph: Math.floor((p.x * 7 + p.y * 3) % a.frames) });
       if (p.kind === "wartable") this.tables.push({ x: at.x, y: at.y - 6 });
       if (p.kind === "altar") {
@@ -121,11 +122,15 @@ export class CityLayer {
   update(me: { x: number; y: number } | undefined, blocked: boolean) {
     const tick = Math.floor(performance.now() / 160);
     for (const a of this.anim) a.spr.setFrame((tick + a.ph) % a.frames);
-    if (me && !this.made && CITIES.some((c) => { const p = cityPx(c, 26, 20); return Math.hypot(p.x - me.x, p.y - me.y) < 45 * TILE; })) {
-      this.made = true;
-      for (const c of CITIES) { GUARDS.forEach((g, i) => this.men.push(this.man(c, g, i, true))); FOLKS.forEach((f, i) => this.men.push(this.man(c, f, i, false))); }
+    if (me) for (const c of CITIES) { // a city's props and people appear when the hero comes within sight of its plot
+      if (this.built.has(c.clan)) continue;
+      const p = cityPx(c, 26, 20);
+      if (Math.hypot(p.x - me.x, p.y - me.y) >= 45 * TILE) continue;
+      this.built.add(c.clan);
+      this.props(c);
+      GUARDS.forEach((g, i) => this.men.push(this.man(c, g, i, true))); FOLKS.forEach((f, i) => this.men.push(this.man(c, f, i, false)));
     }
-    if (me && this.made) for (const m of this.men) this.ready(m);
+    if (me && this.built.size) for (const m of this.men) this.ready(m);
     const inCity = !!me && !!cityAtPx(me.x, me.y);
     this.nearTable = inCity && !blocked && this.tables.some((t) => Math.hypot(t.x - me!.x, t.y - me!.y) <= WARTABLE_REACH);
     this.prompt.classList.toggle("open", this.nearTable);
@@ -149,12 +154,12 @@ export class CityLayer {
       body = `<p>${t.leaderGreeting}</p>` + (sworn
         ? `<p class="sh-empty">You stand ${rank ? `as ${rank}` : "sworn"} of ${name}. ${owed > 0 ? `The hall owes you <b>${owed}</b>${coin}.` : "The hall owes you nothing now."}</p>` +
           (sv && sv.rank >= CITY.titleRank ? `<p class="sh-empty">At Banneret and above the leader names you ${t.title}.</p>` : `<p class="sh-empty">Every rank you earn is paid once: ${CITY.rankGold.slice(1).join(", ")} gold, then at Banneret the title ${t.title}.</p>`)
-        : `<p class="sh-empty">He rewards only those sworn to ${name}. Swear at the altar in the Oath Hall.</p>`);
+        : `<p class="sh-empty">${t.npcs.leader[0]} rewards only those sworn to ${name}. Swear at the altar in ${t.districts.hall}.</p>`);
       btns = btn("reward", `Claim reward${owed > 0 ? ` (${owed})` : ""}`, !sworn);
       acts.reward = () => this.h.send("cityreward");
     } else if (role === "oathkeeper") {
       const home = sv?.home === city.clan;
-      body = `<p>Kneel at the altar and your word is bound to ${name}. Break it, and you may swear again elsewhere.</p>` +
+      body = `<p>${t.oathGreeting}</p>` +
         `<p class="sh-empty">${clan ? `You are sworn to ${CLANS[clan].name.replace(/^The /, "the ")}.` : "You have sworn no oath."}${home ? ` ${t.name} is your home.` : ""}${clan ? "" : ` A hero of level ${CITY.minLevel} or more may swear.`}</p>`;
       btns = (sworn ? "" : btn("oath", `Swear to ${name}`)) + (home ? btn("unhome", `Leave ${t.name} as home`, false, "nd-bye") : btn("home", `Make ${t.name} my home`, !sworn));
       acts.oath = () => this.h.send("cityoath");
@@ -163,7 +168,7 @@ export class CityLayer {
     } else {
       const base = respecCost(hero.level), price = cityPrice(base, city, clan), cut = price < base;
       const cost = price ? `<b>${price}</b>${coin}${cut ? ` <s>${base}</s> (${Math.round(CITY.discount * 100)}% off for the sworn)` : ""}` : "free";
-      body = `<p>Not what you hoped for? I drill it out of you and you start again. Out of combat only.</p><p class="sh-empty">Each reset costs ${cost}. You carry <b>${hero.gold}</b>${coin}.</p>`;
+      body = `<p>${t.trainerGreeting}</p><p class="sh-empty">Each reset costs ${cost}. You carry <b>${hero.gold}</b>${coin}.</p>`;
       btns = btn("respec", `Reset skills`, hero.gold < price) + btn("stats", `Reset stat points`, hero.gold < price);
       acts.respec = () => this.h.send("respec");
       acts.stats = () => this.h.send("resetstats");

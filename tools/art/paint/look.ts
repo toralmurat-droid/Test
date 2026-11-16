@@ -912,6 +912,101 @@ export const LOOKS: Record<string, Look> = {
     legs: "trousers", legCol: 0x4a3e30, boots: 0x2a2018, bootStyle: "wrap",
     sleeve: 0xb8a078, arms: "cloth", glove: 0x3a2618, bracer: 0x5a3a22, weapon: "sword", bladeCol: 0xa8804e, fx: 0xffffff, build: 1.1,
   },
+  // Duskveil (Veiled Circle). The Regent: the Oracle's voice, veiled to the eyes in violet and gold, a sun-orb staff
+  cap_veiled_leader: {
+    skin: 0xd8b898, hair: 0x1a1a2a, hairStyle: "long", eye: 0xe0a030,
+    head: "hood", headCol: 0x2a2a5a, headTrim: 0xe0a030, mask: 0x6a5aa8,
+    torso: "robe", torsoCol: 0x4a3a8a, trim: 0xe0a030, tabard: { col: 0x2a2a5a, trim: 0xe0a030, emblem: 0xf6d26b }, belt: 0xe0a030, buckle: 0xf6d26b, sash: 0xe0a030,
+    legs: "dress", legCol: 0x2a2a5a, boots: 0x14143a, bootStyle: "shoe",
+    sleeve: 0x4a3a8a, arms: "cloth", glove: 0xd8b898, weapon: "staff", orb: 0xf6d26b, fx: 0xf6d26b, back: "cape", capeCol: 0x2a2a5a, build: 1.02,
+  },
+  // the Unspoken Witness: pale lilac veils over the whole face, a violet-lit staff, never a word
+  cap_veiled_oathkeeper: {
+    skin: 0xe0c4a8, hair: 0xd8d4e8, hairStyle: "long", eye: 0x8a7ad0,
+    head: "hood", headCol: 0xd8d4e8, headTrim: 0xe0a030, mask: 0xd8d4e8,
+    torso: "robe", torsoCol: 0xd8d4e8, trim: 0xe0a030, sash: 0x4a3a8a, belt: 0x4a3a8a, buckle: 0xe0a030,
+    legs: "robe", legCol: 0xb8b4cc, boots: 0x2a2a4a, bootStyle: "shoe",
+    sleeve: 0xd8d4e8, arms: "cloth", weapon: "staff", orb: 0xb090ff, fx: 0xb090ff,
+  },
+  // the Blade-Mistress: indigo wraps and a gold sash, a curved blade, light on her feet
+  cap_veiled_trainer: {
+    skin: 0xc8946a, hair: 0x1a1414, hairStyle: "ponytail", eye: 0x2a1a10,
+    head: "bandana", headCol: 0x4a3a8a, headTrim: 0x2a2a5a, mask: 0x34346a,
+    torso: "leather", torsoCol: 0x34346a, trim: 0xe0a030, vest: 0x20204a, belt: 0xe0a030, buckle: 0xf6d26b, sash: 0xe0a030,
+    legs: "wrapped", legCol: 0x2a2a4a, boots: 0x1a1a2a, bootStyle: "wrap",
+    sleeve: 0x34346a, arms: "wrap", glove: 0x20204a, bracer: 0xe0a030, weapon: "katana", fx: 0xf6d26b, build: 0.98,
+  },
+  // Marrowkeep (Ossuary Host). The Lord-Ossuary: black plate, bone pauldrons, a teal-trimmed black tabard, a bone plume
+  cap_host_leader: {
+    skin: 0xc8bcae, hair: 0xd8cfb2, hairStyle: "short", beard: 0xd8cfb2, beardStyle: "stubble", eye: 0x4f7d6a,
+    head: "greathelm", headCol: 0x2a302e, headTrim: 0x4f7d6a, plume: 0xd8cfb2,
+    torso: "plate", torsoCol: 0x3a4442, trim: 0x4f7d6a, tabard: { col: 0x1f2422, trim: 0x4f7d6a, emblem: 0xd8cfb2 }, belt: 0x1c2020, buckle: 0xd8cfb2,
+    legs: "mail", legCol: 0x2e3634, boots: 0x3a4442, bootStyle: "greave", boneArmour: 1,
+    sleeve: 0x3a4442, arms: "plate", glove: 0x1c2020, weapon: "sword", bladeCol: 0xb8c4c0, fx: 0x8affd0, back: "cape", capeCol: 0x1f2422, build: 1.16,
+  },
+  // the Reader of the Roll: bone-pale hood, black robe, a teal grave-lantern on her staff
+  cap_host_oathkeeper: {
+    skin: 0xd0c8bc, hair: 0xe8e2d0, hairStyle: "long", eye: 0x4f7d6a,
+    head: "hood", headCol: 0xd8cfb2, headTrim: 0x4f7d6a,
+    torso: "robe", torsoCol: 0x2a302e, trim: 0xd8cfb2, sash: 0x4f7d6a, belt: 0x4f7d6a, buckle: 0xd8cfb2,
+    legs: "robe", legCol: 0x1c2020, boots: 0x121616, bootStyle: "shoe",
+    sleeve: 0x2a302e, arms: "cloth", glove: 0xd0c8bc, weapon: "staff", orb: 0x8affd0, lantern: 0x8affd0, fx: 0x8affd0, fetishes: 0xd8cfb2,
+  },
+  // the drill-sergeant: a dented kettle helm, grey mail, a teal sash and a heavy mace
+  cap_host_trainer: {
+    skin: 0xb8a898, hair: 0x3a3a38, hairStyle: "short", beard: 0x3a3a38, beardStyle: "full", eye: 0x2a2a28,
+    head: "kettle", headCol: 0x5a625e, headTrim: 0x4f7d6a,
+    torso: "mail", torsoCol: 0x5a625e, trim: 0x2a302e, belt: 0x2a1e14, buckle: 0xd8cfb2, sash: 0x4f7d6a,
+    legs: "trousers", legCol: 0x2a302e, boots: 0x1c2020, bootStyle: "leather",
+    sleeve: 0x5a625e, arms: "cloth", glove: 0x2a1e14, bracer: 0x3a4442, weapon: "mace", fx: 0xffffff, build: 1.12,
+  },
+  // Scarwall (Redfang Compact). The Warlord: a horned iron helm, mail under a red tabard, a wolf pelt, a broad axe
+  cap_redfang_leader: {
+    skin: 0xc8946a, hair: 0x1a1414, hairStyle: "short", beard: 0x1a1414, beardStyle: "full", eye: 0x3a1a10,
+    head: "horned", headCol: 0x3a3434, headTrim: 0x7e1d16,
+    torso: "mail", torsoCol: 0x4a4444, tabard: { col: 0x7e1d16, trim: 0x1a1414, emblem: 0xe3d6b8 }, belt: 0x1a1414, buckle: 0xe3d6b8,
+    legs: "trousers", legCol: 0x2a2224, boots: 0x1a1414, bootStyle: "leather",
+    sleeve: 0x4a4444, arms: "plate", glove: 0x1a1414, bracer: 0x7e1d16, weapon: "axe", fx: 0xff8a6a, back: "pelt", capeCol: 0x5a4a3a, build: 1.26,
+  },
+  // the ledger-keeper: an old woman in a red hood, an ink-stained apron, the knife she cuts thumbs with
+  cap_redfang_oathkeeper: {
+    skin: 0xd0a07c, hair: 0x9a9690, hairStyle: "long", eye: 0x2a1a10,
+    head: "hood", headCol: 0x5a1812, headTrim: 0x1a1414,
+    torso: "robe", torsoCol: 0x3a2a24, trim: 0x7e1d16, apron: 0x7e1d16, belt: 0x1a1414, buckle: 0xe3d6b8,
+    legs: "dress", legCol: 0x2a2224, boots: 0x1a1414, bootStyle: "shoe",
+    sleeve: 0x3a2a24, arms: "cloth", glove: 0xd0a07c, weapon: "dagger", fx: 0xffffff, fetishes: 0xe3d6b8, build: 0.94,
+  },
+  // the pit-boss: bare-chested and scarred, red bandana, red wraps on his fists, no weapon but those
+  cap_redfang_trainer: {
+    skin: 0xc48a5e, hair: 0x2a1a14, hairStyle: "bald", beard: 0x2a1a14, beardStyle: "stubble", eye: 0x2a1a10,
+    head: "bandana", headCol: 0x7e1d16, headTrim: 0x1a1414,
+    torso: "bare", torsoCol: 0xc48a5e, belt: 0x1a1414, buckle: 0xe3d6b8, harness: true,
+    legs: "trousers", legCol: 0x3a2a24, boots: 0x1a1414, bootStyle: "wrap",
+    sleeve: 0xc48a5e, arms: "bare", glove: 0x7e1d16, bracer: 0x7e1d16, weapon: "none", fx: 0xffffff, build: 1.24,
+  },
+  // Deepden (Hide-Kin). The Den-Father: an old man's face under a flayed wolf's head, hide harness, a bone-bound maul
+  cap_hidekin_leader: {
+    skin: 0xa07a58, hairStyle: "none", beard: 0x8a8278, beardStyle: "long", beast: "wolf", beastHood: true, head: "none", eye: 0xe2a040,
+    torso: "leather", torsoCol: 0x6a4a2a, trim: 0xe2c79a, belt: 0x6e1d18, buckle: 0xe2c79a, harness: true,
+    legs: "fur", legCol: 0x5a3e24, boots: 0x3a281a, bootStyle: "wrap",
+    sleeve: 0x8a5f2a, arms: "cloth", bracer: 0x3a281a, glove: 0x3a281a, weapon: "hammer", bladeCol: 0x8a8070, fx: 0xffc070, back: "pelt", capeCol: 0x8a5f2a, fetishes: 0xe2c79a, build: 1.32,
+  },
+  // Grandmother Thistle: a hide hood, white hair, a bone-needle staff, charms all down her belt
+  cap_hidekin_oathkeeper: {
+    skin: 0xb08a68, hair: 0xe8e4dc, hairStyle: "long", eye: 0x2a1a10,
+    head: "hood", headCol: 0x8a5f2a, headTrim: 0xe2c79a,
+    torso: "robe", torsoCol: 0x6a4a2a, trim: 0xe2c79a, apron: 0xc8ac80, belt: 0x6e1d18, buckle: 0xe2c79a,
+    legs: "robe", legCol: 0x5a3e24, boots: 0x3a281a, bootStyle: "wrap",
+    sleeve: 0x6a4a2a, arms: "cloth", glove: 0xb08a68, weapon: "staff", orb: 0xffc070, fx: 0xffc070, fetishes: 0xe2c79a, stoop: 2, build: 0.92,
+  },
+  // the Clawmaster: bare-chested, a quilled back, digging claws, a blood-red bandana
+  cap_hidekin_trainer: {
+    skin: 0xa8805c, hair: 0x2a1c12, hairStyle: "short", eye: 0x2a1a10,
+    head: "bandana", headCol: 0x6e1d18, headTrim: 0x3a1410,
+    torso: "bare", torsoCol: 0xa8805c, belt: 0x3a281a, buckle: 0xe2c79a, harness: true,
+    legs: "fur", legCol: 0x5a3e24, boots: 0x3a281a, bootStyle: "wrap",
+    sleeve: 0xa8805c, arms: "bare", glove: 0x3a281a, weapon: "none", fx: 0xffd0a0, quills: 0x3a2a1a, claws: 0xe2d8bc, build: 1.14,
+  },
   steward_redfang: { // a scarred quartermaster in red leather
     skin: 0xd0a07c, hair: 0x2a1a14, hairStyle: "short", beard: 0x2a1a14, beardStyle: "stubble", eye: 0x3a2a1a,
     head: "cap", headCol: 0x5a1812, headTrim: 0x1a1414,

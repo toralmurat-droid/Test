@@ -187,3 +187,33 @@ test("room: home and capPaid are saved and restored, old and broken saves load w
     await c.leave();
   } finally { await srv.stop(); }
 });
+
+test("room: the other four capitals' gates let in and out, refuse their enemies, give their sworn the discount; logging out inside keeps the land", async () => {
+  const srv = await startRoom();
+  try {
+    const c = await srv.join();
+    await wait(300);
+    const room = srv.room, pid = c.sessionId, p = room.state.players.get(pid), client = room.clients.getById(pid);
+    p.level = 5;
+    for (const C of CITIES.filter((o) => o.clan !== "wardens")) {
+      const out = waygateById(`citygate_${C.clan}`)!, inn = waygateById(`cityexit_${C.clan}`)!;
+      const tryGate = () => { at(p, out.x, out.y); p.gateNoteAt = 0; room.caps.noted.clear(); room.useWaygate(client); return cityAtPx(p.x, p.y); };
+      p.clan = undefined; p.feud = {};
+      assert.equal(tryGate(), C, `Lv 5, unsworn: into ${cityText(C).name}`);
+      assert.equal(room.snapshot(p).act, C.act, "logging out inside saves the city's land");
+      at(p, inn.x, inn.y); room.useWaygate(client);
+      assert.equal(cityAtPx(p.x, p.y), undefined, "out through the city gate");
+      assert.ok(Math.hypot(p.x - out.x, p.y - out.y) < 3 * TILE, "back beside the city gate in the land");
+      const foe = C.clan === "redfang" ? "wardens" : "redfang";
+      p.clan = foe; p.clanAt = 1; setWarPairs([pairOf(foe, C.clan)]);
+      assert.equal(tryGate(), undefined, "a clan at war with the city stays outside");
+      _resetWarRelations();
+      assert.equal(tryGate(), C, "at peace: in");
+      // the quartermaster: the city's sworn pay less, others the base price
+      const q = cityNpcPx(C, "quartermaster"); at(p, q.x, q.y + TILE * 0.8);
+      assert.equal(room.priceFor(p, 100), 100);
+      p.clan = C.clan; assert.equal(room.priceFor(p, 100), 90);
+    }
+    await c.leave();
+  } finally { _resetWarRelations(); await srv.stop(); }
+});

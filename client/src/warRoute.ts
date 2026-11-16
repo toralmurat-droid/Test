@@ -9,6 +9,7 @@
  *    the hero has woken, portal stones. Since the Crown's war (Crown PR3) its ten territories are nodes like any other;
  *    the Crownways are its gates.
  */
+import { cityAt } from "../../shared/capitals";
 import { HOMELAND_GATES } from "../../shared/act2";
 import { inDeepRow, UNDER_END, WORLD_H } from "../../shared/constants";
 import { CROWNWAYS } from "../../shared/crown";
@@ -50,6 +51,8 @@ export interface Here {
 
 /** The territory and land of a map tile (underground: the land only, no node). */
 export function hereAt(tx: number, ty: number): Here {
+  const city = cityAt(tx, ty);
+  if (city) return hereAt(city.outer.x, city.outer.y); // inside a capital: where its city gate stands in its land
   const land = regionOf(tx, ty)?.key;
   if ((ty >= WORLD_H && ty < UNDER_END) || inDeepRow(ty)) return { land, near: false }; // dungeon floors and caves lie under the lands: no territory to mark
   const hit = TERRITORIES.find((t) => inRect(t, tx, ty));

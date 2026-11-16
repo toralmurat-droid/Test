@@ -1,32 +1,53 @@
 import type { CityPropKind } from "../../shared/capitals";
+import { CLANS, type ClanKey } from "../../shared/war/clans";
 import { hsh, IsoPaint, mat, ramp, type Mat, type V3 } from "./isoPaint";
 import { BRASSR, dummy, IRONR, ROPER, STONER, WOODR, wood } from "./isoProps";
 import type Phaser from "phaser";
 import type { Pen } from "./worldProps";
 
 /**
- * Baked prop art for the clan capitals (W7), Wardens look (Hearthhold): oath altar, war table, quartermaster's stash,
- * training dummy, weapon rack and wall banner. Same isometric pixel painter and palettes as isoProps.ts, so they sit with
+ * Baked prop art for the clan capitals (W7), one set per city in its clan's colours (PALS): oath altar, war table,
+ * quartermaster's stash, training dummy, weapon rack and wall banner. Same isometric pixel painter and palettes as isoProps.ts, so they sit with
  * the bonfire and the village props. Cosmetic and client-only: walk-through art placed by the city painter; the blocking
  * boxes are CITY_TEMPLATE `solid`, which this file never touches.
  *
- * Use: `cityPropTextures(scene)` once, then for a prop of kind K put a sprite with texture `cityPropKey(K)` at the prop's
+ * Use: `cityPropTextures(scene, clan)` once per city, then for a prop of kind K put a sprite with texture `cityPropKey(K, clan)` at the prop's
  * foot (world px of the tile x, y), origin `CITY_PROPS[K].ox / w, CITY_PROPS[K].oy / h`, depth by foot y. `frames` > 1 means
  * a spritesheet (flames, cloth): animate frames 0..frames-1 at about 6 fps.
  */
 export interface CityPropArt { w: number; h: number; /** foot anchor in the frame, texels */ ox: number; oy: number; frames: number; draw: (p: Pen, f: number) => void }
 
 const N = 6, TAU = Math.PI * 2;
-/** The Wardens' cloth (shared/war/clans.ts CLANS.wardens.cloth 0x3b4a2c: green) and its trim (0xd9822b: orange), as in the Hold standards. */
-const BLUE = [0x0e140a, 0x1c2614, 0x2c3a20, 0x3b4a2c, 0x546a3c, 0x6f8a4e];
-const ORANGE = [0x3a1a08, 0x7a3a0c, 0xb4601c, 0xd9822b, 0xf0b44a, 0xffd88a];
-const RED = [0x1e0606, 0x561410, 0x962a1e, 0xcc5a3a];
+/** A six-step shade ramp round a base colour (index 3 = the colour), for the clans' cloth, trim and stone. */
+function shades(c: number): number[] {
+  const ch = (sh: number, f: number) => { const v = (c >> sh) & 255; return Math.round(f <= 1 ? v * f : v + (255 - v) * (f - 1) * 0.6); };
+  return [0.25, 0.45, 0.7, 1, 1.3, 1.6].map((f) => (Math.min(255, ch(16, f)) << 16) | (Math.min(255, ch(8, f)) << 8) | Math.min(255, ch(0, f)));
+}
+/** A city's prop colours: its clan's cloth and trim (shared/war/clans.ts CLANS, as in the Hold standards), the foe's pawns on the war table, its stone. */
+interface PropPal { cloth: number[]; trim: number[]; foe: number[]; stone: number[] }
+const PALS: Record<ClanKey, PropPal> = {
+  // Hearthhold: the Wardens' green cloth (0x3b4a2c) and orange trim (0xd9822b), red foes, grey stone
+  wardens: {
+    cloth: [0x0e140a, 0x1c2614, 0x2c3a20, 0x3b4a2c, 0x546a3c, 0x6f8a4e], trim: [0x3a1a08, 0x7a3a0c, 0xb4601c, 0xd9822b, 0xf0b44a, 0xffd88a],
+    foe: [0x1e0606, 0x561410, 0x962a1e, 0xcc5a3a], stone: STONER,
+  },
+  // Duskveil: violet cloth with gold, sandstone; the Host's teal on the war table
+  veiled: { cloth: shades(0x4a3a8a), trim: shades(CLANS.veiled.trim), foe: shades(CLANS.host.trim), stone: shades(0xa08a6a) },
+  // Marrowkeep: black cloth trimmed in teal, black stone; the Hide-Kin's brown on the war table
+  host: { cloth: shades(0x2c3632), trim: shades(CLANS.host.trim), foe: shades(CLANS.hidekin.cloth), stone: shades(0x3a3e3e) },
+  // Scarwall: red cloth trimmed in bone, red stone; the Circle's violet on the war table
+  redfang: { cloth: shades(CLANS.redfang.cloth), trim: shades(0xb8a888), foe: shades(0x4a4a9a), stone: shades(0x6a3e32) },
+  // Deepden: brown hide trimmed in blood red, earth-brown stone; the Wardens' green on the war table
+  hidekin: { cloth: shades(CLANS.hidekin.cloth), trim: shades(0xa8342a), foe: shades(CLANS.wardens.cloth), stone: shades(0x5e5040) },
+};
+/** The palette being baked (bakeCityProp sets it). */
+let PAL: PropPal = PALS.wardens;
 const IVORY = [0x2a261e, 0x4a4436, 0x7a705a, 0xa89c80, 0xd0c4a4, 0xece2c8];
 const FLAME = [0xc05a18, 0xf08a2c, 0xffc860, 0xffeaa8, 0xfff8e0];
 const SACKP = [0x2a2218, 0x463a28, 0x66563c, 0x86744e, 0xa49266, 0xc0b084];
 const metal = (bias = 0): Mat => (l, _s, _t, x, y) => ramp(IRONR, l * 1.1 + bias - 0.05, x, y);
 const brass = (bias = 0): Mat => (l, _s, _t, x, y) => ramp(BRASSR, l + bias, x, y);
-const stone = (bias = 0): Mat => (l, _s, _t, x, y) => ramp(STONER, l + bias + (hsh(x >> 1, y >> 1, 11) - 0.5) * 0.22 - (hsh(x, y, 12) < 0.07 ? 0.2 : 0), x, y);
+const stone = (bias = 0): Mat => (l, _s, _t, x, y) => ramp(PAL.stone, l + bias + (hsh(x >> 1, y >> 1, 11) - 0.5) * 0.22 - (hsh(x, y, 12) < 0.07 ? 0.2 : 0), x, y);
 const cloth = (pal: number[], bias = 0): Mat => (l, s, t, x, y) => ramp(pal, l + bias + (hsh(Math.floor(s * 40), Math.floor(t * 60), 5) - 0.5) * 0.08, x, y);
 
 /** A candle: wax stub with a flickering flame (f = frame). */
@@ -48,8 +69,8 @@ function altar(p: Pen, f: number) {
   g.box(-9.1, 9.1, 5.05, 5.15, 15, 16, brass(-0.1), 2); // gold inlay band on the front faces
   g.box(9.05, 9.15, -5.1, 5.1, 15, 16, brass(-0.1), 4);
   // runner over the slab and down the front (+u) face
-  g.quad([-3, -5.4, 25.3], [6, 0, 0], [0, 10.8, 0], cloth(BLUE, 0.02));
-  g.quad([3, -5, 25.2], [0.4, 0, -12], [0, 10, 0], cloth(BLUE, -0.04), (s) => Math.sin(s * Math.PI * 3) * 0.3);
+  g.quad([-3, -5.4, 25.3], [6, 0, 0], [0, 10.8, 0], cloth(PAL.cloth, 0.02));
+  g.quad([3, -5, 25.2], [0.4, 0, -12], [0, 10, 0], cloth(PAL.cloth, -0.04), (s) => Math.sin(s * Math.PI * 3) * 0.3);
   g.box(3.1, 3.5, -5, 5, 12.6, 13.4, brass(0), 4);
   // open book on a wooden stand
   g.box(-6, 1, -3.5, 3.5, 25, 26.2, wood(WOODR, -0.1, 8));
@@ -85,8 +106,8 @@ function wartable(p: Pen, f: number) {
     return ramp([0x5a4c34, 0x8a7a56, 0xb0a07a, 0xcdbe96], l * 0.9 + (hsh(x >> 1, y >> 1, 6) - 0.5) * 0.18, x, y);
   });
   const pawn = (u: number, v: number, pal: number[], h = 3.6) => { g.rod([u, v, zt], [u, v, zt + h], 0.9, mat(pal, 0.05)); g.blob([u, v, zt + h + 0.4], 1.1, 1.1, 1.1, mat(pal, 0.1)); };
-  for (const [u, v] of [[14, 6], [18, 9], [22, 6.5], [11, 11]]) pawn(u, v, BLUE);
-  for (const [u, v] of [[34, 14], [38, 12], [30, 16]]) pawn(u, v, RED);
+  for (const [u, v] of [[14, 6], [18, 9], [22, 6.5], [11, 11]]) pawn(u, v, PAL.cloth);
+  for (const [u, v] of [[34, 14], [38, 12], [30, 16]]) pawn(u, v, PAL.foe);
   g.rod([8, 17, zt], [11.5, 18.2, zt + 0.6], 0.5, metal(0.1)); // pinned dagger
   g.blob([7.4, 16.8, zt + 0.6], 0.8, 0.8, 0.8, brass(0));
   g.blob([44, 18, zt + 0.2], 2.2, 2.2, 0.6, brass(0.05), 0, 0.5); // brass ring weight
@@ -152,7 +173,7 @@ function rack(p: Pen) {
     if (s > 0.9) return ramp(IRONR, l + 0.1, x, y);
     const a = t * TAU, cy = Math.cos(a) * s, cz = Math.sin(a) * s;
     if (Math.abs(cy) < 0.16 && cz > -0.25 && cz < 0.5 - Math.abs(cy) * 1.8) return ramp(BRASSR, l + 0.15, x, y);
-    return ramp(BLUE, l + (hsh(Math.floor(a * 8), Math.floor(s * 9), 3) - 0.5) * 0.12, x, y);
+    return ramp(PAL.cloth, l + (hsh(Math.floor(a * 8), Math.floor(s * 9), 3) - 0.5) * 0.12, x, y);
   });
 }
 
@@ -171,14 +192,14 @@ function banner(p: Pen, f: number) {
   g.quad([0.2, 0.6, 85], [W, 0, 0], [0, 0, -H], (l, s, t, x, y) => {
     const m = Math.abs(s - 0.5) * 2;
     if (t > 1 - 0.14 * (1 - m)) return undefined; // swallow tail
-    if (m > 0.9 || t < 0.04 || t > 0.9 - 0.14 * (1 - m)) return ramp(ORANGE, l * 0.9 + 0.05, x, y);
+    if (m > 0.9 || t < 0.04 || t > 0.9 - 0.14 * (1 - m)) return ramp(PAL.trim, l * 0.9 + 0.05, x, y);
     const ft = (t - 0.2) / 0.55;
     if (ft > 0 && ft < 1) {
       const w = 0.42 * Math.pow(Math.sin(Math.PI * Math.pow(ft, 0.8)), 0.9) * (1 - 0.2 * Math.sin(ft * 9));
-      if (m < w) return ramp(ORANGE, l + 0.15 - (m / Math.max(0.01, w)) * 0.15, x, y);
+      if (m < w) return ramp(PAL.trim, l + 0.15 - (m / Math.max(0.01, w)) * 0.15, x, y);
     }
-    if (t > 0.78 && t < 0.83 && m < 0.5) return ramp(ORANGE, l, x, y);
-    return ramp(BLUE, l + (hsh(Math.floor(s * 30), Math.floor(t * 70), 5) - 0.5) * 0.06 + t * 0.05, x, y);
+    if (t > 0.78 && t < 0.83 && m < 0.5) return ramp(PAL.trim, l, x, y);
+    return ramp(PAL.cloth, l + (hsh(Math.floor(s * 30), Math.floor(t * 70), 5) - 0.5) * 0.06 + t * 0.05, x, y);
   }, (s, t) => Math.sin(ph - t * 3.4 + s * 1.3) * (0.6 + 2.4 * t) * 0.8);
 }
 
@@ -192,13 +213,14 @@ export const CITY_PROPS: Record<CityPropKind, CityPropArt> = {
   banner: { w: 40, h: 112, ox: 14, oy: 104, frames: N, draw: banner },
 };
 export const CITY_PROP_KINDS = Object.keys(CITY_PROPS) as CityPropKind[];
-/** Texture key of a city prop's spritesheet. */
-export const cityPropKey = (kind: CityPropKind) => `cityprop_${kind}`;
+/** Texture key of a city prop's spritesheet in a clan's colours. */
+export const cityPropKey = (kind: CityPropKind, clan: ClanKey = "wardens") => `cityprop_${clan}_${kind}`;
 
 const OUTLINE = 0x15100d;
 /** One frame as RGBA bytes, with the 1px dark outline round the silhouette (no Phaser: the preview tool uses it too). */
-export function bakeCityProp(kind: CityPropKind, f: number): Uint8ClampedArray {
+export function bakeCityProp(kind: CityPropKind, f: number, clan: ClanKey = "wardens"): Uint8ClampedArray {
   const { w, h, draw } = CITY_PROPS[kind], buf = new Uint32Array(w * h);
+  PAL = PALS[clan];
   const px = (x: number, y: number, c: number, a = 1) => {
     x = Math.round(x); y = Math.round(y);
     if (x < 0 || y < 0 || x >= w || y >= h) return;
@@ -219,13 +241,13 @@ export function bakeCityProp(kind: CityPropKind, f: number): Uint8ClampedArray {
   return out;
 }
 
-/** Paints every city prop spritesheet into the scene's texture manager (once; frames 0..frames-1, NEAREST). */
-export function cityPropTextures(scene: Phaser.Scene) {
+/** Paints every prop spritesheet of one clan's city into the scene's texture manager (once; frames 0..frames-1, NEAREST). */
+export function cityPropTextures(scene: Phaser.Scene, clan: ClanKey) {
   for (const k of CITY_PROP_KINDS) {
-    const key = cityPropKey(k);
+    const key = cityPropKey(k, clan);
     if (scene.textures.exists(key)) continue;
     const { w, h, frames } = CITY_PROPS[k], tex = scene.textures.createCanvas(key, w * frames, h)!, ctx = tex.getContext();
-    for (let f = 0; f < frames; f++) { const img = ctx.createImageData(w, h); img.data.set(bakeCityProp(k, f)); ctx.putImageData(img, f * w, 0); tex.add(f, 0, f * w, 0, w, h); }
+    for (let f = 0; f < frames; f++) { const img = ctx.createImageData(w, h); img.data.set(bakeCityProp(k, f, clan)); ctx.putImageData(img, f * w, 0); tex.add(f, 0, f * w, 0, w, h); }
     tex.refresh();
     tex.setFilter(1 /* Phaser.Textures.FilterMode.NEAREST */);
   }
