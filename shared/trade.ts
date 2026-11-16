@@ -1,6 +1,7 @@
 import { TILE } from "./constants";
 import { EMPTY, isSolidTile, OBJECTS, SAFE_ZONE } from "./map";
 import { SALT_STASH } from "./saltmere";
+import { CITIES, CITY_TEMPLATE, cityPx } from "./capitals";
 import { NPCS } from "./npcs";
 import { BAG_SIZE, isBagItem, isBound } from "./gear";
 
@@ -51,7 +52,8 @@ export const STASH = (() => {
  * Every stash chest, in px (Oakvale's first). They all open the one account stash, so a hero who banks at Saltmere
  * can take it out again in Oakvale; the server accepts stash use next to any of them.
  */
-export const STASHES: readonly { x: number; y: number }[] = [STASH, { x: (SALT_STASH.x + 0.5) * TILE, y: (SALT_STASH.y + 0.6) * TILE }];
+export const STASHES: readonly { x: number; y: number }[] = [STASH, { x: (SALT_STASH.x + 0.5) * TILE, y: (SALT_STASH.y + 0.6) * TILE },
+  ...CITIES.map((c) => cityPx(c, CITY_TEMPLATE.stash.x + 0.5, CITY_TEMPLATE.stash.y + 0.6))]; // each capital's chest in its gate square (shared/capitals.ts)
 /** The nearest stash chest within `range` px of (x, y), if any. */
 export function stashNear(x: number, y: number, range = STASH_RANGE): { x: number; y: number } | undefined {
   let best: { x: number; y: number } | undefined, bd = range;

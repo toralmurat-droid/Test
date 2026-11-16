@@ -4,6 +4,7 @@ import { D } from "./desert";
 import { MR } from "./moors";
 import { BR } from "./badlands";
 import { SR } from "./sinkholes";
+import { CITIES, CITY_SOLIDS, CITY_TEMPLATE, cityNpcId, cityNpcPx, cityShopId, cityText } from "./capitals";
 
 /** Village NPCs: where they stand (feet, in pixels) and which sprite sheet they use. Server and client share this. */
 export interface Npc {
@@ -120,6 +121,12 @@ export const NPCS: Npc[] = [
   { id: "steward_rustwater", name: "Steward", title: "Town Steward", sprite: "steward_neutral", x: 228.5 * TILE, y: 875.6 * TILE, dir: "down" },
   { id: "steward_ropewell", name: "Steward", title: "Town Steward", sprite: "steward_neutral", x: 110.5 * TILE, y: 995.6 * TILE, dir: "down" },
   { id: "steward_millbrook", name: "Reeve", title: "Village Reeve", sprite: "steward_neutral", x: 110.5 * TILE, y: 48.6 * TILE, dir: "down" },
+  // ---- The clans' capitals (W7, shared/capitals.ts): in each city the leader in the keep, the quartermaster in the
+  // market (the city's shop, cap_<clan>), the oath-keeper at the altar and the trainer in the barracks yard
+  ...CITIES.flatMap((c) => CITY_TEMPLATE.npcs.map((n): Npc => {
+    const [name, title] = cityText(c).npcs[n.role];
+    return { id: cityNpcId(c, n.role), name, title, sprite: c.sprites[n.role], ...cityNpcPx(c, n.role), dir: n.dir, ...(n.role === "quartermaster" ? { shop: cityShopId(c) } : {}) };
+  })),
 ];
 
 /**
@@ -161,9 +168,7 @@ const DECOR_CELL = 4;
 let decorCells: Map<number, [number, number, number, number][]> | undefined;
 function decorGrid() {
   const m = new Map<number, [number, number, number, number][]>();
-  for (const d of NPC_DECOR) {
-    const r = d.solid;
-    if (!r) continue;
+  for (const r of [...NPC_DECOR.flatMap((d) => (d.solid ? [d.solid] : [])), ...CITY_SOLIDS]) { // the capitals' war tables, altars, dummies (shared/capitals.ts)
     for (let cy = Math.floor(r[1] / DECOR_CELL); cy <= Math.floor((r[1] + r[3]) / DECOR_CELL); cy++)
       for (let cx = Math.floor(r[0] / DECOR_CELL); cx <= Math.floor((r[0] + r[2]) / DECOR_CELL); cx++) {
         const k = cy * 4096 + cx;

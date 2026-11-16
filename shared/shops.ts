@@ -1,6 +1,7 @@
 import { AffixKey, affixMax, gearDef, itemLevel, itemRarity, withAffixes, withLevel } from "./gear";
 import { POTION_SIZES } from "./potions";
 import { parseRune } from "./runes";
+import { CITY_TEXT } from "./war/cityText";
 
 /**
  * Village shops. A shop is attached to an NPC (shared/npcs.ts) by id. The server checks distance, gold and bag space.
@@ -239,6 +240,14 @@ export const SHOPS: Record<string, Shop> = {
     greeting: "Books on the left, spare strings on the right. Anything you can't use, I'll buy or break.",
     stock: weapons(["bk_hymnal", "bk_march", "bk_dissonance"]),
     buys: ["weapon", "shield"],
+  },
+  // The Wardens' quartermaster in Hearthhold (W7, shared/capitals.ts): Oakvale's armour steps and Morwen's flasks, no
+  // new power; heroes sworn to the Wardens pay CITY.discount less (shared/capitals.ts cityPrice)
+  cap_wardens: {
+    greeting: CITY_TEXT.wardens!.shopGreeting,
+    stock: [...armourStock("armourer"), ...potionStock("potion", [0, 1]), ...potionStock("mpotion", [0, 1])],
+    buys: ARMOUR_SLOTS,
+    levelHeads: true,
   },
   witch: {
     greeting: "Fresh from the still, darling. Red for your blood, blue for your magic. Try not to stare. Found a carved stone out there? I pay well for runes, or fuse four alike into a stronger one.",
