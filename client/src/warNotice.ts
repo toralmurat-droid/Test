@@ -40,6 +40,16 @@ export class WarNotice {
     return `Night Raiders! They strike ${TERRITORIES[t]?.name ?? "?"}, land of ${CLANS[r.clan]?.name ?? "?"}.`;
   }
 
+  /** W4: a column of another clan marches on land of the hero's clan (shown wherever the hero is; the horn is soft). */
+  column(clan: ClanKey, t: number) {
+    play("horn", undefined, undefined, 0.5, undefined, { minGap: 4000 });
+    this.el.textContent = `${CLANS[clan]?.name ?? "?"} send a column to ${TERRITORIES[t]?.name ?? "?"}.`;
+    this.el.className = "siege";
+    this.el.hidden = false;
+    clearTimeout(this.timer);
+    this.timer = window.setTimeout(() => { this.el.hidden = true; }, 6000);
+  }
+
   /** The Night Raiders struck the hunted clan: horn and notice if the hero stands in one of those lands. */
   raid(r: WarRaid, me: { x: number; y: number } | undefined) {
     if (!me || !Array.isArray(r?.ts)) return;

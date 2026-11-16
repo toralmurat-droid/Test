@@ -15,12 +15,15 @@ import type { MouthView } from "../../shared/war/tunnels";
 import type { WarView } from "../../shared/war/view";
 import { HOLD_TIER_KEYS } from "../../shared/war/holdTiers";
 import type { WritKind } from "../../shared/war/writs";
+import { COLUMN_ICON, drawClashIcon, drawColumnIcon, drawGateGlyph, ROAD_STYLE } from "./columnArt";
+import { columnTip, type ColView, type WarColumns } from "./warColumns";
 
 /** Bright map colours per clan (as on the war table). */
 export const CLAN_COL: Record<ClanKey, string> = { wardens: "#e08a2a", redfang: "#d03a2a", host: "#5fb0a0", hidekin: "#a0703a", veiled: "#7a7aff" };
-const LABEL: Record<ClanKey, string> = { wardens: "Wardens", redfang: "Redfang", host: "Ossuary Host", hidekin: "Hide-Kin", veiled: "Veiled Circle" };
+export const CLAN_LABEL: Record<ClanKey, string> = { wardens: "Wardens", redfang: "Redfang", host: "Ossuary Host", hidekin: "Hide-Kin", veiled: "Veiled Circle" };
 export { FORT } from "./holdNames";
 import { FORT } from "./holdNames";
+const LABEL = CLAN_LABEL;
 const GOLD = "#ffd166", EMBER = "#f6b040";
 
 // ---------- pure helpers (tested) ----------
@@ -188,6 +191,9 @@ export interface WarMapData {
   tunnels?: MouthView[];
   /** Holds sacked this war tick: territory -> the sacker's clan index, -1 unsworn (the "holds" message, client/src/warSack.ts). */
   sacked?: ReadonlyMap<number, number>;
+  /** W4: the war roads and marching columns (client/src/warColumns.ts); `me` the hero in world px (column visibility). */
+  lines?: WarColumns;
+  me?: { x: number; y: number };
   /** Is this tile uncovered in the hero's fog? */
   seen(tx: number, ty: number): boolean;
 }
@@ -215,6 +221,7 @@ export function drawWarWorld(g: CanvasRenderingContext2D, d: WarMapData, v: WarM
     for (const id of war.hot) { const T = TERRITORIES[id]; if (T) { const [x, y, w, h] = rect(T); g.globalAlpha = 0.5; g.fillRect(x, y, w, h); } }
     g.globalAlpha = 1;
   }
+  if (d.lines) drawRoads(g, d, v);
   // Front lines: the border where two holders meet
   g.lineCap = "round";
   for (const [x0, y0, x1, y1] of frontSegments(war.owner)) {
@@ -241,7 +248,7 @@ export function drawWarWorld(g: CanvasRenderingContext2D, d: WarMapData, v: WarM
       g.fillStyle = "#000"; g.fillRect(c.x - 3.5, c.y - 3.5, 7, 7); g.fillStyle = "#e8d6a8"; g.fillRect(c.x - 2.5, c.y - 2.5, 5, 5);
     }
     for (const [from, to, tun] of d.plan?.march ?? []) {
-      if (!TERRITORIES[from] || !TERRITORIES[to]) continue;
+      if (!TERRITORIES[from] || !TERRITORIES[to] || (!tun && d.lines?.hasColumns)) continue; // W4: a walking column's icon replaces the plan arrow
       const A = pxs(v, ...pt(landPin(from))), B = pxs(v, ...pt(landPin(to)));
       const len = Math.hypot(B[0] - A[0], B[1] - A[1]); if (len < 6) continue;
       const ux = (B[0] - A[0]) / len, uy = (B[1] - A[1]) / len, ex = B[0] - ux * 12, ey = B[1] - uy * 12, sx = A[0] + ux * 10, sy = A[1] + uy * 10;
@@ -256,6 +263,7 @@ export function drawWarWorld(g: CanvasRenderingContext2D, d: WarMapData, v: WarM
       g.fillStyle = col; g.beginPath(); g.moveTo(...head[0]); g.lineTo(...head[1]); g.lineTo(...head[2]); g.closePath(); g.fill();
     }
   }
+  if (d.lines) drawColumns(g, d, v);
   // Tunnel mouths: open ones where the hero has been (or any of the Hide-Kin's own)
   for (const m of d.tunnels ?? []) {
     if (!(d.clan === "hidekin" || (m.state === "open" && d.seen(Math.floor(m.x / TILE), Math.floor(m.y / TILE))))) continue;
@@ -312,6 +320,79 @@ export function drawWarWorld(g: CanvasRenderingContext2D, d: WarMapData, v: WarM
 }
 
 const PF = '"Pixelify Sans", monospace';
+
+/** Is the segment (px) clear of the minimap's view (its circle sits inside the square of half-side W/2 round the centre)? */
+const outOfView = (g: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number) => {
+  const cx = g.canvas.width / 2, cy = g.canvas.height / 2, r = cx + 12;
+  return Math.max(x0, x1) < cx - r || Math.min(x0, x1) > cx + r || Math.max(y0, y1) < cy - r || Math.min(y0, y1) > cy + r;
+};
+
+/** The war roads: dashed tan polylines (tracks sparser), a gate glyph at each waygate leg's end; faint and in view only on the minimap. */
+function drawRoads(g: CanvasRenderingContext2D, d: WarMapData, v: WarMapView) {
+  const mini = v.mini, gates: [number, number, ClanKey | undefined][] = [];
+  g.save(); g.lineCap = "butt";
+  const stroke = (pts: number[], from: number, to: number, kind: "road" | "track" | "mini") => {
+    const P: number[] = [];
+    for (let i = from; i + 1 < to; i += 2) P.push((pts[i] + 0.5 - v.ox) * v.s, (pts[i + 1] + 0.5 - v.oy) * v.s);
+    if (P.length < 4) return;
+    if (!mini && kind !== "track") { // a dark underlay, so the dashes read on grass and sand
+      g.strokeStyle = ROAD_STYLE.shade; g.lineWidth = ROAD_STYLE.width + 2; g.setLineDash(ROAD_STYLE.dash);
+      path(P); g.stroke();
+    }
+    ROAD_STYLE.apply(g, kind);
+    path(P); g.stroke();
+  };
+  const path = (P: number[]) => {
+    g.beginPath(); let pen = false;
+    for (let i = 0; i < P.length; i += 2) {
+      if (mini && i && outOfView(g, P[i - 2], P[i - 1], P[i], P[i + 1])) { pen = false; continue; }
+      if (!pen) { g.moveTo(P[i], P[i + 1]); pen = true; } else g.lineTo(P[i], P[i + 1]);
+    }
+  };
+  for (const [a, b, f, flag] of d.lines!.roads) {
+    if (flag === -1) { stroke(f, 0, f.length, mini ? "mini" : "track"); continue; }
+    const split = flag !== undefined && flag >= 1 ? flag * 2 : f.length;
+    stroke(f, 0, split, mini ? "mini" : "road");
+    if (split < f.length) {
+      stroke(f, split, f.length, mini ? "mini" : "road");
+      gates.push([f[split - 2] + 0.5, f[split - 1] + 0.5, CLAN_KEYS[d.war.owner[a]]], [f[split] + 0.5, f[split + 1] + 0.5, CLAN_KEYS[d.war.owner[b]]]);
+    }
+  }
+  g.setLineDash([]);
+  const k = mini ? 1 : 2;
+  for (const [tx, ty, clan] of gates) {
+    const x = (tx - v.ox) * v.s, y = (ty - v.oy) * v.s;
+    if (mini && outOfView(g, x, y, x, y)) continue;
+    g.save(); g.translate(Math.round(x), Math.round(y)); v.upright(g); g.scale(k, k); g.imageSmoothingEnabled = false;
+    drawGateGlyph(g, -3.5, -3.5, clan);
+    g.restore();
+  }
+  g.restore();
+}
+
+/** Marching columns as pennants (crossed swords in a clash); the own clan's always, others near the hero. */
+function drawColumns(g: CanvasRenderingContext2D, d: WarMapData, v: WarMapView) {
+  const k = v.mini ? 1 : 2;
+  for (const c of d.lines!.visible(d.clan, d.me, v.wall)) {
+    const [x, y] = pxs(v, c.x, c.y);
+    if (v.mini && outOfView(g, x, y, x, y)) continue;
+    g.save(); g.translate(Math.round(x), Math.round(y)); v.upright(g); g.scale(k, k);
+    if (c.clash) drawClashIcon(g, -4.5, -4.5);
+    else drawColumnIcon(g, -3, -COLUMN_ICON.h + 1, c.clan, c.men);
+    g.restore();
+  }
+}
+
+/** The column nearest the pointer within `r` px (tooltip line), if any. */
+export function columnTarget(d: WarMapData, toScreen: (wx: number, wy: number) => [number, number], px: number, py: number, wall: number, r = 14): ColView | undefined {
+  let best: ColView | undefined, bd = r;
+  for (const c of d.lines?.visible(d.clan, d.me, wall) ?? []) {
+    const [x, y] = toScreen(c.x, c.y), dist = Math.hypot(x - px, y - py - 4);
+    if (dist <= bd) { bd = dist; best = c; }
+  }
+  return best;
+}
+export { columnTip };
 const pt = (p: { x: number; y: number }): [number, number] => [p.x, p.y];
 let linesKey = "", linesOf: [number, number][] = [];
 function caravanLinesOf(owner: (ClanKey | undefined)[], clan: ClanKey): [number, number][] {
