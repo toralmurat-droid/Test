@@ -81,6 +81,8 @@ import { WarTroops } from "./warTroops";
 import { WarStandards } from "./warStandards";
 import { WarSack } from "./warSack";
 import { WarTowns } from "./warTowns";
+import { CROWN_NODE, hereAt, nodeName } from "./warRoute";
+import { regionName } from "../../shared/war/regions";
 import { WarTabards } from "./warTabards";
 import { WarNotice } from "./warNotice";
 import { WarColumns } from "./warColumns";
@@ -3204,6 +3206,17 @@ export class TownScene extends Phaser.Scene {
     this.clearedTimer = window.setTimeout(() => el.classList.remove("show"), 3500);
   }
 
+  private landText = "";
+  /** The line under the minimap: your territory and land, in the same words as the war table (warRoute.ts). */
+  private updateLandLine(me?: { x: number; y: number }) {
+    if (!me) return;
+    const h = hereAt(Math.floor(me.x / TILE), Math.floor(me.y / TILE));
+    const txt = h.node === undefined ? "" : h.node === CROWN_NODE ? nodeName(h.node) : `${h.near ? "near " : ""}${nodeName(h.node)} · ${regionName(h.land!).replace(/^The /, "")}`;
+    if (txt === this.landText) return;
+    this.landText = txt;
+    document.getElementById("landline")!.textContent = txt;
+  }
+
   private showArea(name: string) {
     if (name === this.areaName) return;
     this.areaName = name;
@@ -3622,7 +3635,7 @@ export class TownScene extends Phaser.Scene {
     this.ferry?.update(meEnt?.state, meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near || !!this.portals?.near);
     this.waygates?.update(meEnt?.state, meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near);
     this.portals?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near || !!this.shrine?.near);
-    if (this.minimap) { this.minimap.war = this.warLast; this.minimap.clan = this.warStd?.clan || undefined; this.minimap.sacked = this.sack?.sacked; this.minimap.towns = this.warTowns2; this.minimap.lines = this.warCols; this.minimap.battles = this.warBattle; } // the war table layer (warTable.ts) and the war overlays (warMap.ts)
+    if (this.minimap) { this.minimap.war = this.warLast; this.minimap.woken = this.portals?.wokenIds(); this.updateLandLine(meEnt?.state); this.minimap.clan = this.warStd?.clan || undefined; this.minimap.sacked = this.sack?.sacked; this.minimap.towns = this.warTowns2; this.minimap.lines = this.warCols; this.minimap.battles = this.warBattle; } // the war table layer (warTable.ts) and the war overlays (warMap.ts)
     if (this.minimap && this.npcs) this.minimap.markers = [...this.npcs.markers, ...(this.portals?.markers() ?? []), ...(this.bounty?.markers() ?? []), ...(this.dungeon?.markers() ?? []), ...(this.waygates?.markers() ?? []), ...(this.qcarry?.markers() ?? []), ...(this.tide?.markers() ?? [])];
 
     const mine = meEnt?.state;

@@ -3,14 +3,19 @@
  * bands (design: riven-marches-map.png). Each built land is a slot round the Crown of the Marches (warTableLayout.ts),
  * every territory a cell of its land tinted in its holder's colours (nearest-territory cells, front lines in ember
  * where two clans meet), capitals and holds as markers, the ways between lands as dashed lines, the clans' banners
- * standing in their homelands, a legend on the right. Cosmetic: it draws the server's "war" snapshot and nothing else.
+ * standing in their homelands, a legend on the right. Murat 2026-11-16: a pulsing "You are here" marker with your land
+ * lit, the ways drawn as gate pairs, and a click on a territory shows the route to it (warRoute.ts) both as a gold path and
+ * as steps in the side panel, so the table and the zone map speak of the same places. Cosmetic: it draws the server's
+ * "war" snapshot and nothing else.
  */
 import { CLANS, CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
 import { REGIONS } from "../../shared/war/regions";
-import { LAND_LINKS, TERRITORIES } from "../../shared/war/territories";
+import { TERRITORIES } from "../../shared/war/territories";
 import type { WarView } from "../../shared/war/view";
 import { viewTier } from "../../shared/war/intel";
 import { inPoly, layoutTerritories, SLOTS, WT_H, WT_W, type Pt } from "./warTableLayout";
+import { CROWN_LAND, CROWN_NODE, findRoute, gateReq, landOfNode, nodeName, routeLines, STONES, WAYS, type Here, type Step } from "./warRoute";
+import { wrap } from "./warHere";
 
 const KEY = "wartable";
 let on = (() => { try { return localStorage.getItem(KEY) === "1"; } catch { return false; } })();
@@ -33,6 +38,7 @@ const PARCH = 0x2b231a, CROWN = 0x4b4740, VOID = 0x120e0a, INK = 0x0d0a07, GOLD 
 const PLACED = layoutTerritories(TERRITORIES);
 const POS = new Map(PLACED.map((p) => [p.id, p]));
 const LAND_OF = SLOTS.map((s) => s.key);
+const landOf = landOfNode;
 const NAMES: Record<string, string> = Object.fromEntries(REGIONS.map((r) => [r.key, r.name]));
 const idsOf = (key: string) => TERRITORIES.filter((t) => t.region === key).map((t) => t.id);
 
@@ -116,11 +122,28 @@ function bannerArt(k: ClanKey): HTMLCanvasElement {
 }
 
 export interface WarHover { x: number; y: number }
-/** The territory under the hero (its tile), if one is: the table marks it. */
-export interface WarHero { tx: number; ty: number }
+/** What the table says about the hero: where they stand, the territory they picked, the portal stones they may use. */
+export interface WarTableUI { here?: Here; area?: string; sel?: number; woken?: ReadonlySet<string> }
+
+/** Where the Crown of the Marches stands on the sheet (it holds no territory yet: one node, `CROWN_NODE`). */
+const CROWN_PT: Pt = [590, 430];
+/** Screen spots of the nodes of the last frame, for picking a territory by click. */
+let spots: { id: number; x: number; y: number }[] = [], reach = 16;
+/** The territory (or the Crown) nearest a canvas point of the last frame, if it is close enough. */
+export function warTablePick(x: number, y: number): number | undefined {
+  let best: number | undefined, bd = reach;
+  for (const s of spots) { const d = Math.hypot(s.x - x, s.y - y); if (d < bd) { bd = d; best = s.id; } }
+  return best;
+}
+
+/** A gate glyph (two pillars and a lintel) centred on (x, y), `k` px per art pixel. */
+function gateGlyph(g: CanvasRenderingContext2D, x: number, y: number, k: number, col: string) {
+  g.fillStyle = "#0d0a07"; g.fillRect(x - 6 * k, y - 6 * k, 12 * k, 12 * k);
+  g.fillStyle = col; g.fillRect(x - 5 * k, y - 5 * k, 10 * k, 2 * k); g.fillRect(x - 4 * k, y - 3 * k, 2 * k, 8 * k); g.fillRect(x + 2 * k, y - 3 * k, 2 * k, 8 * k);
+}
 
 /** Draw the war table over the whole big-map canvas (screen space). Returns nothing; the minimap clears the canvas first. */
-export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, font: string, now: number, hover?: WarHover, hero?: WarHero) {
+export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, font: string, now: number, hover?: WarHover, ui: WarTableUI = {}) {
   const W = g.canvas.width, H = g.canvas.height;
   const legW = Math.max(190, Math.min(215, Math.round(W * 0.19))), pad = 8;
   const avail = { w: W - legW - pad * 3, h: H - pad * 2 };
@@ -128,8 +151,13 @@ export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, font: stri
   if (ds > 1) ds = Math.floor(ds * 4) / 4; // keep art pixels near-whole
   const mw = AW * ds, mh = AH * ds, mx = Math.round(pad + (avail.w - mw) / 2), my = Math.round(pad + (avail.h - mh) / 2);
   const u = ds / UNIT; // screen px per sheet unit
-  const P = (id: number): [number, number] => { const p = POS.get(id)!; return [mx + p.x * u, my + p.y * u]; };
+  const kC = Math.max(2, Math.round(ds)); // the Crown icon's pixel size
+  const P = (id: number): [number, number] => {
+    if (id === CROWN_NODE) return [Math.round(mx + CROWN_PT[0] * u), Math.round(my + CROWN_PT[1] * u) + 3 * kC];
+    const p = POS.get(id)!; return [mx + p.x * u, my + p.y * u];
+  };
   const pulse = 0.5 + 0.5 * Math.sin(now / 250);
+  const here = ui.here, hn = here?.node;
   g.save();
   g.imageSmoothingEnabled = false;
   g.textBaseline = "middle"; g.textAlign = "left";
@@ -139,12 +167,39 @@ export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, font: stri
   g.fillStyle = "#6e5326"; g.fillRect(mx - 4, my - 4, mw + 8, mh + 8);
   g.fillStyle = "#1a130b"; g.fillRect(mx - 2, my - 2, mw + 4, mh + 4);
   g.drawImage(paintArt(v), mx, my, mw, mh);
+  // your land lit: a glowing gold edge round it, a light wash over it
+  const myLand = here?.land ? SLOTS.find((s) => s.key === here.land) : undefined;
+  if (myLand) {
+    g.beginPath(); myLand.poly.forEach(([x, y], i) => (i ? g.lineTo(mx + x * u, my + y * u) : g.moveTo(mx + x * u, my + y * u))); g.closePath();
+    g.fillStyle = `rgba(255,214,120,${0.05 + 0.05 * pulse})`; g.fill();
+    g.lineJoin = "round"; g.lineWidth = 6; g.strokeStyle = "rgba(0,0,0,0.6)"; g.stroke();
+    g.lineWidth = 3; g.strokeStyle = `rgba(255,209,102,${0.65 + 0.35 * pulse})`; g.stroke();
+  }
 
-  // ways between lands: a dashed road from one territory to the other, named at its middle
-  g.lineWidth = Math.max(2, Math.round(ds * 0.8)); g.setLineDash([Math.max(5, ds * 3), Math.max(4, ds * 2)]);
-  g.strokeStyle = "rgba(150,215,255,0.9)";
-  for (const l of LAND_LINKS) { const [ax, ay] = P(l.a), [bx, by] = P(l.b); g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.stroke(); }
+  // the route to the territory you picked (or hover): hovered wins, so the way is shown before the click
+  const hovered = hover ? warTablePick(hover.x, hover.y) : undefined, tgt = hovered ?? ui.sel;
+  const route = tgt !== undefined && hn !== undefined && tgt !== hn ? routeOf(hn, tgt, ui.woken) : undefined;
+  const onRoute = new Set(route?.filter((s) => s.via === "gate").map((s) => s.way!.id));
+
+  // ways between lands: a dotted line between the two gates, named at its middle
+  const dash = Math.max(5, ds * 3), gap = Math.max(4, ds * 2), lw0 = Math.max(2, Math.round(ds * 0.8));
+  const mineWay = (w: (typeof WAYS)[number]) => !here?.land || landOf(w.a) === here.land || landOf(w.b) === here.land;
+  for (const w of WAYS) {
+    const [ax, ay] = P(w.a), [bx, by] = P(w.b), dim = route ? !onRoute.has(w.id) : !mineWay(w);
+    g.lineCap = "butt"; g.setLineDash([dash, gap]);
+    g.lineWidth = lw0 + 3; g.strokeStyle = `rgba(0,0,0,${dim ? 0.3 : 0.55})`; g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.stroke();
+    g.lineWidth = lw0; g.strokeStyle = `rgba(150,215,255,${dim ? 0.4 : 0.95})`; g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.stroke();
+  }
   g.setLineDash([]);
+  if (route) { // the path: gold, marching, with a dot on every territory it crosses
+    g.lineCap = "round"; g.lineJoin = "round";
+    const trace = () => { g.beginPath(); route.forEach((s, i) => { const [x0, y0] = P(s.from), [x1, y1] = P(s.to); if (!i) g.moveTo(x0, y0); if (s.via === "portal") g.quadraticCurveTo((x0 + x1) / 2, Math.min(y0, y1) - 60, x1, y1); else g.lineTo(x1, y1); }); };
+    trace(); g.setLineDash([]); g.lineWidth = lw0 + 6; g.strokeStyle = "rgba(0,0,0,0.7)"; g.stroke();
+    trace(); g.setLineDash([12, 7]); g.lineDashOffset = -now / 35; g.lineWidth = lw0 + 2; g.strokeStyle = "#ffd166"; g.stroke();
+    g.setLineDash([]); g.lineDashOffset = 0; g.lineCap = "butt";
+    for (const s of route) for (const n of [s.from, s.to]) { const [x, y] = P(n); g.fillStyle = "#000"; g.fillRect(Math.round(x) - 4, Math.round(y) - 4, 8, 8); g.fillStyle = "#ffd166"; g.fillRect(Math.round(x) - 3, Math.round(y) - 3, 6, 6); }
+  }
+
   // banners of the homelands
   for (const s of SLOTS) {
     if (!s.banner) continue;
@@ -157,43 +212,56 @@ export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, font: stri
     text(label, bx + 10 * bs, by + 36 * bs + 12, GOLD); g.textAlign = "left";
   }
 
-  // the Crown of the Marches: neutral, not yet there
-  { const cx = Math.round(mx + 590 * u), cy = Math.round(my + 430 * u), k = Math.max(2, Math.round(ds));
-    g.fillStyle = "#8a7a52"; // a crown, greyed
+  // the Crown of the Marches: neutral ground that every homeland reaches by its Crownway
+  { const cx = Math.round(mx + CROWN_PT[0] * u), cy = Math.round(my + CROWN_PT[1] * u), k = kC;
+    g.fillStyle = "#b09a5e";
     for (const [x, y, w, h] of [[0, 3, 11, 3], [0, 0, 1, 3], [5, 0, 1, 3], [10, 0, 1, 3], [1, 1, 1, 2], [4, 1, 1, 2], [6, 1, 1, 2], [9, 1, 1, 2]]) g.fillRect(cx - 5 * k + x * k, cy + y * k, w * k, h * k);
   }
 
   // territories: holds and capitals in holder colours
   const sz = Math.max(8, Math.round(15 * u));
-  const near: { id: number; d: number }[] = [];
+  reach = Math.max(16, sz);
+  spots = [{ id: CROWN_NODE, x: P(CROWN_NODE)[0], y: P(CROWN_NODE)[1] }];
   for (const t of TERRITORIES) {
     const [x0, y0] = P(t.id), x = Math.round(x0), y = Math.round(y0), k = CLAN_KEYS[v.owner[t.id]], col = k ? MAP[k] : 0x888888;
     const cap = !!t.capitalOf, s = cap ? Math.round(sz * 1.5) : Math.round(sz * [0.75, 1, 1.25][viewTier(v, t.id)]), h = s >> 1; // (a bigger marker for a bigger Hold)
+    spots.push({ id: t.id, x, y });
     if (v.sieges.some((sg) => sg[0] === t.id)) { g.lineWidth = 2; g.strokeStyle = `rgba(255,80,40,${0.45 + 0.55 * pulse})`; g.strokeRect(x - h - 5, y - h - 5, s + 10, s + 10); }
     if (v.raided?.includes(t.id)) { g.lineWidth = 2; g.setLineDash([4, 3]); g.strokeStyle = `rgba(200,110,255,${0.7 + 0.3 * pulse})`; g.strokeRect(x - h - 3, y - h - 3, s + 6, s + 6); g.setLineDash([]); }
     g.fillStyle = "#0d0a07"; g.fillRect(x - h - 1, y - h - 1, s + 2, s + 2);
     g.fillStyle = hex(mix(col, 0x000000, cap ? 0.15 : 0.35)); g.fillRect(x - h, y - h, s, s);
     g.strokeStyle = cap ? "#ffd860" : hex(mix(col, 0xffffff, 0.35)); g.lineWidth = cap ? 2 : 1; g.strokeRect(x - h + 0.5, y - h + 0.5, s - 1, s - 1);
     if (cap) { g.fillStyle = "#ffd860"; g.fillRect(x - 1, y - h - 6, 2, 6); g.fillStyle = hex(col); g.fillRect(x + 1, y - h - 6, 5, 3); } // a flag on the keep
-    if (hero && t.x <= hero.tx && hero.tx < t.x + t.w && t.y <= hero.ty && hero.ty < t.y + t.h) {
-      g.fillStyle = `rgba(255,209,102,${0.6 + 0.4 * pulse})`; g.fillRect(x - 3, y - 3, 6, 6); g.strokeStyle = "#000"; g.lineWidth = 1; g.strokeRect(x - 3.5, y - 3.5, 7, 7);
+  }
+  // woken portal stones: a small orange diamond on the territory they stand in
+  for (const st of STONES) {
+    if (!ui.woken?.has(st.id)) continue;
+    const [x, y] = P(st.node), dx = Math.round(x + sz * 0.6 + 5), dy = Math.round(y - sz * 0.6 - 5);
+    g.fillStyle = "#000"; g.beginPath(); g.moveTo(dx, dy - 6); g.lineTo(dx + 6, dy); g.lineTo(dx, dy + 6); g.lineTo(dx - 6, dy); g.fill();
+    g.fillStyle = "#ff9a3c"; g.beginPath(); g.moveTo(dx, dy - 4); g.lineTo(dx + 4, dy); g.lineTo(dx, dy + 4); g.lineTo(dx - 4, dy); g.fill();
+  }
+  // gates: a glyph on each end of every way, just off the territory towards the other end
+  for (const w of WAYS) {
+    const dim = route ? !onRoute.has(w.id) : !mineWay(w), col = route && onRoute.has(w.id) ? "#ffd166" : dim ? "#6f8ea3" : "#96d7ff";
+    for (const [me, other] of [[w.a, w.b], [w.b, w.a]] as const) {
+      const [x, y] = P(me), [ox, oy] = P(other), d = Math.hypot(ox - x, oy - y) || 1, off = (me === CROWN_NODE ? 24 : sz * 0.9 + 10);
+      gateGlyph(g, Math.round(x + ((ox - x) / d) * off), Math.round(y + ((oy - y) / d) * off), 1, col);
     }
-    if (hover) near.push({ id: t.id, d: Math.hypot(hover.x - x, hover.y - y) });
   }
 
   // land plates: the land's name and each clan's share of it
   for (const s of SLOTS) {
-    const name = NAMES[s.key] ?? s.key, ids = idsOf(s.key);
+    const name = NAMES[s.key] ?? s.key, ids = idsOf(s.key), mine = s.key === here?.land;
     const sm = ds < 2.2, fs = sm ? 12 : 14;
     g.font = `${fs}px ${font}`;
     const nw = g.measureText(name).width, chip = sm ? 26 : 30, built = ids.length > 0;
-    const sub = built ? "" : "coming";
+    const sub = built ? "" : s.key === CROWN_LAND ? `Lv ${gateReq(CROWN_LAND).replace("Lv ", "")}+, five gates` : "coming";
     g.font = `11px ${font}`;
     const w = Math.round(Math.max(nw, built ? CLAN_KEYS.length * chip : g.measureText(sub).width) + 14), h = sm ? 34 : 38;
     const px = Math.round(mx + s.plate[0] * u), py = Math.round(my + s.plate[1] * u);
     g.fillStyle = "rgba(10,8,6,0.88)"; g.fillRect(px, py, w, h);
-    g.strokeStyle = built ? "#c8962c" : "#6a604c"; g.lineWidth = 1; g.strokeRect(px + 0.5, py + 0.5, w - 1, h - 1);
-    text(name, px + 7, py + (sm ? 11 : 12), built ? GOLD : "#a8a08a", fs);
+    g.strokeStyle = mine ? `rgba(255,209,102,${0.7 + 0.3 * pulse})` : built || s.key === CROWN_LAND ? "#c8962c" : "#6a604c"; g.lineWidth = mine ? 3 : 1; g.strokeRect(px + 0.5, py + 0.5, w - 1, h - 1);
+    text(name, px + 7, py + (sm ? 11 : 12), built || s.key === CROWN_LAND ? GOLD : "#a8a08a", fs);
     if (built) CLAN_KEYS.forEach((k, j) => {
       const n = ids.filter((id) => CLAN_KEYS[v.owner[id]] === k).length, x = px + 7 + j * chip;
       g.fillStyle = rgba(MAP[k], n ? 1 : 0.3); g.fillRect(x, py + h - 14, 8, 8);
@@ -201,63 +269,135 @@ export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, font: stri
     }); else text(sub, px + 7, py + h - 11, "#8a8470", 11);
   }
 
-  // the ways' names, on top of everything on the map
-  for (const l of LAND_LINKS) {
-    const [ax, ay] = P(l.a), [bx, by] = P(l.b), x = Math.round(ax + (bx - ax) * 0.4), y = Math.round(ay + (by - ay) * 0.4);
+  // the ways' names, on top of everything on the map; a name that would sit on another is moved down
+  const placed: [number, number, number, number][] = []; // x, y, w, h of every label already down
+  for (const s of SLOTS) { // the land plates and banner names are in the way too
+    const px = mx + s.plate[0] * u, py = my + s.plate[1] * u;
+    placed.push([px + 60, py + 17, 120, 34]);
+    if (s.banner) placed.push([mx + s.banner.x * u, my + s.banner.y * u + 18 * Math.max(1, Math.round(ds * 1.1)) + 12, 90, 17]);
+  }
+  for (const w of WAYS) {
+    const hot0 = onRoute.has(w.id), asked = hovered === w.a || hovered === w.b || ui.sel === w.a || ui.sel === w.b;
+    if (!hot0 && !asked && !mineWay(w)) continue; // a way that does not touch your land is named only when it matters
+    const [ax, ay] = P(w.a), [bx, by] = P(w.b), x = Math.round(ax + (bx - ax) * 0.45), name = ds < 2.2 ? w.name.replace(/^The /, "") : w.name;
+    let y = Math.round(ay + (by - ay) * 0.45);
     g.font = `12px ${font}`;
-    const w = g.measureText(l.link.name).width + 8;
-    g.fillStyle = "rgba(10,8,6,0.85)"; g.fillRect(Math.round(x - w / 2), y - 8, Math.round(w), 16);
-    g.textAlign = "center"; text(l.link.name, x, y + 1, "#96d7ff", 12); g.textAlign = "left";
+    const wd = g.measureText(name).width + 8;
+    const hit = (yy: number) => placed.some(([px, py, pw, ph]) => Math.abs(px - x) < (pw + wd) / 2 && Math.abs(py - yy) < (ph + 16) / 2);
+    for (const d of [0, 17, -17, 34, -34, 51, -51]) if (!hit(y + d)) { y += d; break; }
+    placed.push([x, y, wd, 16]);
+    const hot = onRoute.has(w.id);
+    g.fillStyle = "rgba(10,8,6,0.88)"; g.fillRect(Math.round(x - wd / 2), y - 8, Math.round(wd), 16);
+    if (hot) { g.strokeStyle = "#ffd166"; g.lineWidth = 1; g.strokeRect(Math.round(x - wd / 2) + 0.5, y - 7.5, Math.round(wd) - 1, 15); }
+    g.textAlign = "center"; text(name, x, y + 1, hot ? "#ffd166" : "#96d7ff", 12); g.textAlign = "left";
   }
 
-  // legend on the right
-  const lx = W - legW - pad + 6, lw = legW - 6;
+  // you are here: a pulsing ring on your territory, a pin over it and a name tag
+  const tag = (x: number, y: number, l1: string, l2: string, col: string, at: "above" | "below" | "right") => {
+    g.font = `12px ${font}`; const w1 = g.measureText(l1).width; g.font = `11px ${font}`;
+    const w = Math.round(Math.max(w1, g.measureText(l2).width) + 12), h = 31;
+    let tx = Math.round(Math.max(mx + 4, Math.min(mx + mw - w - 4, at === "right" ? x : x - w / 2))), ty = Math.round(at === "above" ? y - h : y);
+    ty = Math.max(my + 4, Math.min(my + mh - h - 4, ty));
+    g.fillStyle = "rgba(10,8,6,0.93)"; g.fillRect(tx, ty, w, h); g.strokeStyle = col; g.lineWidth = 2; g.strokeRect(tx + 1, ty + 1, w - 2, h - 2);
+    text(l1, tx + 6, ty + 10, col, 12); text(l2, tx + 6, ty + 23, "#eadfc8", 11);
+  };
+  if (hn !== undefined && here) {
+    const [x0, y0] = P(hn), x = Math.round(x0), y = Math.round(y0), r = sz * 0.9 + 6 + pulse * 4;
+    g.lineWidth = 6; g.strokeStyle = "rgba(0,0,0,0.65)"; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.stroke();
+    g.lineWidth = 3; g.strokeStyle = "#ffd166"; g.setLineDash(here.near ? [5, 4] : []); g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.stroke(); g.setLineDash([]);
+    g.lineWidth = 2; g.strokeStyle = `rgba(255,209,102,${0.7 * (1 - pulse)})`; g.beginPath(); g.arc(x, y, r + 5 + pulse * 10, 0, Math.PI * 2); g.stroke();
+    const label = hn === CROWN_NODE ? nodeName(hn) : (here.near ? "near " : "") + nodeName(hn);
+    if (y - r - 3 - 13 - 31 < my + 4) tag(x + r + 8, y - 15, "You are here", label, "#ffd166", "right"); // no room above: beside the ring
+    else {
+      const bob = Math.round(pulse * 3), ty = y - Math.round(r) - 3 - bob; // a pin pointing down at the ring
+      g.fillStyle = "#000"; g.beginPath(); g.moveTo(x, ty + 2); g.lineTo(x - 9, ty - 11); g.lineTo(x + 9, ty - 11); g.closePath(); g.fill();
+      g.fillStyle = "#ffd166"; g.beginPath(); g.moveTo(x, ty); g.lineTo(x - 6, ty - 9); g.lineTo(x + 6, ty - 9); g.closePath(); g.fill();
+      tag(x, ty - 13, "You are here", label, "#ffd166", "above");
+    }
+  }
+  if (ui.sel !== undefined && ui.sel !== hn) { // the picked territory: a cyan frame, turning dashes
+    const [x0, y0] = P(ui.sel), x = Math.round(x0), y = Math.round(y0), r = sz * 0.9 + 4;
+    g.lineWidth = 5; g.strokeStyle = "rgba(0,0,0,0.65)"; g.strokeRect(x - r, y - r, r * 2, r * 2);
+    g.lineWidth = 2; g.strokeStyle = "#8fe0ff"; g.setLineDash([6, 4]); g.lineDashOffset = -now / 60; g.strokeRect(x - r, y - r, r * 2, r * 2); g.setLineDash([]); g.lineDashOffset = 0;
+    tag(x, y + r + 4, "Picked", nodeName(ui.sel), "#8fe0ff", "below");
+  }
+  if (hovered !== undefined) { const [x, y] = P(hovered), r = sz * 0.9 + 2; g.lineWidth = 1; g.strokeStyle = "#fff"; g.strokeRect(Math.round(x) - r + 0.5, Math.round(y) - r + 0.5, r * 2, r * 2); }
+
+  // legend on the right: where you are, the way to the picked territory, then the clans and the key
+  const lx = W - legW - pad + 6, lw = legW - 6, bot = H - pad - 4;
   g.fillStyle = "rgba(10,8,6,0.85)"; g.fillRect(lx - 6, pad, lw + 6, H - pad * 2);
   g.strokeStyle = "#6e5326"; g.lineWidth = 1; g.strokeRect(lx - 5.5, pad + 0.5, lw + 5, H - pad * 2 - 1);
-  const tight = H < 560, rowH = tight ? 16 : 19, keyH = tight ? 14 : 17;
-  let y = pad + 16;
-  text("The Riven Marches", lx + 4, y, "#f6b040", 16); y += 18;
-  text(`War table, tick ${v.tick}`, lx + 4, y, "#a39680", 11); y += 22;
+  const tight = H < 560, rowH = tight ? 15 : 18, keyH = tight ? 13 : 16, tw = lw - 12;
+  let y = pad + 14;
+  const para = (t: string, c: string, px: number, lh: number, max = 99) => { g.font = `${px}px ${font}`; for (const l of wrap(g, t, tw).slice(0, max)) { text(l, lx + 4, y, c, px); y += lh; } };
+  g.fillStyle = `rgba(255,209,102,${0.6 + 0.4 * pulse})`; g.fillRect(lx + 4, y - 4, 8, 8);
+  text("You are here", lx + 18, y, "#ffd166", 14); y += 17;
+  if (hn === undefined || !here) para(ui.area ? `In ${ui.area}, below the lands.` : "Below the lands.", "#eadfc8", 12, 14);
+  else {
+    if (here.near) para(ui.area ?? "Outside the zones", "#ffe8a3", 13, 15, 2);
+    para(here.near ? `near ${nodeName(hn)}` : nodeName(hn), here.near ? "#cfc4aa" : "#ffe8a3", here.near ? 11 : 13, here.near ? 13 : 15, 2);
+    para(here.land === CROWN_LAND && hn === CROWN_NODE ? "Neutral ground" : NAMES[here.land ?? ""] ?? "", "#a39680", 11, 13);
+  }
+  y += 5; g.fillStyle = "#3a2a1c"; g.fillRect(lx + 4, y - 3, lw - 12, 1); y += 8;
+  if (tgt !== undefined && hn !== undefined && tgt !== hn) {
+    text(`Way to ${tgt === CROWN_NODE ? "the Crown" : nodeName(tgt)}`.slice(0, 26), lx + 4, y, "#8fe0ff", 13); y += 16;
+    if (!route) para("No road from here.", "#d8c8a0", 11, 13);
+    else {
+      para(`${route.length} step${route.length === 1 ? "" : "s"}`, "#a39680", 11, 13);
+      routeLines(route).forEach((l, i) => { para(`${i + 1}. ${l}`, "#d8c8a0", 11, 13, 4); });
+    }
+  } else if (hn !== undefined) { para(tgt === hn ? "This is where you stand." : "Click a territory to see the way there.", "#a39680", 11, 13); if (tgt !== hn) para("The dotted lines are gates between lands.", "#a39680", 11, 13); }
+  y += 6; g.fillStyle = "#3a2a1c"; g.fillRect(lx + 4, y - 3, lw - 12, 1); y += 10;
+  if (!tight || y < bot - 150) { text("The Riven Marches", lx + 4, y, "#f6b040", 14); y += 15; }
   CLAN_KEYS.forEach((k, i) => {
     const n = v.owner.filter((o) => CLAN_KEYS[o] === k).length, tag = v.hunt === i ? "hunted" : v.rally === i ? "Rally" : "";
     g.fillStyle = "#0d0a07"; g.fillRect(lx + 3, y - 6, 12, 12); g.fillStyle = hex(MAP[k]); g.fillRect(lx + 4, y - 5, 10, 10);
     text(short(k), lx + 21, y, "#eadfc8", 12);
     g.textAlign = "right"; text(`${n}`, lx + lw - 6, y, "#ffe8a3", 13); g.textAlign = "left";
-    if (tag) { y += 13; text(tag, lx + 21, y, v.hunt === i ? "#c890ff" : "#9fe07a", 11); }
+    if (tag) { y += 12; text(tag, lx + 21, y, v.hunt === i ? "#c890ff" : "#9fe07a", 11); }
     y += rowH;
   });
-  y += 4;
-  const key = (draw: () => void, label: string) => { draw(); text(label, lx + 28, y, "#cfc4aa", 11); y += keyH; };
+  y += 2;
+  const key = (draw: () => void, label: string) => { if (y > bot) return; draw(); text(label, lx + 28, y, "#cfc4aa", 11); y += keyH; };
   key(() => { g.fillStyle = hex(EMBER[0]); g.fillRect(lx + 3, y - 1, 18, 3); }, "Front line");
   key(() => { g.fillStyle = "#0d0a07"; g.fillRect(lx + 7, y - 6, 10, 10); g.strokeStyle = "#c9b27a"; g.lineWidth = 1; g.strokeRect(lx + 7.5, y - 5.5, 9, 9); }, "Hold");
   key(() => { g.fillStyle = "#0d0a07"; g.fillRect(lx + 6, y - 7, 13, 13); g.strokeStyle = "#ffd860"; g.lineWidth = 2; g.strokeRect(lx + 7, y - 6, 11, 11); }, "Capital (cannot fall)");
-  key(() => { g.strokeStyle = "rgba(150,215,255,0.9)"; g.lineWidth = 2; g.setLineDash([4, 3]); g.beginPath(); g.moveTo(lx + 3, y); g.lineTo(lx + 21, y); g.stroke(); g.setLineDash([]); }, "Way between lands");
+  key(() => { gateGlyph(g, lx + 12, y, 1, "#96d7ff"); }, "Gate between lands");
   key(() => { g.strokeStyle = `rgba(255,80,40,${0.5 + 0.5 * pulse})`; g.lineWidth = 2; g.strokeRect(lx + 6, y - 6, 12, 12); }, "Under siege");
   key(() => { g.strokeStyle = "rgba(200,110,255,0.9)"; g.lineWidth = 2; g.setLineDash([3, 2]); g.strokeRect(lx + 6, y - 6, 12, 12); g.setLineDash([]); }, "Struck by raiders");
-  y += 6;
-  const caps = TERRITORIES.filter((t) => t.capitalOf).length;
-  text(`${TERRITORIES.length} territories, ${caps} capitals`, lx + 4, y, "#a39680", 11);
-  y += tight ? 20 : 26;
-  text("Homelands", lx + 4, y, "#f6b040", 14); y += tight ? 17 : 20;
-  for (const k of CLAN_KEYS) { // each clan's home land, as in the design
-    g.fillStyle = "#0d0a07"; g.fillRect(lx + 3, y - 6, 12, 12); g.fillStyle = hex(MAP[k]); g.fillRect(lx + 4, y - 5, 10, 10);
-    text(TAG[k], lx + 21, y, "#eadfc8", 12);
-    text(REGIONS.find((r) => r.home === k)?.name ?? "", lx + 21, y + 12, "#8f866f", 10);
-    y += tight ? 25 : 30;
-  }
+  if (!tight && y < bot - 20) { y += 6; text(`${TERRITORIES.length} territories, ${TERRITORIES.filter((t) => t.capitalOf).length} capitals · tick ${v.tick}`, lx + 4, y, "#a39680", 10); }
 
   // hover: the nearest territory within reach
-  const h = near.sort((a, b) => a.d - b.d)[0];
-  if (hover && h && h.d < Math.max(16, sz)) {
-    const t = TERRITORIES[h.id], k = CLAN_KEYS[v.owner[h.id]], sg = v.sieges.find((s) => s[0] === h.id);
-    const lines = [t.name, `${k ? short(k) : "Unclaimed"}${t.capitalOf ? "  (capital)" : ""}`, `Level ${t.levels[0]}-${t.levels[1]}  Control ${v.control[h.id] ?? 0}`];
-    if (sg) lines.push(`Siege by ${short(CLAN_KEYS[sg[1]])}`);
+  if (hover && hovered !== undefined) {
+    const lines: string[] = [];
+    let col = "#888";
+    if (hovered === CROWN_NODE) lines.push(nodeName(hovered), "Neutral ground, no clan holds it", `Five Crownways lead in (${gateReq(CROWN_LAND)})`);
+    else {
+      const t = TERRITORIES[hovered], k = CLAN_KEYS[v.owner[hovered]], sg = v.sieges.find((s) => s[0] === hovered);
+      col = k ? hex(MAP[k]) : "#888";
+      lines.push(t.name, `${k ? short(k) : "Unclaimed"}${t.capitalOf ? "  (capital)" : ""}  ·  ${NAMES[t.region] ?? ""}`, `Level ${t.levels[0]}-${t.levels[1]}  Control ${v.control[hovered] ?? 0}`);
+      if (sg) lines.push(`Siege by ${short(CLAN_KEYS[sg[1]])}`);
+    }
+    if (hn === hovered) lines.push("You are here");
+    else if (hn !== undefined) {
+      const r = routeOf(hn, hovered, ui.woken);
+      lines.push(r ? `From you: ${r.length} step${r.length === 1 ? "" : "s"}` : "No road from here", ...(r ? routeLines(r).slice(0, 3) : []));
+      if (ui.sel !== hovered) lines.push("Click to pick");
+    }
     g.font = `12px ${font}`;
     const w = Math.round(Math.max(...lines.map((l) => g.measureText(l).width)) + 14), hh = lines.length * 16 + 8;
     const tx = Math.round(Math.min(W - w - 4, hover.x + 14)), ty = Math.round(Math.max(4, Math.min(H - hh - 4, hover.y + 10)));
     g.fillStyle = "rgba(10,8,6,0.95)"; g.fillRect(tx, ty, w, hh);
-    g.strokeStyle = k ? hex(MAP[k]) : "#888"; g.lineWidth = 1; g.strokeRect(tx + 0.5, ty + 0.5, w - 1, hh - 1);
-    lines.forEach((l, i) => text(l, tx + 7, ty + 12 + i * 16, i === 0 ? GOLD : "#eadfc8", 12));
+    g.strokeStyle = col; g.lineWidth = 1; g.strokeRect(tx + 0.5, ty + 0.5, w - 1, hh - 1);
+    lines.forEach((l, i) => text(l, tx + 7, ty + 12 + i * 16, i === 0 ? GOLD : l.startsWith("Click") ? "#8fe0ff" : "#eadfc8", 12));
   }
   g.restore();
+}
+
+const routeCache = new Map<string, Step[] | undefined>();
+/** findRoute, remembered: the table asks every frame. */
+function routeOf(a: number, b: number, woken?: ReadonlySet<string>): Step[] | undefined {
+  const key = `${a}|${b}|${woken ? [...woken].sort().join(",") : ""}`;
+  if (!routeCache.has(key)) { if (routeCache.size > 400) routeCache.clear(); routeCache.set(key, findRoute(a, b, woken)); }
+  return routeCache.get(key);
 }

@@ -117,6 +117,9 @@ export class PortalLayer {
   }
 
   /** Map markers for the woken stones. */
+  /** The stones this hero has woken (the maps route over them). */
+  wokenIds(): ReadonlySet<string> { return this.found; }
+
   markers(): MapMarker[] {
     return PORTALS.filter((p) => this.found.has(p.id)).map((p) => ({ x: p.x, y: p.y, glyph: "◆", color: "#ff9a3c", label: p.name }));
   }
