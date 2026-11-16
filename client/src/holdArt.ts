@@ -289,8 +289,10 @@ export interface PieceSpec {
   axis: 0 | 1; part: 0 | 1;
   /** wall or fence beside a gap: a broken stub. */
   broken: boolean;
+  /** Hold tier 0 outpost, 1 camp, 2 fortress (W3): towers and gates are drawn smaller or grander. The camp is the pre-W3 look. */
+  tier: 0 | 1 | 2;
 }
-export const pieceKey = (s: PieceSpec) => `hp_${s.clan}_${s.kind}_${s.mask}_${s.v}_${s.cw}x${s.ch}_${s.axis}${s.part}${s.broken ? 1 : 0}`;
+export const pieceKey = (s: PieceSpec) => `hp_${s.clan}_${s.kind}_${s.mask}_${s.v}_${s.cw}x${s.ch}_${s.axis}${s.part}${s.broken ? 1 : 0}${s.tier === 1 ? "" : `_t${s.tier}`}`;
 
 const armsOf = (mask: number) => ({ e: !!(mask & J.E), w: !!(mask & J.W), s: !!(mask & J.S), n: !!(mask & J.N) });
 /** Calls `f` for the boxes of a wall of half-thickness `th`: the middle, an arm to every joined side, a corner block to every corner-only join. */
@@ -407,10 +409,12 @@ function fence(s: Scene, sp: PieceSpec) {
 function woodTowerPiece(s: Scene, sp: PieceSpec) {
   const hu = sp.cw * HALF, hv = sp.ch * HALF, A = Math.min(hu, hv) - 4;
   s.box(-hu - PAD, hu + PAD, -hv - PAD, hv + PAD, 0, 9, rough(STONER, -0.05, 0.3)); // a stone footing that meets the walls
-  woodTower(s, 0, 0, sp.cw > 1 ? 116 : 90, A, sp.clan, true);
+  const H = (sp.cw > 1 ? 116 : 90) + (sp.tier - 1) * (sp.tier === 0 ? 22 : 16); // a low watch post, a tall fortress tower
+  woodTower(s, 0, 0, H, A, sp.clan, true);
+  if (sp.tier === 2) for (const sg of [-1, 1]) s.brazier(sg * (hu - 2), -sg * (hv - 2), 14); // fortress: torches at the foot
 }
 function stoneTowerPiece(s: Scene, sp: PieceSpec) {
-  const hu = sp.cw * HALF - 1, hv = sp.ch * HALF - 1, H = 92, m = (): Mat => (l, a, t, x, y) => {
+  const hu = sp.cw * HALF - 1, hv = sp.ch * HALF - 1, H = sp.tier === 0 ? 68 : sp.tier === 2 ? 108 : 92, m = (): Mat => (l, a, t, x, y) => {
     const row = Math.floor(t * H / 8), col = Math.floor(a * 10 + (row % 2) * 0.5), fy = (t * H / 8) % 1, fx = (a * 10 + (row % 2) * 0.5) % 1;
     const win = t > 0.42 && t < 0.62 && Math.abs(a - 0.5) < 0.05 + (sp.cw > 1 ? 0 : 0.03);
     if (win) return ramp(GHOST, 0.5 + hsh(col, row, 3) * 0.4, x, y);
@@ -428,20 +432,26 @@ function stoneTowerPiece(s: Scene, sp: PieceSpec) {
   s.flame(0, 0, H + 8, 6, 20, GHOST);
   for (const [u, v] of [[hu - 8, hv - 8], [-hu + 8, hv - 8]]) s.skull(u, v, H + 12, 4.2, true);
   s.banner(hu - 4, -hv + 6, H + 12, sp.clan, 18, 38, 1);
+  if (sp.tier === 2) for (const sg of [-1, 1]) s.flame(sg * (hu - 6), -sg * (hv - 6), 0, 4.5, 12, GHOST); // fortress: ghost-fire at the foot
 }
 function pylonPiece(s: Scene, sp: PieceSpec) {
   s.box(-22, 22, -22, 22, 0, 8, blocks(SAND, 44, 8, 8, 12), 7);
   s.box(-17, 17, -17, 17, 8, 14, blocks(SAND, 34, 6, 6, 10, 0.05), 7);
-  s.stone(0, 0, 13, 96, SAND, [0x9a6a10, 0xd9a030, 0xf6d26b], 4 + sp.v);
-  s.q.blob([0, 0, 98], 5, 5, 8, mat(GOLDR, 0.1), 0.35, 1);
-  s.rod([0, 0, 104], [0, 0, 122], 0.9, mat(GOLDR));
-  s.q.blob([0, 0, 124], 3, 3, 4, mat(GOLDR, 0.2));
+  const H = sp.tier === 0 ? 70 : sp.tier === 2 ? 112 : 96; // an outpost pylon is short, a fortress one stands tall
+  s.stone(0, 0, 13, H, SAND, [0x9a6a10, 0xd9a030, 0xf6d26b], 4 + sp.v);
+  s.q.blob([0, 0, H + 2], 5, 5, 8, mat(GOLDR, 0.1), 0.35, 1);
+  s.rod([0, 0, H + 8], [0, 0, H + 26], 0.9, mat(GOLDR));
+  s.q.blob([0, 0, H + 28], 3, 3, 4, mat(GOLDR, 0.2));
+  if (sp.tier === 2) s.glows.push({ u: 0, v: 0, r: 44, col: 0xd9a030, a: 0.4 });
 }
 
 // ---- gates -------------------------------------------------------------------------------------------------------
 function gatePiece(s: Scene, sp: PieceSpec) {
   const sg = sp.part === 0 ? -1 : 1, P = (a: number): [number, number] => (sp.axis === 0 ? [0, sg * a] : [sg * a, 0]);
   const [pu, pv] = P(18), c = sp.clan, back = sp.part === 0;
+  if (sp.tier === 0 && back && c !== "host") { // outpost: bare posts, no lintel
+    s.post(pu, pv, 70, 3.4, wood(WOODR, 0, 40), false); s.skull(pu, pv, 74, 3.8, true); return;
+  }
   const lintel = (z: number, th: number, m: Mat) => { const a = P(-18), b = P(18); s.rod([a[0], a[1], z], [b[0], b[1], z], th, m); };
   if (c === "wardens") {
     s.post(pu, pv, 92, 4.4, wood(WOODR, 0.05, 40), false); s.box(pu - 5, pu + 5, pv - 5, pv + 5, 84, 92, wood(OLDR, 0.1, 10));
@@ -509,9 +519,19 @@ function hearthPiece(s: Scene, sp: PieceSpec) {
   s.flame(0, 0, 3, 5, 12, fire);
 }
 
+/** Fortress gatehouse: a heavy beam between the posts, studded with iron, and a cresset on the front post. */
+function gatehouseTrim(s: Scene, sp: PieceSpec) {
+  const sg = sp.part === 0 ? -1 : 1, P = (a: number): [number, number] => (sp.axis === 0 ? [0, sg * a] : [sg * a, 0]), [pu, pv] = P(18);
+  if (sp.part === 0) {
+    const a = P(-18), b = P(18), m = sp.clan === "veiled" ? mat(GOLDR, 0) : wood(OLDR, 0.05, 20);
+    s.rod([a[0], a[1], 66], [b[0], b[1], 66], 2.2, m);
+    for (let i = 0; i < 7; i++) { const t = P(-15 + i * 5); s.q.blob([t[0], t[1], 66], 1.3, 1.3, 1.3, mat(IRONR, 0.2)); }
+  } else s.flame(pu, pv, 60, 3.6, 10, sp.clan === "host" ? GHOST : sp.clan === "veiled" ? ARCANE : FIRE);
+}
+
 const ZMAX: Record<PieceKind, number> = { wall: 104, fence: 48, tower: 215, tent: 84, mound: 70, gate: 124, rubble: 24, pit: 40 };
 function zmax(sp: PieceSpec) {
-  if (sp.kind === "tower") return sp.clan === "host" ? 160 : sp.clan === "veiled" ? 132 : sp.cw > 1 ? 215 : 190;
+  if (sp.kind === "tower") { const base = sp.clan === "host" ? 160 : sp.clan === "veiled" ? 132 : sp.cw > 1 ? 215 : 190; return base + (sp.tier === 2 ? 20 : 0); }
   if (sp.kind === "wall") return sp.clan === "hidekin" ? 70 : sp.clan === "veiled" ? 84 : ZMAX.wall;
   return ZMAX[sp.kind];
 }
@@ -526,7 +546,7 @@ function paintBody(s: Scene, sp: PieceSpec) {
       return fence(s, sp);
     case "fence": return fence(s, sp);
     case "tower": return sp.clan === "host" ? stoneTowerPiece(s, sp) : sp.clan === "veiled" ? pylonPiece(s, sp) : woodTowerPiece(s, sp);
-    case "gate": return gatePiece(s, sp);
+    case "gate": gatePiece(s, sp); if (sp.tier === 2) gatehouseTrim(s, sp); return;
     case "tent": return tentPiece(s, sp);
     case "mound": return moundPiece(s, sp);
     case "rubble": return rubblePiece(s, sp);
@@ -674,7 +694,7 @@ export function composeGround(f: HoldFort): Painted {
 }
 
 // ---- the baked atlas (tools/art/holds.ts writes it, holdAssets.ts loads it) -------------------------------------
-export const ATLAS_W = 1024, ATLAS_PAD = 2;
+export const ATLAS_W = 2048, ATLAS_PAD = 2;
 /** One clan's atlas: the frame of every piece (`pieceKey`) and ground tile (`groundKey`), with the cell's middle at (ox, oy) in the frame. */
 export interface AtlasMeta { w: number; h: number; frames: Record<string, { x: number; y: number; w: number; h: number; ox: number; oy: number }> }
 export const atlasFile = (k: ClanKey, ext: "png" | "json") => `atlas_${k}.${ext}`;
@@ -695,7 +715,7 @@ export function fortLayout(f: HoldFort): PieceInst[] {
   const kinds = new Map<number, FortKind>(), id = (dx: number, dy: number) => (dy + 40) * 96 + dx + 40;
   for (const c of f.cells) kinds.set(id(c.dx, c.dy), c.kind);
   const at = (dx: number, dy: number) => kinds.get(id(dx, dy));
-  const mk = (clan: ClanKey, kind: PieceKind, o: Partial<PieceSpec> = {}): PieceSpec => ({ clan, kind, mask: 0, v: 0, cw: 1, ch: 1, axis: 0, part: 0, broken: false, ...o });
+  const mk = (clan: ClanKey, kind: PieceKind, o: Partial<PieceSpec> = {}): PieceSpec => ({ clan, kind, mask: 0, v: 0, cw: 1, ch: 1, axis: 0, part: 0, broken: false, tier: kind === "tower" || kind === "gate" ? f.tier : 1, ...o });
   const out: PieceInst[] = [], seen = new Set<number>(), clan = f.clan;
   const push = (spec: PieceSpec, dx: number, dy: number, foot = 0) => out.push({ spec, key: pieceKey(spec), dx, dy, foot });
   const joined = (dx: number, dy: number, join: ReadonlySet<FortKind>) => {
