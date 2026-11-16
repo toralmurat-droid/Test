@@ -3367,20 +3367,38 @@ export function allObjects(): QuestObject[] {
   return [...LANTERNS, COCOON, ...SHRINES, BROOD_HEART, ...SHARDS, ...ENGINES, BEACON, ...CRYPTS, PHYLACTERY, ...WARDS, ...KING_STONES, ...SILK, ...HIDE_TOTEMS, ...PALM_SIGILS, ...MIRAGE_SIGILS, ...CISTERNS, ...ARC_OBJECTS];
 }
 /** Done = its step is behind the hero (or, on a use step, its bit is set). Pick candidates and the like are never done mid-step. */
+/** Where each quest object is used: its chain, the quest in it and the step (worked out once; CHAINS never change). */
+const OBJECT_AT = new Map<QuestObject, { c: number; owner: number; si: number } | null>();
+function objectAt(o: QuestObject) {
+  let at = OBJECT_AT.get(o);
+  if (at === undefined) {
+    const has = (s: QuestStep) => stepObjects(s).includes(o);
+    const c = CHAINS.findIndex((ch) => ch.quests.some((d) => d.steps.some(has)));
+    if (c < 0) at = null;
+    else {
+      const owner = CHAINS[c].quests.findIndex((d) => d.steps.some(has));
+      at = { c, owner, si: CHAINS[c].quests[owner].steps.findIndex(has) };
+    }
+    OBJECT_AT.set(o, at);
+  }
+  return at;
+}
+
+/**
+ * Whether a quest object's step is behind the hero (lantern lit, shard broken...). The client asks this for every
+ * drawn object every frame, so the object's place in the chains is looked up once (objectAt), not scanned each time.
+ */
 export function objectDone(o: QuestObject, p: Quester | undefined): boolean {
-  const has = (s: QuestStep) => stepObjects(s).includes(o);
-  const c = CHAINS.findIndex((ch) => ch.quests.some((d) => d.steps.some(has)));
-  if (c < 0) return false;
-  const quests = CHAINS[c].quests, q = chainState(p, c);
+  const at = objectAt(o);
+  if (!at) return false;
+  const { c, owner, si } = at, q = chainState(p, c);
   const qid = q?.questId ?? 0;
-  const owner = quests.findIndex((d) => d.steps.some(has));
   if (qid > owner) return true;
   if (qid < owner) return false;
-  const si = quests[owner].steps.findIndex(has);
   const stage = q?.questStage ?? 0;
   if (stage - 1 > si) return true;
   if (stage - 1 < si) return false;
-  const st = quests[owner].steps[si];
+  const st = CHAINS[c].quests[owner].steps[si];
   return st.type === "use" && !!(q!.questCount & (1 << st.objects!.indexOf(o)));
 }
 
