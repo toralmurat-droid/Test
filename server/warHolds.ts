@@ -22,6 +22,7 @@ import { STANDARD } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
 import { parseTroop, troopLevel, troopStance } from "../shared/war/troops";
 import { addValor, strikeHold, warNow, warState } from "./war";
+import { boonRenown, crownCredit, keyOf } from "./warCrown";
 import type { SiegeHero } from "./warSieges";
 import type { TroopMob } from "./warTroops";
 
@@ -186,7 +187,8 @@ export class WarHolds {
       for (const [hid, o] of this.h.heroes()) {
         if (o.dead || o.clan !== clan || o.level < STANDARD.minLevel || (hid !== id && !inSackReach(r.t, o.x, o.y))) continue;
         const was = rankOf(o.renown);
-        o.renown += HOLD_SACK.sackRenown * rallyRenown(st, clan);
+        o.renown += HOLD_SACK.sackRenown * rallyRenown(st, clan) * boonRenown(clan);
+        { const by = keyOf(o); if (by) crownCredit(r.t, by, clan, HOLD_SACK.sackValor); } // (a Reckoning: every sacker in the reach took part)
         const rank = rankOf(o.renown);
         if (rank > was) this.h.ranked?.(hid, RENOWN_RANKS[rank].name);
       }

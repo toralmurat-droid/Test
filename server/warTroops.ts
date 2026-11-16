@@ -31,9 +31,11 @@ import { STANDARD } from "../shared/war/standards";
 import { territoryAt } from "../shared/war/view";
 import { inSackReach } from "../shared/war/holdSack";
 import { addValor, warNow, warState } from "./war";
+import { boonRenown, keyOf } from "./warCrown";
 
 /** The parts of a hero this module reads (TownRoom's Player). */
-export interface TroopHero { name: string; clan?: ClanKey; level: number; x: number; y: number; dead: boolean; renown: number; feud?: FeudState }
+/** `cls`: the hero's class (a Reckoning keys its heroes by account and class: server/warCrown.ts keyOf). */
+export interface TroopHero { name: string; cls?: string; clan?: ClanKey; level: number; x: number; y: number; dead: boolean; renown: number; feud?: FeudState }
 /** The parts of a monster this module reads and moves (TownRoom's Mob). */
 export interface TroopMob {
   kind: string; weapon: string; level: number; x: number; y: number; homeX: number; homeY: number; dir: Dir;
@@ -165,8 +167,8 @@ export class WarTroops {
     if (add <= 0) return 0;
     this.valor.set(p.name, { tick: v.tick, n: used + add });
     const was = rankOf(p.renown);
-    if (!addValor(land, p.clan, add)) return 0;
-    p.renown += add * rallyRenown(warState(), p.clan); // effort the war counted earns renown (shared/war/renown.ts)
+    if (!addValor(land, p.clan, add, keyOf(p))) return 0;
+    p.renown += add * rallyRenown(warState(), p.clan) * boonRenown(p.clan); // effort the war counted earns renown (shared/war/renown.ts)
     const rank = rankOf(p.renown);
     if (rank > was) this.h.ranked(killerId, RENOWN_RANKS[rank].name);
     return add;

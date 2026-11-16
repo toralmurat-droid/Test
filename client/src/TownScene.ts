@@ -1700,6 +1700,7 @@ export class TownScene extends Phaser.Scene {
     const warNotice = this.warNotice = new WarNotice(document.getElementById("hud")!);
     this.room.onMessage("warev", (e) => warNotice.show(e, this.entities.get(this.me)?.sprite));
     this.room.onMessage("warraid", (r) => warNotice.raid(r, this.entities.get(this.me)?.sprite)); // the Night Raiders strike the leading clan's lands
+    this.room.onMessage("reckon", (m) => warNotice.reckon(m)); // the Reckoning's warning, start, standings and result (server/warCrown.ts)
     this.room.onMessage("mv", alive);
     this.startPing();
     window.setInterval(() => { if (!this.quitting && Date.now() - lastPatch > 15_000) { this.warBattle.disconnected(); reconnectSoon(login); } }, 3000);

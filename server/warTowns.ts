@@ -24,6 +24,7 @@ import { STANDARD } from "../shared/war/standards";
 import { gatePosts, gatePx, inGateReach, onTownGround, TOWN, TOWNS, townById, townPatron, type Town } from "../shared/war/towns";
 import { troopLevel, troopStats, troopStance, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
 import { townClaim, townHeld, townsNow, townsVersion, warNow, warState, warTowns } from "./war";
+import { boonRenown } from "./warCrown";
 import type { SiegeHero, Soldiers } from "./warSieges";
 import { newFighter, type FightGround, type Fighter, type TroopMob } from "./warTroops";
 
@@ -262,7 +263,7 @@ export class WarTowns {
     for (const [hid, o] of this.h.heroes()) {
       if (o.dead || o.clan !== k || o.level < STANDARD.minLevel || (hid !== pid && !inGateReach(t, o.x, o.y))) continue;
       const was = rankOf(o.renown);
-      o.renown += TOWN.claimRenown * rallyRenown(st, k);
+      o.renown += TOWN.claimRenown * rallyRenown(st, k) * boonRenown(k);
       const rank = rankOf(o.renown);
       if (rank > was) this.h.ranked?.(hid, RENOWN_RANKS[rank].name);
     }

@@ -18,12 +18,16 @@ import { townAt, TOWN } from "../../shared/war/towns";
 import { stewardName } from "../../shared/war/townText";
 import { TILE } from "../../shared/constants";
 import type { WarTowns } from "./warTowns";
+import { reckonCountdown } from "../../shared/war/crown";
 import "./warPlaque.css";
 
 const hex = (c: number) => `#${c.toString(16).padStart(6, "0")}`;
 
-/** A small swallow-tailed pennant in the clan's cloth, trim and sigil colours (16 x 22 pixels, drawn 2x). */
-export function pennant(k: ClanKey): HTMLCanvasElement {
+/**
+ * A small swallow-tailed pennant in the clan's cloth, trim and sigil colours (16 x 22 pixels, drawn 2x). `crowned`: the
+ * clan a Reckoning crowned (shared/war/crown.ts) wears a gold crown in place of its lozenge.
+ */
+export function pennant(k: ClanKey, crowned = false): HTMLCanvasElement {
   const c = document.createElement("canvas"), W = 16, H = 22;
   c.width = W; c.height = H; c.className = "wp-flag";
   const g = c.getContext("2d")!, cl = CLANS[k];
@@ -37,9 +41,18 @@ export function pennant(k: ClanKey): HTMLCanvasElement {
       g.fillRect(x, y, 1, 1);
     }
   }
+  if (crowned) { crownGlyph(g, 3, 6); return c; }
   g.fillStyle = hex(cl.sigil); // the sigil: a small lozenge
   for (const [dx, dy] of [[0, -2], [-1, -1], [0, -1], [1, -1], [-2, 0], [-1, 0], [0, 0], [1, 0], [2, 0], [-1, 1], [0, 1], [1, 1], [0, 2]]) g.fillRect(7 + dx, 9 + dy, 1, 1), g.fillRect(8 + dx, 9 + dy, 1, 1);
   return c;
+}
+
+/** A 10 x 7 gold crown with a dark outline, its top-left at (x, y): the Reckoning's mark on a crowned clan's banners. */
+export function crownGlyph(g: CanvasRenderingContext2D, x: number, y: number) {
+  g.fillStyle = "#1a1008"; g.fillRect(x - 1, y + 2, 12, 6); for (const a of [0, 4, 8]) g.fillRect(x + a - 1, y - 1, 4, 4);
+  g.fillStyle = "#ffd860"; g.fillRect(x, y + 3, 10, 3); for (const a of [0, 4, 8]) g.fillRect(x + a, y, 2, 3);
+  g.fillStyle = "#c8902c"; g.fillRect(x, y + 5, 10, 1);
+  g.fillStyle = "#e04040"; g.fillRect(x + 4, y + 3, 2, 1); // a ruby
 }
 
 const mins = (ms: number) => Math.max(1, Math.ceil(ms / 60_000));
@@ -125,7 +138,8 @@ export class WarPlaque {
     const col = this.cols?.touching(t.id, now);
     const march = col ? `Column of the ${CLAN_LABEL[col.clan]} marching on ${TERRITORIES[col.to]?.name ?? "?"} · ${fmtCountdown(v.next - now)}` : "";
     const tier = viewTier(v, t.id); // (the guard count follows tier and Control, so it needs no key of its own)
-    const key = `${t.id}|${own}|${tier}|${ctl}|${line}|${standing}|${fronts}|${rite}|${brake}|${sacked}|${march}`;
+    const reck = t.reckoningOnly && v.reck ? `${reckonCountdown(v.reck, now)}|${v.reck.crowned ?? ""}` : `${v.reck?.crowned ?? ""}`;
+    const key = `${t.id}|${own}|${tier}|${ctl}|${line}|${standing}|${fronts}|${rite}|${brake}|${sacked}|${march}|${reck}`;
     if (key === this.shown) return;
     this.shown = key;
     const cl = CLANS[own], guards = holdIntel(v, t.id).guards;
@@ -147,7 +161,8 @@ export class WarPlaque {
     if (march) { const ml = document.createElement("div"); ml.className = "wp-foot siege"; ml.textContent = march; text.append(ml); }
     if (brake) { const bl = document.createElement("div"); bl.className = "wp-foot" + (v.rally === v.owner[t.id] && !v.raided?.includes(t.id) ? " rally" : " siege"); bl.textContent = brake; text.append(bl); }
     if (standing) { const me = document.createElement("div"); me.className = "wp-me" + (/cannot|^Swear/.test(standing) ? " no" : ""); me.textContent = standing; text.append(me); }
-    this.el.replaceChildren(pennant(own), text);
+    if (t.reckoningOnly && v.reck) { const rl = document.createElement("div"); rl.className = "wp-foot rally"; rl.textContent = `Reckoning ${reckonCountdown(v.reck, now)}`; text.append(rl); }
+    this.el.replaceChildren(pennant(own, v.reck?.crowned === v.owner[t.id]), text);
     this.el.hidden = false;
   }
 }

@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-16",
+  "title": "The Reckoning",
+  "changes": [
+    "Once a month, on the first Saturday from 18:00 to 21:00 UTC, the clans fight the Reckoning for the Crown Keep: every Crown land a clan holds scores, the Keep thrice, and so does every fight its sworn heroes win in the Crown.",
+    "The clan with the top score takes the Keep (on a tie its holder keeps it), and its sworn heroes earn 10% more gold and renown until the next Reckoning. Its banners wear a gold crown.",
+    "Every sworn hero who fought in the Crown during a Reckoning is paid gold and renown, more if their clan won, on their next login within 14 days.",
+    "The Herald warns an hour before, calls the standings every hour and the result; the war table counts down to the next Reckoning and shows the scores while it runs."
+  ]
+}

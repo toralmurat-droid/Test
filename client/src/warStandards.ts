@@ -32,11 +32,11 @@ const DOCTRINE_LINE: Record<ClanKey, string> = {
   veiled: "Ritual: strongest at noon.",
 };
 
-/** The standard texture of a clan: pole, crossbar and its pennant, 2 world px per art px. */
-function standardTexture(scene: Phaser.Scene, k: ClanKey): string {
-  const key = `warstd_${k}`;
+/** The standard texture of a clan: pole, crossbar and its pennant, 2 world px per art px (`crowned`: the Reckoning's crown on it). */
+function standardTexture(scene: Phaser.Scene, k: ClanKey, crowned = false): string {
+  const key = `warstd_${k}${crowned ? "_crowned" : ""}`;
   if (scene.textures.exists(key)) return key;
-  const flag = pennant(k), W = 22, H = POLE_H, c = document.createElement("canvas");
+  const flag = pennant(k, crowned), W = 22, H = POLE_H, c = document.createElement("canvas");
   c.width = W * 2; c.height = H * 2;
   const g = c.getContext("2d")!;
   g.imageSmoothingEnabled = false;
@@ -118,7 +118,7 @@ export class WarStandards {
     for (const s of STANDARDS) {
       const k = CLAN_KEYS[v.owner[s.t]];
       if (!k) continue;
-      const key = standardTexture(this.scene, k);
+      const key = standardTexture(this.scene, k, v.reck?.crowned === v.owner[s.t]); // (the clan a Reckoning crowned: a crown on its pennant)
       let img = this.poles.get(s.id);
       if (!img) {
         img = this.scene.add.image(s.x, s.y, key).setOrigin(0.5, 1).setDepth(s.y);

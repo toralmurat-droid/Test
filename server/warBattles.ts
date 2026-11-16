@@ -30,6 +30,7 @@ import { atWar } from "../shared/war/feuds";
 import {
   addValor, battleCaptain, battleClanValor, battleClock, battleDeath, battleFielded, battleGrant, battleScore, battleNewsSince, battlesVersion, warBattles, warNow, warState,
 } from "./war";
+import { boonRenown, crownCredit, keyOf } from "./warCrown";
 import type { Soldiers } from "./warCaravans";
 import { newFighter, type FightGround, type Fighter, type TroopHero, type TroopMob } from "./warTroops";
 
@@ -187,7 +188,8 @@ export class WarBattles {
       const side = p.clan === b.a ? "att" : "def", won = b.result === side, draw = b.result === "draw";
       const valor = won ? BATTLE.winValor : BATTLE.loseValor, renown = won ? BATTLE.winRenown : BATTLE.loseRenown;
       for (let left = battleClanValor(b.id, p.clan, valor); left > 0; left -= WAR.valorPerAdd) addValor(b.t, p.clan, Math.min(left, WAR.valorPerAdd));
-      this.renown(hid, p, b, renown * rallyRenown(warState(), p.clan));
+      { const by = keyOf(p); if (by) crownCredit(b.t, by, p.clan, valor); } // (the clan's cap may be spent: the hero fought all the same)
+      this.renown(hid, p, b, renown * rallyRenown(warState(), p.clan) * boonRenown(p.clan));
       const gold = won ? battleGold(lvl) : 0;
       if (gold) this.h.pay(hid, gold);
       this.h.tell(hid, draw ? `The battle for ${land} ends in a draw: you stood your ground.` : won ? `Victory at ${land}! +${gold} gold, and renown for the battle.` : `Defeat at ${land}; you fought on to the end, and that counts.`);
@@ -356,7 +358,7 @@ export class WarBattles {
       const pts = WAR_TROOPS.killPts[pl.captain ? "officer" : "soldier"] + (capOk ? BATTLE.captainValor : 0); // (the captain's valor only for a kill the war counted)
       const add = battleGrant(l.b.id, p.name, "kill", pts);
       // (valor in the battle's land: the war counts it for the holder or a clan that may attack there, a third clan's too)
-      if (add > 0 && addValor(l.b.t, p.clan, add)) this.renown(killerId, p, l.b, add * rallyRenown(warState(), p.clan));
+      if (add > 0 && addValor(l.b.t, p.clan, add, keyOf(p))) this.renown(killerId, p, l.b, add * rallyRenown(warState(), p.clan) * boonRenown(p.clan));
     }
     return true;
   }

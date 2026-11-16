@@ -27,6 +27,7 @@ import { TERRITORIES } from "../shared/war/territories";
 import { parseTroop, TROOP_SHORT, troopStance, troopStats, troopWeapon, type TroopPart } from "../shared/war/troops";
 import { territoryAt } from "../shared/war/view";
 import { addValor, warNow, warState } from "./war";
+import { boonRenown, keyOf } from "./warCrown";
 import { newFighter, type FightGround, type Fighter, type TroopHero, type TroopMob, type WarTroops } from "./warTroops";
 
 /** A hero as the feuds read and change it (TownRoom's Player). */
@@ -159,9 +160,9 @@ export class WarFeuds {
     if (k && k.clan === clan && tier >= 1 && e && e.paid !== day && v.clan !== clan && !(v.party && v.party === k.party) && claims < FEUD.bounty.perDay) {
       e.paid = day; k.claimDay = day; k.claims = claims + 1;
       const was = rankOf(k.renown);
-      k.renown += FEUD.bounty.renown * rallyRenown(warState(), clan);
+      k.renown += FEUD.bounty.renown * rallyRenown(warState(), clan) * boonRenown(clan);
       const t = territoryAt(Math.floor(v.x / TILE), Math.floor(v.y / TILE));
-      if (t) addValor(t.id, clan, FEUD.bounty.valor);
+      if (t) addValor(t.id, clan, FEUD.bounty.valor, keyOf(k));
       const rank = rankOf(k.renown);
       if (rank > was) this.h.ranked(killer.hero!, RENOWN_RANKS[rank].name);
       const line = feudLine(clan, "bounty", v.name, v.name.length);
