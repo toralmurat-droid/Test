@@ -36,7 +36,7 @@ let voices = 0;
 const MAX_VOICES = 28;
 const lastPlay = new Map<string, number>();
 /** Sounds that ring for seconds (kept connected longer). */
-const LONG = new Set(["lootRare", "lootLegendary", "horn", "ritual", "ritualCall", "demonRise", "demonRoar", "shrine", "portalTravel", "portalWake", "ferryOff", "ferryOn", "necroWind", "heroDie", "levelup", "owl", "chime", "warcry", "motherInflate", "demonFire", "skelDie", "lutePluck", "swResonate", "swShatter", "swBounce", "swSnap", "swSwell", "caravan_raided", "caravan_arrived", "siege_front", "ram_wrecked", "ram_at_gate", "tunnel_open", "tunnel_collapse", "ritual_broken", "ritual_done", "wanted_up", "bounty_claimed", "hold_sacked", "hold_grow", "column_clash", "column_march", "column_gate", "battle_horn", "battle_banner", "battle_officer", "battle_end", "town_contested", "town_claimed"]);
+const LONG = new Set(["lootRare", "lootLegendary", "horn", "ritual", "ritualCall", "demonRise", "demonRoar", "shrine", "portalTravel", "portalWake", "ferryOff", "ferryOn", "necroWind", "heroDie", "levelup", "owl", "chime", "warcry", "motherInflate", "demonFire", "skelDie", "lutePluck", "swResonate", "swShatter", "swBounce", "swSnap", "swSwell", "caravan_raided", "caravan_arrived", "siege_front", "ram_wrecked", "ram_at_gate", "tunnel_open", "tunnel_collapse", "ritual_broken", "ritual_done", "wanted_up", "bounty_claimed", "hold_sacked", "hold_grow", "column_clash", "column_march", "column_gate", "battle_horn", "battle_banner", "battle_officer", "battle_end", "town_contested", "town_claimed", "city_oath", "city_reward"]);
 const AMBIENT = new Set(["crackle", "bird", "cricket", "chime", "owl", "step", "skelIdle", "blobGurgle", "crawl"]);
 
 const TOWNS = ["Oakvale", "Market Square", "Chapel of the Dawn", "The Rusty Tankard", "The Smithy", "Saltmere", "Hunter's Camp"];
@@ -827,6 +827,18 @@ const R: Record<string, Recipe> = {
     for (let i = 0; i < 5; i++) voice(o, t + 0.5 + i * 0.06 + rnd(0, 0.05), { f: rnd(150, 230), f2: rnd(190, 280), dur: rnd(0.5, 0.8), vol: 0.07 * v, vowel: [650, 1100], vowel2: [500, 1700], att: 0.12, rough: 0.04 });
     noise(o, t + 0.45, { type: "bandpass", f: 1800, q: 0.8, dur: 1.0, vol: 0.05 * v, att: 0.3 });
   },
+  // W7 capital cities (server broadcast("sfx", { ev: "cityoath" | "cityreward", id })): the oath is a low drone under three slow bells and a
+  // hushed choir; the leader's reward is a shower of coins under a short bright horn call
+  city_oath: (o, t, v) => {
+    [0, 7, 12].forEach((s, i) => bell(o, t + 0.1 + i * 0.35, 262 * 2 ** (s / 12), 2.2, 0.13 * v));
+    tone(o, t, { type: "sine", f: 98, f2: 98, dur: 2.4, vol: 0.07 * v, att: 0.5, vib: 1.2, vibHz: 0.7 });
+    [0, 4, 7].forEach((s, i) => voice(o, t + 0.6 + i * 0.05, { f: 196 * 2 ** (s / 12), f2: 196 * 2 ** (s / 12), dur: 1.4, vol: 0.05 * v, vowel: [600, 1000], vowel2: [450, 800], att: 0.35, rough: 0.02 }));
+  },
+  city_reward: (o, t, v) => {
+    for (let i = 0; i < 9; i++) clank(o, t + i * 0.055 + rnd(0, 0.03), 0.13 * v, rnd(2400, 3800));
+    [0, 7].forEach((s, i) => tone(o, t + 0.1 + i * 0.16, { type: "sawtooth", f: 392 * 2 ** (s / 12), f2: 392 * 2 ** (s / 12), dur: i ? 0.5 : 0.18, vol: 0.07 * v, att: 0.02, vib: 1, vibHz: 5 }));
+    bell(o, t + 0.3, 1047, 1.0, 0.06 * v);
+  },
   // Arrived: a short two-note horn over a bell, the caravan is home
   caravan_arrived: (o, t, v) => {
     [[0, 0.28, 1], [0.3, 0.55, 1.5]].forEach(([s, d, m]) => [1, 2, 3].forEach((k, i) => tone(o, t + s, { type: "sawtooth", f: 196 * m * k, f2: 198 * m * k, dur: d, vol: (0.2 / (1 + i)) * v, att: 0.04, vib: 0.8 * k, vibHz: 5 })));
@@ -1462,6 +1474,8 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
       case "battle_end": pos("battle_end", 1, battleOutcome(ev.result, ev.a, ev.b), { key: "be" + (ev.id ?? ""), minGap: 3000, reach: 3 }); break;
       case "ritual_done": pos("ritual_done", 1, undefined, { key: "rd" + (ev.x ?? "") + ":" + (ev.y ?? ""), minGap: 1500, reach: 2 }); break;
       case "town_contested": pos("town_contested", 1, undefined, { key: "tc" + (ev.id ?? ev.town ?? ""), minGap: 3000, reach: 3 }); break;
+      case "cityoath": pos("city_oath", 1, undefined, { key: "co" + (ev.id ?? ""), minGap: 1500, reach: 2 }); break;
+      case "cityreward": pos("city_reward", 1, undefined, { key: "cr" + (ev.id ?? ""), minGap: 800, reach: 1.8 }); break;
       case "town_claimed": pos("town_claimed", 1, undefined, { key: "tl" + (ev.id ?? ev.town ?? ""), minGap: 3000, reach: 2.5 }); break;
       case "caravan_arrived": case "caravan_delivered": pos("caravan_arrived", 1, undefined, { key: "ca" + (ev.id ?? ev.clan ?? ""), minGap: 500, reach: 2 }); break;
       case "ferry": { // off at the jetty it left, then the landing (the rider hears both; others only what is near them)

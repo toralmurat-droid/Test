@@ -20,3 +20,11 @@ the files Tollcross keeps the village tune and the rest of the Crown the country
 - Mood: regal and ruined; slow horns and strings over a faded fanfare, dusk-gold warmth with a hollow, wind-swept
   edge. Tollcross is livelier (a fair under old banners); the open Marches are sparse and wide.
 - Length: 2 to 4 minutes, seamless loop. Format: mp3, 128 to 192 kbps, cover art stripped.
+
+## Capital cities (W7, optional)
+
+Each clan capital plays its own calm tune: slot `city-<clan>` in `TRACKS` (`client/src/music.ts`), file
+`city-<clan>.mp3`. So far only the Wardens' Hearthhold has one: `city-wardens.mp3` (slot `city-wardens`, "Hearthhold tune",
+`optional`). Without the file Auto plays the act's town tune in the city (the village tune for Hearthhold) and nothing errors.
+- Mood (Hearthhold): warm and steady, a hearth-fire fanfare; strings and low horns, a march in the drums, safe walls.
+- Length: 2 to 4 minutes, seamless loop. Format: mp3, 128 to 192 kbps, cover art stripped.

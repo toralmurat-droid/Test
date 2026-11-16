@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { ART_K as K, BADLANDS_Y0, DESERT_Y0, MAP_H, CROWN_Y0, MAP_W, MOORS_Y0, SINKHOLES_H, SINKHOLES_Y0, TILE } from "../../shared/constants";
+import { ART_K as K, BADLANDS_Y0, CITIES_Y0, DESERT_Y0, MAP_H, CROWN_Y0, MAP_W, MOORS_Y0, SINKHOLES_H, SINKHOLES_Y0, TILE } from "../../shared/constants";
 import { gorseTexture, origin } from "./moorsArt";
 import { origin as blOrigin, scrubTexture } from "./badlandsArt";
 import { fernTexture, origin as skOrigin, willowTexture } from "./sinkholesArt";
@@ -227,6 +227,7 @@ export class Ambient {
   /** The hero's tile: sets how thick the moors mist lies (none outside Act 3, thick in the MIST_HOLLOWS). */
   setHero(tx: number, ty: number) {
     this.dust = ty >= BADLANDS_Y0 - 4 && ty < SINKHOLES_Y0 - 4;
+    if (ty >= CITIES_Y0 - 4) { this.dust = false; this.mistWant = 0; return; } // a capital city: clear air, no Crown haze (W7)
     if (ty >= CROWN_Y0 - 4) { this.mistWant = 0.12; return; } // the Crown: only a faint pale haze (the embers and ash are drawn by the Crown pass)
     if (ty >= SINKHOLES_Y0 - 4) { this.mistWant = 0.3; return; } // the sinkholes: a thin damp haze (cool tint, no dust)
     if (this.dust) { this.mistWant = 0.55; return; } // the badlands: dust in the heat, no hollows
@@ -432,7 +433,7 @@ export class Ambient {
       if (!TREES.has(t)) continue;
       const oaks = SMOOTH ? ["oak_a", "oak_b", "oak_c", "oak_d", "oak_e", "oak_a", "oak_b", "oak_f"] : ["oak_a", "oak_b"];
       const pines = SMOOTH ? ["pine", "pine", "pine_b"] : ["pine"];
-      const crown = y >= CROWN_Y0 - 4, sink = y >= SINKHOLES_Y0 - 4 && !crown, badl = y >= BADLANDS_Y0 - 4 && !sink && !crown, desert = y >= DESERT_Y0 && y < MOORS_Y0 - 4, moors = y >= MOORS_Y0 - 4 && y < BADLANDS_Y0 - 4;
+      const city = y >= CITIES_Y0 - 4, crown = y >= CROWN_Y0 - 4 && !city, sink = y >= SINKHOLES_Y0 - 4 && !crown && !city, badl = y >= BADLANDS_Y0 - 4 && !sink && !crown && !city, desert = y >= DESERT_Y0 && y < MOORS_Y0 - 4, moors = y >= MOORS_Y0 - 4 && y < BADLANDS_Y0 - 4;
       const lush = sink && (t === T.BUSH || t === T.TREE) ? (t === T.TREE ? willowTexture(this.scene, Math.floor(r() * 4)) : fernTexture(this.scene, Math.floor(r() * 3), Math.floor(r() * 4))) : undefined; // the sinkholes' willows and ferns (sinkholesArt.ts)
       const scrub = badl && t === T.BUSH ? scrubTexture(this.scene, Math.floor(r() * 2), Math.floor(r() * 4)) : undefined; // the badlands' thorn scrub and tumbleweed (badlandsArt.ts)
       const gorse = lush ?? scrub ?? (moors && t === T.BUSH ? gorseTexture(this.scene, Math.floor(r() * 4)) : undefined); // the moors' gorse (moorsArt.ts) instead of the plain bush
@@ -534,7 +535,7 @@ export class Ambient {
 
   /** The Crown's braziers (T.BRAZIER, Act 6): a warm flickering glow with embers rising, and a few ash flakes drifting off in the wind. Cosmetic only. */
   private buildBraziers() {
-    for (let y = CROWN_Y0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
+    for (let y = CROWN_Y0; y < CITIES_Y0 - 4; y++) for (let x = 0; x < MAP_W; x++) {
       if (OBJECTS[y][x] !== T.BRAZIER) continue;
       const cx = (x + 0.5) * TILE, fy = (y + 0.5) * TILE;
       const glow = staticObj(this.scene, this.scene.add.image(cx, fy - 10 * K, "glow").setTint(0xffb040).setScale(4.2 * K).setAlpha(0.22).setBlendMode(Phaser.BlendModes.ADD).setDepth(-0.8));
