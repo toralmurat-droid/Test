@@ -162,3 +162,67 @@ test("siege windows: valor counts more at a territory under siege", () => {
   const sieged = warTick(s, {}, { phase: 0, valor }).pressure[t];
   assert.ok(Math.abs(sieged - calm * WAR.siegeValor) < 1e-9, `${sieged} = ${calm} x ${WAR.siegeValor}`);
 });
+
+test("live war (W4): the orders ahead and the columns' losses go into the war save (throttled) and come back after a restart", async () => {
+  const { kv, m } = memKv(), t0 = 7_000_000_000_000;
+  const { startWar, stopWar, warMarches, marchCol, columnLost, warState, _warDirty } = await import("../server/war");
+  _resetWar(saved(t0), kv);
+  await step(t0);
+  const ms = warMarches();
+  assert.ok(ms.length > 0, "columns march for the next tick");
+  let disk = JSON.parse(m.get("war")!) as SavedWar;
+  assert.ok(disk.ahead && Object.keys(disk.ahead).length, "the orders ahead are saved");
+  assert.deepEqual(disk.cols, {}, "no losses yet");
+  const c = ms[0];
+  assert.ok(columnLost(c.id, 2, t0 + 1000));
+  assert.ok(!columnLost("nope", 1, t0 + 1000), "an unknown column");
+  assert.ok(_warDirty());
+  await step(t0 + 30_000);
+  assert.equal((JSON.parse(m.get("war")!) as SavedWar).cols![c.id], undefined, "not saved again within COLUMN.saveMs");
+  await step(t0 + 61_000);
+  disk = JSON.parse(m.get("war")!) as SavedWar;
+  assert.equal(disk.cols![c.id].fallen, 2, "saved after a minute");
+  assert.ok(!_warDirty());
+  const before = JSON.parse(JSON.stringify(warState())), ids = ms.map((x) => x.id);
+  _resetWar(undefined); stopWar();
+  await startWar(kv); stopWar();
+  assert.deepEqual(warState(), before, "the war loads back unchanged");
+  assert.deepEqual(warMarches().map((x) => x.id), ids, "the same columns, on the same roads, to the same targets");
+  assert.equal(marchCol(c.id).fallen, 2, "with their fallen");
+  assert.deepEqual(warMarches().find((x) => x.id === c.id), c);
+});
+
+test("live war (W4): an old save without orders ahead loads and plays its next tick exactly as before W4", async () => {
+  const t0 = 8_000_000_000_000, { kv, m } = memKv();
+  const { startWar, stopWar, warState, warMarches } = await import("../server/war");
+  const old = saved(t0);
+  for (let i = 0; i < 40; i++) warTick(old.state, {}); // (some war behind it)
+  m.set("war", JSON.stringify(old));
+  await startWar(kv); stopWar();
+  assert.ok(warMarches().length > 0, "orders given on load: the columns march");
+  await step(t0);
+  const a = JSON.parse(JSON.stringify(warState()));
+  _resetWar(JSON.parse(JSON.stringify(old))); // no orders ahead: given at the tick, as before W4
+  await step(t0);
+  assert.deepEqual(warState(), a);
+});
+
+test("live war (W4): a column's fallen soldiers weaken its attack at the next tick; an untouched one lands in full", async () => {
+  const t0 = 9_000_000_000_000;
+  const { warMarches, columnLost, columnHalt, warState } = await import("../server/war");
+  const run = async (cut: boolean, halt = false) => {
+    const s = saved(t0);
+    for (let i = 0; i < 30; i++) warTick(s.state, {});
+    _resetWar(s);
+    await step(t0);
+    const c = warMarches()[0];
+    if (cut) columnLost(c.id, c.size);
+    if (halt) columnHalt(c.id, 30_000);
+    await step(t0 + WAR.tickMs);
+    return { c, st: JSON.parse(JSON.stringify(warState())) };
+  };
+  const full = await run(false), cut = await run(true), halted = await run(false, true);
+  assert.deepEqual(halted.st, full.st, "a halt alone changes nothing");
+  assert.ok(cut.st.pressure[cut.c.to] < full.st.pressure[full.c.to], "a column cut down lands weaker");
+  cut.st.pressure.forEach((p: number, t: number) => { if (t !== cut.c.to) assert.equal(p, full.st.pressure[t]); });
+});

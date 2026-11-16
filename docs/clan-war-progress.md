@@ -874,3 +874,85 @@ Murat: attack an encampment on your own initiative; "stand at the standard" valo
 - Sims: no-player baseline unchanged (21.8/22.0/19.9/16.2/20.0 %, 5.59 flips). `--tiers`: 4 % outposts, 38 % camps, 58 % fortresses; front lands 84 % camps. `--sack=all:6` with sackFort 0.02: top clan 23.2 %, 8.97 flips, domination 0 %.
 - Garrison fights (`pve.ts --troops --garrison`, worst case all at once): solo heroes clear outposts; fortresses are group content (Songweaver cannot solo camps/fortresses, Summoner can). Balance follow-up.
 - Open: second-line cap (would give ~38 % fortresses); grow notice in the HUD (Herald line only for now).
+
+## W4: war roads and marching columns, branch claude/war-roads (stacked on claude/war-tiers)
+Step 1 and 2 of the W4 plan (shared, server, room hooks). Client drawing, art, herald lines per leader and the patch
+note are later steps. Owner questions on the plan's defaults (columns public in the world, other clans' columns on the
+map within `COLUMN.scoutTiles` 40; orders one tick ahead; floor 0.5; halts up to 90 s; clashes on a shared road only;
+the 4 road gaps simulated; joining pays 8 valor and 10 renown; a column camps at the siege approach).
+- **War roads** (`shared/war/roads.ts`): the caravans' route search moved here unchanged (`searchBox`, `searchPath`,
+  `simplifyPath`, `routePos`; `caravanRoute` builds with it, same cache and results). A war road blocks every Hold's
+  whole fort footprint (any clan, any tier) except the road's own two Holds (blocking those too cut 6 more roads: their
+  yards hold the gate; every tier's walls are blocked anyway). 88 neighbour pairs: 80 roads, 4 waygate links (two legs:
+  Hold gate to the walkable tile nearest the gate within `ROAD_SEARCH.gateReach` 14 tiles, then the far gate to the
+  Hold), 4 tracks (North Meadow to Old Watchtower and Old Ruins, Brinewood and Heronwreck Strand to Saltwind Coast:
+  straight line between the Hold gates, columns simulated only). About 1.6 s to build all, worst 275 ms; built lazily,
+  one per room tick (the columns' paths first). No `shared/map.ts` change.
+- **Orders one tick ahead** (`server/war.ts`): after each tick the leaders give the next tick's orders at once (same
+  `scriptedOrders`, same seed `tick * 2654435761 + 1` on the same state), kept in the war save as `ahead` and applied at
+  the next tick. Missing (old save, `_resetWar` without it): given at the tick as before. `warPlan` (the "warplan" intel)
+  now shows the orders ahead. `lastOrders` / `warStrikes` (tunnels) still mean the orders the last tick applied.
+- **Rules** (`shared/war/rules.ts`): `deployments(s, orders, phase)` is warTick's step 2, extracted (golden test over
+  50 ticks); `TickExtra.march: {t, k, mult}[]` scales clan k's army attack on t (0..1, valor untouched).
+- **Columns** (`shared/war/marches.ts`, `COLUMN`): one per non-tunnel march of the plan (`plansOf` moved here from
+  `server/war.ts`, re-exported there). Id `${tick}-${clan}-${from}-${to}`; men = 1 officer + clamp(round(force / 30),
+  2, 7) soldiers (force: that march's attack from `deployments`); departs 60 s after the tick; walks at 30 px/s, faster
+  only when the trip (walk + 90 s halts + 60 s clash + 5 s gate + 30 s slack) would not fit before the next tick; camps
+  on the road where it passes nearest the target's `siegeApproach` (axis: from the target toward the land it comes
+  from). `columnPos(path, dep, now, haltMs, meetAt)`: the clock, the same on the server and the client.
+  `marchMult(alive, size)` = max(0.5, alive / size). `clashLosses` = round(n x min(0.5, 0.6 x F_other / (F_a + F_b))).
+  `meetingOf`: columns of one road in opposite directions meet where both clocks (no halts) cross; a column camped
+  already is met at its camp; both stand `clashMs` 60 s there.
+- **Server** (`server/war.ts`): `cols` in the war save (`{fallen, halt, met?}` per column id, current interval only;
+  dirty-flag save at most once a minute from the 15 s timer, and at the tick). `columnLost`, `columnHalt`, `columnSeen`,
+  `columnJoined`, readers `warMarches`, `marchCol`, `marchPath`, `warMeetings`, `meetingFor`, `columnsVersion`. At the
+  tick: meetings nobody saw live are settled by `clashLosses` (`met: "sim"`; one a room had live: `"live"`, its real
+  deaths count), then `TickExtra.march` carries every column that lost men. `v` stays 1; `wellFormed` ignores both new
+  fields, so old builds read new saves and new builds read old saves.
+- **Room** (`server/warMarches.ts`, `WarMarches` behind `MarchHost`; 9 one-line hooks in `TownRoom.ts`): within 26 tiles
+  of a living hero above ground, at most 2 columns per room, plain `"trooper"` mobs (`troopWeapon(clan, officer)`; every
+  trooper gate holds), officer first, the rest while `budget()` has slots (unspawned men stay virtual and alive). Two
+  abreast behind the officer at the clock anchor; `WarTroops.think / fight / walk`; leash 7 tiles round the anchor; no
+  hunting. A soldier fighting an enemy hero halts the column (`columnHalt`, 90 s a trip). Any death counts
+  (`columnLost`); kill valor and renown through the room's usual trooper path. Sleeps after 30 s unseen; the fallen stay
+  fallen; extra men go when another room's losses bring the column below what this room fields. A sworn hero of the
+  column's clan within 6 tiles of the anchor for half the moving time joins it on arrival: 8 valor for the clan in the
+  target land (`addValor`), 10 renown, a Herald tell; once per hero per war tick. Columns take trooper slots after
+  caravans, sieges, tunnels, rituals and manhunters, before the patrols (`reserved()`).
+- **Messages (server -> client only; nothing comes back):**
+  - `"warroads"`: `RoadEntry[]` = `[a, b, pts, flag?][]`, a < b, `pts` flat whole tile coordinates `[tx0, ty0, tx1, ty1,
+    ...]` of the waypoints (tile centres) walked from a. No flag: a road. `-1`: a track (pts = the two Hold gates).
+    `n >= 1`: a waygate link, leg 1 = points `0..n-1` (ends by a's gate), leg 2 = points `n..` (from b's gate). Sent on
+    join (the ways built so far) and once to every room when all are built. `roads.ts pathOfEntry(e)` rebuilds the exact
+    path the server walks (to walk b -> a, reverse the legs).
+  - `"columns"`: `ColumnsMsg` = `{ tick, cols: [id, clanIdx, from, to, dep, size, fallen, haltMs, state][], meets?:
+    [a, b, x, y, at][] }`. `size` counts the officer; `state` 0 muster, 1 march, 2 halted by heroes, 3 clash, 4 in a
+    waygate, 5 camp. Sent on join, after every war tick, and when a column changes (a death, a halt starting or ending,
+    a meeting settled). The client places a column with `columnPos(pathOfEntry(entry), dep, now, haltMs, meetAt)`
+    (meetAt = the `at` of the meeting that names it); while state is 2 it stands.
+  - sfx: `column_march {id, x, y, clan}` (a column wakes near heroes), `column_clash {x, y, a, b}` (a, b clan keys),
+    `column_gate {id, x, y, clan}` (a live column steps into a waygate). Stub recipes in `client/src/sfx.ts`.
+  - Herald: one public line per war tick (at most 3 columns), a tell to sworn heroes whose land is marched on or whose
+    clan marches, a clash line. Leader lines (`WarMoment` march / ambushed / clash) are left to content.
+- **Tools:** `tools/balance/war.ts` prints the column size histogram (`--per-soldier=<n>` to try another value) and has
+  `--ambush=<clan|all>[:share]` and `--clash`; `tools/balance/pve.ts --column` (a hero alone vs a full column);
+  `npm run bench` `COLUMN=1` (with `WAR=1`): a column marches past the first bot for the whole run.
+- **Sims** (`npx tsx tools/balance/war.ts 200 30`): no players identical before/after (Wardens 21.8 / Redfang 22.0 /
+  Host 19.9 / Hide-Kin 16.2 / Veiled 20.0 %, 5.59 flips a day, domination 0.0 %); `--clever=host` identical too (Host
+  20.7 % vs 19.9 %). Column sizes (perSoldier 30, men with the officer): 3: 4.6 / 4: 20.6 / 5: 13.8 / 6: 27.5 / 7: 21.6 /
+  8: 11.9 %, about 780 columns a war day. Hooks (report only, domination 0.0 % in every run):
+  `--ambush=all` (every column on every land cut by half, every tick) Redfang 23.1 / Host 22.7 %, flips 1.65 a day;
+  `--ambush=hidekin` 16.4 %, 5.57 flips; `--ambush=redfang:1` (every column on Redfang land wiped) Redfang 24.9 %,
+  3.94 flips; `--clash` (every same-road meeting of clans at war, the sim does not check that both camp short) 93
+  meetings and 327 men lost a day, 4.09 flips, top clan 22.1 %.
+- **PvE** (`npx tsx tools/balance/pve.ts 40 --column`, a hero alone vs an officer and 7 soldiers of its level; cell =
+  win / half cut / men down / HP lost / s): Lv15 wizard 0/0/0.0, vampire 3/10/0.7, summoner 48/48/4.0, songweaver 0/0/0.0;
+  Lv30 wizard 35/35/2.8, vampire 60/70/5.5, summoner 100/100/8.0, songweaver 8/8/0.7; Lv45 wizard 38/38/3.0, vampire
+  60/68/5.2, summoner 100/100/8.0, songweaver 0/0/0.1. A full column is group content for most classes (like a fortress
+  garrison); the Summoner solos it.
+- **Bench** (`WAR=1 SPREAD=1 npm run bench`, 5 bots, noisy): before 7.06 / 5.44 ms tick avg (p95 13.8 / 12.1), after
+  6.64 / 6.31 (p95 12.9 / 11.4); `COLUMN=1` 5.05 (p95 9.2) with the 8 column troopers live. 80 troopers, no dropped bots.
+- Open: client drawing (map polylines, column icons, clash glyph, track decal, plaque line, notice), pennant art, leader
+  lines per clan, patch note; the 4 road gaps (a later `area:map` PR); clashes off a shared road and live columns joining
+  the siege fronts (W5, `Meeting` records are ready); the `--ambush=redfang:1` extreme lifts one clan to 24.9 % (the
+  0.5 floor is the knob).

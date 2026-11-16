@@ -36,7 +36,7 @@ let voices = 0;
 const MAX_VOICES = 28;
 const lastPlay = new Map<string, number>();
 /** Sounds that ring for seconds (kept connected longer). */
-const LONG = new Set(["lootRare", "lootLegendary", "horn", "ritual", "ritualCall", "demonRise", "demonRoar", "shrine", "portalTravel", "portalWake", "ferryOff", "ferryOn", "necroWind", "heroDie", "levelup", "owl", "chime", "warcry", "motherInflate", "demonFire", "skelDie", "lutePluck", "swResonate", "swShatter", "swBounce", "swSnap", "swSwell", "caravan_raided", "caravan_arrived", "siege_front", "ram_wrecked", "ram_at_gate", "tunnel_open", "tunnel_collapse", "ritual_broken", "ritual_done", "wanted_up", "bounty_claimed", "hold_sacked", "hold_grow"]);
+const LONG = new Set(["lootRare", "lootLegendary", "horn", "ritual", "ritualCall", "demonRise", "demonRoar", "shrine", "portalTravel", "portalWake", "ferryOff", "ferryOn", "necroWind", "heroDie", "levelup", "owl", "chime", "warcry", "motherInflate", "demonFire", "skelDie", "lutePluck", "swResonate", "swShatter", "swBounce", "swSnap", "swSwell", "caravan_raided", "caravan_arrived", "siege_front", "ram_wrecked", "ram_at_gate", "tunnel_open", "tunnel_collapse", "ritual_broken", "ritual_done", "wanted_up", "bounty_claimed", "hold_sacked", "hold_grow", "column_clash", "column_march", "column_gate"]);
 const AMBIENT = new Set(["crackle", "bird", "cricket", "chime", "owl", "step", "skelIdle", "blobGurgle", "crawl"]);
 
 const TOWNS = ["Oakvale", "Market Square", "Chapel of the Dawn", "The Rusty Tankard", "The Smithy", "Saltmere", "Hunter's Camp"];
@@ -759,6 +759,25 @@ const R: Record<string, Recipe> = {
     const c = t + blows * 0.16 + 0.04;
     [196, 247, 294, ...(big ? [392] : [])].forEach((f, i) => tone(o, c + i * 0.03, { type: "triangle", f, f2: f, dur: 0.7, vol: 0.07 * v, att: 0.03 }));
   },
+  // Marching columns (server broadcast("sfx", { ev: "column_march" | "column_clash" | "column_gate", ... }), server/warMarches.ts, W4).
+  // March: a column comes into sight, a steady field drum (four beats, the first one heavier) under a soft fife note
+  column_march: (o, t, v) => {
+    for (let i = 0; i < 4; i++) { thud(o, t + i * 0.3, i === 0 ? 70 : 88, (i === 0 ? 0.5 : 0.32) * v, 0.14); noise(o, t + i * 0.3, { type: "bandpass", f: 2400, q: 2, dur: 0.05, vol: 0.08 * v }); }
+    tone(o, t + 0.05, { type: "triangle", f: 587, f2: 587, dur: 1.0, vol: 0.04 * v, att: 0.15, vib: 4, vibHz: 6 });
+  },
+  // Clash: two columns meet, a clatter of blades on shields, a crash of bodies and two horns answering each other
+  column_clash: (o, t, v) => {
+    for (let i = 0; i < 7; i++) clank(o, t + i * 0.06 + rnd(0, 0.04), rnd(0.12, 0.22) * v, rnd(1400, 2600));
+    thud(o, t + 0.05, 60, 0.6 * v, 0.3); noise(o, t + 0.05, { type: "lowpass", f: 700, dur: 0.4, vol: 0.25 * v });
+    [1, 2].forEach((m, i) => tone(o, t + 0.45, { type: "sawtooth", f: 110 * m, f2: 123 * m, dur: 0.6, vol: (0.18 / (1 + i)) * v, att: 0.05, vib: 1.2 * m, vibHz: 5 }));
+    [1, 2].forEach((m, i) => tone(o, t + 0.85, { type: "sawtooth", f: 131 * m, f2: 117 * m, dur: 0.6, vol: (0.16 / (1 + i)) * v, att: 0.05, vib: 1.2 * m, vibHz: 5 }));
+  },
+  // Gate: a column steps into a waygate, a deep shimmer rising into a soft rush of air as it vanishes
+  column_gate: (o, t, v) => {
+    tone(o, t, { type: "sine", f: 140, f2: 420, dur: 0.8, vol: 0.12 * v, att: 0.2, vib: 6, vibHz: 7 });
+    noise(o, t + 0.1, { type: "bandpass", f: 600, f2: 2800, q: 2, dur: 0.7, vol: 0.12 * v, att: 0.3 });
+    bell(o, t + 0.6, 1046, 0.7, 0.06 * v);
+  },
   // Raising: rope creaking through a pulley and cloth flapping, short; client/src/warSack.ts repeats it while a banner goes up near
   banner_raise: (o, t, v) => {
     tone(o, t, { type: "sawtooth", f: rnd(380, 420), f2: rnd(520, 560), dur: 0.32, vol: 0.035 * v, att: 0.05, vib: 9, vibHz: 14 });
@@ -1341,6 +1360,9 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
       case "bounty_claimed": pos("bounty_claimed", 1, undefined, { key: "bc" + (ev.id ?? ""), minGap: 800, reach: 1.6 }); break;
       case "hold_sacked": pos("hold_sacked", 1, undefined, { key: "hs" + (ev.t ?? ""), minGap: 1500, reach: 2 }); break;
       case "hold_grow": pos("hold_grow", 0.9, ev.tier, { key: "hg" + (ev.t ?? ""), minGap: 1500, reach: 2 }); break;
+      case "column_march": pos("column_march", 0.9, undefined, { key: "cm" + (ev.id ?? ""), minGap: 4000, reach: 1.8 }); break;
+      case "column_clash": pos("column_clash", 1, undefined, { key: "cc" + (ev.x ?? "") + ":" + (ev.y ?? ""), minGap: 1500, reach: 2 }); break;
+      case "column_gate": pos("column_gate", 1, undefined, { key: "cg" + (ev.id ?? ""), minGap: 1500, reach: 1.6 }); break;
       case "ritual_done": pos("ritual_done", 1, undefined, { key: "rd" + (ev.x ?? "") + ":" + (ev.y ?? ""), minGap: 1500, reach: 2 }); break;
       case "caravan_arrived": case "caravan_delivered": pos("caravan_arrived", 1, undefined, { key: "ca" + (ev.id ?? ev.clan ?? ""), minGap: 500, reach: 2 }); break;
       case "ferry": { // off at the jetty it left, then the landing (the rider hears both; others only what is near them)

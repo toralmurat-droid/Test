@@ -41,6 +41,8 @@ import { movesSheet, SkillMoves } from "./skillMoves";
 import { displayGrid } from "./tileset";
 import { CRAWL_CROP, heroTexture, itemTexture, potionTex, makeTileset, MOB_LOOK, mobLook, mobTexture, preloadPaintedMobs } from "./textures";
 import { parseTroop, troopName, troopStance, type TroopStance } from "../../shared/war/troops";
+import type { RoadEntry } from "../../shared/war/roads";
+import type { ColumnsMsg } from "../../shared/war/marches";
 import { WarFeud } from "./warFeud";
 import { clanOfIndex } from "../../shared/war/view";
 import { Minimap } from "./minimap";
@@ -437,6 +439,9 @@ export class TownScene extends Phaser.Scene {
   private warRituals?: WarRituals; // the Veiled noon ritual circle ("rituals", server/warRituals.ts)
   private feud?: WarFeud; // feuds: provoke, Wanted badge and marks ("feud", "wanted", server/warFeuds.ts)
   private sack?: WarSack; // sacking Holds: banner prompt, progress, sacked banners ("holds", "sack", server/warHolds.ts)
+  /** W4 marching columns: the war roads and the columns as last sent (server/warMarches.ts); kept for the map overlay to draw. */
+  warRoads: RoadEntry[] = [];
+  warColumns?: ColumnsMsg;
   /** How a server clan trooper sees this hero (shared/war/troops.ts troopStance), from the oath the "clan" message brought. */
   private troopStanceOf(weapon: string): TroopStance {
     const t = parseTroop(weapon), me = (this.room?.state as any)?.players?.get(this.me);
@@ -1637,6 +1642,8 @@ export class TownScene extends Phaser.Scene {
     });
     this.room.onMessage("rituals", (m) => { (this.warRituals ??= new WarRituals(this)).set(m); (this.warPlaque ??= new WarPlaque(document.getElementById("hud")!)).setRitual(this.warRituals); });
     this.room.onMessage("tunnels", (m) => { if (m && Array.isArray(m.mouths)) { this.tunnelMouths = m.mouths; if (this.minimap) this.minimap.tunnels = m.mouths; } });
+    this.room.onMessage("warroads", (m) => { if (Array.isArray(m)) this.warRoads = m; }); // W4: every war road, once on join (and again when the server has built them all)
+    this.room.onMessage("columns", (m) => { if (m && Array.isArray(m.cols)) this.warColumns = m; }); // W4: the marching columns (shared/war/marches.ts ColumnsMsg)
     this.room.onMessage("warplan", (m) => { if (this.minimap && m && Array.isArray(m.march)) this.minimap.plan = m; }); // the own clan's attacks of the last war tick (server/warIntel.ts)
     const warNotice = new WarNotice(document.getElementById("hud")!);
     this.room.onMessage("warev", (e) => warNotice.show(e, this.entities.get(this.me)?.sprite));
