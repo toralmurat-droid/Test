@@ -285,8 +285,8 @@ export class WarTunnels {
     this.h.broadcast("sfx", { ev: "tunnel_collapse", x, y });
     this.tell();
     const p = this.h.hero(killerId);
-    if (!p || troopStance(tn.clan, p) !== "enemy") return true;
-    this.payClan(tn.t, p.clan!, TUNNEL.collapseValor, tick);
+    if (!p || !p.clan || troopStance(tn.clan, p) !== "enemy") return true; // (an unsworn hero with a grudge collapses it for nobody)
+    this.payClan(tn.t, p.clan, TUNNEL.collapseValor, tick);
     const was = rankOf(p.renown);
     p.renown += TUNNEL.collapseRenown;
     const rank = rankOf(p.renown);

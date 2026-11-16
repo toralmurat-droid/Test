@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { startRoom, until, wait } from "./helpers/room";
 import { BOARDS } from "../shared/bounty";
 import { CLAN_KEYS, type ClanKey } from "../shared/war/clans";
+import { atWar } from "../shared/war/feuds";
 import { newMinds } from "../shared/war/doctrine";
 import { garrisonSpots, patrolOf, TROOP } from "../shared/war/patrols";
 import { newWar } from "../shared/war/rules";
@@ -94,7 +95,7 @@ test("war writs (room): rout counts rival troopers killed by the hero standing i
   freshWar();
   try {
     const { c, room, id, p, got, valor } = await setup(srv);
-    const owner = warState()!.owner[LAND.id] as ClanKey, foe = CLAN_KEYS.find((k) => k !== owner)!;
+    const owner = warState()!.owner[LAND.id] as ClanKey, foe = CLAN_KEYS.find((k) => k !== owner && atWar(k, owner))!; // (at war with the holder: shared/war/feuds.ts)
     p.level = 30; p.clan = foe;
     const gate = patrolOf(LAND.id)!.pts[0];
     p.x = gate.x; p.y = gate.y;

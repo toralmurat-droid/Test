@@ -1,0 +1,29 @@
+/* Feuds (warFeud.ts): the Wanted badge in the top-left column, the Shift hint and the one-time provoke question */
+body #topleft > #warfeud { order: 2; }
+body #warfeud { position: relative; border: 18px solid transparent; border-image: var(--wf-bronze) 9 fill / 18px / 0 repeat; image-rendering: pixelated;
+  padding: 0 6px; color: #eadfc8; text-shadow: 2px 2px #050302; font: 16px var(--pixel-font); -webkit-font-smoothing: none; pointer-events: none; white-space: nowrap; }
+body #warfeud[hidden] { display: none; }
+#warfeud .wf-row { display: flex; align-items: center; gap: 6px; }
+#warfeud .wf-row.t1 { color: #ffd166; }
+#warfeud .wf-row.t2 { color: #ff9a4a; }
+#warfeud .wf-row.t3 { color: #ff5a4a; }
+#warfeud .wf-stars { display: inline-flex; gap: 2px; }
+#warfeud .wf-stars i { width: 8px; height: 8px; background: #2a2016; box-shadow: 0 0 0 1px #080504; }
+#warfeud .wf-stars i.on { background: currentColor; }
+#warfeud .wf-dim { color: #a8977a; }
+#warfeud .wf-land { color: #a8977a; }
+#warfeud .wf-land .ally { color: #8fe388; }
+#warfeud .wf-land .neutral { color: #c8c8c8; }
+#warfeud .wf-land .war { color: #ff6b5e; }
+#warfeud .wf-land .prov { color: #ffa040; }
+#warfeud .wf-land .hunt { color: #ff5a4a; }
+body #warfeudhint { position: absolute; z-index: 30; transform: none; padding: 2px 6px; background: #120c06e0; box-shadow: 0 0 0 1px #080504, 0 0 0 2px #6a5232;
+  color: #ffa040; font: 16px var(--pixel-font); -webkit-font-smoothing: none; pointer-events: none; white-space: nowrap; }
+body #warfeudhint[hidden] { display: none; }
+body #warfeudask { position: absolute; z-index: 40; left: 50%; top: 32%; transform: translateX(-50%); max-width: 440px; padding: 10px 16px;
+  border: 18px solid transparent; border-image: var(--wf-bronze) 9 fill / 18px / 0 repeat; image-rendering: pixelated;
+  color: #eadfc8; text-shadow: 2px 2px #050302; font: 18px var(--pixel-font); -webkit-font-smoothing: none; pointer-events: auto; text-align: center; }
+#warfeudask p { margin: 0 0 6px; }
+#warfeudask .sub { color: #a8977a; font-size: 16px; }
+#warfeudask .row { display: flex; gap: 12px; justify-content: center; margin-top: 8px; }
+#warfeudask button { font: 16px var(--pixel-font); }

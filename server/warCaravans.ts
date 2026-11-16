@@ -243,17 +243,17 @@ export class WarCaravans {
     if (!p || troopStance(clan, p) !== "enemy") { outcomes.set(tr.id, { kind: "lost", until }); return "lost"; }
     outcomes.set(tr.id, { kind: "raided", until });
     this.h.writ?.(killerId, "raid", tr.line); // the killing blow counts for a raid writ, wherever the valor goes
-    const raider = p.clan!, st = warState(), land = caravanLand(tr.line, m.x, m.y);
+    const raider = p.clan, st = warState(), land = caravanLand(tr.line, m.x, m.y); // (an unsworn hero with a grudge raids for nobody: shared/war/feuds.ts)
     this.h.dropGold(m.x, m.y, caravanGold(tr.level));
-    const legal = !!st && (st.owner[land.id] === raider || targetsOf(st, raider).includes(land.id));
-    if (legal && addValor(land.id, raider, CARAVAN.raidValor)) {
+    const legal = !!st && !!raider && (st.owner[land.id] === raider || targetsOf(st, raider).includes(land.id));
+    if (raider && legal && addValor(land.id, raider, CARAVAN.raidValor)) {
       for (const [hid, o] of this.h.heroes()) {
         if (o.dead || o.clan !== raider || o.level < STANDARD.minLevel || (hid !== killerId && Math.hypot(o.x - m.x, o.y - m.y) > CARAVAN.helperPx)) continue;
         this.renown(hid, o, CARAVAN.raidRenown);
       }
     }
     this.h.broadcast("sfx", { ev: "caravan_raided", id, x: Math.round(m.x), y: Math.round(m.y), by: raider, from: clan });
-    this.h.broadcast("chat", { id: "", name: "Herald", text: `${p.name} of the ${CLANS[raider].name} raided a ${CLANS[clan].name} caravan near ${land.name}.` });
+    this.h.broadcast("chat", { id: "", name: "Herald", text: `${p.name}${raider ? ` of the ${CLANS[raider].name}` : ""} raided a ${CLANS[clan].name} caravan near ${land.name}.` });
     return "raided";
   }
 

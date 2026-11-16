@@ -25,6 +25,8 @@ export interface WarView {
   rally?: number;
   /** Territories that were attacked in the last war tick (pressure above 0), so the map can hatch where fighting is; absent when none. */
   hot?: number[];
+  /** Pairs of clans at war (shared/war/feuds.ts pairOf), from the server's memory of the borders; the client takes them as they are. */
+  wars?: number[];
 }
 
 /** `raided`: the lands the Night Raiders struck in the last tick (server/war.ts keeps them; not part of the state). */

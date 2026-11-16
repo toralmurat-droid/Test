@@ -279,8 +279,8 @@ export class WarRituals {
     this.tell(now, true);
     if (!this.h.hero(killerId)) killerId = this.h.mob(killerId)?.owner || killerId; // a summon's kill counts for its hero
     const p = this.h.hero(killerId);
-    if (!p || troopStance(RITUAL.clan, p) !== "enemy") return true;
-    this.payClan(r.t, p.clan!, RITUAL.disruptValor, warNow()?.tick ?? -1);
+    if (!p || !p.clan || troopStance(RITUAL.clan, p) !== "enemy") return true; // (an unsworn hero with a grudge breaks it for nobody)
+    this.payClan(r.t, p.clan, RITUAL.disruptValor, warNow()?.tick ?? -1);
     const was = rankOf(p.renown);
     p.renown += RITUAL.disruptRenown;
     const rank = rankOf(p.renown);

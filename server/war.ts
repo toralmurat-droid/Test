@@ -14,6 +14,7 @@ import { tunnelStrikes, type TunnelStrike } from "../shared/war/tunnels";
 import { warPhase, warView, type WarView } from "../shared/war/view";
 import type { WarPlan } from "../shared/war/intel";
 import { eventVoice, leaderLine } from "../shared/war/heralds";
+import { setWarRelations, warPairs, warRelations } from "../shared/war/feuds";
 import { openKv, type Kv } from "./store";
 
 /**
@@ -23,7 +24,8 @@ import { openKv, type Kv } from "./store";
 export interface WarNews { raid?: { clan: ClanKey; ts: number[] }; rally?: { clan?: ClanKey; was?: ClanKey } }
 export interface WarEvent { at: number; tick: number; kind: "siege" | "flip" | "held"; t: number; by: ClanKey; from: ClanKey; text: string }
 /** `names`: the territory names in id order (optional: saves before 2026-11-15 have none, and their ids are today's). */
-interface Saved { v: 1; state: WarState; minds: Record<ClanKey, Mind>; next: number; log: WarEvent[]; names?: string[] }
+/** `rel`: the last war tick each pair of clans shared a border (shared/war/feuds.ts warRelations; optional: older saves have none). */
+interface Saved { v: 1; state: WarState; minds: Record<ClanKey, Mind>; next: number; log: WarEvent[]; names?: string[]; rel?: (number | null)[] }
 
 const KEY = "war";
 const LOG_MAX = 200;
@@ -161,6 +163,7 @@ export async function startWar(store?: Kv) {
     }
     console.log(`War: tick ${saved.state.tick}, next in ${Math.max(0, Math.round((saved.next - Date.now()) / 1000))} s`);
   }
+  relate(saved.rel ?? []);
   timer = setInterval(() => { step(Date.now()).catch((e) => console.error("War: tick failed:", e)); }, 15_000);
   timer.unref?.();
 }
@@ -178,12 +181,13 @@ export async function step(now: number) {
     saved.next += WAR.tickMs; // first: a tick that throws is skipped, never retried every 15 s
     try { events.push(...tickOnce(at, news)); } catch (e) { console.error("War: tick failed, skipped:", e); }
   }
+  relate();
   const rallyNow = rallyClan(saved.state);
   if (rallyNow !== rallyWas) news.rally = { clan: rallyNow, was: rallyWas };
   saved.log.push(...events);
   if (saved.log.length > LOG_MAX) saved.log.splice(0, saved.log.length - LOG_MAX);
   if (!process.env.NODE_TEST_CONTEXT) for (const e of events) console.log(`War: ${e.text}`);
-  const view = warView(saved.state, saved.next, lastRaided);
+  const view = viewOf(saved);
   listeners.forEach((f) => { try { f(view, events, news); } catch (e) { console.error("War listener:", e); } });
   await kv?.set(KEY, saved).catch((e) => console.error("War: could not save:", e));
 }
@@ -217,7 +221,18 @@ export function addValor(t: number, k: ClanKey, amount: number): boolean {
   return true;
 }
 
-export const warNow = (): WarView | undefined => (saved ? warView(saved.state, saved.next, lastRaided) : undefined);
+/** The snapshot players get, with the clans at war (shared/war/feuds.ts: the client takes them as they are). */
+const viewOf = (s: Saved): WarView => ({ ...warView(s.state, s.next, lastRaided), wars: warPairs() });
+export const warNow = (): WarView | undefined => (saved ? viewOf(saved) : undefined);
+/**
+ * The clans at war (shared/war/feuds.ts) for the war as it stands: after a load (`last`: the saved memory), after every
+ * tick, and once a second from the room (a cheap no-op unless the owners changed outside a tick: tests, a migration).
+ */
+export function relate(last?: readonly unknown[]) {
+  if (!saved) return;
+  setWarRelations(saved.state.owner, saved.state.tick, last);
+  saved.rel = warRelations();
+}
 export const warLog = (n = 50): WarEvent[] => (saved ? saved.log.slice(-n) : []);
 export const warState = (): WarState | undefined => saved?.state;
 /** The orders the leaders gave in the last war tick (not saved), or undefined before the first tick of this process. */
@@ -264,7 +279,7 @@ export function onWar(f: (v: WarView, events: WarEvent[], news: WarNews) => void
 export function flushWar() { if (saved && kv?.setSync) try { kv.setSync(KEY, saved); } catch (e) { console.error("War: could not save:", e); } }
 
 /** Tests: start from a given state without a store or a clock. */
-export function _resetWar(s?: Saved, store?: Kv) { stopWar(); saved = s ?? fresh(Date.now()); saved.names ??= namesNow(); kv = store; valor = TERRITORIES.map(() => ({})); lastOrders = undefined; lastStrikes = []; lastPlans = {}; lastRaided = []; }
+export function _resetWar(s?: Saved, store?: Kv) { stopWar(); saved = s ?? fresh(Date.now()); saved.names ??= namesNow(); kv = store; valor = TERRITORIES.map(() => ({})); lastOrders = undefined; lastStrikes = []; lastPlans = {}; lastRaided = []; relate(saved.rel ?? []); }
 /** Tests: set the last tick's orders. */
 export function _setWarOrders(o: Partial<Record<ClanKey, Orders>> | undefined) { lastOrders = o; lastStrikes = saved ? tunnelStrikes(saved.state, o) : []; lastPlans = saved ? plansOf(saved.state, o, lastStrikes, saved.state.tick) : {}; }
 /** Tests: valor clan `k` has gathered in territory `t` so far this war tick. */
