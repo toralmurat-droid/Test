@@ -132,6 +132,7 @@ export class Minimap {
   sel?: number;
   /** The last frame's map framing (tile at the top-left, canvas px per tile), to turn a click into a tile. */
   private exitRows: ExitRow[] = [];
+  private selBeforeTap?: number;
   private frame?: { x: number; y: number; s: number };
   /** W4: the war roads and marching columns (client/src/warColumns.ts). */
   lines?: WarColumns;
@@ -190,7 +191,7 @@ export class Minimap {
     // Big world map overlay
     this.overlay = document.createElement("div");
     this.overlay.id = "worldmap";
-    this.overlay.innerHTML = `<div class="wm-box"><div class="wm-title"></div><canvas class="wm-map"></canvas><div class="wm-hint"><button type="button" class="wm-center" tabindex="-1" title="Centre on your hero (C)">◎ Centre</button><button type="button" class="wm-war" tabindex="-1" title="Show who holds each land in the clan war, with you on it">War table</button><span class="wm-here"></span><span class="wm-keys-war">M / Esc to close</span><span class="wm-keys">Click a territory to pick it · Drag or I J K L to move · Wheel to zoom · C centres · M / Esc closes</span><span class="wm-touch">Drag · Pinch to zoom · Double-tap to centre</span></div></div>`;
+    this.overlay.innerHTML = `<div class="wm-box"><div class="wm-title"></div><canvas class="wm-map"></canvas><div class="wm-hint"><button type="button" class="wm-center" tabindex="-1" title="Centre on your hero (C)">◎ Centre</button><button type="button" class="wm-war" tabindex="-1" title="Show who holds each land in the clan war, with you on it">War table</button><span class="wm-here"></span><span class="wm-keys-war">M / Esc to close</span><span class="wm-keys"><span class="wm-pick">Click a territory to pick it · </span>Drag or I J K L to move · Wheel to zoom · C centres · M / Esc closes</span><span class="wm-touch">Drag · Pinch to zoom · Double-tap to centre</span></div></div>`;
     this.big = this.overlay.querySelector("canvas")!;
     // Ornate frame: iron-bound oak with gem corners, a title plaque on top and clasps on the sides
     const box = this.overlay.querySelector<HTMLDivElement>(".wm-box")!;
@@ -315,18 +316,16 @@ export class Minimap {
       c.style.cursor = "grab";
       if (this.dragged || ev.type === "pointercancel") return;
       const ex = !warTableOn() && this.exitRows.find((r) => at(ev).x >= r.x && at(ev).x < r.x + r.w && at(ev).y >= r.y && at(ev).y < r.y + r.h);
-      if (ex) { this.focus = { x: ex.tx, y: ex.ty }; return; } // a way out: show it
+      if (ex) { if (!ex.card) this.focus = { x: ex.tx, y: ex.ty }; return; } // a way out: show it (a card just takes the click)
       const row = warTableOn() ? -1 : panelRowAt(this.callBox, at(ev).x, at(ev).y); // (the calls list is not on the war table)
       if (row >= 0 && this.calls[row]) { this.showAt(this.calls[row].x, this.calls[row].y); return; } // a call to arms: centre there
       // A tap on a territory picks it (the other map shows the same one); a second tap soon after centres on the hero
       const p = at(ev), t = performance.now(), l = this.lastTap;
-      if (this.war && (warTableOn() || !(l && t - l.t < 300))) {
-        const hit = warTableOn() ? warTablePick(p.x, p.y) : this.pickFromMap(p.x, p.y);
-        if (warTableOn()) { this.sel = hit === this.sel ? undefined : hit; return; }
-        if (hit !== undefined) this.sel = hit === this.sel ? undefined : hit;
-      }
-      if (l && t - l.t < 300 && Math.hypot(p.x - l.x, p.y - l.y) < 30) { this.lastTap = undefined; this.recentre(); }
-      else this.lastTap = { t, x: p.x, y: p.y };
+      if (this.war && warTableOn()) { const hit = warTablePick(p.x, p.y); this.sel = hit === this.sel ? undefined : hit; return; }
+      if (l && t - l.t < 300 && Math.hypot(p.x - l.x, p.y - l.y) < 30) { this.lastTap = undefined; this.sel = this.selBeforeTap; this.recentre(); return; } // a double-click centres and leaves the pick as it was
+      this.lastTap = { t, x: p.x, y: p.y };
+      this.selBeforeTap = this.sel;
+      if (this.war) { const hit = this.pickFromMap(p.x, p.y); if (hit !== undefined) this.sel = hit === this.sel ? undefined : hit; }
     };
     c.addEventListener("pointerup", up);
     c.addEventListener("pointercancel", up);
@@ -431,6 +430,7 @@ export class Minimap {
     const h = me ? hereAt(Math.floor(me.x / TILE), Math.floor(me.y / TILE)) : undefined;
     const txt = h ? hereCaption(h, areaAt(me!.x, me!.y)) : "";
     this.setTitle(h?.land && h.land !== "oakvale" ? `Map of ${regionName(h.land).replace(/^The /, "the ")}` : "Map of Oakvale");
+    this.overlay.classList.toggle("nopick", !this.war);
     const el = this.overlay.querySelector<HTMLElement>(".wm-here")!;
     if (el.textContent !== txt) el.textContent = txt;
     const war = this.overlay.querySelector<HTMLButtonElement>(".wm-war")!;
@@ -734,7 +734,7 @@ export class Minimap {
       g.fillStyle = "#000"; g.fillText(o.name, lx + 1, ly + 1);
       g.fillStyle = ALLY; g.fillText(o.name, lx, ly);
     }
-    this.exitRows = this.war ? drawHereOnMap(g, { me: me ? { x: me.x / TILE, y: me.y / TILE } : undefined, toScreen: (tx, ty) => T((tx - R.x) * BIG, (ty - R.y) * BIG), s: BIG, w: cw, h: ch, now, font: PF, here: here ?? { near: false }, sel: this.sel, woken: this.woken }) : [];
+    this.exitRows = drawHereOnMap(g, { me: me ? { x: me.x / TILE, y: me.y / TILE } : undefined, toScreen: (tx, ty) => T((tx - R.x) * BIG, (ty - R.y) * BIG), s: BIG, w: cw, h: ch, now, font: PF, here: here ?? { near: false }, sel: this.sel, woken: this.woken });
     // War overlay UI in canvas px: the calls-to-arms list and the hold / siege tooltip
     if (wd) {
       this.calls = currentCalls(wd, me, now);

@@ -53,7 +53,7 @@ export interface HereView {
 }
 
 /** A row of the "Ways out" card: where it sits on the canvas and the tile it leads you to. */
-export interface ExitRow { x: number; y: number; w: number; h: number; tx: number; ty: number }
+export interface ExitRow { x: number; y: number; w: number; h: number; tx: number; ty: number; /** a card with nothing to show: it only swallows the click */ card?: true }
 
 const short = (s: string) => s.replace(/^The /, "");
 
@@ -125,6 +125,7 @@ export function drawHereOnMap(g: CanvasRenderingContext2D, v: HereView): ExitRow
     g.font = `12px ${v.font}`;
     const w = Math.min(300, v.w - 16), h = lines.reduce((n, l) => n + wrap(g, l, w - 20).length, 0) * 16 + 10;
     drawCard(g, 8, v.h - h - 8, w, lines, CYAN, v.font);
+    rows.push({ x: 8, y: v.h - h - 8, w, h, tx: 0, ty: 0, card: true });
   }
   g.restore();
   return rows;

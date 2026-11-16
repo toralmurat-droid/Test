@@ -87,7 +87,7 @@ export const WAYS: Way[] = [
   }),
   ...CROWNWAYS.flatMap((c): Way[] => {
     const a = nearestIn(c.from, c.home.x, c.home.y);
-    return a ? [{ id: `crownway_${c.from}`, name: c.name, a: a.id, b: CROWN_NODE, ta: c.home, tb: crownGateTile(c), req: gateReq(CROWN_LAND) }] : [];
+    return a ? [{ id: `crownway_${c.from}`, name: c.name, a: a.id, b: CROWN_NODE, ta: c.home, tb: crownGateTile(c), req: c.from === "sunscar" ? `${gateReq(CROWN_LAND)}, after Act 1's bosses` : gateReq(CROWN_LAND) }] : [];
   }),
 ];
 
@@ -157,6 +157,3 @@ export function routeLines(steps: readonly Step[]): string[] {
   }
   return out;
 }
-
-/** Number of territories crossed (steps), for "4 steps". */
-export const routeSteps = (steps: readonly Step[]) => steps.length;
