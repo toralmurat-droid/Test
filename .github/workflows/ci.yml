@@ -41,8 +41,12 @@ jobs:
           cache: npm
       - name: Install
         run: npm ci --no-audit --no-fund
-      - name: Unit tests
-        run: npm test
+      - name: Unit tests (only those this PR can affect, see tools/ci/affected-tests.mjs)
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch -q --depth=1 origin "$BASE_SHA" || true
+          bash tools/ci/test-affected.sh "$BASE_SHA"
       - name: Typecheck and build (same as the Dockerfile)
         run: npm run build
       - name: Smoke test (the built server boots and a hero can log in)
