@@ -34,6 +34,8 @@ export class WarColumns {
   private paths = new Map<string, WarPath | null>();
   private msg?: ColumnsMsg;
   private recv = 0;
+  /** Server clock minus this one (ms), from the message's `now`: columns are placed on the server's clock. */
+  private offset = 0;
   private cache: { at: number; list: ColView[] } = { at: -1, list: [] };
   /** Bumped when the roads change (the ground decal redraws). */
   roadsVersion = 0;
@@ -49,7 +51,10 @@ export class WarColumns {
     for (const e of list) if (Array.isArray(e) && e.length >= 3 && Array.isArray(e[2])) this.entries.set(`${e[0]}-${e[1]}`, e);
     this.roadsVersion++; this.cache.at = -1;
   }
-  setColumns(m: ColumnsMsg, now = Date.now()) { this.msg = m; this.recv = now; this.cache.at = -1; }
+  setColumns(m: ColumnsMsg, now = Date.now()) {
+    if (typeof m.now === "number" && Number.isFinite(m.now)) this.offset = m.now - now;
+    this.msg = m; this.recv = now + this.offset; this.cache.at = -1;
+  }
 
   /** The path from `from` to `to` (the entry's own order is a < b: walk b -> a reversed). */
   pathFor(from: number, to: number): WarPath | undefined {
@@ -77,7 +82,7 @@ export class WarColumns {
       const clan = CLAN_KEYS[ci], p = clan && this.pathFor(from, to);
       if (!p) continue;
       // halted by heroes: it stands where it was when the halt began (the message came then)
-      const q = columnPos(p, dep, state === 2 ? this.recv : now, haltMs, meet.get(id));
+      const q = columnPos(p, dep, state === 2 ? this.recv : now + this.offset, haltMs, meet.get(id));
       list.push({ id, clan, from, to, x: q.x, y: q.y, state: state === 2 ? 2 : q.state, men: Math.max(1, size - fallen), clash: state === 3 || q.state === 3 });
     }
     this.cache = { at: now, list };

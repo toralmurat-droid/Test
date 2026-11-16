@@ -37,6 +37,8 @@ export interface MarchHost {
   ranked(heroId: string, rank: string): void;
   /** Trooper slots free for the columns now: WAR_TROOPS.maxTroops less every system before the patrols, these columns included. */
   budget(): number;
+  /** A message to one hero's client ("columns" goes to each hero filtered: their clan's columns, others in scout range). */
+  send(heroId: string, type: string, msg: unknown): void;
 }
 
 // ---- the war roads for the clients ("warroads"), shared by every room -------------------------------------------
@@ -79,7 +81,8 @@ export class WarMarches {
   private clashed = new Set<string>();
   /** Columns whose first fallen soldier the leader already answered. */
   private ambushed = new Set<string>();
-  private sentVersion = -1;
+  /** Per hero: what their last "columns" carried (version, clan, the ids they could see). */
+  private sentTo = new Map<string, string>();
   /** The columns the Herald last announced (their ids), so a sack's news between ticks does not repeat it. */
   private announced = "";
   private sentRoads = !!roadsAll; // (a room opened after the roads were built: its joiners get them all on join)
@@ -135,7 +138,7 @@ export class WarMarches {
     for (const l of [...this.live.values()]) {
       if (want.some((w) => w.m === l.m)) l.lastSeen = now;
       if (now - l.lastSeen > COLUMN.sleepMs) { this.drop(l); continue; } // back on the road unseen; its fallen stay fallen
-      columnSeen(l.m.id, now);
+      columnSeen(l.m.id, now, this);
       // fewer alive than this room fields (soldiers fell in another room): the last ones go
       let extra = l.men.filter(Boolean).length - (l.m.size - marchCol(l.m.id).fallen);
       for (let i = l.men.length - 1; i >= 0 && extra > 0; i--) if (l.men[i]) { this.mobs.delete(l.men[i]); this.h.remove(l.men[i]); l.men[i] = ""; extra--; }
@@ -153,12 +156,32 @@ export class WarMarches {
     this.send(now);
   }
 
-  /** The "columns" message to the room when a column changed (and on every war tick: onWar). */
-  private send(now: number) {
-    const v = columnsVersion();
-    if (v === this.sentVersion) return;
-    this.sentVersion = v;
-    this.h.broadcast("columns", this.view(now));
+  /**
+   * "columns" to each hero whose view changed: a column changed (columnsVersion), or the set the hero may see did (their
+   * clan, or they walked into or out of scout range of another clan's column). `all`: to every hero (a war tick).
+   */
+  private send(now: number, all = false) {
+    const v = columnsVersion(), here = new Set<string>();
+    for (const [hid, h] of this.h.heroes()) {
+      here.add(hid);
+      const ids = this.visible(h, now), key = `${v}|${h.clan ?? ""}|${ids.join()}`;
+      if (!all && this.sentTo.get(hid) === key) continue;
+      this.sentTo.set(hid, key);
+      this.h.send(hid, "columns", this.view(now, h, ids));
+    }
+    for (const hid of this.sentTo.keys()) if (!here.has(hid)) this.sentTo.delete(hid);
+  }
+  /** Ids of the columns hero `h` may see: their own clan's, and any other whose anchor is within COLUMN.scoutTiles. */
+  private visible(h: Pick<TroopHero, "clan" | "x" | "y">, now: number): string[] {
+    const r = COLUMN.scoutTiles * TILE, out: string[] = [];
+    for (const m of warMarches()) {
+      if (m.clan === h.clan) { out.push(m.id); continue; }
+      const p = marchPath(m, false);
+      if (!p) continue;
+      const q = this.posOf(m, p, now);
+      if (Math.hypot(q.x - h.x, q.y - h.y) <= r) out.push(m.id);
+    }
+    return out;
   }
 
   /** Where column m is now; for a live one halted by a fight, the anchor stands between the second ticks too. */
@@ -190,7 +213,7 @@ export class WarMarches {
       l.men[i] = id;
       this.mobs.set(id, { live: l, i });
     }
-    columnSeen(m.id, now);
+    columnSeen(m.id, now, this);
     this.h.broadcast("sfx", { ev: "column_march", id: m.id, x: Math.round(pos.x), y: Math.round(pos.y), clan: m.clan }); // drums: a column comes into sight
   }
 
@@ -308,8 +331,7 @@ export class WarMarches {
    */
   onWar() {
     const ms = warMarches(), now = Date.now(), key = ms.map((m) => m.id).join();
-    this.sentVersion = columnsVersion();
-    this.h.broadcast("columns", this.view(now));
+    this.send(now, true);
     if (!ms.length || key === this.announced) return;
     this.announced = key;
     const on = (m: March) => `the ${CLANS[m.clan].name} on ${TERRITORIES[m.to].name}`, few = ms.slice(0, 3).map(on);
@@ -325,21 +347,27 @@ export class WarMarches {
     }
   }
 
-  /** A hero joined: the war roads built so far and the columns. */
-  join(client: { send(type: string, msg: unknown): void }, now = Date.now()) {
+  /** A hero joined: the war roads built so far and the columns they may see. */
+  join(client: { sessionId: string; send(type: string, msg: unknown): void }, hero: Pick<TroopHero, "clan" | "x" | "y">, now = Date.now()) {
     client.send("warroads", warRoadsMsg());
-    client.send("columns", this.view(now));
+    const ids = this.visible(hero, now);
+    this.sentTo.set(client.sessionId, `${columnsVersion()}|${hero.clan ?? ""}|${ids.join()}`);
+    client.send("columns", this.view(now, hero, ids));
   }
 
-  /** The "columns" message (shared/war/marches.ts ColumnsMsg). */
-  view(now = Date.now()): ColumnsMsg {
-    const cols: ColumnRow[] = warMarches().map((m) => {
+  /**
+   * The "columns" message (shared/war/marches.ts ColumnsMsg) with the server time; for hero `h` only the columns they may
+   * see (`ids`, default visible()) and the meetings of those. Without a hero: every column (tests, tools).
+   */
+  view(now = Date.now(), h?: Pick<TroopHero, "clan" | "x" | "y">, ids = h ? this.visible(h, now) : undefined): ColumnsMsg {
+    const show = ids && new Set(ids);
+    const cols: ColumnRow[] = warMarches().filter((m) => !show || show.has(m.id)).map((m) => {
       const c = marchCol(m.id), p = marchPath(m, false);
       const state = columnHalting(m.id, now) ? 2 : p ? this.posOf(m, p, now).state : now < m.dep ? 0 : 1;
       return [m.id, CLAN_KEYS.indexOf(m.clan), m.from, m.to, m.dep, m.size, c.fallen, Math.round(c.halt), state];
     });
-    const meets = warMeetings();
-    return { tick: warNow()?.tick ?? 0, cols, ...(meets.length ? { meets: meets.map((x) => [x.a, x.b, x.x, x.y, x.at] as [string, string, number, number, number]) } : {}) };
+    const meets = warMeetings().filter((x) => !show || show.has(x.a) || show.has(x.b));
+    return { tick: warNow()?.tick ?? 0, now, cols, ...(meets.length ? { meets: meets.map((x) => [x.a, x.b, x.x, x.y, x.at] as [string, string, number, number, number]) } : {}) };
   }
 
   /** Tests: a column's live state, read-only. */

@@ -28,3 +28,12 @@ test("other clans' columns show only near the hero; the own clan's always", () =
   const at = m.all(10_000)[0];
   assert.equal(m.visible("wardens", at, 10_000).length, 2);
 });
+
+test("columns are placed on the server's clock: the message's `now` gives the offset", () => {
+  const { a, b } = pair(), m = new WarColumns();
+  m.setRoads([roadEntry(a, b)!]);
+  const dep = 1_000_000, server = dep + 40_000, local = server - 7_000; // this computer's clock runs 7 s behind
+  m.setColumns({ tick: 1, now: server, cols: [["c1", 1, a, b, dep, 5, 0, 0, 1]] }, local);
+  const c = m.all(local + 2000)[0], q = columnPos(warPath(a, b)!, dep, server + 2000);
+  assert.ok(Math.hypot(c.x - q.x, c.y - q.y) < 1);
+});

@@ -228,11 +228,12 @@ export function meetingOf(ma: March, pa: WarPath, mb: March, pb: WarPath): Meeti
 }
 
 /**
- * The "columns" message (server -> client, on the war tick, on change and on join): every column of the interval as
+ * The "columns" message (server -> client, to each hero: their clan's columns and others within COLUMN.scoutTiles; on
+ * the war tick, on change, when that set changes and on join), with the server's `now`, the columns of the interval as
  * [id, clan (CLAN_KEYS index), from, to, dep (ms), size (men, officer included), fallen, haltMs, state (ColumnState)],
  * and the meetings as [a, b, x, y (px), at (ms)]. The client walks each column with columnPos on the path of its pair
  * from "warroads" (roads.ts pathOfEntry), the meeting's `at` as meetAt; while state is 2 (halted) it stands.
  */
 export type ColumnRow = [id: string, clan: number, from: number, to: number, dep: number, size: number, fallen: number, haltMs: number, state: ColumnState];
 export type MeetRow = [a: string, b: string, x: number, y: number, at: number];
-export interface ColumnsMsg { tick: number; cols: ColumnRow[]; meets?: MeetRow[] }
+export interface ColumnsMsg { tick: number; /** Server wall time (ms) when sent: the client's clock offset. */ now?: number; cols: ColumnRow[]; meets?: MeetRow[] }
