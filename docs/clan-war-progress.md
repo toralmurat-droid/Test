@@ -1079,3 +1079,5 @@ in every act.
 ## W7 capital cities (in progress)
 
 City band below the Crown, one walled city per clan behind a city gate beside its seat (Murat 2026-11-16). Wardens first (gate at Goldenreach Farms). Plan: see the PR.
+
+Crown of the Marches PR2 (monsters, the Riven King, The Riven Throne chain) in progress.
