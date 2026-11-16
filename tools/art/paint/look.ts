@@ -819,6 +819,49 @@ export const LOOKS: Record<string, Look> = {
     legs: "trousers", legCol: 0x3a3a3a, boots: 0x231a14, bootStyle: "leather",
     sleeve: 0x4a3a30, arms: "cloth", glove: 0x2b1d14, bracer: 0x8e1f1a, weapon: "dagger", fx: 0xffffff,
   },
+  // Clan war W6, town stewards: one per clan, in the clan's cloth and trim (shared/war/clans.ts)
+  steward_wardens: { // a grey-cloaked reeve with a tally staff, a forest-green tabard
+    skin: 0xc49a76, hair: 0x8a8a84, hairStyle: "short", beard: 0x8a8a84, beardStyle: "full", eye: 0x2a2a20,
+    head: "hood", headCol: 0x6a6e6c, headTrim: 0xd9822b,
+    torso: "leather", torsoCol: 0x4a5238, trim: 0xd9822b, tabard: { col: 0x3b4a2c, trim: 0xd9822b, emblem: 0xf0b44a }, belt: 0x2a1e14, buckle: 0xf0b44a,
+    legs: "trousers", legCol: 0x3a3e34, boots: 0x2a2018, bootStyle: "leather",
+    sleeve: 0x5a5e54, arms: "cloth", glove: 0x2a1e14, weapon: "staff", fx: 0xffffff, back: "cape", capeCol: 0x6a6e6c, build: 1.08,
+  },
+  steward_redfang: { // a scarred quartermaster in red leather
+    skin: 0xd0a07c, hair: 0x2a1a14, hairStyle: "short", beard: 0x2a1a14, beardStyle: "stubble", eye: 0x3a2a1a,
+    head: "cap", headCol: 0x5a1812, headTrim: 0x1a1414,
+    torso: "leather", torsoCol: 0x7e1d16, trim: 0x1a1414, belt: 0x1a1414, buckle: 0xe3d6b8, sash: 0x3a2018,
+    legs: "trousers", legCol: 0x2a2224, boots: 0x1a1414, bootStyle: "wrap",
+    sleeve: 0x5a1812, arms: "cloth", glove: 0x1a1414, bracer: 0x3a2018, weapon: "none", fx: 0xffffff, build: 1.12,
+  },
+  steward_host: { // a hooded ossuary clerk, bone-pale, a bone-green sash
+    skin: 0xb8b0a0, hair: 0xd8cfb2, hairStyle: "bald", eye: 0x4f7d6a,
+    head: "hood", headCol: 0x1f2422, headTrim: 0x4f7d6a,
+    torso: "robe", torsoCol: 0x2a302e, trim: 0x4f7d6a, apron: 0x3a4440, belt: 0x4f7d6a, buckle: 0xd8cfb2, sash: 0x4f7d6a,
+    legs: "dress", legCol: 0x1c2020, boots: 0x121616, bootStyle: "shoe",
+    sleeve: 0x2a302e, arms: "cloth", glove: 0xb8b0a0, weapon: "staff", fx: 0xffffff, back: "cape", capeCol: 0x1f2422, fetishes: 0xd8cfb2, build: 0.96,
+  },
+  steward_hidekin: { // a hide-wrapped burrow-warden, horned, a bone-studded harness
+    skin: 0xa07a58, hair: 0x2a1c12, hairStyle: "long", beard: 0x2a1c12, beardStyle: "full", eye: 0x2a1a10,
+    head: "horned", headCol: 0x8a5f2a, headTrim: 0xe2c79a,
+    torso: "leather", torsoCol: 0x6a4a2a, trim: 0xe2c79a, belt: 0x6e1d18, buckle: 0xe2c79a, harness: true,
+    legs: "trousers", legCol: 0x5a3e24, boots: 0x3a281a, bootStyle: "wrap",
+    sleeve: 0x8a5f2a, arms: "cloth", bracer: 0x3a281a, glove: 0x3a281a, weapon: "hammer", fx: 0xffffff, back: "pelt", capeCol: 0x8a5f2a, fetishes: 0xe2c79a, build: 1.2,
+  },
+  steward_veiled: { // a masked envoy in moon-robes, indigo and gold
+    skin: 0xd8b898, hair: 0x1a1a2a, hairStyle: "long", eye: 0xe0a030,
+    head: "hood", headCol: 0x2a2a5a, headTrim: 0xe0a030, mask: 0xd8d4e8,
+    torso: "robe", torsoCol: 0x34346a, trim: 0xe0a030, apron: 0x2a2a5a, belt: 0xe0a030, buckle: 0xf6d26b, sash: 0xe0a030,
+    legs: "dress", legCol: 0x20204a, boots: 0x14143a, bootStyle: "shoe",
+    sleeve: 0x34346a, arms: "cloth", glove: 0xd8b898, weapon: "staff", fx: 0xf6d26b, back: "cape", capeCol: 0x2a2a5a, build: 0.98,
+  },
+  steward_neutral: { // an unaffiliated town reeve: plain drab wool and a ledger belt
+    skin: 0xc8a284, hair: 0x6a5a48, hairStyle: "short", eye: 0x3a2a1a,
+    head: "cap", headCol: 0x5a5448, headTrim: 0x3a342c,
+    torso: "jerkin", torsoCol: 0x6a6458, trim: 0x4a4438, belt: 0x2a1e14, buckle: 0x9a8a5a,
+    legs: "trousers", legCol: 0x3a3830, boots: 0x2a2218, bootStyle: "leather",
+    sleeve: 0x6a6458, arms: "cloth", glove: 0x2a1e14, weapon: "none", fx: 0xffffff, build: 1.04,
+  },
   // The watch quartermaster: the guard's kit in the watch's blue-grey, a big belly, a brass sash, ledger-keeper not spearman
   quartermaster: {
     skin: 0xdcaa80, hair: 0x6a6a68, hairStyle: "short", beard: 0x6a6a68, beardStyle: "full",

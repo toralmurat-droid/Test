@@ -57,7 +57,13 @@
   "rusthealer",
   "ropewarden",
   "ropearmourer",
-  "ropehealer"
+  "ropehealer",
+  "steward_wardens",
+  "steward_redfang",
+  "steward_host",
+  "steward_hidekin",
+  "steward_veiled",
+  "steward_neutral"
  ],
  "image": "{name}.webp",
  "frameWidth": 48,
