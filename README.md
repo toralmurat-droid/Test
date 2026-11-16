@@ -101,7 +101,9 @@ Only the classes in `ACTIVE_CLASSES` can be played. Archived classes keep their 
 - **Act 6 — the Crown of the Marches** (`shared/crown.ts`, being built): the ruined realm of the last High King in the
   middle of the continent (levels 40-50), reached by five Crownways, one from each homeland, once a hero reaches level
   40 (the Sun Gate also wants Act 2 unlocked). Tollcross, the Truce Market, is the safe outpost; the Crown Keep and its
-  Throne Hall stand on the hill at the centre.
+  Throne Hall stand on the hill at the centre. The old court holds its lands (Oathbroken Knights, Crownguard, Hollow
+  Heralds, Court Magi, Gildhounds, Crown Crows, Pretenders, Thronewardens; `server/crownMobs.ts`), and Herald-Marshal
+  Ysmay Corrant's chain, The Riven Throne, climbs from Tollcross to Aldemar, the Riven King (Lv 50), in the Throne Hall.
 - **Dungeons** (`shared/dungeon.ts`): the Mawdeep, the Lantern Crypt and the Undercity.
 - **Quests** (`shared/quests.ts`): zone quest arcs in both acts, quest bosses (some only at night).
 - **Bounty boards** (`shared/bounty.ts`): pick a hunt for your level, paid when the last kill lands.
