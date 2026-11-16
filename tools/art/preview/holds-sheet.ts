@@ -31,7 +31,7 @@ export function drawFort(g: ReturnType<Canvas["getContext"]>, f: HoldFort, cx: n
     g.drawImage(c, cx + (i.dx - i.dy) * 48 - p.ox, cy + (i.dx + i.dy) * 24 - p.oy);
   }
 }
-const planFort = (clan: ClanKey): HoldFort => ({ t: -1, clan, cx: 1000, cy: 1000, cells: FORT_PLANS[clan].cells, walls: [], gates: [], reach: 0 });
+const planFort = (clan: ClanKey): HoldFort => ({ t: -1, clan, tier: 1, cx: 1000, cy: 1000, cells: FORT_PLANS[clan].cells, walls: [], gates: [], reach: 0 });
 
 const items: { name: string; f: HoldFort }[] = CLAN_KEYS.map((k) => ({ name: k, f: planFort(k) }));
 const real: { name: string; f: HoldFort }[] = [];

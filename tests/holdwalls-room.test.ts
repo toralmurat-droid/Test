@@ -5,7 +5,7 @@ import { PLAYER_RADIUS, TILE } from "../shared/constants";
 import { blocked } from "../shared/movement";
 import type { ClanKey } from "../shared/war/clans";
 import { newMinds } from "../shared/war/doctrine";
-import { BLOCKING, FORT_PLANS, fortOf, setHoldOwners, touchesHoldWall } from "../shared/war/holdWalls";
+import { BLOCKING, FORT_PLANS, fortOf, liveTier, setHoldOwners, touchesHoldWall } from "../shared/war/holdWalls";
 import { newWar } from "../shared/war/rules";
 import { HOLDS } from "../shared/war/standards";
 import { _resetWar, warState } from "../server/war";
@@ -18,9 +18,10 @@ const HOLD = HOLDS.find((h) => {
 })!;
 const stop = { up: false, down: false, left: false, right: false };
 
-async function setup(srv: Awaited<ReturnType<typeof startRoom>>, holder: ClanKey) {
+/** The war with `holder` holding HOLD's land, its Hold a camp (fort 0.3, W3: a fresh Hold is an outpost) unless `fort` says otherwise. */
+async function setup(srv: Awaited<ReturnType<typeof startRoom>>, holder: ClanKey, fort = 0.3) {
   _resetWar({ v: 1, state: newWar(), minds: newMinds(), next: Date.now() + 1e9, log: [] });
-  warState()!.owner[HOLD.t] = holder;
+  warState()!.owner[HOLD.t] = holder; warState()!.fort[HOLD.t] = fort;
   const c = await srv.join({ cls: "wizard" });
   await wait(150);
   const room = srv.room, p = room.state.players.get(c.sessionId);
@@ -63,7 +64,7 @@ test("hold walls (room): when the land changes hands, heroes and monsters standi
     mob.x = sx + 4; mob.y = sy; mob.homeX = sx + 4; mob.homeY = sy;
     await wait(1200);
     assert.ok(Math.hypot(p.x - sx, p.y - sy) < 1, "the Wardens' courtyard: nothing to move");
-    warState()!.owner[HOLD.t] = "host"; // the Ossuary Host take the land: its keep rises
+    warState()!.owner[HOLD.t] = "host"; // the Ossuary Host take the land: its keep rises (as a camp here: the test sets no flip reset)
     assert.ok(await until(() => !touchesHoldWall(p.x, p.y, PLAYER_RADIUS) && !touchesHoldWall(mob.x, mob.y, PLAYER_RADIUS), 3000), "both moved out of the new wall");
     assert.ok(!blocked(p.x, p.y) && Math.hypot(p.x - sx, p.y - sy) <= 1.5 * TILE, `the hero stands on free ground next to it (${((p.x - sx) / TILE).toFixed(1)}, ${((p.y - sy) / TILE).toFixed(1)} tiles)`);
     assert.ok(!blocked(mob.x, mob.y) && Math.hypot(mob.x - sx, mob.y - sy) <= 2 * TILE, "the monster too");
@@ -85,5 +86,31 @@ test("hold walls (room): a hero coming back (resume after an update) where a wal
     assert.ok(Math.hypot(p.x - sx, p.y - sy) <= 1.5 * TILE, `back where they stood, or a tile off it (${((p.x - sx) / TILE).toFixed(1)}, ${((p.y - sy) / TILE).toFixed(1)})`);
     assert.ok(!touchesHoldWall(p.x, p.y, PLAYER_RADIUS) && !blocked(p.x, p.y), "not inside the palisade");
     room.state.players.delete(sid);
+  } finally { setHoldOwners([]); await srv.stop(); }
+});
+
+test("hold walls (room, W3): when a Hold grows, heroes where the outer works rise are moved out; when it shrinks or flips, the walls go", async () => {
+  const srv = await startRoom();
+  try {
+    const { p } = await setup(srv, "wardens");
+    const camp = fortOf(HOLD.t, "wardens", 1)!, big = fortOf(HOLD.t, "wardens", 2)!, small = fortOf(HOLD.t, "wardens", 0)!;
+    const inCamp = new Set(camp.walls.map(([x, y]) => `${x},${y}`));
+    const outer = big.walls.find(([x, y]) => !inCamp.has(`${x},${y}`) && Math.max(Math.abs(x - big.cx), Math.abs(y - big.cy)) >= 5); // the fortress's outer palisade
+    assert.ok(outer, "this Hold has outer works");
+    const sx = (outer[0] + 0.5) * TILE, sy = (outer[1] + 0.5) * TILE;
+    p.x = sx; p.y = sy;
+    await wait(1200);
+    assert.ok(Math.hypot(p.x - sx, p.y - sy) < 1 && liveTier(HOLD.t) === 1, "a camp: nothing stands there yet");
+    warState()!.fort[HOLD.t] = 0.7; // built up to a fortress
+    assert.ok(await until(() => liveTier(HOLD.t) === 2 && !touchesHoldWall(p.x, p.y, PLAYER_RADIUS), 2500), "the outer palisade rose and the hero is out of it within the next sweep");
+    assert.ok(!blocked(p.x, p.y) && Math.hypot(p.x - sx, p.y - sy) <= 1.5 * TILE, `on free ground next to it (${((p.x - sx) / TILE).toFixed(1)} tiles)`);
+    assert.ok(touchesHoldWall(sx, sy, PLAYER_RADIUS), "the wall stands");
+    warState()!.control[HOLD.t] = 45; // shaken: a camp again
+    assert.ok(await until(() => liveTier(HOLD.t) === 1 && !touchesHoldWall(sx, sy, PLAYER_RADIUS), 2500), "Control 45: the fortress shows a camp");
+    warState()!.owner[HOLD.t] = "host"; warState()!.fort[HOLD.t] = 0; warState()!.control[HOLD.t] = 60; // a flip as warTick does it
+    assert.ok(await until(() => liveTier(HOLD.t) === 0, 2500), "the new holder starts with an outpost");
+    const hostSmall = fortOf(HOLD.t, "host", 0)!, [wx, wy] = hostSmall.walls[0];
+    assert.ok(touchesHoldWall((wx + 0.5) * TILE, (wy + 0.5) * TILE, PLAYER_RADIUS) && small.walls.length > 0);
+    assert.ok(!touchesHoldWall((camp.walls[0][0] + 0.5) * TILE, (camp.walls[0][1] + 0.5) * TILE, PLAYER_RADIUS) || hostSmall.walls.some(([x, y]) => x === camp.walls[0][0] && y === camp.walls[0][1]), "the camp's palisade is down");
   } finally { setHoldOwners([]); await srv.stop(); }
 });

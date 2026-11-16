@@ -2,18 +2,18 @@
  * Walking round the Hold walls (shared/war/holdWalls.ts) for monsters that steer by themselves (server/warTroops.ts
  * walk: a guard going to its post on the far side of the fort, a man coming out of the courtyard). Away from a fort,
  * or when the straight way is clear, the goal itself; else the farthest tile in sight along the shortest tile path to
- * the goal (a small BFS field round the Hold, cached per goal tile and holder).
+ * the goal (a small BFS field round the Hold, cached per goal tile, holder and tier).
  */
 import { MAP_H, MAP_W, TILE } from "../constants";
 import { blocked } from "../movement";
-import { liveHolder, liveReachPx } from "./holdWalls";
+import { liveHolder, liveReachPx, liveTier } from "./holdWalls";
 import { HOLDS } from "./standards";
 
 /** Tiles round a Hold that a field covers (the goal's tile is always inside it). */
 const FIELD_R = 18;
 /** Tiles of the path looked along for the farthest one in sight (long enough that a hook round stumps reads the same from each tile on it). */
 const CHAIN = 20;
-/** Fields kept (goal tile x holder); all are dropped when there are more. */
+/** Fields kept (goal tile x holder x tier); all are dropped when there are more. */
 const FIELD_MAX = 1500;
 
 interface Field { x0: number; y0: number; w: number; h: number; dist: Int16Array }
@@ -98,7 +98,7 @@ export function fortDetour(x: number, y: number, gx: number, gy: number): { x: n
     const r = liveReachPx(hd.t);
     if (!r || !crossesSquare(x, y, gx, gy, hd.x, hd.y, r + 3 * TILE) || clearLine(x, y, gx, gy)) continue; // (rocks by the walls count: they make the corners)
     const htx = Math.floor(hd.x / TILE), hty = Math.floor(hd.y / TILE);
-    const gtx = Math.floor(gx / TILE), gty = Math.floor(gy / TILE), f = field(htx, hty, gtx, gty, `${hd.t}:${liveHolder(hd.t)}:${gtx},${gty}`);
+    const gtx = Math.floor(gx / TILE), gty = Math.floor(gy / TILE), f = field(htx, hty, gtx, gty, `${hd.t}:${liveHolder(hd.t)}:${liveTier(hd.t)}:${gtx},${gty}`);
     if (!f) return { x: gx, y: gy };
     const at = (tx: number, ty: number) => (tx >= f.x0 && ty >= f.y0 && tx < f.x0 + f.w && ty < f.y0 + f.h ? f.dist[(ty - f.y0) * f.w + tx - f.x0] : -1);
     let tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);

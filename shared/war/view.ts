@@ -6,6 +6,7 @@ import { dayFrac } from "../daynight";
 import { CLAN_KEYS, type ClanKey } from "./clans";
 import type { WarState } from "./rules";
 import { huntedClan, rallyClan, WAR } from "./rules";
+import { holdTiers } from "./holdTiers";
 import { TERRITORIES, type Territory } from "./territories";
 
 export interface WarView {
@@ -25,6 +26,8 @@ export interface WarView {
   rally?: number;
   /** Territories that were attacked in the last war tick (pressure above 0), so the map can hatch where fighting is; absent when none. */
   hot?: number[];
+  /** Each territory's Hold tier (holdTiers.ts: 0 outpost, 1 camp, 2 fortress), by territory id; absent from older servers (read as camps). */
+  tier?: number[];
   /** Pairs of clans at war (shared/war/feuds.ts pairOf), from the server's memory of the borders; the client takes them as they are. */
   wars?: number[];
 }
@@ -33,7 +36,7 @@ export interface WarView {
 export function warView(s: WarState, next: number, raided: readonly number[] = []): WarView {
   const sieges: [number, number, number][] = [];
   s.siege.forEach((sg, t) => { if (sg) sieges.push([t, CLAN_KEYS.indexOf(sg.by), next + (sg.at - s.tick) * WAR.tickMs]); });
-  const v: WarView = { tick: s.tick, next, owner: s.owner.map((k) => CLAN_KEYS.indexOf(k)), control: s.control.map(Math.round), sieges };
+  const v: WarView = { tick: s.tick, next, owner: s.owner.map((k) => CLAN_KEYS.indexOf(k)), control: s.control.map(Math.round), sieges, tier: holdTiers(s) };
   const hunt = huntedClan(s), rally = rallyClan(s), hit = raided.filter((t) => Number.isInteger(t) && t >= 0 && t < s.owner.length);
   if (hunt) v.hunt = CLAN_KEYS.indexOf(hunt);
   if (hit.length) v.raided = [...hit];

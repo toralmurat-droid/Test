@@ -10,6 +10,7 @@ import { garrisonSpots, patrolOf, TROOP } from "../shared/war/patrols";
 import { newWar } from "../shared/war/rules";
 import { HOLDS } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
+import { territoryAt } from "../shared/war/view";
 import { parseTroop, WAR_TROOPS } from "../shared/war/troops";
 import { _resetWar, _valorOf, warState } from "../server/war";
 import { swear } from "../server/warHeroes";
@@ -28,7 +29,8 @@ async function setup(srv: Awaited<ReturnType<typeof startRoom>>, opts: Record<st
   await wait(150);
   const room = srv.room, id = c.sessionId, p = room.state.players.get(id);
   p.level = 30; p.hp = p.maxHp = 1_000_000; p.invulnUntil = 0; p.clan = undefined; p.renown = 0; p.feud = {};
-  const gate = patrolOf(LAND.id)!.pts[0];
+  // on the patrol route inside LAND (W3: a fortress's reach can put the gate spot just past the land's edge)
+  const route = patrolOf(LAND.id)!.pts, gate = route.find((q) => territoryAt(Math.floor(q.x / TILE), Math.floor(q.y / TILE))?.id === LAND.id) ?? route[0];
   p.x = gate.x; p.y = gate.y;
   room.warTroops.tick(Date.now());
   room.state.mobs.forEach((m: any, mid: string) => { if (m.kind !== "trooper") room.state.mobs.delete(mid); });

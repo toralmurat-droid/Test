@@ -129,6 +129,29 @@ test("attachWar: each event gives the herald, a leader's voice and a war event t
   assert.ok(sent[ev - 1][1].name && sent[ev - 1][1].name !== "Herald", "a leader spoke");
 });
 
+test("attachWar (W3): Holds built up to a camp or a fortress: a few Herald lines a tick and a hammer chord at the Hold, no leader, no horn", async () => {
+  const { attachWar } = await import("../server/war");
+  const t0 = 7_000_000_000_000, sv = saved(t0);
+  sv.state.fort = sv.state.fort.map(() => 0.195); // every quiet land crosses the camp line this tick
+  _resetWar(sv);
+  const sent: [string, any][] = [];
+  const off = attachWar({ broadcast: (t, m) => sent.push([t, m]) });
+  await step(t0);
+  off();
+  const grew = warLog().filter((e) => e.kind === "grow");
+  assert.ok(grew.length >= 1 && grew.length <= 3, `${grew.length} announced (a new war raises every camp at once: a few only)`);
+  for (const e of grew) {
+    assert.equal(e.by, e.from);
+    assert.equal(e.by, warNow()!.owner[e.t] !== undefined ? CLAN_KEYS[warNow()!.owner[e.t]] : undefined);
+    assert.equal(e.tier, 1);
+    assert.match(e.text, new RegExp(`raise a camp at ${TERRITORIES[e.t].name}$`));
+    assert.ok(!TERRITORIES[e.t].capitalOf || TERRITORIES[e.t].capitalOf !== e.by, "a capital is a fortress from the start");
+    assert.ok(sent.some(([t, m]) => t === "chat" && m.name === "Herald" && m.text === e.text));
+    assert.ok(sent.some(([t, m]) => t === "sfx" && m.ev === "hold_grow" && m.t === e.t && m.tier === 1 && Number.isFinite(m.x) && Number.isFinite(m.y)));
+  }
+  assert.ok(!sent.some(([t, m]) => t === "warev" && m.kind === "grow"), "no horn for growth");
+});
+
 test("siege windows: valor counts more at a territory under siege", () => {
   const base = newWar();
   const k = CLAN_KEYS.find((c) => targetsOf(base, c).some((t) => !TERRITORIES[t].capitalOf))!;

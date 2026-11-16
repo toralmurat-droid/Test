@@ -18,7 +18,9 @@ import { noMobsAt } from "../shared/spawns";
 import { inVillage } from "../shared/wrath";
 import { CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import { fortDetour } from "../shared/war/holdRoutes";
-import { garrisonCount, garrisonSpots, patrolCount, patrolOf, patrolPos, TROOP } from "../shared/war/patrols";
+import { garrisonSpots, patrolCount, patrolOf, patrolPos, TROOP } from "../shared/war/patrols";
+import { holdGuards, viewTier } from "../shared/war/intel";
+import type { HoldTier } from "../shared/war/holdTiers";
 import { RENOWN_RANKS, rankOf } from "../shared/war/renown";
 import { TERRITORIES } from "../shared/war/territories";
 import { columnLead, parseTroop, troopLevel, troopStats, troopName, troopStance, troopWeapon, WAR_TROOPS, type TroopStance } from "../shared/war/troops";
@@ -66,7 +68,8 @@ export interface WarTroopsHost {
 type Role = "march" | "guard";
 /** One place in a land's force: who fills it (or when its man fell). */
 interface Slot { role: Role; i: number; officer: boolean; id: string; fellAt: number }
-interface Land { t: number; clan?: ClanKey; lastHero: number; slots: Slot[] }
+/** `tier`: the Hold's tier its guards stand round (holdTiers.ts, from the war snapshot): their number and posts follow it. */
+interface Land { t: number; clan?: ClanKey; tier: HoldTier; lastHero: number; slots: Slot[] }
 /** A soldier's fighting state: a patrol trooper's, or a caravan escort's (server/warCaravans.ts). */
 export interface Fighter { clan: ClanKey; officer: boolean; nextPick: number; near: boolean; nextRush: number; rushUntil: number; rushHit: boolean; nextThrow: number; throwing: boolean }
 /**
@@ -198,13 +201,13 @@ export class WarTroops {
     return l.length;
   }
 
-  /** How many guards territory t's Hold should field now (its Control, its garrison spots; none while sacked), whatever the room's budget. */
+  /** How many guards territory t's Hold should field now (its tier and Control, its garrison spots; none while sacked), whatever the room's budget. */
   private guardsWanted(t: number): number {
     const v = warNow();
     if (!v || !CLAN_KEYS[v.owner[t]] || !patrolOf(t)) return 0;
     const off = this.guardsOff.get(t);
     if (off !== undefined && v.tick < off) return 0;
-    return Math.min(garrisonCount(v.control[t] ?? 100), garrisonSpots(t, TROOP.garrisonMax).length);
+    return holdGuards(t, v.control[t] ?? 100, viewTier(v, t));
   }
 
   /**
@@ -259,7 +262,7 @@ export class WarTroops {
       }
       const land = this.lands.get(t.id);
       if (best <= WAR_TROOPS.wakeTiles) {
-        if (!land) this.lands.set(t.id, { t: t.id, lastHero: now, slots: [] }); else land.lastHero = now;
+        if (!land) this.lands.set(t.id, { t: t.id, tier: viewTier(v, t.id), lastHero: now, slots: [] }); else land.lastHero = now;
       }
       const l = this.lands.get(t.id);
       if (l && now - l.lastHero < WAR_TROOPS.sleepMs && patrolOf(t.id)) near.push([t.id, best]);
@@ -279,9 +282,11 @@ export class WarTroops {
       const fresh = !land.clan || flipped;
       land.clan = clan;
       const control = v!.control[t] ?? 100, siege = v!.sieges.some((s) => s[0] === t);
+      // the Hold grew or shrank (W3): its guards walk to the new tier's posts, the count follows like a Control change
+      land.tier = viewTier(v!, t);
       const off = this.guardsOff.get(t);
       if (off !== undefined && v!.tick >= off) this.guardsOff.delete(t);
-      const marchers = siege ? 0 : patrolCount(control), guards = this.guardsOff.has(t) ? 0 : Math.min(garrisonCount(control), garrisonSpots(t, TROOP.garrisonMax).length); // (a sacked Hold's guards stay down)
+      const marchers = siege ? 0 : patrolCount(control), guards = this.guardsOff.has(t) ? 0 : holdGuards(t, control, land.tier); // (a sacked Hold's guards stay down)
       const want = Math.min(marchers + guards, budget);
       budget -= want;
       const slots: Slot[] = [], m: Slot[] = [], g: Slot[] = [];
@@ -326,10 +331,16 @@ export class WarTroops {
     land.slots = []; land.clan = undefined;
   }
 
+  /** Guard post i round territory t's Hold at the tier its land stands at now. */
+  private guardPost(t: number, i: number) {
+    const tier = this.lands.get(t)?.tier ?? 1;
+    return garrisonSpots(t, TROOP.garrison[tier][1], tier)[i];
+  }
+
   /** Where a trooper of this slot belongs now: its place in the marching column, or its guard post. */
   private postOf(t: number, s: Slot, now: number): { x: number; y: number } {
     const p = patrolOf(t)!;
-    if (s.role === "guard") { const g = garrisonSpots(t, TROOP.garrisonMax)[s.i]; return g ? { x: g.x, y: g.y } : { ...p.pts[0] }; }
+    if (s.role === "guard") { const g = this.guardPost(t, s.i); return g ? { x: g.x, y: g.y } : { ...p.pts[0] }; }
     const lead = columnLead(p, now), q = patrolPos(p, lead.d - (s.i >> 1) * TROOP.rankGap), side = s.i & 1 ? 1 : -1;
     const ox = q.x - q.dy * side * TROOP.lateral, oy = q.y + q.dx * side * TROOP.lateral;
     return offLimits(ox, oy) || blocked(ox, oy) ? { x: q.x, y: q.y } : { x: ox, y: oy };
@@ -487,7 +498,7 @@ export class WarTroops {
   /** At its place: a guard looks out from the Hold, a marcher along the route. */
   private face(m: TroopMob, tr: Troop, now: number) {
     let fx: number, fy: number;
-    if (tr.slot.role === "guard") { const g = garrisonSpots(tr.t, TROOP.garrisonMax)[tr.slot.i]; fx = g?.fx ?? 0; fy = g?.fy ?? 1; }
+    if (tr.slot.role === "guard") { const g = this.guardPost(tr.t, tr.slot.i); fx = g?.fx ?? 0; fy = g?.fy ?? 1; }
     else { const p = patrolOf(tr.t)!, q = patrolPos(p, columnLead(p, now).d); fx = q.dx; fy = q.dy; }
     m.dir = Math.abs(fx) > Math.abs(fy) ? (fx > 0 ? "right" : "left") : (fy > 0 ? "down" : "up");
   }
