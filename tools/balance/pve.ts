@@ -12,7 +12,8 @@
  *   win = every man down; also how often the hero cut at least half of it (the most an ambush takes off the attack, COLUMN.floor).
  * --hunters: the hero alone against a manhunter squad (shared/war/feuds.ts FEUD.hunt) at each tier that sends one, Lv 15 / 30 / 45.
  * --troops: the hero alone against a clan soldier, a captain and 3 soldiers of its level (shared/war/troops.ts), at Lv 8 / 20 / 45 (--clans: each clan at Lv 20;
- *   --garrison: a Hold's whole garrison at Control 100, 3 / 6 / 8 guards for an outpost / camp / fortress, at Lv 20 and 45).
+ *   --garrison: a Hold's whole garrison at Control 100, 3 / 6 / 8 guards for an outpost / camp / fortress, at Lv 20 and 45,
+ *   and a contested town's gate guard (shared/war/towns.ts: a captain and 4 soldiers) at Lv 17 / 25 / 33).
  * --champions: one fight against each champion (shared/champions.ts, a 1D version of its affixes) beside the same plain monster.
  *
  * It reuses the PvP simulator (tools/balance/duel.ts): the same hero bot, skill engine, builds (rushing one branch),
@@ -25,6 +26,7 @@
  * Monsters raised or called mid-fight (Necromancer skeletons, Chief reinforcements, the King's servants) are left out,
  * so boss win rates read a bit high.
  */
+import { TOWN } from "../../shared/war/towns";
 import { NIGHT_RAID } from "../../shared/raiders";
 import { ACTIVE_CLASSES, ClassKind } from "../../shared/classes";
 import { BANDIT_AI, BANDIT_ROLES, CHIEF } from "../../shared/bandits";
@@ -597,16 +599,18 @@ function bossRun(cls: ClassKind, b: BossDef, build: Build, potions = 5): RunResu
 }
 
 /** Clan troopers (shared/war/troops.ts): the hero alone against `n` of its level (clans in turn), 5 heal + 5 mana potions. */
-function troopRun(cls: ClassKind, level: number, n: number, build: Build, seed: number, officer = false, clan?: ClanKey, potions = 5): RunResult {
+/** `officer`: every trooper an officer, or "lead": only the first (a gate guard: a captain and his soldiers). */
+function troopRun(cls: ClassKind, level: number, n: number, build: Build, seed: number, officer: boolean | "lead" = false, clan?: ClanKey, potions = 5): RunResult {
   const h = make("h", cls, level, build);
   const pack: Pack = { heal: potions, mana: potions, healUsed: 0, manaUsed: 0, size: potionSize(level), lastDrink: -1e9 };
   const ms = Array.from({ length: n }, (_, k) => {
-    const sp = mobSpec("trooper", level), st = troopStats(clan ?? CLAN_KEYS[(seed + k) % CLAN_KEYS.length], level, officer);
+    const off = officer === true || (officer === "lead" && k === 0);
+    const sp = mobSpec("trooper", level), st = troopStats(clan ?? CLAN_KEYS[(seed + k) % CLAN_KEYS.length], level, off);
     const R = WAR_TROOPS.rush;
     const J = WAR_TROOPS.javelin;
     Object.assign(sp, { hp: st.hp, dmg: st.dmg, speed: st.speed, cd: st.cd, lunge: { min: R.min, max: R.max, every: R.everyMs, mult: R.dmgMult } });
     sp.specials.push({ name: "Javelin", every: J.everyMs, windup: J.windupMs, min: J.min, max: J.max, radius: J.radius + 4, mult: J.dmgMult, at: "target", shot: { speed: J.speed, radius: J.radius } });
-    if (officer) sp.poise *= TROOP_OFFICER.hp;
+    if (off) sp.poise *= TROOP_OFFICER.hp;
     return new MobF(sp, "t" + k);
   });
   const d = new PveDuel(h, ms, pack, 0), hp0 = h.hp;
@@ -868,7 +872,7 @@ if (process.argv[1]?.includes("pve")) {
   if (TROOPS) {
     console.log("Clan troopers: the hero alone vs N troopers of its level (clans in turn), 5 heal + 5 mana potions. Cell = win% / HP lost (whole fight) / fight s");
     console.log("".padEnd(18) + CLASSES.map((c) => c.padEnd(20)).join(""));
-    const row = (label: string, L: number, k: number, officer: boolean, clan?: ClanKey) => {
+    const row = (label: string, L: number, k: number, officer: boolean | "lead", clan?: ClanKey) => {
       let line = label.padEnd(18);
       for (const c of CLASSES) {
         let won = 0, hp = 0, sec = 0;
@@ -881,6 +885,8 @@ if (process.argv[1]?.includes("pve")) {
     if (process.argv.includes("--clans")) for (const k of CLAN_KEYS) row(`Lv20 ${k}`, 20, 1, false, k);
     // --garrison (W3): a whole Hold garrison at full Control, outpost / camp / fortress (patrols.ts TROOP.garrison), all at once
     if (process.argv.includes("--garrison")) for (const L of [20, 45]) TROOP.garrison.forEach(([, top], tier) => row(`Lv${L} ${["outpost", "camp", "fort"][tier]} x${top}`, L, top, false));
+    // --garrison (W6): a contested town's gate guard (shared/war/towns.ts TOWN: a captain and his soldiers), at the patron lands' levels
+    if (process.argv.includes("--garrison")) for (const L of [17, 25, 33]) row(`Lv${L} gate 1+${TOWN.guards}`, L, TOWN.captain + TOWN.guards, "lead");
   }
   if (CHAMPS) {
     console.log("Champions: the hero alone at the monster's level, 3 heal + 3 mana potions. Cell = win% / HP lost / fight s (plain -> champion)");

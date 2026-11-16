@@ -15,6 +15,7 @@
 //   HOLDFIGHT=1 (with WAR=1): the bots, sworn to the Redfang, hop about the courtyards of three Wardens Holds; the troopers chase them round the walls (shared/war/holdRoutes.ts)
 //   COLUMN=1 (with WAR=1): a clan is ordered to attack along a war road and its column (shared/war/marches.ts) marches past the first bot, kept live the whole run (server/warMarches.ts)
 //   BATTLE=1 (with WAR=1): a pitched battle (shared/war/battles.ts) is fought at an Act 1 front, full pools (300 a side), with the first bot (sworn to the defender) in the middle of the field the whole run (server/warBattles.ts)
+//   TOWN=1 (with WAR=1): every capturable town is contested and the third bot stands at Saltmere's gate muster (server/warTowns.ts)
 //   RITUAL=1 (with WAR=1): the rituals run on a clock shifted to noon and the second bot stands at the circle (server/warRituals.ts)
 //   CAST=1 SPREAD=1: the Summoner bots cast wisps, blades, black holes and the Void Arsenal non-stop (tools/perf/bots.ts)
 //   TIDE=1: a Gloam Tide march is out the whole time, its last wave all at once (TIDE.maxAlive marchers, server/tide.ts)
@@ -127,6 +128,13 @@ async function main() {
       const pl = [...room.state.players.values()][1];
       if (pl) { pl.x = at.x + 48; pl.y = at.y; }
     }
+  }
+  if (process.env.TOWN && process.env.WAR) { // W6: every town contested; the third bot stands at Saltmere's gate muster, so its guard stands and fights
+    const { warState, _setTown } = await import("../../server/war"), { TOWNS, townPatron, gatePx } = await import("../../shared/war/towns"), { CLAN_KEYS } = await import("../../shared/war/clans");
+    const st = warState()!;
+    for (const t of TOWNS) { const k = st.owner[townPatron(t.id)], by = CLAN_KEYS.find((c) => c !== k)!; _setTown(t.id, { k, c: { by, until: st.tick + 3, ext: 0 } }); st.owner[townPatron(t.id)] = by; }
+    const g = gatePx(TOWNS[0]), pl = [...room.state.players.values()][2];
+    if (pl) { pl.x = g.x; pl.y = g.y; }
   }
   let columnId = "";
   if (process.env.COLUMN && process.env.WAR) {

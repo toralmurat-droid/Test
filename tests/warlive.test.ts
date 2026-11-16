@@ -5,7 +5,8 @@ import { newMinds } from "../shared/war/doctrine";
 import { newWar, targetsOf, valorForce, WAR, warTick } from "../shared/war/rules";
 import { TERRITORIES } from "../shared/war/territories";
 import { territoryAt, warView } from "../shared/war/view";
-import { _resetWar, addValor, onWar, step, warLog, warNow, type SavedWar } from "../server/war";
+import { _resetWar, addValor, onWar, step, warLog, warNow, warTowns, type SavedWar } from "../server/war";
+import { townCounts } from "../shared/war/towns";
 import type { Kv } from "../server/store";
 
 const memKv = () => { const m = new Map<string, string>(); const kv: Kv = { get: async (k) => (m.has(k) ? JSON.parse(m.get(k)!) : undefined), set: async (k, v) => { m.set(k, JSON.stringify(v)); } }; return { kv, m }; };
@@ -242,12 +243,12 @@ test("live war (W4 review B1): with no players the server war plays exactly the 
     const owners: string[] = [];
     let meetings = 0;
     for (let i = 0; i < N; i++) {
-      const before = JSON.parse(JSON.stringify(warState())), at = warNow()!.next;
+      const before = JSON.parse(JSON.stringify(warState())), at = warNow()!.next, towns = townCounts(warTowns()); // (W6: the towns it holds feed the income)
       const met = warMeetings();
       await step(at);
       meetings += met.length;
       if (check) { // the same tick by the rules alone, with the orders the server applied and no march mults
-        warTick(before, warOrders()!, { phase: warPhase(at), valor: TERRITORIES.map(() => ({})) });
+        warTick(before, warOrders()!, { phase: warPhase(at), valor: TERRITORIES.map(() => ({})), towns });
         assert.deepEqual(warState(), before, `tick ${i}`);
       }
       owners.push(warState()!.owner.join());
