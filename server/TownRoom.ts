@@ -749,6 +749,7 @@ export class TownRoom extends Room<TownState> {
     remove: (id) => { this.state.mobs.delete(id); }, mob: (id) => this.state.mobs.get(id),
     heroes: () => this.state.players.entries(), hero: (id) => this.state.players.get(id), broadcast: (type, msg) => this.broadcast(type, msg),
     tell: (pid, text) => this.clients.getById(pid)?.send("chat", { id: "", name: "Herald", text }),
+    send: (pid, type, msg) => this.clients.getById(pid)?.send(type, msg),
     budget: () => WAR_TROOPS.maxTroops - this.caravans.count - this.sieges.count - this.tunnels.count - this.rituals.count - this.feuds.count - this.marches.count,
     ranked: (pid, rank) => { const c = this.clients.getById(pid), p = this.state.players.get(pid); if (c && p) { c.send("clan", clanView(p)); c.send("chat", { id: "", name: "Herald", text: `Your renown grows: you are now ${rank}.` }); } },
   }, this.warTroops);
@@ -1218,7 +1219,7 @@ export class TownRoom extends Room<TownState> {
     const war = warNow(); if (war) client.send("war", war); // the clan war front plaque (client/src/warPlaque.ts)
     client.send("siege", this.sieges.view()); // the live siege battle's fronts (server/warSieges.ts)
     client.send("tunnels", this.tunnels.view()); // Hide-Kin tunnel mouths (server/warTunnels.ts)
-    this.marches.join(client); // the war roads and the marching columns (server/warMarches.ts)
+    this.marches.join(client, p); // the war roads and the marching columns (server/warMarches.ts)
     client.send("rituals", this.rituals.view()); // the Veiled noon ritual circle (server/warRituals.ts)
     client.send("holds", this.holds.view()); // sacked Holds and banners going up (server/warHolds.ts)
     client.send("clan", clanView(p));

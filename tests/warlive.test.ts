@@ -227,3 +227,95 @@ test("live war (W4): a column's fallen soldiers weaken its attack at the next ti
   assert.ok(cut.st.pressure[cut.c.to] < full.st.pressure[full.c.to], "a column cut down lands weaker");
   cut.st.pressure.forEach((p: number, t: number) => { if (t !== cut.c.to) assert.equal(p, full.st.pressure[t]); });
 });
+
+test("live war (W4 review B1): with no players the server war plays exactly the rules' war; meetings cost no men", async () => {
+  const { warOrders, warState, warMeetings } = await import("../server/war");
+  const { COLUMN } = await import("../shared/war/marches");
+  const { warPhase } = await import("../shared/war/view");
+  const t0 = 10_000_000_000_000, N = 300;
+  const run = async (check: boolean) => {
+    _resetWar(saved(t0));
+    const owners: string[] = [];
+    let meetings = 0;
+    for (let i = 0; i < N; i++) {
+      const before = JSON.parse(JSON.stringify(warState())), at = warNow()!.next;
+      const met = warMeetings();
+      await step(at);
+      meetings += met.length;
+      if (check) { // the same tick by the rules alone, with the orders the server applied and no march mults
+        warTick(before, warOrders()!, { phase: warPhase(at), valor: TERRITORIES.map(() => ({})) });
+        assert.deepEqual(warState(), before, `tick ${i}`);
+      }
+      owners.push(warState()!.owner.join());
+    }
+    return { owners, meetings };
+  };
+  const a = await run(true);
+  const saved2 = { ...COLUMN };
+  try {
+    Object.assign(COLUMN, { clashLoss: 0, clashCap: 0 });
+    const b = await run(false);
+    assert.deepEqual(b.owners, a.owners, "the clash formula plays no part");
+  } finally { Object.assign(COLUMN, saved2); }
+  assert.ok(a.meetings > 0, `columns met (${a.meetings}) and cost nothing`);
+});
+
+/** Steps the war from a fresh start until the interval has a meeting; returns it. */
+async function untilMeeting(t0: number) {
+  const { warMeetings } = await import("../server/war");
+  _resetWar(saved(t0));
+  for (let i = 0; i < 400; i++) { const mt = warMeetings()[0]; if (mt) return mt; await step(warNow()!.next); }
+  throw new Error("no meeting in 400 ticks");
+}
+
+test("live war (W4 review B2): a meeting is settled once at its time, marked sim or live (both columns live in one room), and costs no men", async () => {
+  const { marchCol, columnSeen, columnLost, columnsVersion, _marchMults, warMarches } = await import("../server/war");
+  const t0 = 11_000_000_000_000;
+  // unseen: marked "sim", nobody falls
+  let mt = await untilMeeting(t0);
+  assert.ok(mt.at < warNow()!.next, "before the next tick");
+  await step(mt.at - 1000);
+  assert.equal(marchCol(mt.a).met, undefined, "not before its time");
+  const v0 = columnsVersion();
+  await step(mt.at + 1);
+  assert.equal(marchCol(mt.a).met, "sim"); assert.equal(marchCol(mt.b).met, "sim");
+  assert.equal(marchCol(mt.a).fallen, 0); assert.equal(marchCol(mt.b).fallen, 0);
+  assert.ok(columnsVersion() > v0, "the clients hear of it");
+  const v1 = columnsVersion();
+  await step(mt.at + 20_000);
+  assert.equal(columnsVersion(), v1, "settled once");
+  // live in two different rooms: still "sim"
+  mt = await untilMeeting(t0 + 1);
+  columnSeen(mt.a, mt.at - 500, "room1"); columnSeen(mt.b, mt.at - 500, "room2");
+  await step(mt.at + 1);
+  assert.equal(marchCol(mt.a).met, "sim", "live, but not in one room");
+  // live in one room: "live"; its real deaths reach the next tick's attack
+  mt = await untilMeeting(t0 + 2);
+  columnSeen(mt.a, mt.at - 500, "room1"); columnSeen(mt.b, mt.at - 500, "room1");
+  await step(mt.at + 1);
+  assert.equal(marchCol(mt.a).met, "live"); assert.equal(marchCol(mt.b).met, "live");
+  assert.deepEqual(_marchMults(), [], "no formula losses");
+  assert.ok(columnLost(mt.a, 2, mt.at + 2000));
+  const A = warMarches().find((x) => x.id === mt.a)!;
+  assert.deepEqual(_marchMults(), [{ t: A.to, k: A.clan, mult: Math.max(0.5, (A.size - 2) / A.size) }]);
+});
+
+test("live war (W4 review): an old save with orders ahead on another map drops them and its columns; on the same map keeps them", async () => {
+  const { migrateWar, startWar, stopWar, warMarches, marchCol } = await import("../server/war");
+  const names = TERRITORIES.map((t) => t.name), still = Object.fromEntries(CLAN_KEYS.map((k) => [k, { defend: 1, attack: [] }]));
+  const old = { ...saved(1), ahead: still, cols: { "0-redfang-1-2": { fallen: 3, halt: 0 } } } as SavedWar;
+  const moved = [...names.slice(0, -2), names[names.length - 1], names[names.length - 2]];
+  const m = migrateWar(old, moved, names);
+  assert.equal(m.ahead, undefined); assert.equal(m.cols, undefined);
+  const same = migrateWar(old, names, names);
+  assert.deepEqual(same.ahead, still); assert.deepEqual(same.cols, old.cols);
+  // through a load: another map gives orders afresh (columns march), the same map keeps the saved "defend all" (none)
+  for (const [n, want] of [[moved, true], [names, false]] as const) {
+    const { kv, m: mem } = memKv(), t0 = 12_000_000_000_000;
+    mem.set("war", JSON.stringify({ ...old, next: t0, names: n }));
+    _resetWar(undefined); stopWar();
+    await startWar(kv); stopWar();
+    assert.equal(warMarches().length > 0, want, want ? "orders given afresh" : "the saved orders ahead");
+    assert.equal(marchCol("0-redfang-1-2").fallen, 0, "no column of the old interval");
+  }
+});

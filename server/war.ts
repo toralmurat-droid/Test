@@ -17,7 +17,7 @@ import { eventVoice, leaderLine } from "../shared/war/heralds";
 import { holdGrew, HOLD_TIER_KEYS } from "../shared/war/holdTiers";
 import { bannerSpot } from "../shared/war/holdSack";
 import { atWar, setWarRelations, warPairs, warRelations } from "../shared/war/feuds";
-import { clashLosses, COLUMN, marchesOf, marchMult, meetingOf, plansOf, type March, type Meeting } from "../shared/war/marches";
+import { COLUMN, marchesOf, marchMult, meetingOf, plansOf, type March, type Meeting } from "../shared/war/marches";
 import { pathKnown, warPath, type WarPath } from "../shared/war/roads";
 import { openKv, type Kv } from "./store";
 
@@ -67,7 +67,7 @@ let marches: March[] = [];
 const paths = new Map<string, WarPath>();
 let meets: Meeting[] | undefined;
 /** Columns a room has as real troopers (id -> last time seen), and those halted by a fight with heroes right now. */
-const seenLive = new Map<string, number>(), halting = new Map<string, number>();
+const seenLive = new Map<string, Map<unknown, number>>(), halting = new Map<string, number>();
 /** Hero name -> the war tick they last joined a column in (one join per hero per war tick). */
 const joined = new Map<string, number>();
 /** Bumped on every column change rooms should pass on ("columns"); the war save is dirty since `dirtyAt` (0: clean). */
@@ -135,7 +135,9 @@ export function migrateWar(saved: Saved, oldNames: readonly string[], names: rea
     return [k, m];
   })) as Record<ClanKey, Mind>;
   const log = saved.log.flatMap((e) => { const t = re(e.t); return t === undefined ? [] : [{ ...e, t }]; });
-  return { ...saved, state, minds, log, names: [...names] };
+  const out: Saved = { ...saved, state, minds, log, names: [...names] };
+  if (oldNames.length !== names.length || oldNames.some((n, i) => n !== names[i])) { delete out.ahead; delete out.cols; } // (orders and columns name territory ids: given afresh on load)
+  return out;
 }
 
 /**
@@ -238,7 +240,7 @@ function tickOnce(at: number, news: WarNews): WarEvent[] {
   const raid = nightRaid(s, phase); // (likewise: the lands warTick strikes)
   lastRaided = raid?.ts ?? [];
   if (raid?.ts.length) news.raid = { clan: raid.clan, ts: [...raid.ts] };
-  settleMeetings(Infinity); // a meeting nobody saw is fought by the formula before the attack lands
+  settleMeetings(Infinity); // (marks the meetings not yet marked; they cost no men)
   warTick(s, orders, { phase, valor, march: marchMults() });
   lastOrders = orders;
   valor = TERRITORIES.map(() => ({}));
@@ -314,7 +316,7 @@ function lookAhead(at: number) {
   marches = marchesOf(lastPlans, deployments(s, saved.ahead, warPhase(at + WAR.tickMs)).attack, s.tick, at);
   const cols = (saved.cols ??= {});
   for (const id of Object.keys(cols)) if (!marches.some((m) => m.id === id)) delete cols[id]; // (a column of an older interval)
-  paths.clear(); meets = undefined; colVersion++;
+  paths.clear(); meets = undefined; seenLive.clear(); halting.clear(); colVersion++;
 }
 
 /** The share of each cut-down column's attack that lands (TickExtra.march): only columns that lost men. */
@@ -353,22 +355,26 @@ export function warMeetings(): Meeting[] {
 /** The meeting column `id` has this interval, if any. */
 export const meetingFor = (id: string): Meeting | undefined => warMeetings().find((x) => x.a === id || x.b === id);
 
+/** Were both columns live in one room at about time `at` (each reported within 2 s before it, by the same room)? */
+function liveTogether(a: string, b: string, at: number): boolean {
+  const ra = seenLive.get(a), rb = seenLive.get(b);
+  if (!ra || !rb) return false;
+  for (const [room, t] of ra) if (t >= at - 2000 && (rb.get(room) ?? -Infinity) >= at - 2000) return true;
+  return false;
+}
 /**
- * Meetings whose time has come (by `now`; Infinity at the tick): one a room saw live was fought there (its real deaths
- * count); one nobody saw costs both sides clashLosses. Settled once each.
+ * Meetings whose time has come (by `now`; Infinity at the tick), marked once each: "live" when both columns stood in
+ * one room (they fought there: only real deaths count, through columnLost), "sim" otherwise. A meeting costs no men by
+ * itself (Murat's call on the W4 review: losses only where a hero is involved), so the war without players plays
+ * exactly as before W4; both columns still stand COLUMN.clashMs (the clock) and the clients show it.
  */
 function settleMeetings(now: number) {
   if (!saved || !marches.length) return;
   for (const mt of warMeetings()) {
     if (mt.at > now) continue;
-    const ca = colOf(mt.a), cb = colOf(mt.b), A = marchOf(mt.a), B = marchOf(mt.b);
-    if (ca.met || cb.met || !A || !B) continue;
-    const live = [mt.a, mt.b].some((id) => (seenLive.get(id) ?? -Infinity) >= mt.at - 2000);
-    if (!live) {
-      const [la, lb] = clashLosses(A.size - ca.fallen, B.size - cb.fallen, A.force, B.force);
-      ca.fallen = Math.min(A.size, ca.fallen + la); cb.fallen = Math.min(B.size, cb.fallen + lb);
-    }
-    ca.met = cb.met = live ? "live" : "sim";
+    const ca = colOf(mt.a), cb = colOf(mt.b);
+    if (ca.met || cb.met || !marchOf(mt.a) || !marchOf(mt.b)) continue;
+    ca.met = cb.met = liveTogether(mt.a, mt.b, mt.at) ? "live" : "sim";
     dirty(Number.isFinite(now) ? now : Date.now());
   }
 }
@@ -395,11 +401,13 @@ export function columnHalt(id: string, ms: number, now = Date.now()): number {
 }
 /** Is column `id` halted by a fight right now (a room reported it within the last 2.5 s)? */
 export const columnHalting = (id: string, now = Date.now()) => now - (halting.get(id) ?? -Infinity) <= 2500;
-/** A room has column `id` as real troopers now (an unseen meeting is fought by the formula, a seen one in the room). */
-export function columnSeen(id: string, now = Date.now()) {
+/** Room `room` has column `id` as real troopers now (a meeting of two columns live in one room is a live clash). */
+export function columnSeen(id: string, now = Date.now(), room: unknown = "") {
   const h = halting.get(id);
   if (h !== undefined && now - h > 2500) { halting.delete(id); colVersion++; } // its halt ended
-  seenLive.set(id, now);
+  let r = seenLive.get(id);
+  if (!r) seenLive.set(id, (r = new Map()));
+  r.set(room, now);
 }
 /** Hero `name` joined column `id` on arrival: true once per hero per war tick (the caller pays). */
 export function columnJoined(id: string, name: string): boolean {
@@ -425,8 +433,9 @@ export const warStrikes = (): readonly TunnelStrike[] => lastStrikes;
 export { plansOf };
 /**
  * Clan `k`'s attacks of the next war tick (W4: the orders come one tick ahead, and their columns march now), for its
- * sworn heroes only (server/warIntel.ts): orders are secret from the other clans. Undefined before the orders are known
- * or when the clan gave no orders.
+ * sworn heroes only (server/warIntel.ts): the plan is secret from the other clans, though its marching columns are not
+ * (server/warMarches.ts sends each hero their own clan's columns and any other within COLUMN.scoutTiles of them).
+ * Undefined before the orders are known or when the clan gave no orders.
  */
 export const warPlan = (k: ClanKey): WarPlan | undefined => lastPlans[k];
 /** Called after every war tick with the new view and what happened. Returns an unsubscribe function. */

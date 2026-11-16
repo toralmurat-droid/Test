@@ -900,15 +900,19 @@ the 4 road gaps simulated; joining pays 8 valor and 10 renown; a column camps at
   only when the trip (walk + 90 s halts + 60 s clash + 5 s gate + 30 s slack) would not fit before the next tick; camps
   on the road where it passes nearest the target's `siegeApproach` (axis: from the target toward the land it comes
   from). `columnPos(path, dep, now, haltMs, meetAt)`: the clock, the same on the server and the client.
-  `marchMult(alive, size)` = max(0.5, alive / size). `clashLosses` = round(n x min(0.5, 0.6 x F_other / (F_a + F_b))).
+  `marchMult(alive, size)` = max(0.5, alive / size). `clashLosses` = round(n x min(0.5, 0.6 x F_other / (F_a + F_b))) (the sim's `--clash` what-if only).
   `meetingOf`: columns of one road in opposite directions meet where both clocks (no halts) cross; a column camped
   already is met at its camp; both stand `clashMs` 60 s there.
 - **Server** (`server/war.ts`): `cols` in the war save (`{fallen, halt, met?}` per column id, current interval only;
   dirty-flag save at most once a minute from the 15 s timer, and at the tick). `columnLost`, `columnHalt`, `columnSeen`,
-  `columnJoined`, readers `warMarches`, `marchCol`, `marchPath`, `warMeetings`, `meetingFor`, `columnsVersion`. At the
-  tick: meetings nobody saw live are settled by `clashLosses` (`met: "sim"`; one a room had live: `"live"`, its real
-  deaths count), then `TickExtra.march` carries every column that lost men. `v` stays 1; `wellFormed` ignores both new
-  fields, so old builds read new saves and new builds read old saves.
+  `columnJoined`, readers `warMarches`, `marchCol`, `marchPath`, `warMeetings`, `meetingFor`, `columnsVersion`. A meeting
+  is marked once at its time: `"live"` when both columns stood in one room (they fought there; only real deaths count,
+  through `columnLost`), else `"sim"`. A meeting costs no men by itself (review decision: losses only where a hero is
+  involved), so the war without players plays exactly as before W4 (test: 300 server ticks with no rooms match
+  `warTick` with the applied orders, and `COLUMN.clashLoss` changes nothing); both columns still stand `clashMs` and the
+  clients show the clash. At the tick `TickExtra.march` carries every column that lost men. `v` stays 1; `wellFormed`
+  ignores both new fields, so old builds read new saves and new builds read old saves; `migrateWar` drops `ahead` and
+  `cols` when the territory names differ (they name ids), so a new map gives fresh orders.
 - **Room** (`server/warMarches.ts`, `WarMarches` behind `MarchHost`; 9 one-line hooks in `TownRoom.ts`): within 26 tiles
   of a living hero above ground, at most 2 columns per room, plain `"trooper"` mobs (`troopWeapon(clan, officer)`; every
   trooper gate holds), officer first, the rest while `budget()` has slots (unspawned men stay virtual and alive). Two
@@ -925,11 +929,14 @@ the 4 road gaps simulated; joining pays 8 valor and 10 renown; a column camps at
     `n >= 1`: a waygate link, leg 1 = points `0..n-1` (ends by a's gate), leg 2 = points `n..` (from b's gate). Sent on
     join (the ways built so far) and once to every room when all are built. `roads.ts pathOfEntry(e)` rebuilds the exact
     path the server walks (to walk b -> a, reverse the legs).
-  - `"columns"`: `ColumnsMsg` = `{ tick, cols: [id, clanIdx, from, to, dep, size, fallen, haltMs, state][], meets?:
-    [a, b, x, y, at][] }`. `size` counts the officer; `state` 0 muster, 1 march, 2 halted by heroes, 3 clash, 4 in a
-    waygate, 5 camp. Sent on join, after every war tick, and when a column changes (a death, a halt starting or ending,
-    a meeting settled). The client places a column with `columnPos(pathOfEntry(entry), dep, now, haltMs, meetAt)`
-    (meetAt = the `at` of the meeting that names it); while state is 2 it stands.
+  - `"columns"`: `ColumnsMsg` = `{ tick, now, cols: [id, clanIdx, from, to, dep, size, fallen, haltMs, state][], meets?:
+    [a, b, x, y, at][] }`, per hero: their own clan's columns and any other whose anchor is within `COLUMN.scoutTiles`
+    (40) of them, and the meetings of those. `now` is the server's clock (the client keeps the offset). `size` counts
+    the officer; `state` 0 muster, 1 march, 2 halted by heroes, 3 clash, 4 in a waygate, 5 camp. Sent on join, after
+    every war tick, when a column changes (a death, a halt starting or ending, a meeting settled) and when the set a hero
+    may see changes (their oath, or walking into or out of scout range). The client places a column with
+    `columnPos(pathOfEntry(entry), dep, now + offset, haltMs, meetAt)` (meetAt = the `at` of the meeting that names it);
+    while state is 2 it stands.
   - sfx: `column_march {id, x, y, clan}` (a column wakes near heroes), `column_clash {x, y, a, b}` (a, b clan keys),
     `column_gate {id, x, y, clan}` (a live column steps into a waygate). Stub recipes in `client/src/sfx.ts`.
   - Herald: one public line per war tick (at most 3 columns), a tell to sworn heroes whose land is marched on or whose
@@ -943,7 +950,7 @@ the 4 road gaps simulated; joining pays 8 valor and 10 renown; a column camps at
   8: 11.9 %, about 780 columns a war day. Hooks (report only, domination 0.0 % in every run):
   `--ambush=all` (every column on every land cut by half, every tick) Redfang 23.1 / Host 22.7 %, flips 1.65 a day;
   `--ambush=hidekin` 16.4 %, 5.57 flips; `--ambush=redfang:1` (every column on Redfang land wiped) Redfang 24.9 %,
-  3.94 flips; `--clash` (every same-road meeting of clans at war, the sim does not check that both camp short) 93
+  3.94 flips; `--clash` (a what-if the live war does not play: every same-road meeting of clans at war charged clashLosses, the sim does not check that both camp short) 93
   meetings and 327 men lost a day, 4.09 flips, top clan 22.1 %.
 - **PvE** (`npx tsx tools/balance/pve.ts 40 --column`, a hero alone vs an officer and 7 soldiers of its level; cell =
   win / half cut / men down / HP lost / s): Lv15 wizard 0/0/0.0, vampire 3/10/0.7, summoner 48/48/4.0, songweaver 0/0/0.0;
@@ -956,3 +963,9 @@ the 4 road gaps simulated; joining pays 8 valor and 10 renown; a column camps at
   lines per clan, patch note; the 4 road gaps (a later `area:map` PR); clashes off a shared road and live columns joining
   the siege fronts (W5, `Meeting` records are ready); the `--ambush=redfang:1` extreme lifts one clan to 24.9 % (the
   0.5 floor is the knob).
+- **Review fixes (W4 reviewer NOT OK):** B1 meetings cost no men (see Server above; the no-player sim and the no-room
+  server war match the baseline: 21.8 / 22.0 / 19.9 / 16.2 / 20.0 %, 5.59 flips a day, domination 0.0 %). B2 tests:
+  meeting settlement (once, the marker, no losses, a live clash's real deaths in `_marchMults`, one room vs two), a room
+  fight halting a column with the `haltMaxMs` cap and the halt ending, cross-room trimming, an old save with orders
+  ahead on another map. Also: a meeting is live only with both columns live in the same room; "columns" filtered per
+  hero; the server's `now` in "columns" and a clock offset in `client/src/warColumns.ts`.

@@ -6,8 +6,9 @@
  * Marching columns (W4, shared/war/marches.ts): every run prints the histogram of column sizes (men, officer included)
  * so COLUMN.perSoldier can be tuned (`--per-soldier=<n>` tries another value). `--ambush=<clan|all>[:share]`: each tick
  * that clan's heroes (or every clan's) cut `share` (default 0.5) of every enemy column marching on its lands, which
- * scales those attacks by marchMult (rules.ts TickExtra.march). `--clash`: columns of clans at war on one road in
- * opposite directions meet and lose clashLosses. Both report only, like zeal.
+ * scales those attacks by marchMult (rules.ts TickExtra.march). `--clash` (a what-if: the live war charges no men for
+ * a meeting nobody fights, only a live clash's real deaths count): columns of clans at war on one road in opposite
+ * directions meet and lose clashLosses. Both report only, like zeal.
  *
  * `--tiers` (W3, diagnostic): the share of Holds at each tier (holdTiers.ts: outpost, camp, fortress) per clan after
  * settling, the average tier and the share of front-line lands that are outposts. `--sack-fort=<x>` sets WAR.sackFort

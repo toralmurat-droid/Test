@@ -11,7 +11,7 @@ import { warPath, type RoadEntry } from "../shared/war/roads";
 import { newWar, targetsOf, WAR, type Orders } from "../shared/war/rules";
 import { parseTroop, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
 import { TERRITORIES } from "../shared/war/territories";
-import { _marchMults, _resetWar, _setWarOrders, _valorOf, columnJoined, marchCol, warMarches } from "../server/war";
+import { _marchMults, _resetWar, _setWarOrders, _valorOf, columnHalting, columnJoined, columnLost, marchCol, warMarches } from "../server/war";
 
 /** A clan, a target and its orders whose column walks a real road long enough to watch (the opening war). */
 const PICK = (() => {
@@ -47,6 +47,8 @@ async function setup(srv: Awaited<ReturnType<typeof startRoom>>) {
   room.broadcast = (t: string, msg: any, o?: any) => { sent.push([t, msg]); return bc(t, msg, o); };
   const told: string[] = [], tell = room.marches.h.tell;
   room.marches.h.tell = (pid: string, text: string) => { if (pid === id) told.push(text); return tell(pid, text); };
+  const hsend = room.marches.h.send; // "columns" goes to each hero (filtered): seen here like a broadcast
+  room.marches.h.send = (pid: string, t: string, msg: any) => { if (pid === id) sent.push([t, msg]); return hsend(pid, t, msg); };
   const wild = () => room.state.mobs.forEach((m: any, mid: string) => { if (m.kind !== "trooper" || !room.marches.owns(mid)) room.state.mobs.delete(mid); });
   return { c, room, id, p, sent, told, wild };
 }
@@ -168,10 +170,11 @@ test("columns (room): \"warroads\" and \"columns\" come with the join", async ()
   const m = warMarching();
   const { TownRoom } = await import("../server/TownRoom");
   const proto = TownRoom.prototype as any, onJoin = proto.onJoin, sent: [string, unknown][] = [];
-  proto.onJoin = function (client: any, ...rest: unknown[]) {
-    const send = client.send.bind(client);
+  proto.onJoin = function (client: any, ...rest: unknown[]) { // the joiner comes back sworn to the marching clan (as from a save)
+    const send = client.send.bind(client), stats = this.applyStats;
     client.send = (t: string, msg: unknown) => { sent.push([t, msg]); return send(t, msg); };
-    return onJoin.call(this, client, ...rest);
+    this.applyStats = (p: any, ...a: unknown[]) => { p.level = 20; p.clan = PICK.k; return stats.call(this, p, ...a); };
+    try { return onJoin.call(this, client, ...rest); } finally { this.applyStats = stats; }
   };
   const srv = await startRoom();
   try {
@@ -184,6 +187,7 @@ test("columns (room): \"warroads\" and \"columns\" come with the join", async ()
     const row = cols.cols.find((r) => r[0] === m.id)!;
     assert.deepEqual(row.slice(0, 8), [m.id, CLAN_KEYS.indexOf(m.clan), m.from, m.to, m.dep, m.size, 0, 0]);
     assert.ok([1, 2, 5].includes(row[8]));
+    assert.ok(typeof cols.now === "number" && Math.abs(cols.now - Date.now()) < 5000, "the server's clock");
   } finally { proto.onJoin = onJoin; restore(); await srv.stop(); }
 });
 
@@ -201,5 +205,53 @@ test("columns (room): the Herald announces a tick's columns once (a sack's news 
     assert.ok(told.some((x) => x.includes(TERRITORIES[m.to].name) && /your clan's land/.test(x)), "the holder's sworn hear a column comes");
     assert.equal(sent.filter(([t]) => t === "columns").length >= 2, true, "the columns each time");
     assert.ok(id);
+  } finally { restore(); await srv.stop(); }
+});
+
+test("columns (room): a fight with an enemy hero halts the column, at most COLUMN.haltMaxMs a trip, and the halt ends when the fight does", async () => {
+  const srv = await startRoom();
+  try {
+    const m = warMarching();
+    const { room, id, p, sent, wild } = await setup(srv);
+    room.marches.tick(Date.now());
+    p.clan = PICK.foe;
+    const q = at(m); p.x = q.x; p.y = q.y;
+    const t0 = Date.now();
+    room.marches.tick(t0);
+    const lv = room.marches._live(m.id);
+    assert.ok(lv); wild();
+    const engage = () => lv.men.forEach((x: string) => { const mob = room.state.mobs.get(x); if (mob) mob.target = id; });
+    engage(); room.marches.tick(t0 + 1000);
+    assert.ok(marchCol(m.id).halt > 0 && columnHalting(m.id, t0 + 1000), "halted");
+    assert.ok(sent.some(([t, msg]) => t === "columns" && msg.cols.some((r: any) => r[0] === m.id && r[8] === 2)), "the clients see it stand");
+    const stood = at(m, t0 + 1000);
+    for (let t = t0 + 3000; t <= t0 + COLUMN.haltMaxMs + 30_000; t += 2000) { engage(); room.marches.tick(t); }
+    assert.equal(marchCol(m.id).halt, COLUMN.haltMaxMs, "capped for the trip");
+    // the fight ends: the halt ends, and the column marches on
+    const tEnd = t0 + COLUMN.haltMaxMs + 40_000;
+    lv.men.forEach((x: string) => { const mob = room.state.mobs.get(x); if (mob) mob.target = ""; });
+    room.marches.tick(tEnd);
+    assert.ok(!columnHalting(m.id, tEnd), "no longer halted");
+    assert.ok(sent.filter(([t]) => t === "columns").at(-1)![1].cols.some((r: any) => r[0] === m.id && r[8] !== 2), "the clients hear it march on");
+    assert.ok(stood);
+  } finally { restore(); await srv.stop(); }
+});
+
+test("columns (room): losses in another room bring this room's men down to those still alive", async () => {
+  const srv = await startRoom();
+  try {
+    const m = warMarching();
+    const { room, p, wild } = await setup(srv);
+    room.marches.tick(Date.now());
+    const q = at(m); p.x = q.x; p.y = q.y;
+    room.marches.tick(Date.now());
+    const lv = room.marches._live(m.id);
+    assert.ok(lv); wild();
+    assert.equal(lv.men.filter(Boolean).length, m.size);
+    columnLost(m.id, 2); // (two soldiers fell where another room has the same column)
+    room.marches.tick(Date.now());
+    assert.equal(lv.men.filter(Boolean).length, m.size - 2, "the extra men go");
+    assert.equal(room.marches.count, m.size - 2);
+    assert.ok(lv.men[0], "the officer stays");
   } finally { restore(); await srv.stop(); }
 });
