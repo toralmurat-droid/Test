@@ -1,5 +1,6 @@
 {
   "date": "2026-11-16",
+  "patch": 291,
   "title": "Smoother frames",
   "changes": [
     "The game spends much less time each frame checking quest objects around the world (lanterns, shrines, seals), so frames come quicker everywhere."
