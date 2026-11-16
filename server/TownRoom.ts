@@ -685,7 +685,7 @@ export class TownRoom extends Room<TownState> {
     mob: (id) => this.state.mobs.get(id), mobsInBox: (x, y, r) => this.state.mobs.inBox(x, y, r),
     heroes: () => this.state.players.entries(), hero: (id) => this.state.players.get(id),
     hidden: (id, now) => inVoid(this.state.players.get(id), now),
-    strikeHero: (mid, pid, dmg, by) => { const m = this.state.mobs.get(mid); if (m) { this.broadcast("swing", { id: mid }); this.damagePlayer(pid, dmg, by, DIR_OFFSET[m.dir], 1, { atkLevel: m.level, from: mid }); } },
+    strikeHero: (mid, pid, dmg, by) => { const m = this.state.mobs.get(mid); if (m) { this.broadcast("swing", { id: mid }); this.damagePlayer(pid, dmg, by, DIR_OFFSET[m.dir], 1, { atkLevel: m.level, from: mid }); this.battles.struck(mid, pid); } }, // (a battle soldier's blow keeps the hero active in the battle)
     shoot: (mid, clan, tx, ty, dmg, by) => {
       const m = this.state.mobs.get(mid), J = WAR_TROOPS.javelin;
       if (!m) return;

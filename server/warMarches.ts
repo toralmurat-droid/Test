@@ -20,7 +20,7 @@ import { RENOWN_RANKS, rankOf } from "../shared/war/renown";
 import { pathKnown, roadEntry, roadOffLimits, roadPairs, routePos, warPath, type RoadEntry, type WarPath } from "../shared/war/roads";
 import { TERRITORIES } from "../shared/war/territories";
 import { troopLevel, troopStance, troopStats, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
-import { addValor, columnHalt, columnHalting, columnJoined, columnLost, columnSeen, columnsVersion, marchCol, marchPath, meetingFor, warMarches, warMeetings, warNow } from "./war";
+import { addValor, inMeetBattle, columnHalt, columnHalting, columnJoined, columnLost, columnSeen, columnsVersion, marchCol, marchPath, meetingFor, warMarches, warMeetings, warNow } from "./war";
 import type { Soldiers } from "./warCaravans";
 import { newFighter, type FightGround, type Fighter, type TroopHero, type TroopMob } from "./warTroops";
 
@@ -106,7 +106,7 @@ export class WarMarches {
     if (!warNow()) { for (const l of [...this.live.values()]) this.drop(l); return; }
     const live = COLUMN.live && WAR_TROOPS.live; // (off: the columns still march, join and arrive, but none is spawned)
     if (!live) for (const l of [...this.live.values()]) this.drop(l);
-    for (const l of [...this.live.values()]) if (!ms.includes(l.m)) this.drop(l); // a new interval: the old columns are done
+    for (const l of [...this.live.values()]) if (!ms.includes(l.m) || inMeetBattle(l.m, now)) this.drop(l); // a new interval: the old columns are done; a meeting battle (W5) takes their place while it runs
     for (const id of this.beside.keys()) if (!ms.some((m) => m.id === id)) this.beside.delete(id);
     for (const id of this.arrived) if (!ms.some((m) => m.id === id)) this.arrived.delete(id);
     const heroes: [string, TroopHero][] = [];
@@ -130,7 +130,7 @@ export class WarMarches {
         if (lv) { this.h.broadcast("sfx", { ev: "column_gate", id: m.id, x: Math.round(pos.x), y: Math.round(pos.y), clan: m.clan }); this.drop(lv); }
         continue;
       }
-      if (!live || p.kind === "track" || m.size - marchCol(m.id).fallen <= 0) continue; // (a track's column is simulated only)
+      if (!live || p.kind === "track" || m.size - marchCol(m.id).fallen <= 0 || inMeetBattle(m, now)) continue; // (a track's column is simulated only; one in a meeting battle stands down)
       let dist = Infinity;
       for (const [, h] of heroes) dist = Math.min(dist, Math.hypot(h.x - pos.x, h.y - pos.y) / TILE);
       if (dist <= COLUMN.wakeTiles) want.push({ m, p, dist });

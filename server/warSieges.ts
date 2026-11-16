@@ -22,7 +22,7 @@ import { attackAxis, frontPay, frontStep, SIEGE_BATTLE, siegeApproach, siegeForc
 import { STANDARD } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
 import { parseTroop, troopLevel, troopStance, troopStats, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
-import { addValor, warNow, warState } from "./war";
+import { addValor, stormingAt, warNow, warState } from "./war";
 import { newFighter, type FightGround, type Fighter, type TroopHero, type TroopMob, type WarTroops } from "./warTroops";
 import { WarWorks } from "./warWorks";
 
@@ -105,13 +105,14 @@ export class WarSieges {
     for (const [, p] of this.h.heroes()) if (!p.dead && !underground(p.y)) heroes.push(p);
     let near: Siege | undefined, nd = Infinity;
     for (const s of this.sieges.values()) {
+      if (stormingAt(s.t)) continue; // a storming (W5) is called at this gate: the battle's lines replace the siege's waves
       const r = TERRITORIES[s.t];
       for (const p of heroes) {
         const tx = p.x / TILE, ty = p.y / TILE, d = Math.hypot(Math.max(0, r.x - tx, tx - (r.x + r.w)), Math.max(0, r.y - ty, ty - (r.y + r.h)));
         if (d <= SIEGE_BATTLE.wakeTiles && d < nd) { nd = d; near = s; }
       }
     }
-    for (const s of this.sieges.values()) if (s.live && s !== near && (near || now - s.lastHero > SIEGE_BATTLE.sleepMs)) this.sleep(s);
+    for (const s of this.sieges.values()) if (s.live && s !== near && (near || stormingAt(s.t) || now - s.lastHero > SIEGE_BATTLE.sleepMs)) this.sleep(s);
     if (near) {
       near.lastHero = now;
       if (!near.live) { near.live = true; near.nextWave = 0; near.nextScore = now + SIEGE_BATTLE.scoreMs; near.nextPay = now + SIEGE_BATTLE.valorEveryMs; this.h.broadcast("siege", this.view()); }

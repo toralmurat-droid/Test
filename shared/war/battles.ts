@@ -66,6 +66,9 @@ export const BATTLE = {
   leashPx: 6 * TILE,
   /** The lines stand this far either side of the field's centre (tiles); the banners are counted this often (ms). */
   lineGapTiles: 3, scoreMs: 2000,
+  /** A hero counts as active (field time, banner rings) for this long after moving, dealing or taking battle damage (ms);
+   *  the field reaches this many tiles past the pitched box; a room's report of the men it fields goes stale after this (ms). */
+  idleMs: 15_000, fieldMarginTiles: 4, roomStaleMs: 5000,
   /** A battle soldier's blow on one of the other side counts this much (the pools decide the battle; the live lines show it). */
   troopDmg: 0.2,
   /** While a battle is live in a room, its trooper cap is WAR_TROOPS.maxTroops + extraTroops. */

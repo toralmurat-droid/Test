@@ -6,8 +6,9 @@
  * with BATTLE.captainHp x the officer's HP. They fight within BATTLE.leashPx of their places (WarTroops.think / fight /
  * walk); every trooper gate holds (only heroes the clan fights hurt them, no XP or loot). Every death fills the pools'
  * quota (battleDeath); empty places fill again from the rear every BATTLE.reserveMs while the pools have men. Banners
- * change hands by the siege fronts' hysteresis (battleFront); a fallen captain slows its side (battleCaptain) and pays
- * its killer. At the end the active sworn heroes of both sides are paid (winners more), under the per-battle caps.
+ * change hands by the siege fronts' hysteresis, summed over every room that has the battle live (battleScore); the
+ * captains stand in one room only (the one fielding the most men), and a fallen captain never comes back, slows its side
+ * (battleCaptain) and pays its killer. Only heroes in a room that fielded men for the battle are paid at its end. At the end the active sworn heroes of both sides are paid (winners more), under the per-battle caps.
  * Battle troopers live in their own BATTLE.extraTroops slots on top of WAR_TROOPS.maxTroops, so the patrols, sieges and
  * columns keep theirs, and the room's cap is back to normal the moment the battle's men are gone.
  * TownRoom calls in at the same points as for the columns, through the narrow BattleHost below.
@@ -16,7 +17,7 @@ import { TILE, type Dir } from "../shared/constants";
 import { underground } from "../shared/dungeon";
 import { blocked } from "../shared/movement";
 import { CLANS, type ClanKey } from "../shared/war/clans";
-import { BATTLE, battleBanners, battleField, battleGold, battleView, type Battle, type BattleMsg } from "../shared/war/battles";
+import { BATTLE, battleField, battleGold, battleView, type Battle, type BattleMsg } from "../shared/war/battles";
 import { captainName, hashStr, leaderLine, type WarMoment } from "../shared/war/heralds";
 import { RENOWN_RANKS, rankOf } from "../shared/war/renown";
 import { roadOffLimits } from "../shared/war/roads";
@@ -27,7 +28,7 @@ import { TERRITORIES } from "../shared/war/territories";
 import { troopLevel, troopStance, troopStats, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
 import { atWar } from "../shared/war/feuds";
 import {
-  addValor, battleCaptain, battleClanValor, battleClock, battleDeath, battleFielded, battleFront, battleGrant, battleNewsSince, battlesVersion, warBattles, warNow, warState,
+  addValor, battleCaptain, battleClanValor, battleClock, battleDeath, battleFielded, battleGrant, battleScore, battleNewsSince, battlesVersion, warBattles, warNow, warState,
 } from "./war";
 import type { Soldiers } from "./warCaravans";
 import { newFighter, type FightGround, type Fighter, type TroopHero, type TroopMob } from "./warTroops";
@@ -47,8 +48,8 @@ export interface BattleHost {
   pay(heroId: string, gold: number): void;
 }
 
-/** One place in a side's lines: who stands there ("" empty), and the fighter state. */
-interface Place { id: string; f: Fighter; captain: boolean }
+/** One place in a side's lines: who stands there ("" empty), the fighter state; a captain's place that `fallen` stays empty. */
+interface Place { id: string; f: Fighter; captain: boolean; fallen?: true }
 /** The battle this room has live: its places per side, the axis and centre, the ground. */
 interface Live { b: Battle; places: [Place[], Place[]]; ax: { x: number; y: number }; c: { x: number; y: number }; long: number; g: FightGround; lastSeen: number; nextReserve: number; nextScore: number }
 
@@ -60,7 +61,10 @@ export class WarBattles {
   private mobs = new Map<string, { side: 0 | 1; i: number }>();
   /** Per battle id: hero name -> ms active in the field; and the last place and move time per hero (the idle check). */
   private active = new Map<string, Map<string, number>>();
+  /** Per hero: the last place seen, and the last time they moved, dealt or took battle damage (the idle check). */
   private lastPos = new Map<string, { x: number; y: number; moved: number }>();
+  /** Battles this room fielded men for (only its heroes are paid at the end). */
+  private fieldedFor = new Set<string>();
   private paid = new Set<string>();
   private sentVer = -1;
   private sentAt = 0;
@@ -129,7 +133,11 @@ export class WarBattles {
         this.herald(won ? `${won} won the battle for ${land}.` : `The battle for ${land} ends in a draw.`);
         this.h.broadcast("sfx", { ev: "battle_end", id: b.id, x: Math.round(b.x), y: Math.round(b.y), a: b.a, b: b.b, result: b.result });
         if (won) { const w = b.result === "att" ? b.a : b.b, l = b.result === "att" ? b.b : b.a; this.say(w, "battle_won", b, l); this.say(l, "battle_lost", b, w); }
-      } else this.herald(`The battle for ${land} is called off.`);
+      } else if (n.kind === "banner" && n.i !== undefined) {
+        const to = b.banners[n.i]?.holder, clan = to === "atk" ? b.a : b.b, q = battleBannerAt(b, n.i);
+        this.h.broadcast("sfx", { ev: "battle_banner", id: b.id, i: n.i, x: Math.round(q.x), y: Math.round(q.y), clan });
+        this.say(clan, "battle_banner", b, clan === b.a ? b.b : b.a, n.i);
+      } else if (n.kind === "off") this.herald(`The battle for ${land} is called off.`);
     }
     // the reminder BATTLE.remindMs before a battle starts (once per battle per room)
     for (const b of warBattles()) if (!b.begun && b.start - now <= BATTLE.remindMs && b.start > now && !this.paid.has(`r${b.id}`)) {
@@ -144,18 +152,23 @@ export class WarBattles {
   }
   private herald(text: string) { this.h.broadcast("chat", { id: "", name: "Herald", text }); }
 
-  /** Time in the field per sworn hero of either side who moved in the last 15 s (the idle check). */
+  private busy(hid: string, now: number) { return now - (this.lastPos.get(hid)?.moved ?? -Infinity) <= BATTLE.idleMs; }
+  private acted(hid: string, now: number) { const p = this.h.hero(hid), q = this.lastPos.get(hid); if (q) q.moved = now; else if (p) this.lastPos.set(hid, { x: p.x, y: p.y, moved: now }); }
+  /** A battle soldier struck hero `heroId` (TownRoom's trooper blow): taking battle damage counts as being active. */
+  struck(mobId: string, heroId: string, now = Date.now()) { if (this.mobs.has(mobId)) this.acted(heroId, now); }
+
+  /** Time in the field per sworn hero of either side active in the last BATTLE.idleMs (moved, dealt or took battle damage). */
   private track(b: Battle, heroes: [string, TroopHero][], dt: number, now: number) {
     let m = this.active.get(b.id);
     for (const [hid, p] of heroes) {
-      if ((p.clan !== b.a && p.clan !== b.b) || !this.inField(b, p.x, p.y) || now - (this.lastPos.get(hid)?.moved ?? -Infinity) > 15_000) continue;
+      if ((p.clan !== b.a && p.clan !== b.b) || !this.inField(b, p.x, p.y) || !this.busy(hid, now)) continue;
       if (!m) this.active.set(b.id, (m = new Map()));
       m.set(p.name, (m.get(p.name) ?? 0) + dt);
     }
   }
-  /** Is (x, y) on the battlefield (the pitched box and 4 tiles round it; for the others BATTLE.fieldLong / 2 + 4 tiles from the centre)? */
+  /** Is (x, y) on the battlefield (the pitched box and BATTLE.fieldMarginTiles round it; for the others fieldLong / 2 + that from the centre)? */
   private inField(b: Battle, x: number, y: number): boolean {
-    const f = b.kind === "pitched" ? battleField(b.from, b.t) : undefined, m = 4;
+    const f = b.kind === "pitched" ? battleField(b.from, b.t) : undefined, m = BATTLE.fieldMarginTiles;
     if (f) { const tx = x / TILE, ty = y / TILE; return tx >= f.tx - m && ty >= f.ty - m && tx < f.tx + f.w + m && ty < f.ty + f.h + m; }
     return Math.hypot(x - b.x, y - b.y) <= (BATTLE.fieldLong / 2 + m) * TILE;
   }
@@ -165,9 +178,9 @@ export class WarBattles {
     if (this.paid.has(b.id)) return;
     this.paid.add(b.id);
     if (this.paid.size > 64) this.paid.delete(this.paid.values().next().value!);
-    const act = this.active.get(b.id);
+    const act = this.active.get(b.id), fought = this.fieldedFor.delete(b.id);
     this.active.delete(b.id);
-    if (!act || !b.result) return;
+    if (!act || !b.result || !fought) return; // (only a room that fielded men for it pays: watching from another room earns nothing)
     const land = TERRITORIES[b.t].name, lvl = Math.round((TERRITORIES[b.t].levels[0] + TERRITORIES[b.t].levels[1]) / 2);
     for (const [hid, p] of this.h.heroes()) {
       if (!p.clan || (act.get(p.name) ?? 0) < BATTLE.activeMs || p.level < STANDARD.minLevel || (p.clan !== b.a && p.clan !== b.b)) continue;
@@ -208,18 +221,22 @@ export class WarBattles {
   private fill(l: Live, now: number, first = false) {
     const have: [number, number] = [0, 0];
     for (const side of SIDES) have[side] = l.places[side].filter((p) => p.id).length;
-    const may = battleFielded(l.b.id, this, have, now);
+    const { may, captains } = battleFielded(l.b.id, this, have, now);
     for (const side of SIDES) { // fewer men left in the pools than this room fields (they fell elsewhere): the rearmost go
       let extra = have[side] - may[side];
       for (let i = l.places[side].length - 1; i >= 0 && extra > 0; i--) { const p = l.places[side][i]; if (p.id && !p.captain) { this.mobs.delete(p.id); this.h.remove(p.id); p.id = ""; extra--; } }
+      if (!captains) for (const p of l.places[side]) if (p.captain && p.id) { this.mobs.delete(p.id); this.h.remove(p.id); p.id = ""; } // (another room holds the captains now)
     }
     if (!first && now < l.nextReserve) return this.score(l, now);
     l.nextReserve = now + BATTLE.reserveMs;
     for (const side of SIDES) {
       let room = Math.min(may[side], BATTLE.perSide) - l.places[side].filter((p) => p.id).length;
+      // captains alive may stand here only in the captains' room, never more than the battle has left, never a fallen one again
+      let caps = captains ? BATTLE.captains - l.b.captains[side] - l.places[side].filter((p) => p.captain && p.id).length : 0;
       for (let i = 0; i < l.places[side].length && room > 0 && this.mobs.size < BATTLE.extraTroops; i++) {
         const p = l.places[side][i];
-        if (p.id || (p.captain && l.b.captains[side] > i)) continue; // (a fallen captain does not come back)
+        if (p.id || (p.captain && (p.fallen || caps <= 0))) continue;
+        if (p.captain) caps--;
         const at = first ? this.postOf(l, side, i) : this.rearOf(l, side, i), clan = side ? l.b.b : l.b.a;
         const id = `wb${++this.seq}`, level = troopLevel(l.b.t, p.captain), mob = this.h.spawn(id, level, at.x, at.y, troopWeapon(clan, p.captain));
         if (!mob) continue;
@@ -230,34 +247,31 @@ export class WarBattles {
         room--;
       }
     }
-    battleFielded(l.b.id, this, [l.places[0].filter((p) => p.id).length, l.places[1].filter((p) => p.id).length], now); // (what it fields now, for the other rooms)
+    const now2: [number, number] = [l.places[0].filter((p) => p.id).length, l.places[1].filter((p) => p.id).length];
+    battleFielded(l.b.id, this, now2, now); // (what it fields now, for the other rooms)
+    if (now2[0] + now2[1] > 0) this.fieldedFor.add(l.b.id);
     this.score(l, now);
   }
 
-  /** Every BATTLE.scoreMs: each banner's ring is counted (troopers + heroWeight x active sworn heroes a side) into its hysteresis. */
+  /**
+   * Each second: this room's count at every banner (its troopers + heroWeight x its active sworn heroes a side within
+   * frontRadiusPx), reported to the war, which sums every room's count per BATTLE.scoreMs window into the banners'
+   * hysteresis (server/war.ts scoreBanners). A banner changing hands comes back as news (news()).
+   */
   private score(l: Live, now: number) {
-    if (now < l.nextScore) return;
-    l.nextScore = now + BATTLE.scoreMs;
-    const pts = this.bannerPts(l), R = SIEGE_BATTLE.frontRadiusPx;
-    pts.forEach((q, i) => {
+    const R = SIEGE_BATTLE.frontRadiusPx;
+    battleScore(l.b.id, this, this.bannerPts(l).map((q) => {
       const n: [number, number] = [0, 0];
       for (const [id, s] of this.mobs) { const m = this.h.mob(id); if (m && !m.dead && Math.hypot(m.x - q.x, m.y - q.y) <= R) n[s.side]++; }
       for (const [hid, p] of this.h.heroes()) {
-        if (p.dead || Math.hypot(p.x - q.x, p.y - q.y) > R || now - (this.lastPos.get(hid)?.moved ?? -Infinity) > 15_000) continue;
+        if (p.dead || Math.hypot(p.x - q.x, p.y - q.y) > R || !this.busy(hid, now)) continue;
         if (p.clan === l.b.a && troopStance(l.b.b, p) === "enemy") n[0] += SIEGE_BATTLE.heroWeight;
         else if (p.clan === l.b.b && troopStance(l.b.a, p) === "enemy") n[1] += SIEGE_BATTLE.heroWeight;
       }
-      const to = battleFront(l.b.id, i, n[0], n[1], now);
-      if (to) this.h.broadcast("sfx", { ev: "battle_banner", id: l.b.id, i, x: Math.round(q.x), y: Math.round(q.y), clan: to === "atk" ? l.b.a : l.b.b });
-      if (to) this.say(to === "atk" ? l.b.a : l.b.b, "battle_banner", l.b, to === "atk" ? l.b.b : l.b.a, i);
-    });
+      return n;
+    }), now);
   }
-  private bannerPts(l: Live) {
-    const f = l.b.kind === "pitched" ? battleField(l.b.from, l.b.t) : undefined;
-    if (f) return battleBanners(f);
-    const px = -l.ax.y, py = l.ax.x, half = (BATTLE.fieldLong / 2 - BATTLE.flankInset) * TILE;
-    return [{ x: l.c.x - px * half, y: l.c.y - py * half }, { ...l.c }, { x: l.c.x + px * half, y: l.c.y + py * half }];
-  }
+  private bannerPts(l: Live) { return [0, 1, 2].map((i) => battleBannerAt(l.b, i)); }
 
   /** Place i of a side: two lines across the axis, the attackers on the near side, captains in the middle of the rear line. */
   private postOf(l: Live, side: 0 | 1, i: number): { x: number; y: number } {
@@ -308,6 +322,7 @@ export class WarBattles {
     const s = this.mobs.get(id), p = this.h.hero(heroId), l = this.live, m = this.h.mob(id);
     if (!s || !p || !l || !m || troopStance(s.side ? l.b.b : l.b.a, p) !== "enemy") return;
     m.target = heroId;
+    this.acted(heroId, Date.now()); // (dealing battle damage counts as being active)
   }
 
   /** A hero left or died: no battle soldier keeps chasing them. */
@@ -330,13 +345,15 @@ export class WarBattles {
     pl.id = "";
     battleDeath(l.b.id, s.side, 1);
     const clan = s.side ? l.b.b : l.b.a, p = killerId ? this.h.hero(killerId) : undefined;
-    if (pl.captain && battleCaptain(l.b.id, s.side, now)) {
+    const capOk = pl.captain && battleCaptain(l.b.id, s.side, now);
+    if (pl.captain) pl.fallen = true; // (this place stays empty: a fallen captain never comes back)
+    if (capOk) {
       this.h.broadcast("sfx", { ev: "battle_officer", id: l.b.id, x: Math.round(m.x), y: Math.round(m.y), clan });
       this.herald(`${p ? p.name : "A blade"} cut down a captain of the ${CLANS[clan].name} at ${TERRITORIES[l.b.t].name}!`);
       this.say(clan, "battle_captain", l.b, clan === l.b.a ? l.b.b : l.b.a, l.b.captains[s.side]);
     }
     if (p && killerId && p.clan && !p.dead && p.level >= STANDARD.minLevel && p.clan !== clan && atWar(p.clan, clan) && troopStance(clan, p) === "enemy") {
-      const pts = WAR_TROOPS.killPts[pl.captain ? "officer" : "soldier"] + (pl.captain ? BATTLE.captainValor : 0);
+      const pts = WAR_TROOPS.killPts[pl.captain ? "officer" : "soldier"] + (capOk ? BATTLE.captainValor : 0); // (the captain's valor only for a kill the war counted)
       const add = battleGrant(l.b.id, p.name, "kill", pts);
       // (valor in the battle's land: the war counts it for the holder or a clan that may attack there, a third clan's too)
       if (add > 0 && addValor(l.b.t, p.clan, add)) this.renown(killerId, p, l.b, add * rallyRenown(warState(), p.clan));
@@ -361,5 +378,8 @@ export class WarBattles {
   /** Tests: the live battle, read-only. */
   _live() { return this.live; }
 }
+
+/** Banner i of a battle (px): the field's (battleBanners), or for a storming and a meeting the client view's spots (battleView). */
+const battleBannerAt = (b: Battle, i: number) => { const v = battleView(b, 0).banners[i]; return v ? { x: v[0], y: v[1] } : { x: b.x, y: b.y }; };
 
 const dirOf = (dx: number, dy: number): Dir => (Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : dy > 0 ? "down" : "up");
