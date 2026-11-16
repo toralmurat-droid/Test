@@ -86,6 +86,17 @@ export const SAFE_REGEN_MULT = 3;
 /** HP per second from Stamina: [in combat, out of combat]. */
 export const regenFromStamina = (sta: number) => [sta * COMBAT_REGEN_PER_STA, sta * REGEN_PER_STA] as const;
 export const HIT_RADIUS = 6; // body radius used for projectile / melee hit tests
+/**
+ * Monsters in a fight keep their bodies apart (server/crowd.ts), so a pack spreads round its target instead of
+ * piling into one sprite. `r`: body radius in px (two monsters keep 2r apart); `big`: radius of the large ones;
+ * `maxPush`: most a monster is nudged per tick (px), soft so it never jitters; `planted`: share of the nudge a monster
+ * takes while it winds up a blow (it holds its ground, the newcomer walks round it); `maxNear`: neighbours looked at.
+ */
+export const CROWD = {
+  r: 8, maxPush: 1.6, planted: 0.3, maxNear: 8,
+  big: { demon: 15, hollowking: 16, motherblob: 15, sunwright: 16, barrowking: 16, rourke: 14, banditchief: 12, hornbrute: 13,
+    hidemother: 13, packlord: 12, cairnlord: 13, redcaptain: 12, camelfolk: 11, sphinx: 12, nightraider: 12 } as Partial<Record<MobKind, number>>,
+};
 
 export type Dir = "up" | "down" | "left" | "right";
 
