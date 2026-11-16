@@ -1,5 +1,6 @@
 {
   "date": "2026-11-16",
+  "patch": 284,
   "title": "Clearer maps",
   "changes": [
     "The war table now shows where you are: a pulsing marker on your territory, your land lit up, and \"You: territory, land\" under the map and in the side panel.",

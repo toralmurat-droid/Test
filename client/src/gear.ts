@@ -180,6 +180,7 @@ export class GearLayer {
       if (this.ids[slot] !== key) { s.setTexture(key, 0); this.ids[slot] = key; }
       s.setFrame(base.frame.name);
       s.setPosition(base.x, base.y).setOrigin(base.originX, base.originY).setScale(base.scaleX, base.scaleY);
+      (s as any).__z = (base as any).__z; // lifted with the body (castShadows.ts hop)
       s.setFlipX(base.flipX).setAngle(base.angle).setAlpha(base.alpha).setVisible(base.visible);
       s.setDepth(base.depth + 0.01 * (i + 1));
       if (base.isTinted) { s.setTint(base.tintTopLeft); s.tintFill = base.tintFill; } else if (s.isTinted) s.clearTint();

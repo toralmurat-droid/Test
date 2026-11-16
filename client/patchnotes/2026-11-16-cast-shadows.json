@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-16",
+  "patch": 285,
+  "title": "Shadows and Leaps",
+  "changes": [
+    "Heroes and monsters now cast shadows on the ground. They follow the sun: long in the morning and evening, short at noon, faint under the moon.",
+    "Leaps, pounces, ambushers dropping from trees and critical blows lift bodies off the ground while their shadows stay below."
+  ]
+}

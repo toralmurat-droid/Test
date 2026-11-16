@@ -340,6 +340,8 @@ export class IsoView {
       if (a) { const r = a as any; ax = r.__isoF === frame ? r.__isoX : r.x; ay = r.__isoF === frame ? r.__isoY : r.y; }
       o.x = wx + isoX(ax, ay) - ax;
       o.y = wy + isoY(ax, ay) - ay;
+      const z = o.__z || (a && (a as any).__z); // in the air (castShadows.ts hop), or a name/bar riding on one
+      if (z) o.y -= z; // drawn higher, still sorted by where its feet are
       // Depth: overlays and ground decorations keep theirs; the rest sorts by the screen height of the feet
       const g = o.__isoD;
       const orig = g !== undefined && g === o.depth ? o.__isoO : o.depth;

@@ -1,5 +1,6 @@
 {
   "date": "2026-11-16",
+  "patch": 282,
   "title": "Towns change hands",
   "changes": [
     "Saltmere, Rustwater Post, Ropewell and Millbrook Mill now follow the land around them. When that land changes hands, the town is contested for about 30 minutes and its old guard stands at the gate.",
