@@ -864,3 +864,13 @@ Murat: attack an encampment on your own initiative; "stand at the standard" valo
 - Sack valor and the sack siege need the sacker's clan at war with the holder (`atWar`); a grudge or Wanted alone robs the Hold (gold, half Control, no siege). `sackHold` calls a siege only on a full (not half) sack.
 - Hero-kill valor once per victim per killer per war tick (`heroKillValor`). A hero's creature's trooper kills (lone or patrol) pay its owner kill valor and writ credit.
 - Presence idle check restored (an idle hero counts no standard minutes for old hold writs). `WarHolds.forget` is called on leave.
+
+## W3: Holds grow with their garrison (outpost, camp, fortress), branch claude/war-tiers
+- Tier is derived, never saved (`shared/war/holdTiers.ts`): camp at fort ≥ 0.2 and Control > 25, fortress at fort ≥ 0.6 and Control ≥ 50; a capital held by its clan is always a fortress; a front land (borders a clan its holder is at war with) is at most a camp. Flip resets to outpost.
+- Per-tier fort plans per clan (`planOf`/`fortOf(t, clan, tier)`); camps unchanged; outposts and fortresses give way to every camp and keep roads/links open. Walls push heroes out on a tier change.
+- Guards 3/6/8 at Control 100 (`TROOP.garrison`). Sack reach follows the live tier. A sack cuts `fort` by `WAR.sackFort` 0.02 (half for unsworn).
+- Herald + `hold_grow` sfx when a Hold grows (max 3 per tick).
+- Art: tier looks for towers and gates in the per-clan atlases (now 2048 px wide). Client: tier names (`client/src/holdNames.ts`), icon/marker sizes, plaque and tooltip lines.
+- Sims: no-player baseline unchanged (21.8/22.0/19.9/16.2/20.0 %, 5.59 flips). `--tiers`: 4 % outposts, 38 % camps, 58 % fortresses; front lands 84 % camps. `--sack=all:6` with sackFort 0.02: top clan 23.2 %, 8.97 flips, domination 0 %.
+- Garrison fights (`pve.ts --troops --garrison`, worst case all at once): solo heroes clear outposts; fortresses are group content (Songweaver cannot solo camps/fortresses, Summoner can). Balance follow-up.
+- Open: second-line cap (would give ~38 % fortresses); grow notice in the HUD (Herald line only for now).
