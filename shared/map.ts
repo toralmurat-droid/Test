@@ -5,6 +5,7 @@ import { buildMoors, CAIRN_PORTAL, CAIRN_SQUARE, MOORSGATE_OAKVALE, MR } from ".
 import { BR, buildBadlands, REDPASS_OAKVALE, RUSTWATER_PORTAL, RUSTWATER_SQUARE } from "./badlands";
 import { buildSinkholes, ROPEWELL_PORTAL, ROPEWELL_SQUARE, SINKWAY_OAKVALE, SR } from "./sinkholes";
 import { buildCrown, CR, crownwayDais, crownwayFrom, TOLLCROSS_SQUARE } from "./crown";
+import { buildCities, CITIES, CITY_TEMPLATE, cityAt, cityText, cityTile } from "./capitals";
 import { JETTY_RUNS, SALT_BUILDINGS, SALT_HARBOUR_STREET, SALT_LANE, SALT_PIERS, SALT_RACKS, SALT_SQUARE, SALT_TOWN, SALT_UPPER_LANE } from "./saltmere";
 
 /** Mirror Pond, in tiles (centre and radii of its water): the Songweaver's Mirror Pond Air is played on its shore (shared/songbook.ts). */
@@ -104,6 +105,8 @@ export const PORTAL_SPOTS = [
   { id: "rustwater", name: "Rustwater Post", x: RUSTWATER_PORTAL.x, y: BR(RUSTWATER_PORTAL.y) },
   // Act 5: in the yard of Ropewell, the sinkholes' outpost (shared/sinkholes.ts)
   { id: "ropewell", name: "Ropewell", x: ROPEWELL_PORTAL.x, y: SR(ROPEWELL_PORTAL.y) },
+  // the clans' capitals (shared/capitals.ts): each city's waystone in its gate square, id `city_<clan>` (append only)
+  ...CITIES.map((c) => ({ id: `city_${c.clan}`, name: cityText(c).waystone, ...cityTile(c, CITY_TEMPLATE.waystone) })),
 ] as const;
 export const REDFANG = { x: 240, y: 102, w: 24, h: 18 };
 export const REDFANG_TOWERS: [number, number][] = [[254, 103], [249, 118], [241, 108]];
@@ -996,6 +999,18 @@ function buildWorld() {
     curve([[G.x, G.y - 3], [G.x - 1, G.y - 7], [G.x - 2, G.y - 10], [G.x - 3, G.y - 13]], 1, T.DIRT, (x, y) => { if (x >= B.x0 && x <= B.x1 && y >= B.y0 && y <= B.y1 && (objects[y][x] === EMPTY || NATURE.has(objects[y][x]))) road(x, y, 1, 1); });
   }
 
+  // ---------- 14f. The capitals' city gates (shared/capitals.ts CITIES `outer`): a dais of old flagstones beside each
+  // clan's seat in its land, carved after the reachability pass and only inside the city's `outerBox`, so the rest of the
+  // land (and its Hold and standards) stays exactly as it was. Only Act 1's (the Wardens', at Goldenreach Farms) are here.
+  for (const c of CITIES) if (c.outer.y < MAP_H) {
+    const G = c.outer, B = c.outerBox;
+    disk(G.x + 0.5, G.y + 0.5, 3.6, 3.2, (x, y, d) => {
+      if (x < B.x0 || x > B.x1 || y < B.y0 || y > B.y1) return;
+      if (NATURE.has(objects[y][x])) setO(x, y, EMPTY);
+      if (objects[y][x] === EMPTY && ground[y][x] !== T.WATER) setG(x, y, d < 0.5 ? (hash(x, y, 361) < 0.8 ? T.FLAGS : T.RUBBLE) : d < 0.8 && hash(x, y, 362) < 0.5 ? T.RUBBLE : ground[y][x]);
+    });
+  }
+
   const areas: Area[] = [
     { name: "Market Square", ...SQ },
     { name: "Chapel of the Dawn", x: 86, y: 50, w: 12, h: 7 },
@@ -1081,6 +1096,9 @@ function buildWorld() {
   for (const k of crown.roads) roads.add(k);
   areas.push(...crown.areas);
   posts.push(...crown.posts);
+  // ---------- 21. The clans' capital cities, in their own band under the Crown (shared/capitals.ts) ----------
+  // (their areas go first: a city's districts and walls lie inside no other area)
+  areas.unshift(...buildCities(T, ground, objects, EMPTY).areas);
   return { ground, objects, areas, posts, roads, broken, makeshift };
 }
 
@@ -1358,7 +1376,7 @@ export function randomSpawn(): { x: number; y: number } {
   return { x: (ROADS.RX + 1.5) * TILE, y: (ROADS.RY + 1.5) * TILE };
 }
 
-/** The market squares (Oakvale's, Saltmere's harbour square, Kel Ashar's, Cairnwatch's, the Rustwater Post's, Ropewell's, Tollcross's) are safe zones: no damage there, and monsters will not enter. */
+/** The market squares (Oakvale's, Saltmere's harbour square, Kel Ashar's, Cairnwatch's, the Rustwater Post's, Ropewell's, Tollcross's) and the clans' capital cities are safe zones: no damage there, and monsters will not enter. */
 export function isSafeZone(px: number, py: number): boolean {
   const tx = Math.floor(px / TS), ty = Math.floor(py / TS);
   const z = SAFE_ZONE;
@@ -1374,7 +1392,8 @@ export function isSafeZone(px: number, py: number): boolean {
   const s = SINKHOLES_SAFE; // Act 5: Ropewell's square
   if (tx >= s.x && ty >= s.y && tx < s.x + s.w && ty < s.y + s.h) return true;
   const c = CROWN_SAFE; // Act 6: Tollcross Square
-  return tx >= c.x && ty >= c.y && tx < c.x + c.w && ty < c.y + c.h;
+  if (tx >= c.x && ty >= c.y && tx < c.x + c.w && ty < c.y + c.h) return true;
+  return !!cityAt(tx, ty); // the clans' capitals, walls and all (shared/capitals.ts): capitals never fall
 }
 
 /** Random walkable point outside the village palisade, where monsters live. */

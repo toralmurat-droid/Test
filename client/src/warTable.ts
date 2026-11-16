@@ -13,6 +13,7 @@ import { REGIONS } from "../../shared/war/regions";
 import { TERRITORIES } from "../../shared/war/territories";
 import type { WarView } from "../../shared/war/view";
 import { viewTier } from "../../shared/war/intel";
+import { CITIES, cityText } from "../../shared/capitals";
 import { inPoly, layoutTerritories, SLOTS, WT_H, WT_W, type Pt } from "./warTableLayout";
 import { CROWN_LAND, CROWN_NODE, findRoute, gateReq, landOfNode, nodeName, routeLines, STONES, WAYS, type Here, type Step } from "./warRoute";
 import { wrap } from "./warHere";
@@ -248,6 +249,17 @@ export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, font: stri
       gateGlyph(g, Math.round(x + ((ox - x) / d) * off), Math.round(y + ((oy - y) / d) * off), 1, col);
     }
   }
+  // the capital cities' gates (shared/capitals.ts): a small gilt arch in the clan's colour beside the territory the gate stands in
+  for (const c of CITIES) {
+    const t = TERRITORIES.find((q) => q.x <= c.outer.x && c.outer.x < q.x + q.w && q.y <= c.outer.y && c.outer.y < q.y + q.h);
+    if (!t) continue;
+    const [x0, y0] = P(t.id), k = Math.max(2, Math.round(sz / 5)), gx = Math.round(x0 + sz * 0.9), gy = Math.round(y0 + sz * 0.5);
+    g.fillStyle = "#0d0a07"; g.fillRect(gx - 3 * k - 1, gy - 3 * k - 1, 6 * k + 2, 6 * k + 2);
+    g.fillStyle = hex(MAP[c.clan]); g.fillRect(gx - 3 * k, gy - 3 * k, 6 * k, 6 * k);
+    g.fillStyle = "#0d0a07"; g.fillRect(gx - k, gy, 2 * k, 3 * k);
+    g.fillStyle = "#ffd860"; g.fillRect(gx - 3 * k, gy - 3 * k, 6 * k, Math.max(1, k >> 1));
+    g.textAlign = "left"; text(`${cityText(c).name} gate`, gx + 3 * k + 5, gy, GOLD, 11);
+  }
 
   // land plates: the land's name and each clan's share of it
   for (const s of SLOTS) {
@@ -363,6 +375,7 @@ export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, font: stri
   key(() => { g.fillStyle = "#0d0a07"; g.fillRect(lx + 7, y - 6, 10, 10); g.strokeStyle = "#c9b27a"; g.lineWidth = 1; g.strokeRect(lx + 7.5, y - 5.5, 9, 9); }, "Hold");
   key(() => { g.fillStyle = "#0d0a07"; g.fillRect(lx + 6, y - 7, 13, 13); g.strokeStyle = "#ffd860"; g.lineWidth = 2; g.strokeRect(lx + 7, y - 6, 11, 11); }, "Capital (cannot fall)");
   key(() => { gateGlyph(g, lx + 12, y, 1, "#96d7ff"); }, "Gate between lands");
+  if (CITIES.length) key(() => { g.fillStyle = "#0d0a07"; g.fillRect(lx + 6, y - 7, 13, 13); g.fillStyle = hex(MAP[CITIES[0].clan]); g.fillRect(lx + 7, y - 6, 11, 11); g.fillStyle = "#0d0a07"; g.fillRect(lx + 11, y - 1, 3, 6); }, "City gate");
   key(() => { g.strokeStyle = `rgba(255,80,40,${0.5 + 0.5 * pulse})`; g.lineWidth = 2; g.strokeRect(lx + 6, y - 6, 12, 12); }, "Under siege");
   key(() => { g.strokeStyle = "rgba(200,110,255,0.9)"; g.lineWidth = 2; g.setLineDash([3, 2]); g.strokeRect(lx + 6, y - 6, 12, 12); g.setLineDash([]); }, "Struck by raiders");
   if (!tight && y < bot - 20) { y += 6; text(`${TERRITORIES.length} territories, ${TERRITORIES.filter((t) => t.capitalOf).length} capitals · tick ${v.tick}`, lx + 4, y, "#a39680", 10); }

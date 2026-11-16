@@ -5,6 +5,7 @@
  * and "tunnels" messages, and decides nothing. The pure helpers (layout, geometry, texts) have tests (tests/warMap.test.ts).
  */
 import { TILE } from "../../shared/constants";
+import { CITIES, cityText } from "../../shared/capitals";
 import type { ClanKey } from "../../shared/war/clans";
 import { CLAN_KEYS } from "../../shared/war/clans";
 import { caravanLines } from "../../shared/war/caravans";
@@ -326,7 +327,34 @@ export function drawWarWorld(g: CanvasRenderingContext2D, d: WarMapData, v: WarM
     g.restore();
   }
   if (d.towns) drawTowns(g, d, v);
+  drawCityGates(g, d, v);
   g.restore();
+}
+
+/** The clans' capital city gates (shared/capitals.ts CITIES): a little arch in the clan's colour on the map, with the city's name on the big map. Shown once the hero has seen the spot. */
+function drawCityGates(g: CanvasRenderingContext2D, d: WarMapData, v: WarMapView) {
+  const mini = v.mini, k = mini ? 1 : 2;
+  for (const c of CITIES) {
+    if (!d.seen(c.outer.x, c.outer.y)) continue;
+    const [x, y] = pxs(v, (c.outer.x + 0.5) * TILE, (c.outer.y + 0.5) * TILE);
+    if (mini && (x < -20 || y < -20 || x > g.canvas.width + 20 || y > g.canvas.height + 20)) continue;
+    g.save(); g.translate(Math.round(x), Math.round(y)); v.upright(g);
+    g.imageSmoothingEnabled = false;
+    const w = 6 * k, h = 6 * k;
+    g.fillStyle = "#1a1008"; g.fillRect(-w / 2 - k, -h / 2 - k, w + 2 * k, h + 2 * k);
+    g.fillStyle = CLAN_COL[c.clan]; g.fillRect(-w / 2, -h / 2, w, h); // the gate's tower
+    g.fillStyle = "#1a1008"; g.fillRect(-k, 0, 2 * k, h / 2); // the arch
+    g.fillStyle = "#ffe8a3"; g.fillRect(-w / 2, -h / 2, w, k); // gilt top
+    if (!mini) {
+      const text = `${cityText(c).name} gate`;
+      g.font = `13px ${PF}`; g.textAlign = "center"; g.textBaseline = "middle";
+      const tw = Math.ceil(g.measureText(text).width) + 8;
+      g.fillStyle = "rgba(13,10,7,0.92)"; g.fillRect(-tw / 2, 12, tw, 16);
+      g.strokeStyle = CLAN_COL[c.clan]; g.lineWidth = 1; g.strokeRect(-tw / 2 + 0.5, 12.5, tw - 1, 15);
+      g.fillStyle = "#ffe8a3"; g.fillText(text, 0, 21);
+    }
+    g.restore();
+  }
 }
 
 /** Where a town's icon sits (tile centre of its steward). */

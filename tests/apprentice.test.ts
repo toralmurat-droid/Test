@@ -19,7 +19,7 @@ const drag = CHAINS[HUNT].quests.find((q) => q.id === "dragmark")!, dragStep = d
 const dragIdx = CHAINS[HUNT].quests.indexOf(drag);
 const tutDone = (p: any) => { p.quests.set("tut", packQuest(CHAINS[ci("tutorial")].quests.length, 0, 0)); };
 const [T_MENTOR, T_CAPTAIN, T_WARDEN] = MENTOR.titles.map((t) => t.title);
-const T_RUMOUR = TITLES.length - 1; // Rumour-Chaser: a title that is not a mentor title
+const T_RUMOUR = TITLES.indexOf("Rumour-Chaser"); // a title that is not a mentor title
 const asc = (a: number[]) => [...a].sort((x, y) => x - y);
 const shown = (p: any) => unpackCosmetics(metaOf(p, META.cosm)).title;
 

@@ -19,6 +19,8 @@ import { FEAST, FEAST_MAX, feastLines, type Family } from "../../shared/devour";
 import { moveStep } from "../../shared/movement";
 import { SPAWN_ZONES, zoneAt } from "../../shared/spawns";
 import { musicCombat, setMusicZone } from "./music";
+import { CityLayer } from "./capitals";
+import { CLANS, type ClanKey } from "../../shared/war/clans";
 import { bindSfx, play as playSfx, sfxFrame } from "./sfx";
 import { songweaverSfx, setSwornClan } from "./sfx";
 import { DI_EVENTS, diEvent } from "./songbookFx";
@@ -447,6 +449,7 @@ export class TownScene extends Phaser.Scene {
   private warTroops?: WarTroops;
   private warRituals?: WarRituals; // the Veiled noon ritual circle ("rituals", server/warRituals.ts)
   private feud?: WarFeud; // feuds: provoke, Wanted badge and marks ("feud", "wanted", server/warFeuds.ts)
+  private city?: CityLayer; // the capital cities: props, guards, the war table and the NPC panels (capitals.ts)
   private warTowns2?: WarTowns; // capturable towns: banners, watch, claim prompt ("towns", "townclaim", server/warTowns.ts)
   private sack?: WarSack; // sacking Holds: banner prompt, progress, sacked banners ("holds", "sack", server/warHolds.ts)
   /** W4 marching columns: the war roads and the columns as last sent (server/warMarches.ts); kept for the map overlay to draw. */
@@ -586,6 +589,7 @@ export class TownScene extends Phaser.Scene {
       if (!this.npcs?.isOpen && this.waygates?.interact()) return; // then Act 2's waygate
       if (!this.npcs?.isOpen && this.ferry?.interact()) return; // Pell's boat at a jetty (also closes its list)
       if (!this.npcs?.isOpen && !this.npcs?.busy && this.sack?.interact()) return; // raise a banner in a hostile Hold (warSack.ts)
+      if (!this.npcs?.isOpen && !this.npcs?.busy && this.city?.interact()) return; // study a capital's war table
       if (!this.npcs?.isOpen && !this.npcs?.busy && this.warTowns2?.interact()) return; // raise a banner at a contested town's gate (warTowns.ts)
       if (!this.npcs?.isOpen && !this.npcs?.busy && this.warStd?.interact()) return; // a clan war standard (anything else here comes first)
       this.npcs?.interact();
@@ -1650,6 +1654,10 @@ export class TownScene extends Phaser.Scene {
     if (this.npcs) this.npcs.towns = towns;
     this.room.onMessage("towns", (m) => { if (this.npcs) this.npcs.towns = towns; towns.setTowns(m); this.npcs?.townsChanged(); (this.warPlaque ??= new WarPlaque(document.getElementById("hud")!)).setTowns(towns); });
     this.room.onMessage("townclaim", (m) => towns.setClaim(m));
+    const city = this.city = new CityLayer(this, { clan: () => this.warStd?.clan, send: (type, msg) => this.room.send(type, msg), openWarTable: () => this.minimap?.showWarTable() }); // W7 capital cities (client/src/capitals.ts)
+    if (this.npcs) { this.npcs.city = city; this.npcs.heroClan = () => this.warStd?.clan; }
+    this.room.onMessage("city", (m) => city.setCity(m));
+    this.room.send("city");
     this.room.onMessage("war", (v) => {
       // the Hold walls follow the holders (shared/war/holdWalls.ts): prediction and click-to-walk routes see the new forts
       const flipped = setHoldOwners(Array.isArray(v?.owner) ? v.owner : [], Array.isArray(v?.tier) ? v.tier : undefined); // (and their tiers, W3)
@@ -1871,6 +1879,7 @@ export class TownScene extends Phaser.Scene {
         const out: ClickSpot[] = [];
         for (const n of NPCS) if (npcPresent(n.id, p)) out.push({ x: n.x, y: n.y, w: 18, h: 30, range: TALK_RANGE, act: () => { if (!this.npcs?.isOpen) this.npcs?.interact(); } });
         for (const c of CHESTS) out.push({ x: c.x, y: c.y, w: 22, h: 18, range: CHEST_RANGE, act: () => this.chests?.interact() });
+        for (const t of this.city?.tablesPx() ?? []) out.push({ x: t.x, y: t.y, w: 60, h: 30, range: 3 * TILE, act: () => { if (!this.npcs?.isOpen) this.city?.interact(); } });
         out.push({ x: SHRINE.x, y: SHRINE.y, w: 26, h: 36, range: SHRINE_RANGE, act: () => this.shrine?.interact() });
         for (const b of BOARDS) out.push({ x: b.x, y: b.y, w: BOARD_W, h: BOARD_H, range: BOARD_RANGE, act: () => { if (!this.bounty?.open) this.bounty?.interact(); } });
         for (const c of STASHES) out.push({ x: c.x, y: c.y, w: 22, h: 18, range: STASH_RANGE, act: () => { if (!this.stash?.open) this.stash?.interact(); } });
@@ -3052,6 +3061,14 @@ export class TownScene extends Phaser.Scene {
   private onSkillFx(ev: any) {
     if (typeof ev.ev === "string" && ev.ev.startsWith("tide")) { this.tideFx(ev); return; }
     if (SONG_SFX.has(ev.ev)) this.songEvent(ev);
+    if (ev.ev === "cityoath" || ev.ev === "cityreward") { // W7: an oath sworn at a capital's altar, the leader's pay (sounds: sfx.ts)
+      const e = this.entities.get(ev.id);
+      if (e) {
+        const oath = ev.ev === "cityoath";
+        this.floatText(e.sprite.x, e.sprite.y - 30, oath ? `SWORN TO THE ${String(CLANS[ev.clan as ClanKey]?.name ?? "CLAN").replace(/^The /, "").toUpperCase()}!` : `+${Number(ev.gold) || 0} GOLD`, oath ? "#9cc8ff" : "#ffd166", PIXEL_FONT, 1.3);
+        this.burst(e.sprite.x, e.sprite.y - 14, oath ? 8 : 6, oath ? 0xffe090 : 0xffd166, 450);
+      }
+    }
     if (DI_EVENTS.has(ev.ev)) this.diEvent(ev); // newsong, matpick, lutefit, break
     if (ev.ev === "cast") {
       const e = this.entities.get(ev.id);
@@ -3673,6 +3690,7 @@ export class TownScene extends Phaser.Scene {
       this.warBattle.update(meEnt.state.dead ? undefined : meEnt.sprite);
       this.warRituals?.update(meEnt.state.dead ? undefined : meEnt.sprite); // the Veiled ritual circle (warRituals.ts)
       this.sack?.update(meEnt.state.dead ? undefined : meEnt.sprite, !!this.npcs?.isOpen || !!this.npcs?.busy || !!this.chests?.near || !!this.stash?.near || !!this.bounty?.near || !!this.portals?.near); // a hostile Hold's banner (warSack.ts)
+      this.city?.update(meEnt.state.dead ? undefined : meEnt.sprite, !!this.npcs?.isOpen || !!this.npcs?.busy || !!this.chests?.near || !!this.stash?.near || !!this.portals?.near || !!this.waygates?.near);
       this.warTowns2?.update(meEnt.state.dead ? undefined : meEnt.sprite, !!this.npcs?.isOpen || !!this.npcs?.busy || !!this.chests?.near || !!this.stash?.near || !!this.bounty?.near || !!this.portals?.near); // town banners, watch and the gate prompt (warTowns.ts)
       if (!meEnt.state.dead) this.warRoadFx?.update(meEnt.sprite.x, meEnt.sprite.y);
       this.warPlaque?.update(tx, ty, this.warStd?.standing(meEnt.sprite)); // the clan war front plaque (warPlaque.ts)

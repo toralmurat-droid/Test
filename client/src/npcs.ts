@@ -50,6 +50,9 @@ import { matCanvas } from "./matArt";
 import { TEXT_FONT, TITLE_FONT, TEXT_PX, TITLE_PX, WT } from "./pixelfont";
 import { hudOccludes, hudSlot } from "./hudSlots";
 import { own } from "./own";
+import { CITY, cityNpcRole, cityPrice } from "../../shared/capitals";
+import type { CityLayer } from "./capitals";
+import type { ClanKey } from "../../shared/war/clans";
 /** Escapes text for HTML text and attributes (the shop's wear reason goes into both). */
 const escAttr = (t: string) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
@@ -138,6 +141,9 @@ export class NpcLayer {
   private talking?: Npc;
   /** Capturable towns (client/src/warTowns.ts): the stewards' look and lines, and the holder's shop discount. */
   towns?: WarTowns;
+  /** The capital cities (client/src/capitals.ts): the leader's, oath-keeper's and trainer's panels, and the hero's oath for the quartermaster's discount. */
+  city?: CityLayer;
+  heroClan?: () => ClanKey | "" | undefined;
   private talkSeq = 0;
   /** Trader page instead of the quest talk (traders who also give quests get a "Trade" button) */
   private trading = false;
@@ -559,7 +565,7 @@ export class NpcLayer {
     const bag = [...o.bag];
     // masterwork: one level shown at a time (picked with the buttons), by default the best one the hero can wear
     const master = this.masterLv ?? [...MASTER_LEVELS].reverse().find((l) => l <= (q?.level ?? 1)) ?? MASTER_LEVELS[0];
-    const tw = this.towns, town = townAt(n.x, n.y), cut = (p: number) => (tw ? tw.price(p, town) : p); // the holder's sworn heroes pay less (the server charges the same)
+    const tw = this.towns, town = townAt(n.x, n.y), capital = cityNpcRole(n.id)?.city, cut = (p: number) => (capital ? cityPrice(p, capital, this.heroClan?.() || undefined) : tw ? tw.price(p, town) : p); // the holder's sworn heroes pay less (the server charges the same)
     const key = JSON.stringify([n.id, master, cut(1000), gold, potions, bag, q?.level, o.ptSta, o.ptStr, o.ptMag, o.ptDex, ...GEAR_SLOTS.map((s) => q?.[s]), this.shopMsg, questSig(q)]);
     if (key === this.stage) return;
     this.stage = key;
@@ -620,7 +626,7 @@ export class NpcLayer {
     const lm = n.id === "lutemaker"; // Wren's shop is a tab of her panel
     this.dialog.innerHTML = this.head(n) + (lm ? lmTabsHtml("shop", true) : "") + `<p>${lm ? "Books on the left, spare strings on the right. Anything you can't use, I'll buy or break." : shop.greeting}</p>` +
       `<div class="sh-gold">Your gold: <b>${gold}${pxIcon("coin")}</b> ${this.shopMsg}</div>` +
-      (cut(1000) < 1000 ? `<p class="sh-empty">Sworn to ${CLANS[tw!.info(town!.id)!.holder].name}, holders of this town: ${Math.round(TOWN.discount * 100)}% off everything for sale.</p>` : "") +
+      (capital && cut(1000) < 1000 ? `<p class="sh-empty">Sworn to ${CLANS[capital.clan].name}: ${Math.round(CITY.discount * 100)}% off everything for sale in their capital.</p>` : !capital && cut(1000) < 1000 ? `<p class="sh-empty">Sworn to ${CLANS[tw!.info(town!.id)!.holder].name}, holders of this town: ${Math.round(TOWN.discount * 100)}% off everything for sale.</p>` : "") +
       `<h4>For sale</h4><div class="sh-list">${buy}</div>${sell}${fuse}` +
       `<div class="nd-btns">${quest ? `<button class="nd-talk">Talk</button>` : ""}<button class="nd-bye">Goodbye <kbd>E</kbd></button></div>`;
     this.dialog.classList.add("shop");
@@ -692,9 +698,24 @@ export class NpcLayer {
     return c;
   }
 
+  /** A capital's leader, oath-keeper or trainer (capitals.ts builds the page; the server answers each button with a "city" message). */
+  private renderCity(n: Npc, city: Parameters<CityLayer["panel"]>[0], role: Parameters<CityLayer["panel"]>[1]) {
+    const o = own(this.q), pg = this.city!.panel(city, role, { level: this.q?.level ?? 1, gold: o.gold });
+    if (pg.sig === this.stage) return;
+    this.stage = pg.sig;
+    this.dialog.classList.remove("shop", "lm");
+    if (this.shopOpen) { this.shopOpen = false; this.onPreview?.(); this.onShopOpen?.(false); }
+    this.dialog.innerHTML = this.head(n) + pg.html;
+    this.optKeys = [];
+    for (const b of this.dialog.querySelectorAll<HTMLButtonElement>("button[data-act]")) b.onclick = () => { pg.acts[b.dataset.act!]?.(); b.disabled = true; setTimeout(() => { this.stage = -1; }, 1200); };
+    this.dialog.querySelector<HTMLButtonElement>(".nd-bye")!.onclick = () => this.close();
+  }
+
   private renderDialog(q: QuestState) {
     const n = this.talking!;
     if (n.id === "lutemaker" && !(this.lmTab === "shop" && n.shop && SHOPS[n.shop])) return this.renderLute(n, q);
+    const cr = cityNpcRole(n.id);
+    if (cr && cr.role !== "quartermaster" && this.city) return this.renderCity(n, cr.city, cr.role);
     const tid = stewardTown(n), st = tid ? this.towns?.steward(tid, this.talkSeq) : undefined;
     const page = st ? { text: st.text, bye: "Farewell", chain: 0 } : pageFor(n.id, q);
     if (n.shop && (this.trading || !page)) return this.renderShop(n, q);

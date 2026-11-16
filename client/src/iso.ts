@@ -30,7 +30,9 @@ import { hiResTexture } from "./smooth";
 import { uprightTexture, UPRIGHT_OY } from "./smoothProps";
 import { ADOBE_PAD, ADOBE_WALL_H, adobeHead, adobeTexture, adobeWallTexture, bonesTexture, CLIFF_DEPTH, cliffDistance, cliffHeight, cliffTexture, cliffVariant, deadTreeTexture, desertRockTexture, sunStoneTexture, tentTexture } from "./desertArt";
 import { D, FURNACE, SUNSTONE } from "../../shared/desert";
-import { BADLANDS_H, BADLANDS_Y0, DESERT_H, DESERT_Y0, MOORS_H, MOORS_Y0, SINKHOLES_H, SINKHOLES_Y0, CROWN_H, CROWN_Y0 } from "../../shared/constants";
+import { BADLANDS_H, BADLANDS_Y0, DESERT_H, DESERT_Y0, MOORS_H, MOORS_Y0, SINKHOLES_H, SINKHOLES_Y0, CROWN_H, CROWN_Y0, CITIES_Y0 } from "../../shared/constants";
+import { cityAt } from "../../shared/capitals";
+import { CITY_LOOK } from "./cityArt";
 import { ARCHES, BR } from "../../shared/badlands";
 import { barrowTexture, birchTexture, boneHeapTexture, graniteCliffTexture, origin, standingStoneTexture } from "./moorsArt";
 import { BRAZIER_FRAMES, brazierTexture, crownCliffTexture, origin as crOrigin, spireTexture, statueTexture } from "./crownArt";
@@ -716,17 +718,20 @@ export function isoStanding(scene: Phaser.Scene, objects: number[][]): number[][
   const md = (x: number, y: number) => (x < 0 || x >= MAP_W || y < M0 || y >= MAP_H ? 9 : mdist[(y - M0) * MAP_W + x]);
   const B0 = BADLANDS_Y0 - 4; // Act 4's band (shared/badlands.ts): the rows from here down are never the moors'
   const S0 = SINKHOLES_Y0 - 4; // Act 5's band (shared/sinkholes.ts): rows S0..C0; the badlands end above
-  const C0 = CROWN_Y0 - 4; // Act 6's band (shared/crown.ts): the rows from here down
+  const C0 = CROWN_Y0 - 4; // Act 6's band (shared/crown.ts): the rows from here down to the cities
+  const Y0 = CITIES_Y0 - 4; // the capital cities' band (shared/capitals.ts): the rows from here down are never the Crown's
   const bdist = cliffDistance(objects.map((r) => r.map(id)), T.CLIFF, MAP_W, B0, S0, CLIFF_DEPTH + 1);
   const bd = (x: number, y: number) => (x < 0 || x >= MAP_W || y < B0 || y >= S0 ? 9 : bdist[(y - B0) * MAP_W + x]);
   const sdist = cliffDistance(objects.map((r) => r.map(id)), T.CLIFF, MAP_W, S0, C0, CLIFF_DEPTH + 1);
   const sd = (x: number, y: number) => (x < 0 || x >= MAP_W || y < S0 || y >= C0 ? 9 : sdist[(y - S0) * MAP_W + x]);
-  const kdist = cliffDistance(objects.map((r) => r.map(id)), T.CLIFF, MAP_W, C0, MAP_H, CLIFF_DEPTH + 1);
-  const kd = (x: number, y: number) => (x < 0 || x >= MAP_W || y < C0 || y >= MAP_H ? 9 : kdist[(y - C0) * MAP_W + x]);
+  const kdist = cliffDistance(objects.map((r) => r.map(id)), T.CLIFF, MAP_W, C0, Y0, CLIFF_DEPTH + 1);
+  const kd = (x: number, y: number) => (x < 0 || x >= MAP_W || y < C0 || y >= Y0 ? 9 : kdist[(y - C0) * MAP_W + x]);
   for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
     const index = objects[ty][tx], t = id(index);
     if (t < 0) continue;
-    if (ty >= C0) { // the Crown of the Marches
+    if (ty >= Y0) { // the capital cities: the rock round the plots is the ground's; walls, roofs and stalls inside are drawn the usual way below
+      if (!cityAt(tx, ty)) { out[ty][tx] = -1; continue; }
+    } else if (ty >= C0) { // the Crown of the Marches
       if (ty < CROWN_Y0 || ty >= CROWN_Y0 + CROWN_H) { out[ty][tx] = -1; continue; } // the solid rock strips round the Crown: ground paints them
       if (isoCrown(scene, t, tx, ty, at, kd)) { out[ty][tx] = -1; continue; }
     } else if (ty >= S0) { // the sinkholes band
@@ -771,7 +776,10 @@ export function isoStanding(scene: Phaser.Scene, objects: number[][]): number[][
         key = blockTexture(scene, `blk_${index}_${h}`, tileSrc(index), tileSrc(index), h!);
       }
       // origin = the centre of the footprint diamond, so the block stands on its tile
-      staticObj(scene, scene.add.image(cx, cy, key).setOrigin(0.5, (IH / 2 + h) / (IH + h)).setDepth(cy));
+      const blk = scene.add.image(cx, cy, key).setOrigin(0.5, (IH / 2 + h) / (IH + h)).setDepth(cy);
+      const cty = cityAt(tx, ty);
+      if (cty) blk.setTint(CITY_LOOK[cty.clan].stone); // a capital's walls take its clan's stone colour (cityArt.ts)
+      staticObj(scene, blk);
       out[ty][tx] = -1;
     } else if (t === T.WHEEL) {
       out[ty][tx] = -1; // the mill's wheel is a world prop (millArt.ts)

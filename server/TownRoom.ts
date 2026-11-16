@@ -85,7 +85,7 @@ import { hashAddr, ideaLog, saveIdeas } from "./ideaStore";
 import { dropLive, LiveState, rememberLive, takeLive } from "./handoff";
 import { MobView } from "./mobView";
 import { copyPatches } from "./patchCopy";
-import { act1Home, actAt, actOpen, actSpawn, gateColdNote, gateOpen, WAYGATE_RANGE, waygateArrival, waygateById, WAYGATES } from "../shared/act2";
+import { act1Home, actAt, actOpen, actSpawn, cityGateOf, gateColdNote, gateOpen, WAYGATE_RANGE, waygateArrival, waygateById, WAYGATES } from "../shared/act2";
 import { respecCost } from "../shared/upkeep";
 import { ARSENAL, ATTUNE_ORDER, attuneOf, bondShare, DEFAULT_GRIMOIRE, SUMMONER_TREE, ESSENCE, GOLEM, GOLEM_OF, golemSlots, isElement, isSummonKind, parseGrimoire, PORTAL, SUMMON, summonElement, summonScaleLevel, WISP, wispEls, type AttuneElement, type SummonKind } from "../shared/summons";
 import { cleanFeast, familyOf, type Feast, feastMult, THRALL, thrallMax } from "../shared/devour";
@@ -94,7 +94,7 @@ import { QuestSteps, setMeta } from "./questSteps";
 import { Tide } from "./tide";
 import { Rumours } from "./rumours";
 import { Apprentice } from "./apprentice";
-import { titleMsg } from "./titles";
+import { award, titleMsg } from "./titles";
 import { cleanOwned } from "../shared/cosmetics";
 import { cleanRumour, rumourDay, RUMOURS, type RumourState } from "../shared/rumours";
 import { TIDE } from "../shared/tide";
@@ -125,6 +125,8 @@ import { WarTowns } from "./warTowns";
 import { townAt, townPrice } from "../shared/war/towns";
 import { WarOaths } from "./warOaths";
 import { WarFeuds } from "./warFeuds";
+import { homeAfterOath, respawnAt, WarCapitals } from "./warCapitals";
+import { cityNpcRole, cityOfPortal, cityPrice, cityRoleNear, cleanCapPaid, cleanHome } from "../shared/capitals";
 import { cleanFeud } from "../shared/war/feuds";
 import { WarWrits } from "./warWrits";
 import { cleanWrit } from "../shared/war/writs";
@@ -797,6 +799,16 @@ export class TownRoom extends Room<TownState> {
     save: (id) => { const p = this.state.players.get(id); if (p) saveHero(p.name, p.cls, this.snapshot(p)); },
   });
 
+  /** The clans' capitals (server/warCapitals.ts): gate and waystone admission, the altar's oath, the leader's rewards, home. */
+  private caps = new WarCapitals({
+    hero: (id) => this.state.players.get(id),
+    send: (id, type, msg) => this.clients.getById(id)?.send(type, msg),
+    note: (id, text) => this.note(id, text),
+    oathChanged: (id) => this.oathChanged(id),
+    award: (id, i) => { const p = this.state.players.get(id); return !!p && award(p, i); },
+    sfx: (msg) => this.broadcast("sfx", msg),
+  });
+
   /** Hold walls (server/holdWalls.ts): the forts follow the war's holders; nobody is left standing in a wall. */
   private holdWalls = new HoldWalls({ heroes: () => this.state.players.entries(), mobs: () => this.state.mobs.entries() });
 
@@ -894,9 +906,14 @@ export class TownRoom extends Room<TownState> {
       const p = this.state.players.get(client.sessionId);
       if (!p || !this.allow("ask", client)) return;
       const err = msg && msg.swear !== undefined ? swear(p, msg.swear) : "";
-      client.send("clan", { ...clanView(p), err });
-      if (!err) { this.writs.oathChanged(client.sessionId); this.oaths.sync(); sendPlan(client, p, true); } // a writ for the old clan is withdrawn; tabards update; the new clan's plan
+      if (err) client.send("clan", { ...clanView(p), err });
+      else this.oathChanged(client.sessionId);
     });
+    // The clans' capitals (server/warCapitals.ts): swear at a city's altar, the leader's rank reward, bind / unbind home ({on}), {} = resend
+    this.onMessage("cityoath", (client) => { if (this.allow("ask", client)) this.caps.oath(client.sessionId); });
+    this.onMessage("cityreward", (client) => { if (this.allow("ask", client)) this.caps.reward(client.sessionId); });
+    this.onMessage("cityhome", (client, msg: unknown) => { if (this.allow("ask", client)) this.caps.home(client.sessionId, msg); });
+    this.onMessage("city", (client) => { if (this.allow("ask", client)) this.caps.view(client.sessionId); });
     this.setState(new TownState());
     copyPatches(this); // each socket gets its own copy of a patch (deflate compresses later; server/patchCopy.ts)
     // Monsters near each hero go out just before every state patch, so both halves of an update arrive together
@@ -1283,6 +1300,7 @@ export class TownRoom extends Room<TownState> {
     this.warTroops.forget(client.sessionId); this.holds.forget(client.sessionId); this.caravans.forget(client.sessionId); this.sieges.forget(client.sessionId); this.tunnels.forget(client.sessionId); this.rituals.forget(client.sessionId); this.marches.forget(client.sessionId); this.battles.forget(client.sessionId); this.towns.forget(client.sessionId);
     this.oaths.leave(client.sessionId); // (after players.delete) the tabard goes for everyone
     this.feuds.forget(client.sessionId); this.feuds.leave(client.sessionId); // (likewise) the Wanted mark goes, the manhunters go home
+    this.caps.leave(client.sessionId);
     this.unsummon(client.sessionId);
     this.dismissAll(client.sessionId);
     this.addrs.delete(client.sessionId);
@@ -1364,6 +1382,7 @@ export class TownRoom extends Room<TownState> {
       flags: metaOf(p, META.flags) || undefined, cosm: metaOf(p, META.cosm) || undefined,
       titles: p.titles || undefined, mentor: p.mentor && { ...p.mentor, names: [...p.mentor.names] },
       ...(p.clan ? { clan: p.clan, clanAt: p.clanAt } : {}), ...(p.renown > 0 ? { renown: p.renown } : {}),
+      ...(p.home ? { home: p.home } : {}), ...(p.capPaid > 0 ? { capPaid: p.capPaid } : {}), // the capitals: bound home, ranks paid (server/warCapitals.ts)
       ...(p.writ ? { writ: { ...p.writ } } : {}), ...(p.writN > 0 ? { writDay: p.writDay, writN: p.writN } : {}),
       ...(Object.keys(p.feud).length ? { feud: cleanFeud(p.feud, Date.now()) } : {}), // grudges, kill points, bounty day (server/warFeuds.ts)
       ...(p.claims > 0 ? { claimDay: p.claimDay, claims: p.claims } : {}), // feud bounties claimed today (FEUD.bounty.perDay)
@@ -1432,6 +1451,7 @@ export class TownRoom extends Room<TownState> {
     p.bounty = cleanBounty(s.bounty);
     p.rumour = cleanRumour(s.rumour, rumourDay(Date.now()), p.level); // another day's rumours start over
     { const o = cleanOath(s.clan, s.clanAt); p.clan = o.clan; p.clanAt = o.clanAt; p.renown = cleanRenown(s.renown); } // clan war oath (server/warHeroes.ts)
+    p.home = cleanHome(s.home); p.capPaid = cleanCapPaid(s.capPaid); homeAfterOath(p); // the capitals (server/warCapitals.ts): older saves have neither
     p.writ = cleanWrit(s.writ, p.clan); p.writDay = Math.max(0, Math.floor(num(s.writDay))); p.writN = Math.max(0, Math.floor(num(s.writN))); // war writs (server/warWrits.ts)
     p.feast = cleanFeast(s.feast);
     p.feud = cleanFeud(s.feud, Date.now(), true); // feuds (shared/war/feuds.ts): time away decays at half rate; older saves have none
@@ -4328,6 +4348,8 @@ export class TownRoom extends Room<TownState> {
       }
       return;
     }
+    const cg = cityGateOf(g);
+    if (cg && !cg.inner && !this.caps.admit(pid, cg.city)) return; // a capital's gate stays shut to its enemies (server/warCapitals.ts)
     if (this.lanternHeld(pid, p)) return;
     if (Date.now() - p.lastHurt < PORTAL_COMBAT_MS) { client.send("travelno", { why: "fight" }); return; }
     const dest = waygateById(g.to)!, at = waygateArrival(dest);
@@ -4995,7 +5017,7 @@ export class TownRoom extends Room<TownState> {
 
   /** Takes the reset fee (shared/upkeep.ts respecCost); false with a note when the hero can't pay. */
   private payReset(id: string, p: Player, what: string): boolean {
-    const cost = respecCost(p.level);
+    const cost = cityPrice(respecCost(p.level), cityRoleNear("trainer", p.x, p.y), p.clan); // less beside a capital's trainer for its clan's sworn
     if (p.gold < cost) { this.note(id, `Resetting your ${what} costs ${cost} gold at level ${p.level}. You have ${p.gold}.`); return false; }
     if (cost) { p.gold -= cost; this.note(id, `Your ${what} are reset (${cost} gold).`); }
     return true;
@@ -5834,6 +5856,8 @@ export class TownRoom extends Room<TownState> {
   /** What hero p pays for `base` at the trader beside them: less in a capturable town its clan holds (shared/war/towns.ts townPrice). */
   private priceFor(p: Player, base: number): number {
     const n = npcNear(p.x, p.y, TALK_RANGE * 1.5, (o) => npcPresent(o.id, p)), t = n && townAt(n.x, n.y);
+    const city = n && cityNpcRole(n.id)?.city; // a capital's quartermaster: its clan's sworn pay less (shared/capitals.ts cityPrice)
+    if (city) return cityPrice(base, city, p.clan);
     return t ? townPrice(base, t, warTowns()[t.id]?.k, p.clan) : base;
   }
 
@@ -6345,6 +6369,8 @@ export class TownRoom extends Room<TownState> {
     if (!p || p.dead || !dest || !p.portals.has(dest.id)) return;
     const from = PORTALS.find((o) => p.portals.has(o.id) && Math.hypot(o.x - p.x, o.y - p.y) <= PORTAL_RANGE * 1.5);
     if (!from || from.id === dest.id) return;
+    const city = cityOfPortal(dest.id);
+    if (city && !this.caps.admit(id, city)) return; // a capital's waystone lets in whom its gate does
     if (this.lanternHeld(id, p)) return;
     if (now - p.lastHurt < PORTAL_COMBAT_MS) { client.send("travelno", { why: "fight" }); return; }
     const at = arrivalOf(dest);
@@ -6563,6 +6589,16 @@ export class TownRoom extends Room<TownState> {
     this.clients.find((c) => c.sessionId === id)?.send("songbook", this.songs.msg(p));
   }
 
+  /** A hero's oath changed (a standard's "clan" message or a capital's altar): the reply, writs, tabards, plan, home. */
+  private oathChanged(id: string) {
+    const p = this.state.players.get(id), client = this.clients.getById(id);
+    if (!p) return;
+    homeAfterOath(p); // a home in another clan's city is unbound (server/warCapitals.ts)
+    client?.send("clan", { ...clanView(p), err: "" });
+    this.writs.oathChanged(id); this.oaths.sync(); // a writ for the old clan is withdrawn; tabards update
+    if (client) sendPlan(client, p, true); // the new clan's plan
+  }
+
   /** A line in one player's chat from the game itself. */
   private note(id: string, text: string) {
     this.clients.find((c) => c.sessionId === id)?.send("chat", { id: "", name: "Oakvale", text });
@@ -6694,7 +6730,8 @@ export class TownRoom extends Room<TownState> {
     this.clock.setTimeout(() => {
       if (!this.state.players.has(tid)) return;
       // back at the act's own town (the moors: Cairnwatch; the badlands: the Rustwater Post); Act 1: Oakvale, or Saltmere when nearer and its waystone is woken
-      const s = actSpawn(actAt(t.y, t.x), () => act1Home(t.x, t.y, (id) => t.portals.has(id)));
+      // a hero who bound a capital of their clan as home wakes there when it is nearer, in the same land only (server/warCapitals.ts)
+      const s = respawnAt(t, t.x, t.y, actSpawn(actAt(t.y, t.x), () => act1Home(t.x, t.y, (id) => t.portals.has(id))));
       t.x = s.x; t.y = s.y; t.hp = t.maxHp; t.dead = false;
       if (usesGauge(t.cls)) { t.mana = 0; this.syncMana(t); } // the song gauge starts over empty
     }, RESPAWN_MS);

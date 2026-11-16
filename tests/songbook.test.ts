@@ -12,7 +12,7 @@ import { CHAINS, QUESTS, questFinished } from "../shared/quests";
 import { ODO_LINES, pondShore, progressionsFor, SONG_IDS, SONG_PROGRESSIONS, SONG_SOURCES, songOfQuest } from "../shared/songbook";
 import { SongCollector, SW_KIT_VERSION } from "../server/songs";
 import { play, singer, world } from "./helpers/songWorld";
-import { startRoom, wait } from "./helpers/room";
+import { startRoom, until, wait } from "./helpers/room";
 import { newRuntime } from "../shared/skillEngine";
 
 test("data: four songs with the contract's ids, each a new progression and a hidden finisher; never a drop", () => {
@@ -106,8 +106,7 @@ test("room: an old save that finished jelly gets its song; finishing king teache
   const books: any[] = [];
   c.onMessage("songbook", (m: any) => books.push(m));
   try {
-    await wait(250);
-    assert.ok(books.length >= 1, "sent on join");
+    assert.ok(await until(() => books.length >= 1), "sent on join");
     assert.deepEqual(books[0].songs, []);
     const room = srv.room, p = room.state.players.get(c.sessionId);
     const jelly = QUESTS.findIndex((q) => q.id === "jelly");
@@ -123,7 +122,7 @@ test("room: an old save that finished jelly gets its song; finishing king teache
     c.onMessage("sfx", (e: any) => fx.push(e));
     room.qset(p, ci, { questId: qi, questStage: CHAINS[ci].quests[qi].steps.length, questCount: 0 });
     room.nextStep(c.sessionId, p, ci);
-    await wait(250);
+    assert.ok(await until(() => fx.some((e) => e.ev === "newsong") && books.at(-1)?.songs.length === 2), "newsong and songbook arrive");
     assert.ok(room.songs.has(p, "song_lament"));
     assert.ok(fx.some((e) => e.ev === "newsong" && e.song === "song_lament" && e.id === c.sessionId));
     assert.deepEqual(books.at(-1).songs, ["song_hum", "song_lament"]);

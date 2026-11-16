@@ -1,6 +1,6 @@
 import { uiScale } from "./worldscale";
 import { decodeFog, encodeFog, loadFog } from "./fogmigrate";
-import { BADLANDS_H, BADLANDS_Y0, DESERT_H, DESERT_Y0, CROWN_H, CROWN_Y0, inBadlandsBand, inCrownBand, inDeepRow, inMoorsBand, inSinkholesBand, SINKHOLES_H, SINKHOLES_Y0, MOORS_Y0, MOORS_H, MAP_H, MAP_W, TILE, UNDER_END, WORLD_H } from "../../shared/constants";
+import { BADLANDS_H, BADLANDS_Y0, DESERT_H, DESERT_Y0, CROWN_H, CROWN_Y0, CITIES_Y0, CITIES_H, inBadlandsBand, inCitiesBand, inCrownBand, inDeepRow, inMoorsBand, inSinkholesBand, SINKHOLES_H, SINKHOLES_Y0, MOORS_Y0, MOORS_H, MAP_H, MAP_W, TILE, UNDER_END, WORLD_H } from "../../shared/constants";
 import { floorAt, SEA_END } from "../../shared/dungeon";
 import { AREAS, areaAt, EMPTY, GROUND, OBJECTS, T } from "../../shared/map";
 import { createTilesetCanvas, tileColors } from "./tileset";
@@ -61,6 +61,16 @@ function crownColor(o: number, g: number, colors: string[]): string {
   return g === T.MARBLE ? "#cfcabc" : g === T.COBBLE ? "#8a8a90" : g === T.DIRT ? "#8a7a5c" : g === T.GRASS ? "#5a7a48" : colors[g];
 }
 
+/** Capital-city colours (warm stone walls, slate and red roofs, cobbled streets, grass courts) for the minimap and world map; the rock round the plots is dark. */
+function citiesColor(o: number, g: number, colors: string[]): string {
+  if (o === T.WALL_STONE || o === T.CLIFF) return "#9a8e7c";
+  if (o === T.ROOF_SLATE) return "#4a5a78";
+  if (o === T.ROOF_RED) return "#a8442c";
+  if (o === T.DOOR) return "#e8b848";
+  if (o !== EMPTY && o !== T.BUSH) return colors[o];
+  return g === T.ROCK ? "#0d0b0c" : g === T.COBBLE ? "#8c8070" : g === T.FLAGS ? "#a89c86" : g === T.DIRT ? "#7a644a" : colors[g];
+}
+
 const VIEW_W = 56, VIEW_H = 56; // tiles shown around the player on the (round) minimap
 const PX = 3; // minimap canvas pixels per tile (56x56 tiles -> 168x168)
 const MIN_VIEW = 24; // minimap zoom when almost nothing is explored (tiles across)
@@ -112,6 +122,8 @@ export class Minimap {
   private inBadlands = false;
   private inSinkholes = false;
   private inCrown = false;
+  private inCities = false;
+  private cx0 = MAP_W; private cy0 = MAP_H; private cx1 = -1; private cy1 = -1; // explored box of the cities band
   private kx0 = MAP_W; private ky0 = MAP_H; private kx1 = -1; private ky1 = -1; // explored box of the Crown
   private sx0 = MAP_W; private sy0 = MAP_H; private sx1 = -1; private sy1 = -1; // explored box of the sinkholes
   private ax0 = MAP_W; private ay0 = MAP_H; private ax1 = -1; private ay1 = -1; // explored box of the badlands
@@ -174,7 +186,8 @@ export class Minimap {
       const o = OBJECTS[y][x];
       // the Mawdeep: black rock, dim cave floors
       const g = GROUND[y][x];
-      b.fillStyle = inCrownBand(y) ? crownColor(o, g, colors) // the Crown of the Marches
+      b.fillStyle = inCitiesBand(y) ? citiesColor(o, g, colors) // the clans' capital cities
+        : inCrownBand(y) ? crownColor(o, g, colors) // the Crown of the Marches
         : inSinkholesBand(y) ? sinkholesColor(o, g, colors) // the Mawdeep Sinkholes
         : inBadlandsBand(y) ? badlandsColor(o, g, colors) // the Red Badlands
         : inMoorsBand(y) ? moorsColor(o, g, colors) // the Grey Barrow Moors
@@ -357,6 +370,7 @@ export class Minimap {
     const f = me && floorAt(Math.floor(me.x / TILE), Math.floor(me.y / TILE));
     if (f) return { x0: f.x, y0: f.y, x1: f.x + f.w, y1: f.y + f.h };
     if (me && me.y >= WORLD_H * TILE && me.y < UNDER_END * TILE) return { x0: 0, y0: WORLD_H, x1: MAP_W, y1: UNDER_END };
+    if (this.inCities) return { x0: 0, y0: CITIES_Y0, x1: MAP_W, y1: CITIES_Y0 + CITIES_H };
     if (this.inCrown) return { x0: 0, y0: CROWN_Y0, x1: MAP_W, y1: CROWN_Y0 + CROWN_H };
     if (this.inSinkholes) return { x0: 0, y0: SINKHOLES_Y0, x1: MAP_W, y1: SINKHOLES_Y0 + SINKHOLES_H };
     if (this.inBadlands) return { x0: 0, y0: BADLANDS_Y0, x1: MAP_W, y1: BADLANDS_Y0 + BADLANDS_H };
@@ -468,6 +482,13 @@ export class Minimap {
     return this.war ? { war: this.war, clan: this.clan, plan: this.plan, writ: this.writ, tunnels: this.tunnels, sacked: this.sacked, towns: this.towns, lines: this.lines, battles: this.battles, me: this.me, seen: (x, y) => this.isSeen(x, y) } : undefined;
   }
 
+  /** Opens the big map with the war layer on (a capital's war table prop). */
+  showWarTable() {
+    setWarTableOn(true);
+    this.overlay.querySelector<HTMLButtonElement>(".wm-war")?.classList.add("on");
+    this.toggle(true);
+  }
+
   get isOpen() { return this.overlay.classList.contains("open"); }
 
   /** True while the turned (iso) world map draws its markers: their glyphs turn back upright. */
@@ -507,6 +528,11 @@ export class Minimap {
 
   private grow(x: number, y: number) {
     if (inDeepRow(y)) return; // the deep dungeons frame their floor
+    if (inCitiesBand(y)) {
+      if (x < this.cx0) this.cx0 = x; if (x > this.cx1) this.cx1 = x;
+      if (y < this.cy0) this.cy0 = y; if (y > this.cy1) this.cy1 = y;
+      return;
+    }
     if (inCrownBand(y)) {
       if (x < this.kx0) this.kx0 = x; if (x > this.kx1) this.kx1 = x;
       if (y < this.ky0) this.ky0 = y; if (y > this.ky1) this.ky1 = y;
@@ -538,6 +564,7 @@ export class Minimap {
   }
   /** The explored box of the act the hero is in. */
   private box() {
+    if (this.inCities) return { x0: this.cx0, y0: this.cy0, x1: this.cx1, y1: this.cy1 };
     if (this.inCrown) return { x0: this.kx0, y0: this.ky0, x1: this.kx1, y1: this.ky1 };
     if (this.inSinkholes) return { x0: this.sx0, y0: this.sy0, x1: this.sx1, y1: this.sy1 };
     if (this.inBadlands) return { x0: this.ax0, y0: this.ay0, x1: this.ax1, y1: this.ay1 };
@@ -563,7 +590,7 @@ export class Minimap {
       return { x: f.x + f.w / 2 - cw / s / 2, y: f.y + f.h / 2 - ch / s / 2, s };
     }
     const B = this.box();
-    if (B.x1 < 0) return { x: 0, y: this.inCrown ? CROWN_Y0 : this.inSinkholes ? SINKHOLES_Y0 : this.inBadlands ? BADLANDS_Y0 : this.inMoors ? MOORS_Y0 : this.inDesert ? DESERT_Y0 : 0, s: Math.max(1, Math.floor(Math.min(cw / MAP_W, ch / WORLD_H))) };
+    if (B.x1 < 0) return { x: 0, y: this.inCities ? CITIES_Y0 : this.inCrown ? CROWN_Y0 : this.inSinkholes ? SINKHOLES_Y0 : this.inBadlands ? BADLANDS_Y0 : this.inMoors ? MOORS_Y0 : this.inDesert ? DESERT_Y0 : 0, s: Math.max(1, Math.floor(Math.min(cw / MAP_W, ch / WORLD_H))) };
     const w = Math.max(24, B.x1 - B.x0 + 1 + MAP_PAD * 2), hh = Math.max(18, B.y1 - B.y0 + 1 + MAP_PAD * 2);
     const s = Math.max(1, Math.floor(Math.min(cw / w, ch / hh)));
     const cx = (B.x0 + B.x1 + 1) / 2, cy = (B.y0 + B.y1 + 1) / 2;
@@ -599,11 +626,12 @@ export class Minimap {
   private drawMini(now: number, me: P | undefined, others: OtherHero[]) {
     if (me) {
       const ty = Math.floor(me.y / TILE);
+      this.inCities = inCitiesBand(ty);
       this.inCrown = inCrownBand(ty);
       this.inSinkholes = inSinkholesBand(ty);
       this.inBadlands = inBadlandsBand(ty);
       this.inMoors = inMoorsBand(ty);
-      this.inDesert = !this.inMoors && !this.inBadlands && !this.inSinkholes && !this.inCrown && me.y >= DESERT_Y0 * TILE && !inDeepRow(ty);
+      this.inDesert = !this.inMoors && !this.inBadlands && !this.inSinkholes && !this.inCrown && !this.inCities && me.y >= DESERT_Y0 * TILE && !inDeepRow(ty);
     }
     if (me) this.reveal(Math.floor(me.x / TILE), Math.floor(me.y / TILE));
     if (this.dirty && now - this.lastSave > 3000) { this.save(); this.dirty = false; this.lastSave = now; }

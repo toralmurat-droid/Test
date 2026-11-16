@@ -3,7 +3,7 @@ import { BEAST_CHAIN, CHAINS, CROWN_CHAIN, packQuest } from "../shared/quests";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
-  ACT_LEVEL, actMobLevel, actOfTile, actSpecialLevel, BADLANDS_H, BADLANDS_Y0, CROWN_H, CROWN_LEVEL, CROWN_Y0, DESERT_H, DESERT_Y0, MAP_H, MAP_W,
+  ACT_LEVEL, actMobLevel, actOfTile, actSpecialLevel, BADLANDS_H, BADLANDS_Y0, CITIES_Y0, CROWN_H, CROWN_LEVEL, CROWN_Y0, DESERT_H, DESERT_Y0, MAP_H, MAP_W,
   MOORS_H, MOORS_Y0, SINKHOLES_H, SINKHOLES_LEVEL, SINKHOLES_Y0, TILE,
 } from "../shared/constants";
 import { AREAS, EMPTY, GROUND, isSafeZone, isSolidAt, isSolidTile, OBJECTS, randomSpawn, T, TILE_COUNT } from "../shared/map";
@@ -12,7 +12,7 @@ import {
   TOLLCROSS, TOLLCROSS_SQUARE, type TileBox,
 } from "../shared/crown";
 import {
-  actAt, actOpen, actSpawn, crownSpawn, gateColdNote, gateOpen, HOMELAND_GATES, homelandGate, isCrownGate, isSinkholesGate, waygateArrival, waygateById, WAYGATES,
+  actAt, actOpen, actSpawn, cityGateOf, crownSpawn, gateColdNote, gateOpen, HOMELAND_GATES, homelandGate, isCrownGate, isSinkholesGate, waygateArrival, waygateById, WAYGATES,
 } from "../shared/act2";
 import { baseLevelAt, SPAWN_ZONES } from "../shared/spawns";
 import { regionOf } from "../shared/war/regions";
@@ -47,8 +47,8 @@ test("crown: a band of its own under the sinkholes, built the same every time", 
   assert.equal(CROWN_Y0, SINKHOLES_Y0 + SINKHOLES_H + 8);
   assert.equal(CROWN_Y0, 1148);
   assert.equal(CROWN_H, 176);
-  assert.equal(MAP_H, CROWN_Y0 + CROWN_H + 4);
-  assert.equal(MAP_H, 1328);
+  assert.equal(CITIES_Y0, CROWN_Y0 + CROWN_H + 8, "the capitals' band (W7, shared/capitals.ts) under the Crown's rock");
+  assert.equal(MAP_H, 1384);
   assert.equal(GROUND.length, MAP_H);
   assert.equal(TILE_COUNT, 68);
   assert.deepEqual(NEW_TILES, [64, 65, 66, 67]);
@@ -83,7 +83,7 @@ test("crown: actOfTile knows all six acts, the rock strip under the sinkholes sp
   assert.equal(actOfTile(140, SINKHOLES_Y0 + SINKHOLES_H - 1), 5, "the sinkholes' last row");
   assert.deepEqual([1140, 1143, 1144, 1147].map((y) => actOfTile(0, y)), [5, 5, 6, 6], "rows 1140-1143 Act 5, 1144-1147 Act 6");
   assert.equal(actOfTile(0, C0), 6);
-  assert.equal(actOfTile(287, MAP_H - 1), 6, "the last row (rock under the Crown)");
+  assert.equal(actOfTile(287, C1 + 3), 6, "the Crown's share of the rock under it");
   for (const c of CROWNWAYS) {
     const g = crownGateTile(c);
     assert.equal(actOfTile(g.x, g.y), 6, `${c.name}: its Crown side`);
@@ -101,7 +101,7 @@ test("crown: sealed in rock, every walkable tile reachable from every Crownway, 
   }
   assert.ok(walk > MAP_W * CROWN_H * 0.5, `mostly open land (${walk})`);
   for (let y = SINKHOLES_Y0 + SINKHOLES_H; y < C0; y++) for (let x = 0; x < MAP_W; x++) assert.ok(isSolidTile(x, y), `rock at ${x},${y}`);
-  for (let y = C1; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) assert.ok(isSolidTile(x, y), `rock at ${x},${y}`);
+  for (let y = C1; y < CITIES_Y0; y++) for (let x = 0; x < MAP_W; x++) assert.ok(isSolidTile(x, y), `rock at ${x},${y}`);
   // the five gates on the rim, each on the side its homeland lies, every arrival free and joined to the others
   const at = Object.fromEntries(CROWNWAYS.map((c) => [c.from, c.gate]));
   assert.ok(at.oakvale.x < MAP_W / 4 && at.oakvale.y < CROWN_H / 4, "Oakvale's gate on the north-west rim");
@@ -178,7 +178,7 @@ test("crown: Lv 40-50 climbing inward from the rim, the Crownways open at Lv 40,
   // the gates: five pairs, each Crown side leading back to its own homeland
   const crown = WAYGATES.filter(isCrownGate);
   assert.equal(crown.length, 10);
-  assert.equal(WAYGATES.length, 18);
+  assert.equal(WAYGATES.filter((g) => !cityGateOf(g)).length, 18, "(and the capitals' city gates, shared/capitals.ts)");
   for (const c of CROWNWAYS) {
     const g = home(c.from), b = gate(c.from);
     assert.equal(g.to, b.id); assert.equal(b.to, g.id);
