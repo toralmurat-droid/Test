@@ -63,13 +63,13 @@ export const REGIONS: Region[] = [
   ] },
   // Redfang's homeland (Act 4): its seat is Fangrock, the clan's stockade in the far west (Old Rourke's keep inside is a
   // lair, not a territory). Built, so Redfang Hollow and Dustrider Camp step down to ordinary territories (capitalsOf).
-  // The Rustwater Post lies outside every zone: a safe hub, out of the war like Cairnwatch.
+  // The Rustwater Post lies outside every zone: a safe hub and no territory, like Cairnwatch; since W6 a capturable town that follows The Saltlick Flats (shared/war/towns.ts), never fought in.
   { key: "badlands", name: "The Red Badlands", compass: "W", home: "redfang", contains: (x, y) => actOfTile(x, y) === 4, capitals: [
     { clan: "redfang", zone: "Fangrock" },
   ] },
   // The Hide-Kin's homeland (Act 5): their seat is Hidehall, the warren town in the far south-east (the Maw-Father's
   // ledge in the Great Maw is a lair, not a territory). Built, so Thornwood and the Humpback Mesas step down to ordinary
-  // territories (capitalsOf): no forward capitals are left. Ropewell lies outside every zone: a safe hub, out of the war.
+  // territories (capitalsOf): no forward capitals are left. Ropewell lies outside every zone: a safe hub and no territory; since W6 a capturable town that follows Rootfall Slopes (shared/war/towns.ts), never fought in.
   { key: "sinkholes", name: "The Mawdeep Sinkholes", compass: "S", home: "hidekin", contains: (x, y) => actOfTile(x, y) === 5, capitals: [
     { clan: "hidekin", zone: "Hidehall" },
   ] },

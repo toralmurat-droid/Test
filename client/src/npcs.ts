@@ -12,6 +12,9 @@ import { CAMP_PIVOT, TX as CAMP_TX, witchCampTextures } from "./witchCamp";
 import { worldPropTextures } from "./worldProps";
 import { ANVIL_TOP, FORGE_FLUE, SMITHY_ORIGIN, TX as SMITHY_TX, smithyTextures } from "./smithy";
 import { smokeTexture } from "./bonfireArt";
+import type { WarTowns } from "./warTowns";
+import { CLANS } from "../../shared/war/clans";
+import { TOWN, townAt, townById } from "../../shared/war/towns";
 import { NPCS, NPC_DECOR, Npc, npcById, npcNear, TALK_RANGE } from "../../shared/npcs";
 import {
   mentorOffer, CHAINS, chainOpen, chainState, questSig, tutorialDone, USE_RANGE, TUT_CHAIN, npcPresent, ZONE_ARCS, npcQuestMark, questDef, questDialog, questObjective, questStep, stepFor, DialogPage, Quester, QuestTarget, questTargets, stepGoal, stepProgress,
@@ -116,6 +119,9 @@ for (const a of ZONE_ARCS) ZONE_GIVERS.set(a.quests[0].giver, [...(ZONE_GIVERS.g
 /** A zone arc fits a hero from its first quest's level to a few levels past it (beyond that it is only a "!" on the map). */
 export const arcFits = (giver: string, level: number) => (ZONE_GIVERS.get(giver) ?? []).some((l) => level >= l && level <= l + 6);
 
+/** The town id of a steward NPC (`steward_<town>`), if it is one. */
+const stewardTown = (n: Npc): string | undefined => { const id = n.id.startsWith("steward_") ? n.id.slice(8) : ""; return townById(id) ? id : undefined; };
+
 export class NpcLayer {
   private bubbles = new Map<string, Phaser.GameObjects.Image>();
   private sprites = new Map<string, { sprite: Phaser.GameObjects.Sprite; label: Phaser.GameObjects.Text; mark: Phaser.GameObjects.Text }>();
@@ -130,6 +136,9 @@ export class NpcLayer {
   private toast = document.createElement("div");
   private near?: Npc;
   private talking?: Npc;
+  /** Capturable towns (client/src/warTowns.ts): the stewards' look and lines, and the holder's shop discount. */
+  towns?: WarTowns;
+  private talkSeq = 0;
   /** Trader page instead of the quest talk (traders who also give quests get a "Trade" button) */
   private trading = false;
   private q: QuestState;
@@ -518,7 +527,20 @@ export class NpcLayer {
     this.stage = -1;
   }
 
+  /** The towns view changed: every steward takes the holder's name and sheet (client-only: the shared entries are the neutral default). */
+  townsChanged() {
+    for (const n of NPCS) {
+      const id = stewardTown(n); if (!id) continue;
+      const st = this.towns?.steward(id), s = this.sprites.get(n.id);
+      if (!st || !s) continue;
+      if (n.name !== st.name) { n.name = st.name; s.label.setText(st.name); }
+      if (n.sprite !== st.sprite) { n.sprite = st.sprite; this.ready.delete(n.id); this.asked.delete(n.id); } // the new sheet loads, the figure waits for it
+    }
+    this.stage = -1;
+  }
+
   private open(n: Npc) {
+    this.talkSeq++;
     this.talking = n;
     this.trading = !pageFor(n.id, this.q);
     this.shopMsg = "";
@@ -537,7 +559,8 @@ export class NpcLayer {
     const bag = [...o.bag];
     // masterwork: one level shown at a time (picked with the buttons), by default the best one the hero can wear
     const master = this.masterLv ?? [...MASTER_LEVELS].reverse().find((l) => l <= (q?.level ?? 1)) ?? MASTER_LEVELS[0];
-    const key = JSON.stringify([n.id, master, gold, potions, bag, q?.level, o.ptSta, o.ptStr, o.ptMag, o.ptDex, ...GEAR_SLOTS.map((s) => q?.[s]), this.shopMsg, questSig(q)]);
+    const tw = this.towns, town = townAt(n.x, n.y), cut = (p: number) => (tw ? tw.price(p, town) : p); // the holder's sworn heroes pay less (the server charges the same)
+    const key = JSON.stringify([n.id, master, cut(1000), gold, potions, bag, q?.level, o.ptSta, o.ptStr, o.ptMag, o.ptDex, ...GEAR_SLOTS.map((s) => q?.[s]), this.shopMsg, questSig(q)]);
     if (key === this.stage) return;
     this.stage = key;
     const row = (icon: string, name: string, color: string, desc: string, btn: string, cls2: string, i: number, off: boolean) =>
@@ -550,7 +573,7 @@ export class NpcLayer {
         const room = bag.length + slotsAfter(pots, e.item, size, qty) <= BAG_SIZE;
         return row(`${e.item}:${size}`, `${qty > 1 ? `${qty} × ` : ""}${potionName(e.item, size)}`, mana ? "#8ab4ff" : "#ff8a8a",
           `${mana ? "+" : "Heals "}${potionAmount(e.item, size)}${mana ? " mana" : " HP"} · you carry ${total(pots[e.item])} · ${actionKey(mana ? "mana" : "potion")} · ${room ? "10 per bag slot" : "no room in your bag"}`,
-          `${e.price}${pxIcon("coin")}`, "sh-buy", i, gold < e.price || !room);
+          `${cut(e.price)}${pxIcon("coin")}`, "sh-buy", i, gold < cut(e.price) || !room);
       }
       const d = gearDef(e.item)!, lv = itemLevel(e.item), isMaster = itemRarity(e.item) === 3;
       if (isMaster && lv !== master) return "";
@@ -564,7 +587,7 @@ export class NpcLayer {
       const cant = q ? wearProblem(cls ?? "", e.item) : ""; // a class that can never wear it (buying stays allowed: it can be sold on)
       const why = q && !cant ? reqProblem(e.item, reqInfoOf(q)) : "";
       const html = row(e.item, gearName(e.item, cls), itemColor(e.item), `${rarityLabel(e.item)}${TIER_NAMES[d.tier]} · Lv ${itemLevel(e.item)} · ${itemText(e.item)}${why ? ` · <span class="sh-need">${why}</span>` : ""}` +
-        (cant ? `<span class="sh-cant" title="${escAttr(cant)}">${escAttr(cant.split(". ")[0].replace(/\.$/, ""))}</span>` : ""), `${e.price.toLocaleString("en-US")}${pxIcon("coin")}`, "sh-buy", i, gold < e.price);
+        (cant ? `<span class="sh-cant" title="${escAttr(cant)}">${escAttr(cant.split(". ")[0].replace(/\.$/, ""))}</span>` : ""), `${cut(e.price).toLocaleString("en-US")}${pxIcon("coin")}`, "sh-buy", i, gold < cut(e.price));
       return head + (cant ? html.replace('class="sh-row"', 'class="sh-row cant"') : html);
     }).join("");
     const sellable = shop.buys ? bag.map((id, i) => [id, i] as const).filter(([id]) => shopBuys(shop, id, true) && !keepsBoundOf(q?.cls ?? "", [q?.weapon, q?.shield], bag)(id)) : [];
@@ -597,6 +620,7 @@ export class NpcLayer {
     const lm = n.id === "lutemaker"; // Wren's shop is a tab of her panel
     this.dialog.innerHTML = this.head(n) + (lm ? lmTabsHtml("shop", true) : "") + `<p>${lm ? "Books on the left, spare strings on the right. Anything you can't use, I'll buy or break." : shop.greeting}</p>` +
       `<div class="sh-gold">Your gold: <b>${gold}${pxIcon("coin")}</b> ${this.shopMsg}</div>` +
+      (cut(1000) < 1000 ? `<p class="sh-empty">Sworn to ${CLANS[tw!.info(town!.id)!.holder].name}, holders of this town: ${Math.round(TOWN.discount * 100)}% off everything for sale.</p>` : "") +
       `<h4>For sale</h4><div class="sh-list">${buy}</div>${sell}${fuse}` +
       `<div class="nd-btns">${quest ? `<button class="nd-talk">Talk</button>` : ""}<button class="nd-bye">Goodbye <kbd>E</kbd></button></div>`;
     this.dialog.classList.add("shop");
@@ -671,13 +695,14 @@ export class NpcLayer {
   private renderDialog(q: QuestState) {
     const n = this.talking!;
     if (n.id === "lutemaker" && !(this.lmTab === "shop" && n.shop && SHOPS[n.shop])) return this.renderLute(n, q);
-    const page = pageFor(n.id, q);
+    const tid = stewardTown(n), st = tid ? this.towns?.steward(tid, this.talkSeq) : undefined;
+    const page = st ? { text: st.text, bye: "Farewell", chain: 0 } : pageFor(n.id, q);
     if (n.shop && (this.trading || !page)) return this.renderShop(n, q);
     this.dialog.classList.remove("shop", "lm");
     if (this.shopOpen) { this.shopOpen = false; this.onPreview?.(); }
     const rumourBody = n.id === MAGS && !(page?.accept || page?.options) ? this.rumours.dialogHtml(tutorialDone(q)) : "";
     this.rumourPage = !!rumourBody;
-    const key = JSON.stringify([n.id, questSig(q), q?.level, metaOf(q, META.flags), rumourBody ? this.rumours.rev : 0, n.id === "captain" ? this.mentor : 0]);
+    const key = JSON.stringify([n.id, st?.text, questSig(q), q?.level, metaOf(q, META.flags), rumourBody ? this.rumours.rev : 0, n.id === "captain" ? this.mentor : 0]);
     if (key === this.stage) return;
     this.stage = key;
     if (rumourBody) { // Mags: today's three rumours as option buttons, or the one under way with "Drop it"
@@ -740,7 +765,7 @@ export class NpcLayer {
 
   update(me: Me, q: QuestState) {
     this.q = q;
-    const present = (n: Npc) => npcPresent(n.id, q);
+    const present = (n: Npc) => npcPresent(n.id, q) && (!stewardTown(n) || !!this.towns?.info(stewardTown(n)!)); // a steward waits for the towns view
     this.objects.update(q, me);
     if (this.rumourRev !== this.rumours.rev) { this.rumourRev = this.rumours.rev; this.objects.setRumour(this.rumours.objects()); }
     const ro = this.rumours.usable();

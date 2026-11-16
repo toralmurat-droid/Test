@@ -76,7 +76,7 @@ export interface Fighter { clan: ClanKey; officer: boolean; nextPick: number; ne
  * Where a soldier fights: `leash` holds every foe and chase, `hunt` the wild monsters it goes for unprovoked, `far` (when
  * given) the wider leash for a hero its clan wants (shared/war/feuds.ts FEUD.leashTiles).
  */
-export interface FightGround { leash(x: number, y: number): boolean; hunt(x: number, y: number): boolean; far?(x: number, y: number): boolean }
+export interface FightGround { leash(x: number, y: number): boolean; hunt(x: number, y: number): boolean; far?(x: number, y: number): boolean; /** Heroes it fights at all (unset: every enemy; a town's gate guard: TOWN.minFoeLevel and up). */ foe?(hero: TroopHero): boolean }
 export const newFighter = (clan: ClanKey, officer: boolean): Fighter => ({ clan, officer, nextPick: 0, near: false, nextRush: 0, rushUntil: 0, rushHit: false, nextThrow: 0, throwing: false });
 interface Troop extends Fighter { t: number; slot: Slot; g: FightGround }
 
@@ -381,7 +381,7 @@ export class WarTroops {
     for (const [pid, p] of this.h.heroes()) {
       const wanted = wantedTier(p.feud, tr.clan, now) > 0, far = R * 2 * (wanted ? FEUD.sight : 1); // a Wanted hero is seen from farther
       if (p.dead || Math.abs(p.x - m.x) > far || Math.abs(p.y - m.y) > far) continue;
-      if (troopStance(tr.clan, p, now) !== "enemy" || this.h.hidden(pid, now)) continue;
+      if (troopStance(tr.clan, p, now) !== "enemy" || this.h.hidden(pid, now) || (g.foe && !g.foe(p))) continue;
       consider(pid, p.x, p.y, W.heroBonus, wanted); // a soldier goes for the enemy hero first
     }
     const hated = m.hateId && m.hate > 0 ? this.h.mob(m.hateId) : undefined; // (the only one it sees from twice as far)
@@ -444,7 +444,7 @@ export class WarTroops {
     const tp = m.target ? this.h.hero(m.target) : undefined, tm = !tp && m.target ? this.h.mob(m.target) : undefined;
     const t = tp ?? tm;
     const far = !!tp && !!g.far && wantedTier(tp.feud, tr.clan, now) > 0; // a Wanted hero is chased past the usual leash
-    if (m.target && (!t || (tp && (tp.dead || this.stance(tr.clan, m.target) !== "enemy" || this.h.hidden(m.target, now)))
+    if (m.target && (!t || (tp && (tp.dead || this.stance(tr.clan, m.target) !== "enemy" || this.h.hidden(m.target, now) || (g.foe && !g.foe(tp))))
       || (tm && (tm.dead || tm.hidden)) || offLimits(t.x, t.y) || !(far ? g.far!(t.x, t.y) : g.leash(t.x, t.y)))) { m.target = ""; m.windUntil = 0; m.winding = false; }
     if (!m.target || !t) { tr.throwing = false; tr.rushHit = false; return false; }
     const st = troopStats(tr.clan, m.level, tr.officer), speed = st.speed * (m.slowed ? SLOW_MOB : 1);

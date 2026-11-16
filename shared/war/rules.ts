@@ -78,6 +78,9 @@ export const WAR = {
   battleAttack: 1.25,
   battleDefence: 1.25,
   battleHold: 8,
+  // Capturable towns (W6, shared/war/towns.ts): troops each town its holder holds adds to that clan's income per tick
+  // (only with TickExtra.towns: a tick without it plays as before W6)
+  townIncome: 0.5,
 };
 
 /** `sack`: called by a sacked Hold (sackHold), not by the armies (optional: older saves have none). */
@@ -204,9 +207,17 @@ const fortCap = (k: ClanKey) => WAR.fortMax * (CLANS[k].doctrine === "palisade" 
  * What the live game adds to a tick. `phase`: the real time of day (the sim counts it from the tick). `valor`: the
  * players' effort per territory and clan this tick (standards held, see server/war.ts), turned into troops there.
  * `march` (W4): clan k's army attack on land t counts `mult` (0..1) of itself: what is left of its marching column
- * (shared/war/marches.ts marchMult, floored there); valor is untouched.
+ * (shared/war/marches.ts marchMult, floored there); valor is untouched. `towns` (W6): the towns each clan holds
+ * (shared/war/towns.ts townCounts), each adding WAR.townIncome to its income after the rally bonus.
  */
-export interface TickExtra { phase?: number; valor?: Partial<Record<ClanKey, number>>[]; march?: { t: number; k: ClanKey; mult: number }[]; battle?: BattleOutcome[] }
+export interface TickExtra { phase?: number; valor?: Partial<Record<ClanKey, number>>[]; march?: { t: number; k: ClanKey; mult: number }[]; battle?: BattleOutcome[]; towns?: Partial<Record<ClanKey, number>> }
+/** Most towns one clan can count in TickExtra.towns (validated: a bad count is dropped, a big one capped). */
+export const TOWNS_MAX = 16;
+/** Clan k's held towns from TickExtra.towns (W6): a whole number 0..TOWNS_MAX, 0 for junk. */
+export const townCount = (towns: TickExtra["towns"], k: ClanKey): number => {
+  const n = towns?.[k];
+  return typeof n === "number" && Number.isFinite(n) && n > 0 ? Math.min(TOWNS_MAX, Math.floor(n)) : 0;
+};
 
 /** W5 big battles (shared/war/battles.ts): a pitched battle at fixed times, a storming at a siege's gate, a meeting of two columns. */
 export type BattleKind = "pitched" | "storm" | "meet";
@@ -285,6 +296,7 @@ export function warTick(s: WarState, orders: Partial<Record<ClanKey, Orders>>, e
     for (const t of TERRITORIES) if (s.owner[t.id] === k) inc += (t.capitalOf === k ? WAR.capitalIncome : WAR.income) * supply[t.id];
     // Rally: the less land a clan holds below a fair share, the more its people take up arms
     inc *= 1 + WAR.rally * Math.max(0, 1 - land[k] / (s.owner.length / CLAN_KEYS.length));
+    if (extra.towns) inc += WAR.townIncome * townCount(extra.towns, k); // held towns (W6); nothing at all without them
     s.army[k] = s.army[k] * (1 - WAR.upkeep) + inc;
   }
   // The Night Raiders hunt the clan that holds clearly the most: its army bleeds, its weakest borders shake

@@ -14,7 +14,7 @@ import { regionByKey } from "../shared/war/regions";
 import { tunnelStrikes, type TunnelStrike } from "../shared/war/tunnels";
 import { warPhase, warView, type WarView } from "../shared/war/view";
 import type { WarPlan } from "../shared/war/intel";
-import { eventVoice, leaderLine } from "../shared/war/heralds";
+import { eventVoice, leaderLine, type WarMoment } from "../shared/war/heralds";
 import { holdGrew, HOLD_TIER_KEYS } from "../shared/war/holdTiers";
 import { bannerSpot } from "../shared/war/holdSack";
 import { atWar, setWarRelations, warPairs, warRelations } from "../shared/war/feuds";
@@ -25,6 +25,7 @@ import {
   setMen, siteForces, stormField, type Battle, type BattleSite,
 } from "../shared/war/battles";
 import { frontStep } from "../shared/war/siege";
+import { TOWN, TOWNS, townById, townCounts, townPatron, townStep, townsView, type TownChange, type TownState, type TownsMsg } from "../shared/war/towns";
 import { openKv, type Kv } from "./store";
 
 /**
@@ -36,7 +37,8 @@ export interface WarNews { raid?: { clan: ClanKey; ts: number[] }; rally?: { cla
  * `sack` (server/warHolds.ts): a hero sacked the Hold of t; `by` is the sacker's clan, or the holder itself when the hero was unsworn.
  * `grow` (W3): the holder (`by` = `from`) built its Hold of t up to `tier` (1 camp, 2 fortress; shared/war/holdTiers.ts).
  */
-export interface WarEvent { at: number; tick: number; kind: "siege" | "flip" | "held" | "sack" | "grow"; t: number; by: ClanKey; from: ClanKey; text: string; tier?: number }
+/** `town` (W6): town `town` (shared/war/towns.ts) was contested, claimed, submitted or the contest called off (`change`); t is its patron land. */
+export interface WarEvent { at: number; tick: number; kind: "siege" | "flip" | "held" | "sack" | "grow" | "town"; t: number; by: ClanKey; from: ClanKey; text: string; tier?: number; town?: string; change?: TownChange | "claimed" }
 /** Most Holds the Herald announces growing in one war tick (a new war raises every camp at once; the log keeps the rest quiet). */
 const GROW_NEWS = 3;
 /** `names`: the territory names in id order (optional: saves before 2026-11-15 have none, and their ids are today's). */
@@ -54,6 +56,8 @@ export interface BattleSave { list: Battle[]; day: number; n: number; meets: num
 interface Saved {
   v: 1; state: WarState; minds: Record<ClanKey, Mind>; next: number; log: WarEvent[]; names?: string[]; rel?: (number | null)[];
   ahead?: Partial<Record<ClanKey, Orders>>; cols?: Record<string, ColSave>; battles?: BattleSave;
+  /** W6: each capturable town's holder and contest (shared/war/towns.ts). Optional: read through cleanTowns, dropped on a map change. */
+  towns?: Record<string, TownState>;
 }
 
 const KEY = "war";
@@ -147,6 +151,7 @@ export function migrateWar(saved: Saved, oldNames: readonly string[], names: rea
   const log = saved.log.flatMap((e) => { const t = re(e.t); return t === undefined ? [] : [{ ...e, t }]; });
   const out: Saved = { ...saved, state, minds, log, names: [...names] };
   if (oldNames.length !== names.length || oldNames.some((n, i) => n !== names[i])) { delete out.ahead; delete out.cols; delete out.battles; } // (orders, columns and battles name territory ids: given afresh on load)
+  if (oldNames.length !== names.length || oldNames.some((n, i) => n !== names[i])) delete out.towns; // (W6: each town takes its land's holder again)
   return out;
 }
 
@@ -207,6 +212,7 @@ export async function startWar(store?: Kv) {
   }
   relate(saved.rel ?? []);
   cleanBattles();
+  cleanTowns(); // (W6)
   try { lookAhead(saved.next - WAR.tickMs); } catch (e) { console.error("War: the orders ahead could not be given:", e); } // (the next tick tries again)
   timer = setInterval(() => { step(Date.now()).catch((e) => console.error("War: tick failed:", e)); }, 15_000);
   timer.unref?.();
@@ -254,7 +260,7 @@ function tickOnce(at: number, news: WarNews): WarEvent[] {
   if (raid?.ts.length) news.raid = { clan: raid.clan, ts: [...raid.ts] };
   settleMeetings(Infinity); // (marks the meetings not yet marked; they cost no men)
   const battle = battleOutcomes(at);
-  warTick(s, orders, { phase, valor, march: marchMults(), ...(battle.length ? { battle } : {}) });
+  warTick(s, orders, { phase, valor, march: marchMults(), ...(battle.length ? { battle } : {}), ...townExtra() });
   lastOrders = orders;
   valor = TERRITORIES.map(() => ({}));
   // the orders for the next tick, at once (same leaders, same seed as if given then): their columns march now
@@ -274,6 +280,7 @@ function tickOnce(at: number, news: WarNews): WarEvent[] {
   const grew = TERRITORIES.flatMap((t) => { const g = holdGrew(before, s, t.id); return g ? [{ t, g }] : []; }).sort((a, b) => b.g - a.g || a.t.id - b.t.id);
   for (const { t, g } of grew.slice(0, GROW_NEWS))
     out.push({ at, tick: s.tick, kind: "grow", t: t.id, by: s.owner[t.id], from: s.owner[t.id], tier: g, text: `${name(s.owner[t.id])} raise a ${HOLD_TIER_KEYS[g]} at ${t.name}` });
+  try { out.push(...stepTowns(at)); } catch (e) { console.error("War: towns failed:", e); } // (W6: after the owners moved)
   return out;
 }
 
@@ -733,6 +740,7 @@ export function _resetWar(s?: Saved, store?: Kv) {
   stopWar(); saved = s ?? fresh(Date.now()); saved.names ??= namesNow(); kv = store; valor = TERRITORIES.map(() => ({})); lastOrders = undefined; lastStrikes = []; lastPlans = {}; lastRaided = []; relate(saved.rel ?? []);
   marches = []; paths.clear(); meets = undefined; seenLive.clear(); halting.clear(); joined.clear(); dirtyAt = 0; colVersion++;
   pendingLive.clear(); fielded.clear(); captainRoom.clear(); bannerReports.clear(); scoredWin.clear(); heroCaps.clear(); clanCaps.clear(); battleNews.length = 0; cleanBattles(); battleVer++;
+  heldGate.clear(); cleanTowns(); townVer++; // (W6)
   if (saved.ahead) lookAhead(saved.next - WAR.tickMs); // (no orders ahead: given at the first tick, as before W4)
 }
 /** Tests: set the last tick's orders; they are the orders ahead too (the plan and the columns follow them). */
@@ -751,7 +759,9 @@ export type { Saved as SavedWar };
 export function attachWar(room: { broadcast(type: string, msg: unknown): void }) {
   return onWar((v, events, news) => {
     room.broadcast("war", v);
+    let townLines = 0;
     for (const e of events) {
+      if (e.kind === "town") { townNews(room, e, ++townLines); continue; } // (W6: Herald capped per tick, sfx, the "towns" message)
       room.broadcast("chat", { id: "", name: "Herald", text: e.text });
       if (e.kind === "grow") { // a hammer chord where the Hold grew (client/src/sfx.ts hold_grow); no leader line, no horn
         const at = bannerSpot(e.t);
@@ -784,3 +794,119 @@ export function rallyLine(clan: ClanKey | undefined, was: ClanKey | undefined): 
 /** What a hero sworn to the rallied clan is told on joining (and the room tells its own sworn when the Rally comes). */
 export const rallyTell = (clan: ClanKey) =>
   `Rally! ${CLANS[clan].name} hold the least land: your valor counts x${WAR.rallyValor}, your renown x${WAR.rallyRenown}, and its writs pay more.`;
+
+// ---- Capturable towns (W6: shared/war/towns.ts has the rules, server/warTowns.ts the gate fight and the claim) ----------
+
+/** Towns whose old holder kept the gate during the current war tick (a guard alive and an active defender: warTowns). */
+const heldGate = new Set<string>();
+/** Bumped on every town change rooms pass on ("towns"). */
+let townVer = 0;
+
+/**
+ * The war save's towns, cleaned (on load and reset): every town of TOWNS gets a holder (a saved one, else its land's
+ * holder, with no contest), a contest only when it names a clan other than the holder and finite ticks. Unknown towns
+ * are dropped. A town whose land is missing from the map keeps a valid saved holder (or the first clan).
+ */
+function cleanTowns() {
+  if (!saved) return;
+  saved.towns = cleanTownSave(saved.towns, saved.state.owner);
+}
+/** Pure: a raw `towns` save field cleaned against the war's owners (tests). */
+export function cleanTownSave(raw: unknown, owner: readonly ClanKey[]): Record<string, TownState> {
+  const src = raw && typeof raw === "object" ? (raw as Record<string, Partial<TownState> | undefined>) : {}, out: Record<string, TownState> = {};
+  for (const t of TOWNS) {
+    const r = src[t.id], p = townPatron(t.id), land = p >= 0 ? owner[p] : undefined;
+    const k = r && CLANS[r.k as ClanKey] ? (r.k as ClanKey) : land ?? CLAN_KEYS[0];
+    const c = r?.c, ok = !!c && typeof c === "object" && !!CLANS[c.by as ClanKey] && c.by !== k && Number.isFinite(c.until) && Number.isFinite(c.ext);
+    out[t.id] = ok ? { k, c: { by: c!.by as ClanKey, until: Math.floor(c!.until), ext: Math.max(0, Math.min(TOWN.maxExt, Math.floor(c!.ext))) } } : { k };
+  }
+  return out;
+}
+/** What the tick hands warTick for the towns (TickExtra.towns), only while the towns are live. */
+const townExtra = (): { towns?: Partial<Record<ClanKey, number>> } => (TOWN.live && saved?.towns ? { towns: townCounts(saved.towns) } : {});
+
+const townName = (id: string) => townById(id)?.name ?? id;
+const cap = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
+/** The Herald's line for a town's news. */
+export function townLine(id: string, change: TownChange | "claimed", by: ClanKey, from: ClanKey, hero?: string): string {
+  const n = townName(id), B = CLANS[by].name, F = CLANS[from].name;
+  if (change === "contested") return `${B} hold ${townById(id)?.patron ?? "its land"}: ${n} is contested. ${F} keep its gate for now.`;
+  if (change === "off") return `${F} hold their land again: the contest for ${n} is over.`;
+  if (change === "submitted") return `${cap(n)} submits to ${B}. ${F} give up its hall.`;
+  return `${hero ? `${hero} of ${B}` : B} raised the banner at the gate of ${n}: it belongs to ${B} now.`;
+}
+
+/** After each war tick (the owners moved): every town follows its land (townStep), the gate held this tick or not. */
+function stepTowns(at: number): WarEvent[] {
+  if (!saved || !TOWN.live) { heldGate.clear(); return []; }
+  const s = saved.state, towns = (saved.towns ??= cleanTownSave(undefined, s.owner)), out: WarEvent[] = [];
+  for (const t of TOWNS) {
+    const p = townPatron(t.id);
+    if (p < 0 || !s.owner[p]) continue;
+    const prev = towns[t.id], r = townStep(prev, s.owner[p], s.tick, heldGate.has(t.id));
+    towns[t.id] = r.s;
+    if (!r.change || !prev) continue;
+    const by = r.change === "off" ? prev.k : r.change === "submitted" ? r.s.k : r.s.c!.by, from = prev.k;
+    out.push({ at, tick: s.tick, kind: "town", t: p, by, from, town: t.id, change: r.change, text: townLine(t.id, r.change, by, r.change === "off" ? prev.c?.by ?? from : from) });
+  }
+  heldGate.clear();
+  if (out.length) townVer++;
+  return out;
+}
+
+/** Every town's state (empty before the war is loaded). */
+export const warTowns = (): Readonly<Record<string, TownState>> => saved?.towns ?? {};
+/** The clients' towns view, with the banners going up (`raising`: town id -> 0..100). */
+export const townsNow = (raising: Partial<Record<string, number>> = {}): TownsMsg =>
+  (saved?.towns ? townsView(saved.towns, saved.state.tick, saved.next, raising) : { list: [] });
+/** Bumped on every town change rooms pass on ("towns"). */
+export const townsVersion = () => townVer;
+/** Town `id`'s old holder kept its gate in this war tick (a guard alive and an active defender: server/warTowns.ts). */
+export function townHeld(id: string): boolean {
+  const c = saved?.towns?.[id]?.c;
+  if (!c) return false;
+  heldGate.add(id);
+  return true;
+}
+/** Tests: the towns' step after a war tick, on the state as it is (no warTick). */
+export const _stepTowns = (at = Date.now()) => stepTowns(at);
+/** Tests: towns held this tick so far. */
+export const _townsHeld = () => [...heldGate];
+
+/**
+ * A hero sworn to `k` raised its banner at the gate of contested town `id` (server/warTowns.ts checked the gate): the
+ * town flips at once, the clan earns TOWN.claimValor in the patron land, the news goes out like a tick's (every room's
+ * Herald, sfx and "towns"), the war is saved. False when the town is not contested by `k`.
+ */
+export function townClaim(id: string, k: ClanKey, hero = "A hero", now = Date.now()): boolean {
+  const st = saved?.towns?.[id], p = townPatron(id);
+  if (!saved || !TOWN.live || !st?.c || st.c.by !== k || p < 0) return false;
+  const from = st.k;
+  saved.towns![id] = { k };
+  heldGate.delete(id);
+  addValor(p, k, TOWN.claimValor);
+  const e: WarEvent = { at: now, tick: saved.state.tick, kind: "town", t: p, by: k, from, town: id, change: "claimed", text: townLine(id, "claimed", k, from, hero) };
+  saved.log.push(e);
+  if (saved.log.length > LOG_MAX) saved.log.splice(0, saved.log.length - LOG_MAX);
+  if (!process.env.NODE_TEST_CONTEXT) console.log(`War: ${e.text}`);
+  townVer++;
+  const view = viewOf(saved);
+  listeners.forEach((f) => { try { f(view, [e], {}); } catch (err) { console.error("War listener:", err); } });
+  kv?.set(KEY, saved).catch((err) => console.error("War: could not save:", err));
+  return true;
+}
+/** Tests: set a town's state as it is (no checks). */
+export function _setTown(id: string, s: TownState) { if (saved) { (saved.towns ??= {})[id] = s; townVer++; } }
+
+/** A room passes on a town's news: the Herald (at most TOWN.heraldPerTick lines a tick: `n` counts them) and a sound at the gate. */
+function townNews(room: { broadcast(type: string, msg: unknown): void }, e: WarEvent, n: number) {
+  if (n <= TOWN.heraldPerTick) room.broadcast("chat", { id: "", name: "Herald", text: e.text });
+  const t = townById(e.town);
+  if (n <= TOWN.heraldPerTick && e.change !== "off") { // the leaders answer: the new holder boasts, the old one grieves (or the defender calls its gate)
+    const nm = townName(e.town!), say = (k: ClanKey, m: WarMoment, foe: ClanKey) => { const l = leaderLine(k, m, nm, foe, e.tick); room.broadcast("chat", { id: "", name: l.name, text: l.text }); };
+    if (e.change === "contested") say(e.from, "town_contested", e.by);
+    else { say(e.by, "town_claimed", e.from); say(e.from, "town_lost", e.by); }
+  }
+  if (t && e.change !== "off") room.broadcast("sfx", { ev: e.change === "contested" ? "town_contested" : "town_claimed", id: t.id, x: Math.round((t.gate.x + 0.5) * TILE), y: Math.round((t.gate.y + 0.5) * TILE), by: e.by, from: e.from });
+  // (the "towns" view, with the banners going up there, goes out from each room's own WarTowns.onWar, the same news)
+}

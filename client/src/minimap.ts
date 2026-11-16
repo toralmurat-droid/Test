@@ -9,13 +9,14 @@ import { pixelText } from "./pixeltext";
 import { clasp, frameBorderImage, plaque, FRAME } from "./mapframe";
 import type { WarColumns } from "./warColumns";
 import { drawWarTable, warTableOn, setWarTableOn } from "./warTable";
+import type { WarTowns } from "./warTowns";
 import type { WarView } from "../../shared/war/view";
 import { CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
 const CLAN_KEYS_OF = (i: number): ClanKey | undefined => CLAN_KEYS[i];
 import type { WarPlan, CallToArms } from "../../shared/war/intel";
 import type { MouthView } from "../../shared/war/tunnels";
 import type { WritState } from "../../shared/war/writs";
-import { currentCalls, drawCalls, drawRimArrows, drawTip, drawWarWorld, battleTarget, columnTarget, columnTip, holdTip, panelLayout, panelRowAt, rimTargets, tipTarget, CLAN_COL, type PanelLayout, type WarMapData } from "./warMap";
+import { currentCalls, drawCalls, drawRimArrows, drawTip, drawWarWorld, battleTarget, columnTarget, columnTip, holdTip, townTarget, townTip, panelLayout, panelRowAt, rimTargets, tipTarget, CLAN_COL, type PanelLayout, type WarMapData } from "./warMap";
 
 /** Moors colours (cool greys and heather) for the minimap and world map; the rest falls back to the tileset. */
 function moorsColor(o: number, g: number, colors: string[]): string {
@@ -120,6 +121,8 @@ export class Minimap {
   clan?: ClanKey; plan?: WarPlan; writ?: WritState | null; tunnels?: MouthView[];
   /** Holds sacked this war tick (client/src/warSack.ts): a flag on their icon and a tooltip line. */
   sacked?: ReadonlyMap<number, number>;
+  /** W6: capturable towns (client/src/warTowns.ts): icons, contest rings and tooltips on the maps. */
+  towns?: WarTowns;
   /** W4: the war roads and marching columns (client/src/warColumns.ts). */
   lines?: WarColumns;
   /** W5: big battle markers (client/src/warBattle.ts). */
@@ -403,7 +406,7 @@ export class Minimap {
   isSeen(tx: number, ty: number) { return tx >= 0 && ty >= 0 && tx < MAP_W && ty < MAP_H && this.seen[ty * MAP_W + tx] >= 100; }
 
   private warData(): WarMapData | undefined {
-    return this.war ? { war: this.war, clan: this.clan, plan: this.plan, writ: this.writ, tunnels: this.tunnels, sacked: this.sacked, lines: this.lines, battles: this.battles, me: this.me, seen: (x, y) => this.isSeen(x, y) } : undefined;
+    return this.war ? { war: this.war, clan: this.clan, plan: this.plan, writ: this.writ, tunnels: this.tunnels, sacked: this.sacked, towns: this.towns, lines: this.lines, battles: this.battles, me: this.me, seen: (x, y) => this.isSeen(x, y) } : undefined;
   }
 
   get isOpen() { return this.overlay.classList.contains("open"); }
@@ -679,7 +682,9 @@ export class Minimap {
         if (col) drawTip(g, [columnTip(col)], this.hover.x, this.hover.y, CLAN_COL[col.clan]);
         const bt = col ? undefined : battleTarget(wd, (wx, wy) => T((wx / TILE - R.x) * BIG, (wy / TILE - R.y) * BIG), this.hover.x, this.hover.y, Date.now());
         if (bt) drawTip(g, [bt], this.hover.x, this.hover.y, "#ffd98a");
-        const hit = col || bt ? undefined : tipTarget(wd, (wx, wy) => T((wx / TILE - R.x) * BIG, (wy / TILE - R.y) * BIG), this.hover.x, this.hover.y);
+        const tw = col || bt ? undefined : townTarget(wd, (wx, wy) => T((wx / TILE - R.x) * BIG, (wy / TILE - R.y) * BIG), this.hover.x, this.hover.y);
+        if (tw) { const ti = wd.towns!.info(tw); drawTip(g, townTip(wd, tw, Date.now()), this.hover.x, this.hover.y, ti ? CLAN_COL[ti.holder] : "#e8c27a"); }
+        const hit = col || bt || tw ? undefined : tipTarget(wd, (wx, wy) => T((wx / TILE - R.x) * BIG, (wy / TILE - R.y) * BIG), this.hover.x, this.hover.y);
         if (hit) { const own = CLAN_KEYS_OF(wd.war.owner[hit[0]]); drawTip(g, holdTip(wd.war, hit[0], Date.now(), hit[1], wd.sacked?.get(hit[0])), this.hover.x, this.hover.y, own ? CLAN_COL[own] : "#e8c27a"); }
       }
     } else { this.calls = []; this.callBox = undefined; }

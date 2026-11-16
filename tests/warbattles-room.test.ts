@@ -10,9 +10,10 @@ import { WAR_TROOPS } from "../shared/war/troops";
 import { STANDARD } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
 import { warPhase } from "../shared/war/view";
+import { townCounts } from "../shared/war/towns";
 import type { Kv } from "../server/store";
 import {
-  _battleFed, _forceBattle, _resetWar, _valorOf, battleClock, battleDeath, battleFielded, battleScore, inMeetBattle, step, stormingAt, warBattles, warNow, warOrders, warState, type SavedWar,
+  _battleFed, _forceBattle, _resetWar, _valorOf, battleClock, battleDeath, battleFielded, battleScore, inMeetBattle, step, stormingAt, warBattles, warNow, warOrders, warState, warTowns, type SavedWar,
 } from "../server/war";
 import { WarBattles, type BattleHost } from "../server/warBattles";
 import type { TroopHero, TroopMob } from "../server/warTroops";
@@ -38,11 +39,11 @@ test("battles (server war): with battles on, the server war plays the rules' war
   _resetWar(saved(t0));
   const kinds = new Map<string, number>();
   for (let i = 0; i < N; i++) {
-    const before = JSON.parse(JSON.stringify(warState())), at = warNow()!.next;
+    const before = JSON.parse(JSON.stringify(warState())), at = warNow()!.next, towns = townCounts(warTowns()); // (W6: the towns it holds feed the income)
     await step(at);
     const fed = _battleFed();
     for (const o of fed) kinds.set(o.kind, (kinds.get(o.kind) ?? 0) + 1);
-    warTick(before, warOrders()!, { phase: warPhase(at), valor: TERRITORIES.map(() => ({})), ...(fed.length ? { battle: fed } : {}) });
+    warTick(before, warOrders()!, { phase: warPhase(at), valor: TERRITORIES.map(() => ({})), ...(fed.length ? { battle: fed } : {}), towns });
     assert.deepEqual(warState(), before, `tick ${i}`);
   }
   assert.ok((kinds.get("pitched") ?? 0) >= 3, `pitched battles fought (${[...kinds].join(", ")})`);

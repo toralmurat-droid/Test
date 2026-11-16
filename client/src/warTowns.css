@@ -1,0 +1,11 @@
+/* Raising a town's banner at its gate (warTowns.ts): progress under the prompts, in the pixel font */
+body #townbar { min-width: 260px; padding: 2px 8px 6px; border: 18px solid transparent; border-image: var(--wf-gold) 9 fill / 18px / 0 repeat; image-rendering: pixelated;
+  color: #fff3cf; text-shadow: 2px 2px #050302; font: 18px var(--pixel-font); -webkit-font-smoothing: none; -moz-osx-font-smoothing: grayscale; pointer-events: none; text-align: center; white-space: nowrap; }
+body #townbar[hidden] { display: none; }
+#townbar.paused { color: #ffb070; }
+#townbar.done { color: #b9ff8a; }
+#townbar.err { color: #ff9a7a; border-image-source: var(--wf-bronze); }
+#townbar .tb-track { height: 10px; margin-top: 4px; background: #1a120a; box-shadow: 0 0 0 2px #6a5232, 0 0 0 4px #080504; }
+#townbar .tb-track i { display: block; height: 100%; background: #e3bf6a; box-shadow: inset 0 -3px #a8842e; }
+#townbar.paused .tb-track i { background: #c07840; box-shadow: inset 0 -3px #8a5228; }
+#townbar.done .tb-track i { background: #8fe388; box-shadow: inset 0 -3px #5aa858; }
