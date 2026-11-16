@@ -66,7 +66,8 @@
   "steward_neutral",
   "cap_wardens_leader",
   "cap_wardens_oathkeeper",
-  "cap_wardens_trainer"
+  "cap_wardens_trainer",
+  "crownherald"
  ],
  "image": "{name}.png",
  "frameWidth": 64,

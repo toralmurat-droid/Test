@@ -18,13 +18,16 @@ const ell = (c: C2, x: number, y: number, rx: number, ry: number, col: number, r
 const lmb = (c: C2, a: P, b: P, wa: number, wb: number, col: number) => { limb(c, a, b, wa + 0.8, wb + 0.8, sh(col, 0.34)); limb(c, a, b, wa, wb, col); };
 
 // ------------------------------------------------------------------ the war-hound
-const FUR = 0x8e4326, FUR_D = 0x4e2216, FUR_L = 0xc07c4c, IRON = 0x70706c, PAINT = 0xb3261c, AMBER = 0xffc03a, TOOTH = 0xf4ecd8;
+/** A hound's colours: fur (dark, light), the collar and its studs, the stripes on the shoulder, eyes, teeth. */
+export interface HoundPalette { fur: number; furD: number; furL: number; iron: number; stud: number; paint: number; eye: number; tooth: number }
+export const WARHOUND_PAL: HoundPalette = { fur: 0x8e4326, furD: 0x4e2216, furL: 0xc07c4c, iron: 0x70706c, stud: 0xc4c4bc, paint: 0xb3261c, eye: 0xffc03a, tooth: 0xf4ecd8 };
 
-/** A big red-furred war dog: heavy chest, a spiked iron collar, red war-paint stripes on the shoulder, amber eyes, a torn ear. */
-export function paintWarhound(c: C2, sc: C2 | null, dir: Dir, pose: Pose, f: number) {
+/** A big red-furred war dog: heavy chest, a spiked iron collar, red war-paint stripes on the shoulder, amber eyes, a torn ear. Other packs (the Crown's Gildhounds) pass their own palette. */
+export function paintWarhound(c: C2, sc: C2 | null, dir: Dir, pose: Pose, f: number, pal: HoundPalette = WARHOUND_PAL) {
+  const { fur: FUR, furD: FUR_D, furL: FUR_L, iron: IRON, stud: STUD, paint: PAINT, eye: AMBER, tooth: TOOTH } = pal;
   const w = WARHOUND_W, h = WARHOUND_H, g = h - 3, step = pose === "step", wind = pose === "wind", strike = pose === "strike", S = sc ?? c;
   const eye = (x: number, y: number) => { fillShape(c, ellipseP(x, y, 0.8, 0.6), css(0x180806)); glow(c, x, y, 1.2, AMBER, 0.5); fillShape(c, ellipseP(x, y, 0.42, 0.34), css(AMBER)); };
-  const studs = (pts: P[]) => { for (const [x, y] of pts) { fillShape(c, poly([[x - 0.5, y + 0.2], [x + 0.5, y + 0.2], [x, y - 1.3]]), css(0xc4c4bc)); } };
+  const studs = (pts: P[]) => { for (const [x, y] of pts) { fillShape(c, poly([[x - 0.5, y + 0.2], [x + 0.5, y + 0.2], [x, y - 1.3]]), css(STUD)); } };
   const leg = (hip: P, s: number, lift: number, far: boolean, hind: boolean, sgn = 1) => {
     const col = far ? sh(FUR, 0.66) : FUR, fx = hip[0] + sgn * s * 2.8, fy = g - lift, kx = hip[0] + sgn * (hind ? -1.8 : 1.2) + s * sgn * 0.8, ky = (hip[1] + fy) / 2;
     lmb(c, hip, [kx, ky], hind ? 2.4 : 2.1, 1.4, col); lmb(c, [kx, ky], [fx, fy - 0.6], 1.3, 1.0, col);
@@ -91,14 +94,17 @@ export function paintWarhound(c: C2, sc: C2 | null, dir: Dir, pose: Pose, f: num
 }
 
 // ------------------------------------------------------------------ the carrion vulture
-const PLUME = 0x3c2c26, PLUME_L = 0x6a5240, RUFF = 0xe0d6c2, SKIN = 0xc8604e, BEAK = 0xd8b050, TALON = 0x2a2220;
+/** A carrion bird's colours: plumage (dark, light), the ruff, the bare head, bill, talons and eye. */
+export interface BirdPalette { plume: number; plumeL: number; ruff: number; skin: number; beak: number; talon: number; eye: number }
+export const VULTURE_PAL: BirdPalette = { plume: 0x3c2c26, plumeL: 0x6a5240, ruff: 0xe0d6c2, skin: 0xc8604e, beak: 0xd8b050, talon: 0x2a2220, eye: 0xffd070 };
 
 /**
  * A big carrion vulture: dark brown plumage with paler wing coverts, a ragged white ruff, a bald wrinkled red head and a
  * hooked bill. It hovers (the sheet is painted with the body lifted, wings beating): stand and step are the up and down
  * beats, wind-up rears back with the wings raised, the strike drops claws-first.
  */
-export function paintVulture(c: C2, sc: C2 | null, dir: Dir, pose: Pose, f: number) {
+export function paintVulture(c: C2, sc: C2 | null, dir: Dir, pose: Pose, f: number, pal: BirdPalette = VULTURE_PAL) {
+  const { plume: PLUME, plumeL: PLUME_L, ruff: RUFF, skin: SKIN, beak: BEAK, talon: TALON, eye: EYE } = pal;
   const w = VULTURE_W, h = VULTURE_H, g = h - 3, step = pose === "step", wind = pose === "wind", strike = pose === "strike", S = sc ?? c;
   const lift = 8 + (wind ? 1.5 : strike ? -2 : 0) + (step ? -1 : 0);
   shadow(S, w / 2, g, 8 - lift * 0.15, 2);
@@ -123,12 +129,12 @@ export function paintVulture(c: C2, sc: C2 | null, dir: Dir, pose: Pose, f: numb
     if (face === "front") {
       ell(c, x, y - 1.4, 1.9, 2.3, SKIN);
       fillShape(c, poly([[x - 1, y - 0.4], [x + 1, y - 0.4], [x, y + 2.2]]), css(BEAK)); line(c, [[x, y - 0.4], [x, y + 2.2]], sh(BEAK, 0.5), 0.3);
-      for (const sd of [-1, 1]) { fillShape(c, ellipseP(x + sd * 1.0, y - 1.6, 0.5, 0.4), css(0x100806)); fillShape(c, ellipseP(x + sd * 1.0, y - 1.7, 0.2, 0.2), css(0xffd070)); }
+      for (const sd of [-1, 1]) { fillShape(c, ellipseP(x + sd * 1.0, y - 1.6, 0.5, 0.4), css(0x100806)); fillShape(c, ellipseP(x + sd * 1.0, y - 1.7, 0.2, 0.2), css(EYE)); }
     } else {
       ell(c, x, y - 1.2, 2.2, 2.0, SKIN);
       fillShape(c, poly([[x + 1.6, y - 2.0], [x + 4.6, y - 0.4 + tilt * 0.3], [x + 3.4, y + 0.8], [x + 1.6, y + 0.6]]), css(BEAK)); // hooked bill
       fillShape(c, poly([[x + 4.2, y - 0.5], [x + 4.7, y + 0.4], [x + 3.9, y + 0.9]]), css(sh(BEAK, 0.55)));
-      fillShape(c, ellipseP(x + 0.8, y - 1.6, 0.55, 0.45), css(0x100806)); fillShape(c, ellipseP(x + 0.7, y - 1.7, 0.22, 0.2), css(0xffd070));
+      fillShape(c, ellipseP(x + 0.8, y - 1.6, 0.55, 0.45), css(0x100806)); fillShape(c, ellipseP(x + 0.7, y - 1.7, 0.22, 0.2), css(EYE));
     }
   };
   const claws = (x: number, y: number, reach: number) => { lmb(c, [x, y], [x + reach * 0.3, y + 3 + reach], 1.2, 0.8, TALON); for (const o of [-1, 0, 1]) line(c, [[x + reach * 0.3, y + 3 + reach], [x + reach * 0.3 + o * 1.1, y + 4.8 + reach]], TALON, 0.45); };
@@ -151,6 +157,7 @@ export function paintVulture(c: C2, sc: C2 | null, dir: Dir, pose: Pose, f: numb
 }
 
 // ------------------------------------------------------------------ the giant rattlesnake
+const TOOTH = 0xf4ecd8;
 const SCALE = 0xb0763c, SCALE_D = 0x5a3418, DIAMOND = 0x3e220e, BELLY = 0xe8cfa0, RATTLE = 0xe4d6a8;
 
 /**
