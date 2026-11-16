@@ -113,6 +113,13 @@ export const NPCS: Npc[] = [
   // Tavern Rumours: Mags sells ale off her cart at the square's south-west corner, by the crates and barrels, and hears
   // everything (shared/rumours.ts, server/rumours.ts)
   { id: "alewife", name: "Mags", title: "Alewife", sprite: "alewife", x: 77.4 * TILE, y: 64.75 * TILE, dir: "down", where: "Oakvale, at her ale-cart on the square" },
+  // ---- Town stewards (W6, shared/war/towns.ts TOWNS: the same tiles, checked by tests/warTowns.test.ts): no quest, no shop.
+  // Name, look and lines follow the town's holder on the client (shared/war/townText.ts); by default
+  // they wear the neutral sheet (steward_${holder ?? "neutral"}, the art branch). Quest givers and traders are never touched by a town changing hands.
+  { id: "steward_saltmere", name: "Steward", title: "Town Steward", sprite: "steward_neutral", x: 150.5 * TILE, y: 182.6 * TILE, dir: "down" },
+  { id: "steward_rustwater", name: "Steward", title: "Town Steward", sprite: "steward_neutral", x: 228.5 * TILE, y: 875.6 * TILE, dir: "down" },
+  { id: "steward_ropewell", name: "Steward", title: "Town Steward", sprite: "steward_neutral", x: 110.5 * TILE, y: 995.6 * TILE, dir: "down" },
+  { id: "steward_millbrook", name: "Reeve", title: "Village Reeve", sprite: "steward_neutral", x: 110.5 * TILE, y: 48.6 * TILE, dir: "down" },
 ];
 
 /**
