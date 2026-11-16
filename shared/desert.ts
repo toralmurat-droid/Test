@@ -1,4 +1,5 @@
 import { MAP_W, DESERT_Y0, DESERT_H, type MobKind } from "./constants";
+import { crownwayDais, crownwayFrom } from "./crown";
 
 /**
  * Act 2: the Sunscar (Murat 2026-11-08). A desert as big as Oakvale's valley, reached through the old waygate south of
@@ -374,5 +375,9 @@ export function buildDesert(T: DesertTiles, ground: number[][], objects: number[
     { x: OASES[1].x - 2, y: D(OASES[1].y - 6), to: ["The Veiled Sanctum", "The Saffron Dunes", "Kel Ashar"] },
     { x: SUNSTONE.x + 6, y: D(SUNSTONE.y - 4), to: ["Kel Ashar", "Palmshade Oasis"] },
   ];
+  // ---------- Last: the Sun Gate, the Crownway to the Crown of the Marches (Act 6, shared/crown.ts): a dais of old
+  // flagstones on the sand east of the Veiled Sanctum. Cut after the reachability pass, so the rest of the band stays exactly as it
+  // was (outside its CROWNWAYS box) ----------
+  crownwayDais(crownwayFrom("sunscar"), ground, objects, EMPTY, T, 391);
   return { areas, posts, roads };
 }
