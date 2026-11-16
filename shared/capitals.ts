@@ -23,6 +23,8 @@ export const CITY_CLANS: readonly ClanKey[] = ["wardens", "veiled", "host", "red
 export const CITY = {
   /** Heroes below this level find the outer gate barred (the oath's own minimum, shared/war/standards.ts STANDARD.minLevel). */
   minLevel: 5,
+  /** Spawn zones place no monster within this many tiles of a city's outer gate (shared/spawns.ts; wanderers may still pass). */
+  gateClear: 10,
   /** Shop and trainer discount for heroes sworn to the city's clan (W6's town discount, shared/war/towns.ts TOWN.discount). */
   discount: 0.1,
   /** Gold the leader pays once per hero for each renown rank reached (index: shared/war/renown.ts RENOWN_RANKS; Sworn pays nothing). */

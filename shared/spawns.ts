@@ -4,6 +4,7 @@ import { MOORSGATE_MOORS } from "./moors";
 import { REDPASS_BADLANDS } from "./badlands";
 import { MAW_LEDGE_RECT, SINKWAY_SINKHOLES, SR } from "./sinkholes";
 import { crownGateTile, CROWNWAYS } from "./crown";
+import { CITIES, CITY } from "./capitals";
 import { AREAS, isSafeZone, isSolidAt, OBJECTS, T, VILLAGE } from "./map";
 import { CAMP_POSTS, campMobs } from "./bandits";
 import { AMBUSH_ROOMS, chamberAtPx, FLOORS, LAIRS, LANDING, pointInChamber } from "./dungeon";
@@ -252,6 +253,9 @@ function claimedByArea(name: string, tx: number, ty: number): boolean {
   for (const a of list) if (inRect(a, tx, ty)) return true;
   return false;
 }
+/** True within CITY.gateClear tiles of a city's outer gate: spawn zones place nothing there, so a hero leaving a capital is not
+ * met by a pack (wandering monsters may still come by). */
+export const nearCityGate = (tx: number, ty: number) => CITIES.some((c) => Math.hypot(tx - c.outer.x, ty - c.outer.y) < CITY.gateClear);
 /** Per zone, the areas that keep it out (filtered once: this runs for every tile of every wild zone at start-up). */
 const claimCache = new Map<string, { x: number; y: number; w: number; h: number }[]>();
 /** Tiles where this zone may spawn a monster. */
@@ -259,6 +263,7 @@ function spawnable(z: { name: string; wild?: boolean }, tx: number, ty: number):
   const v = VILLAGE;
   if (tx >= v.x0 - 2 && tx <= v.x1 + 2 && ty >= v.y0 - 2 && ty <= v.y1 + 2) return false;
   if (z.wild && claimedByArea(z.name, tx, ty)) return false;
+  if (nearCityGate(tx, ty)) return false;
   if (LAIRS.some((l) => l.name !== z.name && inRect(l, tx, ty))) return false; // a lair is its elite's alone (and the boss bed nobody's)
   const x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE;
   if (noMobsAt(x, y) || isSafeZone(x, y)) return false;

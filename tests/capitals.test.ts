@@ -13,7 +13,7 @@ import { isDecorSolidAt, NPCS } from "../shared/npcs";
 import { SHOPS } from "../shared/shops";
 import { STASHES } from "../shared/trade";
 import { TITLES } from "../shared/cosmetics";
-import { SPAWN_ZONES } from "../shared/spawns";
+import { nearCityGate, randomPointInZone, SPAWN_ZONES } from "../shared/spawns";
 import { POSTS } from "../shared/bandits";
 import { HOLDS, STANDARDS } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
@@ -255,4 +255,18 @@ test("capitals: who gets in, prices, rank rewards, the title, save values", () =
   assert.equal(cleanCapPaid(3), 3); assert.equal(cleanCapPaid(99), CITY.rankGold.length - 1);
   assert.equal(cleanHome("wardens"), "wardens"); assert.equal(cleanHome("veiled"), "veiled", "Duskveil is built"); assert.equal(cleanHome("nowhere"), undefined); assert.equal(cleanHome(7), undefined);
   assert.equal(cityOf("__proto__"), undefined);
+});
+
+test("no spawn zone places a monster within CITY.gateClear tiles of any city's outer gate", () => {
+  assert.ok(CITY.gateClear >= 8, "a real ring");
+  for (const c of CITIES) {
+    assert.ok(nearCityGate(c.outer.x, c.outer.y) && nearCityGate(c.outer.x + CITY.gateClear - 1, c.outer.y), `${c.clan}: the ring covers the gate`);
+    assert.ok(!nearCityGate(c.outer.x + CITY.gateClear + 1, c.outer.y), `${c.clan}: and ends at its radius`);
+    const R = CITY.gateClear, near = SPAWN_ZONES.filter((z) => z.x < c.outer.x + R && z.x + z.w > c.outer.x - R && z.y < c.outer.y + R && z.y + z.h > c.outer.y - R);
+    assert.ok(near.length > 0, `${c.clan}: some zone reaches the gate (else this test proves nothing)`);
+    for (const z of near) for (let i = 0; i < 400; i++) {
+      const p = randomPointInZone(z), d = Math.hypot(Math.floor(p.x / TILE) - c.outer.x, Math.floor(p.y / TILE) - c.outer.y);
+      assert.ok(d >= R, `${c.clan}: ${z.name} spawned ${d.toFixed(1)} tiles from the gate`);
+    }
+  }
 });
