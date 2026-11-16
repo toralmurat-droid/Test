@@ -5,7 +5,7 @@
  */
 import type { ClanKey } from "./clans";
 
-export type WarMoment = "siege" | "besieged" | "took" | "lost" | "held" | "repelled" | "sacked";
+export type WarMoment = "siege" | "besieged" | "took" | "lost" | "held" | "repelled" | "sacked" | "march" | "ambushed" | "clash";
 
 export interface Leader { name: string; lines: Record<WarMoment, string[]> }
 
@@ -18,6 +18,9 @@ export const LEADERS: Record<ClanKey, Leader> = {
     held: ["{land} held. {foe} broke on our palisade.", "They came, they bled, they left. {land} stands."],
     repelled: ["The walls of {land} were too high. Regroup.", "{foe} held {land}. Next time, more ladders."],
     sacked: ["{foe} raised their rag over our Hold at {land}. Tear it down!", "The Hold of {land} was sacked by {foe}. Double the watch."],
+    march: ["Wardens, the road is ours. March for {land}!", "Boots on the road. {foe} will see us at {land} before they see the sun."],
+    ambushed: ["Our column was cut down on the road to {land}. {foe} fight like thieves.", "Bury our fallen, then march again for {land}."],
+    clash: ["Steel on the road to {land}! Hold the line, Wardens!", "{foe} met our column in the open. Let them learn what the watch is."],
   } },
   redfang: { name: "The Redfang Chief", lines: {
     siege: ["{land} has fat stores. Take them.", "Knives out, lads. {land} pays us now."],
@@ -27,6 +30,9 @@ export const LEADERS: Record<ClanKey, Leader> = {
     held: ["{land} stays ours. {foe} learned what a red fang is.", "Ha! {foe} turned tail at {land}."],
     repelled: ["{land} held out. We raid somewhere softer.", "Pull back from {land}. We hit them where they sleep."],
     sacked: ["{foe} robbed our camp at {land}? Nobody robs a robber twice.", "Who let {foe} into the camp at {land}? Find them. Gut them."],
+    march: ["Out on the road, lads. {land} is waiting to be robbed.", "March light and grab heavy. {land} pays us now."],
+    ambushed: ["{foe} jumped our column on the road to {land}? Somebody talked.", "Our lads were cut down on the road. {foe} will pay double."],
+    clash: ["Our column met {foe} on the road to {land}. Cut your way through!", "A fight on the road? Good. Take their purses after."],
   } },
   host: { name: "The Pale Marshal", lines: {
     siege: ["The dead march on {land}. They do not tire.", "Raise the engines before {land}. The night is ours."],
@@ -36,6 +42,9 @@ export const LEADERS: Record<ClanKey, Leader> = {
     held: ["{land} held. {foe} filled our ranks.", "The dead do not yield {land}."],
     repelled: ["{land} resisted. The night will come again.", "Fall back from {land}. Gather the bones."],
     sacked: ["{foe} defiled our keep at {land}. The dead will remember their faces.", "Let {foe} wave their banner at {land}. It will hang over their graves."],
+    march: ["The column walks for {land}. The road is long. We are patient.", "March, you dead. {land} will not wait forever."],
+    ambushed: ["Our column fell on the road to {land}. They will rise again.", "{foe} struck from the dark. The dead do not forget the road."],
+    clash: ["The columns meet on the road to {land}. Let {foe} fall and join us.", "Steel on bone. The road to {land} is ours."],
   } },
   hidekin: { name: "The Hide-Mother", lines: {
     siege: ["Dig under {land}, my children.", "{land} smells of fear. Tunnel."],
@@ -45,6 +54,9 @@ export const LEADERS: Record<ClanKey, Leader> = {
     held: ["{land} holds. {foe} cannot fight in the dark.", "The burrows of {land} ate them."],
     repelled: ["{land} is too hard to dig. Another way.", "Back into the earth. {land} can wait."],
     sacked: ["{foe} trampled our burrow at {land}. Bite them, my children!", "The burrow of {land} is fouled by {foe}. Dig them out."],
+    march: ["Out of the burrow, my children. The road leads to {land}.", "Quiet feet on the road to {land}. Then bite."],
+    ambushed: ["They caught our column on the road to {land}. Bring the hurt ones home.", "{foe} cut down my children on the road. Dig, and wait."],
+    clash: ["Our column met {foe} on the road. Bite, my children, bite!", "Teeth and claws on the road to {land}. Do not give an inch."],
   } },
   veiled: { name: "The Veiled Oracle", lines: {
     siege: ["The sun turns against {land}. Begin the rite.", "At noon {land} will be ours. It is written."],
@@ -54,6 +66,9 @@ export const LEADERS: Record<ClanKey, Leader> = {
     held: ["{land} held. {foe} could not see what we saw.", "The rite protects {land}."],
     repelled: ["{land} is not yet ready to see. Patience.", "The omens were wrong at {land}. We wait."],
     sacked: ["{foe} profaned the shrine of {land}. The omens turn against them.", "The shrine of {land} was sacked by {foe}. It was foreseen. It will be avenged."],
+    march: ["The column sets out for {land}. The road was foreseen.", "Walk in the sun, children of the Circle. {land} awaits."],
+    ambushed: ["Our column was cut down on the road to {land}. It was foreseen, and it will be paid.", "{foe} struck on the road. The omens turn against them."],
+    clash: ["The columns meet on the road to {land}. As it was written.", "{foe} stand in our way. The Circle does not turn aside."],
   } },
 };
 

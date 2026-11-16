@@ -7,7 +7,7 @@
  */
 import { CLANS, CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import { newMinds, scriptedOrders, type Mind } from "../shared/war/doctrine";
-import { cleanOrders, newWar, nightRaid, rallyClan, sackHold, supplyMap, targetsOf, WAR, warTick, type Orders, type WarState } from "../shared/war/rules";
+import { deployments, newWar, nightRaid, rallyClan, sackHold, WAR, warTick, type Orders, type TickExtra, type WarState } from "../shared/war/rules";
 import { TERRITORIES, type Territory } from "../shared/war/territories";
 import { regionByKey } from "../shared/war/regions";
 import { tunnelStrikes, type TunnelStrike } from "../shared/war/tunnels";
@@ -16,7 +16,9 @@ import type { WarPlan } from "../shared/war/intel";
 import { eventVoice, leaderLine } from "../shared/war/heralds";
 import { holdGrew, HOLD_TIER_KEYS } from "../shared/war/holdTiers";
 import { bannerSpot } from "../shared/war/holdSack";
-import { setWarRelations, warPairs, warRelations } from "../shared/war/feuds";
+import { atWar, setWarRelations, warPairs, warRelations } from "../shared/war/feuds";
+import { COLUMN, marchesOf, marchMult, meetingOf, plansOf, type March, type Meeting } from "../shared/war/marches";
+import { pathKnown, warPath, type WarPath } from "../shared/war/roads";
 import { openKv, type Kv } from "./store";
 
 /**
@@ -33,7 +35,16 @@ export interface WarEvent { at: number; tick: number; kind: "siege" | "flip" | "
 const GROW_NEWS = 3;
 /** `names`: the territory names in id order (optional: saves before 2026-11-15 have none, and their ids are today's). */
 /** `rel`: the last war tick each pair of clans shared a border (shared/war/feuds.ts warRelations; optional: older saves have none). */
-interface Saved { v: 1; state: WarState; minds: Record<ClanKey, Mind>; next: number; log: WarEvent[]; names?: string[]; rel?: (number | null)[] }
+/**
+ * `ahead` (W4): the leaders' orders for the next tick, given right after each tick (missing: computed on load).
+ * `cols` (W4): the marching columns of the current interval by id: soldiers fallen, ms halted by heroes, and how a
+ * meeting was settled ("live" fought in a room, "sim" by the formula). Both optional: wellFormed ignores them.
+ */
+export interface ColSave { fallen: number; halt: number; met?: "live" | "sim" }
+interface Saved {
+  v: 1; state: WarState; minds: Record<ClanKey, Mind>; next: number; log: WarEvent[]; names?: string[]; rel?: (number | null)[];
+  ahead?: Partial<Record<ClanKey, Orders>>; cols?: Record<string, ColSave>;
+}
 
 const KEY = "war";
 const LOG_MAX = 200;
@@ -48,8 +59,19 @@ let valor: Partial<Record<ClanKey, number>>[] = TERRITORIES.map(() => ({}));
 let lastOrders: Partial<Record<ClanKey, Orders>> | undefined;
 /** The tunnel strikes of those orders, read on the state before the tick (as rules.ts warTick saw it). */
 let lastStrikes: TunnelStrike[] = [];
-/** Each clan's plan of the last tick (warPlan), read on the state before the tick like lastStrikes. Memory only. */
+/** Each clan's plan of its orders for the next tick (warPlan: saved.ahead, read on the state they were given for). Memory only. */
 let lastPlans: Partial<Record<ClanKey, WarPlan>> = {};
+/** The marching columns of those orders (shared/war/marches.ts), recomputed from saved.ahead after a load. Memory only. */
+let marches: March[] = [];
+/** Their paths (built on demand: shared/war/roads.ts) and their meetings (computed once every path is known). */
+const paths = new Map<string, WarPath>();
+let meets: Meeting[] | undefined;
+/** Columns a room has as real troopers (id -> last time seen), and those halted by a fight with heroes right now. */
+const seenLive = new Map<string, Map<unknown, number>>(), halting = new Map<string, number>();
+/** Hero name -> the war tick they last joined a column in (one join per hero per war tick). */
+const joined = new Map<string, number>();
+/** Bumped on every column change rooms should pass on ("columns"); the war save is dirty since `dirtyAt` (0: clean). */
+let colVersion = 0, dirtyAt = 0, lastSave = 0;
 /** The lands the Night Raiders struck in the last tick (memory only, like lastOrders: shown on the war table and plaque). */
 let lastRaided: number[] = [];
 const listeners = new Set<(v: WarView, events: WarEvent[], news: WarNews) => void>();
@@ -113,7 +135,9 @@ export function migrateWar(saved: Saved, oldNames: readonly string[], names: rea
     return [k, m];
   })) as Record<ClanKey, Mind>;
   const log = saved.log.flatMap((e) => { const t = re(e.t); return t === undefined ? [] : [{ ...e, t }]; });
-  return { ...saved, state, minds, log, names: [...names] };
+  const out: Saved = { ...saved, state, minds, log, names: [...names] };
+  if (oldNames.length !== names.length || oldNames.some((n, i) => n !== names[i])) { delete out.ahead; delete out.cols; } // (orders and columns name territory ids: given afresh on load)
+  return out;
 }
 
 /**
@@ -172,6 +196,7 @@ export async function startWar(store?: Kv) {
     console.log(`War: tick ${saved.state.tick}, next in ${Math.max(0, Math.round((saved.next - Date.now()) / 1000))} s`);
   }
   relate(saved.rel ?? []);
+  try { lookAhead(saved.next - WAR.tickMs); } catch (e) { console.error("War: the orders ahead could not be given:", e); } // (the next tick tries again)
   timer = setInterval(() => { step(Date.now()).catch((e) => console.error("War: tick failed:", e)); }, 15_000);
   timer.unref?.();
 }
@@ -180,7 +205,9 @@ export function stopWar() { if (timer) clearInterval(timer); timer = undefined; 
 
 /** Runs every war tick that is due (at most CATCH_UP after downtime). Exported for tests. */
 export async function step(now: number) {
-  if (!saved || now < saved.next) return;
+  if (!saved) return;
+  settleMeetings(now);
+  if (now < saved.next) { if (dirtyAt && now - lastSave >= COLUMN.saveMs) await save(now); return; }
   const late = Math.floor((now - saved.next) / WAR.tickMs);
   if (late >= CATCH_UP) saved.next = now - (CATCH_UP - 1) * WAR.tickMs;
   const events: WarEvent[] = [], news: WarNews = {}, rallyWas = rallyClan(saved.state);
@@ -197,20 +224,30 @@ export async function step(now: number) {
   if (!process.env.NODE_TEST_CONTEXT) for (const e of events) console.log(`War: ${e.text}`);
   const view = viewOf(saved);
   listeners.forEach((f) => { try { f(view, events, news); } catch (e) { console.error("War listener:", e); } });
+  await save(now);
+}
+
+async function save(now: number) {
+  dirtyAt = 0; lastSave = now;
   await kv?.set(KEY, saved).catch((e) => console.error("War: could not save:", e));
 }
 
 function tickOnce(at: number, news: WarNews): WarEvent[] {
   const s = saved!.state, before = { owner: [...s.owner], siege: s.siege.map((x) => x && { ...x }), fort: [...s.fort], control: [...s.control] };
-  const orders = scriptedOrders(s, saved!.minds, rng(s.tick * 2654435761 + 1)), phase = warPhase(at);
+  // the orders given one tick ahead (W4: their columns marched since), or given now when there are none (a first tick)
+  const orders = saved!.ahead ?? scriptedOrders(s, saved!.minds, rng(s.tick * 2654435761 + 1)), phase = warPhase(at);
   lastStrikes = tunnelStrikes(s, orders); // (before warTick moves the owners: the strikes the rules fed)
-  lastPlans = plansOf(s, orders, lastStrikes, s.tick + 1); // (likewise; the view after this tick carries tick + 1)
   const raid = nightRaid(s, phase); // (likewise: the lands warTick strikes)
   lastRaided = raid?.ts ?? [];
   if (raid?.ts.length) news.raid = { clan: raid.clan, ts: [...raid.ts] };
-  warTick(s, orders, { phase, valor });
+  settleMeetings(Infinity); // (marks the meetings not yet marked; they cost no men)
+  warTick(s, orders, { phase, valor, march: marchMults() });
   lastOrders = orders;
   valor = TERRITORIES.map(() => ({}));
+  // the orders for the next tick, at once (same leaders, same seed as if given then): their columns march now
+  saved!.cols = {};
+  try { saved!.ahead = scriptedOrders(s, saved!.minds, rng(s.tick * 2654435761 + 1)); lookAhead(at); }
+  catch (e) { delete saved!.ahead; marches = []; console.error("War: the orders ahead could not be given (the next tick gives them):", e); }
   const out: WarEvent[] = [];
   const name = (k: ClanKey) => CLANS[k].name;
   for (const t of TERRITORIES) {
@@ -267,43 +304,138 @@ export function relate(last?: readonly unknown[]) {
   setWarRelations(saved.state.owner, saved.state.tick, last);
   saved.rel = warRelations();
 }
+
+// ---- Marching columns (W4: shared/war/marches.ts has the rules, server/warMarches.ts the live troopers) ------------
+
+/** The plans, columns and march paths of the orders ahead (saved.ahead, given now if missing), for the tick at `at`. */
+function lookAhead(at: number) {
+  if (!saved) return;
+  const s = saved.state;
+  saved.ahead ??= scriptedOrders(s, saved.minds, rng(s.tick * 2654435761 + 1)); // (an old save, or a first tick: as the tick would have given them)
+  lastPlans = plansOf(s, saved.ahead, tunnelStrikes(s, saved.ahead), s.tick); // (the view after the last tick carries s.tick)
+  marches = marchesOf(lastPlans, deployments(s, saved.ahead, warPhase(at + WAR.tickMs)).attack, s.tick, at);
+  const cols = (saved.cols ??= {});
+  for (const id of Object.keys(cols)) if (!marches.some((m) => m.id === id)) delete cols[id]; // (a column of an older interval)
+  paths.clear(); meets = undefined; seenLive.clear(); halting.clear(); colVersion++;
+}
+
+/** The share of each cut-down column's attack that lands (TickExtra.march): only columns that lost men. */
+function marchMults(): NonNullable<TickExtra["march"]> {
+  const out: NonNullable<TickExtra["march"]> = [];
+  for (const m of marches) { const c = saved?.cols?.[m.id]; if (c && c.fallen > 0) out.push({ t: m.to, k: m.clan, mult: marchMult(m.size - c.fallen, m.size) }); }
+  return out;
+}
+
+const colOf = (id: string): ColSave => ((saved!.cols ??= {})[id] ??= { fallen: 0, halt: 0 });
+const marchOf = (id: string) => marches.find((m) => m.id === id);
+const dirty = (now: number) => { dirtyAt ||= now; colVersion++; };
+
+/** The marching columns of the current interval (empty before the orders ahead are known). */
+export const warMarches = (): readonly March[] => marches;
+/** A column's losses and halts so far (zeros when untouched). */
+export const marchCol = (id: string): Readonly<ColSave> => saved?.cols?.[id] ?? { fallen: 0, halt: 0 };
+/** A column's path (shared/war/roads.ts warPath), built on demand unless `build` is false (then undefined while unbuilt). */
+export function marchPath(m: March, build = true): WarPath | undefined {
+  let p = paths.get(m.id);
+  if (!p && (build || pathKnown(m.from, m.to))) { p = warPath(m.from, m.to); if (p) paths.set(m.id, p); }
+  return p;
+}
+/** The meetings of this interval: columns of clans at war on one road in opposite directions (deterministic). */
+export function warMeetings(): Meeting[] {
+  if (meets) return meets;
+  const out: Meeting[] = [];
+  for (let i = 0; i < marches.length; i++) for (let j = i + 1; j < marches.length; j++) {
+    const a = marches[i], b = marches[j];
+    if (a.from !== b.to || a.to !== b.from || a.clan === b.clan || !atWar(a.clan, b.clan)) continue;
+    const pa = marchPath(a), pb = marchPath(b), m = pa && pb && meetingOf(a, pa, b, pb);
+    if (m) out.push(m);
+  }
+  return (meets = out);
+}
+/** The meeting column `id` has this interval, if any. */
+export const meetingFor = (id: string): Meeting | undefined => warMeetings().find((x) => x.a === id || x.b === id);
+
+/** Were both columns live in one room at about time `at` (each reported within 2 s before it, by the same room)? */
+function liveTogether(a: string, b: string, at: number): boolean {
+  const ra = seenLive.get(a), rb = seenLive.get(b);
+  if (!ra || !rb) return false;
+  for (const [room, t] of ra) if (t >= at - 2000 && (rb.get(room) ?? -Infinity) >= at - 2000) return true;
+  return false;
+}
+/**
+ * Meetings whose time has come (by `now`; Infinity at the tick), marked once each: "live" when both columns stood in
+ * one room (they fought there: only real deaths count, through columnLost), "sim" otherwise. A meeting costs no men by
+ * itself (Murat's call on the W4 review: losses only where a hero is involved), so the war without players plays
+ * exactly as before W4; both columns still stand COLUMN.clashMs (the clock) and the clients show it.
+ */
+function settleMeetings(now: number) {
+  if (!saved || !marches.length) return;
+  for (const mt of warMeetings()) {
+    if (mt.at > now) continue;
+    const ca = colOf(mt.a), cb = colOf(mt.b);
+    if (ca.met || cb.met || !marchOf(mt.a) || !marchOf(mt.b)) continue;
+    ca.met = cb.met = liveTogether(mt.a, mt.b, mt.at) ? "live" : "sim";
+    dirty(Number.isFinite(now) ? now : Date.now());
+  }
+}
+
+/** A soldier of column `id` fell (any hand): it counts against the attack at the next tick. False for an unknown or empty column. */
+export function columnLost(id: string, n = 1, now = Date.now()): boolean {
+  const m = marchOf(id);
+  if (!saved || !m || !(n > 0)) return false;
+  const c = colOf(id);
+  if (c.fallen >= m.size) return false;
+  c.fallen = Math.min(m.size, c.fallen + n);
+  dirty(now);
+  return true;
+}
+/** Column `id` stood `ms` more in a fight with heroes (at most COLUMN.haltMaxMs a trip). Returns the halt so far. */
+export function columnHalt(id: string, ms: number, now = Date.now()): number {
+  if (!saved || !marchOf(id) || !(ms > 0)) return marchCol(id).halt;
+  const c = colOf(id), was = c.halt;
+  c.halt = Math.min(COLUMN.haltMaxMs, c.halt + ms);
+  const started = now - (halting.get(id) ?? -Infinity) > 2500;
+  halting.set(id, now);
+  if (c.halt !== was) { dirtyAt ||= now; if (started) colVersion++; } // (the clients hear when it stops and starts, not every second)
+  return c.halt;
+}
+/** Is column `id` halted by a fight right now (a room reported it within the last 2.5 s)? */
+export const columnHalting = (id: string, now = Date.now()) => now - (halting.get(id) ?? -Infinity) <= 2500;
+/** Room `room` has column `id` as real troopers now (a meeting of two columns live in one room is a live clash). */
+export function columnSeen(id: string, now = Date.now(), room: unknown = "") {
+  const h = halting.get(id);
+  if (h !== undefined && now - h > 2500) { halting.delete(id); colVersion++; } // its halt ended
+  let r = seenLive.get(id);
+  if (!r) seenLive.set(id, (r = new Map()));
+  r.set(room, now);
+}
+/** Hero `name` joined column `id` on arrival: true once per hero per war tick (the caller pays). */
+export function columnJoined(id: string, name: string): boolean {
+  const m = marchOf(id);
+  if (!m || joined.get(name) === m.tick) return false;
+  joined.set(name, m.tick);
+  return true;
+}
+/** Bumped on every change of the columns rooms pass on ("columns"). */
+export const columnsVersion = () => colVersion;
+/** Tests: the march mults the next tick would apply (rules.ts TickExtra.march). */
+export const _marchMults = () => marchMults();
+/** Tests: the save would be written at the next step (columns changed since the last save). */
+export const _warDirty = () => dirtyAt > 0;
+
 export const warLog = (n = 50): WarEvent[] => (saved ? saved.log.slice(-n) : []);
 export const warState = (): WarState | undefined => saved?.state;
 /** The orders the leaders gave in the last war tick (not saved), or undefined before the first tick of this process. */
 export const warOrders = (): Partial<Record<ClanKey, Orders>> | undefined => lastOrders;
 /** The tunnel strikes of the last war tick (server/warTunnels.ts), computed on the state that tick started from. Empty before the first tick. */
 export const warStrikes = (): readonly TunnelStrike[] => lastStrikes;
-/** Most attacks one plan lists (cleanOrders keeps 8 anyway). */
-const PLAN_MAX = 8;
-
+/** Every clan's plan from its orders (shared/war/marches.ts; kept here for the callers that read it from the war). */
+export { plansOf };
 /**
- * Every clan's plan from its orders, on the state the orders were given for: each legal attack once, fed from the
- * adjacent own land with the best supply (as warTick feeds it; first in near order on a tie), or, for a Hide-Kin strike
- * with no own land next to it, from the tunnel's start (`tunnel` 1). `tick`: the WarView.tick the plan goes out with.
- */
-export function plansOf(s: WarState, orders: Partial<Record<ClanKey, Orders>> | undefined, strikes: readonly TunnelStrike[], tick: number): Partial<Record<ClanKey, WarPlan>> {
-  const out: Partial<Record<ClanKey, WarPlan>> = {};
-  if (!orders) return out;
-  let supply: number[] | undefined;
-  for (const k of CLAN_KEYS) {
-    if (!orders[k]) continue;
-    const o = cleanOrders(orders[k]), legal = new Set(targetsOf(s, k)), march: WarPlan["march"] = [];
-    for (const a of o.attack) {
-      if (march.length >= PLAN_MAX || !legal.has(a.t) || !(a.share > 0) || march.some((m) => m[1] === a.t)) continue;
-      supply ??= supplyMap(s);
-      let from = -1;
-      for (const n of TERRITORIES[a.t].near) if (s.owner[n] === k && (from < 0 || supply[n] > supply[from])) from = n;
-      if (from >= 0) { march.push([from, a.t, 0]); continue; }
-      const st = strikes.find((x) => x.clan === k && x.t === a.t);
-      if (st) march.push([st.from, a.t, 1]);
-    }
-    out[k] = { tick, march };
-  }
-  return out;
-}
-/**
- * Clan `k`'s attacks of the last war tick, for its sworn heroes only (server/warIntel.ts): orders are secret from the
- * other clans. Undefined before the first tick of this process or when the clan gave no orders.
+ * Clan `k`'s attacks of the next war tick (W4: the orders come one tick ahead, and their columns march now), for its
+ * sworn heroes only (server/warIntel.ts): the plan is secret from the other clans, though its marching columns are not
+ * (server/warMarches.ts sends each hero their own clan's columns and any other within COLUMN.scoutTiles of them).
+ * Undefined before the orders are known or when the clan gave no orders.
  */
 export const warPlan = (k: ClanKey): WarPlan | undefined => lastPlans[k];
 /** Called after every war tick with the new view and what happened. Returns an unsubscribe function. */
@@ -313,9 +445,19 @@ export function onWar(f: (v: WarView, events: WarEvent[], news: WarNews) => void
 export function flushWar() { if (saved && kv?.setSync) try { kv.setSync(KEY, saved); } catch (e) { console.error("War: could not save:", e); } }
 
 /** Tests: start from a given state without a store or a clock. */
-export function _resetWar(s?: Saved, store?: Kv) { stopWar(); saved = s ?? fresh(Date.now()); saved.names ??= namesNow(); kv = store; valor = TERRITORIES.map(() => ({})); lastOrders = undefined; lastStrikes = []; lastPlans = {}; lastRaided = []; relate(saved.rel ?? []); }
-/** Tests: set the last tick's orders. */
-export function _setWarOrders(o: Partial<Record<ClanKey, Orders>> | undefined) { lastOrders = o; lastStrikes = saved ? tunnelStrikes(saved.state, o) : []; lastPlans = saved ? plansOf(saved.state, o, lastStrikes, saved.state.tick) : {}; }
+export function _resetWar(s?: Saved, store?: Kv) {
+  stopWar(); saved = s ?? fresh(Date.now()); saved.names ??= namesNow(); kv = store; valor = TERRITORIES.map(() => ({})); lastOrders = undefined; lastStrikes = []; lastPlans = {}; lastRaided = []; relate(saved.rel ?? []);
+  marches = []; paths.clear(); meets = undefined; seenLive.clear(); halting.clear(); joined.clear(); dirtyAt = 0; colVersion++;
+  if (saved.ahead) lookAhead(saved.next - WAR.tickMs); // (no orders ahead: given at the first tick, as before W4)
+}
+/** Tests: set the last tick's orders; they are the orders ahead too (the plan and the columns follow them). */
+export function _setWarOrders(o: Partial<Record<ClanKey, Orders>> | undefined) {
+  lastOrders = o; lastStrikes = saved ? tunnelStrikes(saved.state, o) : [];
+  if (!saved) { lastPlans = {}; return; }
+  if (o) saved.ahead = o; else delete saved.ahead;
+  saved.cols = {};
+  lookAhead(saved.next - WAR.tickMs);
+}
 /** Tests: valor clan `k` has gathered in territory `t` so far this war tick. */
 export const _valorOf = (t: number, k: ClanKey): number => valor[t]?.[k] ?? 0;
 export type { Saved as SavedWar };

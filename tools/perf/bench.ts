@@ -13,6 +13,7 @@
 //   SIEGE=host: the same, led by the Ossuary Host, so its bone ram and crew roll too (server/warWorks.ts)
 //   TUNNEL=1 (with WAR=1): the Hide-Kin are ordered through a tunnel and the last bot stands at its mouth (server/warTunnels.ts)
 //   HOLDFIGHT=1 (with WAR=1): the bots, sworn to the Redfang, hop about the courtyards of three Wardens Holds; the troopers chase them round the walls (shared/war/holdRoutes.ts)
+//   COLUMN=1 (with WAR=1): a clan is ordered to attack along a war road and its column (shared/war/marches.ts) marches past the first bot, kept live the whole run (server/warMarches.ts)
 //   RITUAL=1 (with WAR=1): the rituals run on a clock shifted to noon and the second bot stands at the circle (server/warRituals.ts)
 //   CAST=1 SPREAD=1: the Summoner bots cast wisps, blades, black holes and the Void Arsenal non-stop (tools/perf/bots.ts)
 //   TIDE=1: a Gloam Tide march is out the whole time, its last wave all at once (TIDE.maxAlive marchers, server/tide.ts)
@@ -126,6 +127,27 @@ async function main() {
       if (pl) { pl.x = at.x + 48; pl.y = at.y; }
     }
   }
+  let columnId = "";
+  if (process.env.COLUMN && process.env.WAR) {
+    // the orders ahead: one clan attacks a land along a long war road, ordered a few seconds ago; the first bot stands on the road ahead of its column
+    const { _resetWar, _setWarOrders, warMarches, marchPath, marchCol } = await import("../../server/war"), { newWar, targetsOf, WAR } = await import("../../shared/war/rules");
+    const { newMinds } = await import("../../shared/war/doctrine"), { COLUMN, columnPos, columnTrip } = await import("../../shared/war/marches");
+    const { CLAN_KEYS } = await import("../../shared/war/clans"), { TERRITORIES } = await import("../../shared/war/territories"), { warPath } = await import("../../shared/war/roads");
+    const st = newWar();
+    _resetWar({ v: 1, state: st, minds: newMinds(), next: Date.now() + WAR.tickMs - COLUMN.musterMs - 5000, log: [] });
+    outer: for (const k of CLAN_KEYS) for (const t of targetsOf(st, k)) {
+      const from = TERRITORIES[t].near.find((n) => st.owner[n] === k), p = from === undefined ? undefined : warPath(from, t);
+      if (!p || p.kind !== "road" || columnTrip(p).moveMs < 120_000) continue;
+      _setWarOrders({ [k]: { defend: 0.5, attack: [{ t, share: 1 }] } });
+      const m = warMarches().find((x) => x.clan === k && x.to === t);
+      if (!m) continue;
+      columnId = m.id;
+      const path = marchPath(m)!, p0 = [...room.state.players.values()][0];
+      const pin = () => { if (!p0) return; const q = columnPos(path, m.dep, Date.now() + 8000, marchCol(m.id).halt); p0.x = q.x; p0.y = q.y; };
+      pin(); setInterval(pin, 300).unref();
+      break outer;
+    }
+  }
   if (process.env.HOLDFIGHT && process.env.WAR) {
     // heroes sworn to another clan stand about in the courtyards of three Act 1 Holds (moving tile to tile); the holders' troopers chase them
     const { warState } = await import("../../server/war"), { TERRITORIES } = await import("../../shared/war/territories");
@@ -160,6 +182,7 @@ async function main() {
     ...(process.env.WAR ? { war: true, troopers } : {}),
     ...(siegeLand >= 0 ? { siege: siegeLand, siegeTroopers: room.sieges.count } : {}),
     ...(tunnelLand >= 0 ? { tunnel: tunnelLand, tunnelTroopers: room.tunnels.count } : {}),
+    ...(columnId ? { column: columnId, columnTroopers: room.marches.count } : {}),
     ...(ritualLand >= 0 ? { ritual: ritualLand, ritualTroopers: room.rituals.count, ritualState: room.rituals._ritual?.state } : {}),
   }));
   if (dropped) console.error(`BENCH INVALID: ${dropped} of ${BOTS} bots lost their connection during the run, so the numbers above are not a measurement`);

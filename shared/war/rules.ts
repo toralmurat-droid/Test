@@ -194,8 +194,10 @@ const fortCap = (k: ClanKey) => WAR.fortMax * (CLANS[k].doctrine === "palisade" 
 /**
  * What the live game adds to a tick. `phase`: the real time of day (the sim counts it from the tick). `valor`: the
  * players' effort per territory and clan this tick (standards held, see server/war.ts), turned into troops there.
+ * `march` (W4): clan k's army attack on land t counts `mult` (0..1) of itself: what is left of its marching column
+ * (shared/war/marches.ts marchMult, floored there); valor is untouched.
  */
-export interface TickExtra { phase?: number; valor?: Partial<Record<ClanKey, number>>[] }
+export interface TickExtra { phase?: number; valor?: Partial<Record<ClanKey, number>>[]; march?: { t: number; k: ClanKey; mult: number }[] }
 
 /** Troops that `v` valor is worth: each point counts, but a crowd adds less and less (WAR.valorCap at most). */
 export const valorForce = (v: number) => (v > 0 ? WAR.valorCap * (1 - Math.exp(-v / WAR.valorScale)) : 0);
@@ -218,25 +220,13 @@ export function sackHold(s: WarState, t: number, k: ClanKey | undefined, half: b
   return out;
 }
 
-/** One war tick. Mutates and returns `s`. A clan missing from `orders` (or with broken orders) only defends. */
-export function warTick(s: WarState, orders: Partial<Record<ClanKey, Orders>>, extra: TickExtra = {}): WarState {
-  const supply = supplyMap(s), phase = extra.phase ?? phaseOf(s.tick), rally = rallyClan(s);
-  const land = Object.fromEntries(CLAN_KEYS.map((k) => [k, landOf(s, k)])) as Record<ClanKey, number>;
-  // 1. Income and upkeep
-  for (const k of CLAN_KEYS) {
-    let inc = 0;
-    for (const t of TERRITORIES) if (s.owner[t.id] === k) inc += (t.capitalOf === k ? WAR.capitalIncome : WAR.income) * supply[t.id];
-    // Rally: the less land a clan holds below a fair share, the more its people take up arms
-    inc *= 1 + WAR.rally * Math.max(0, 1 - land[k] / (s.owner.length / CLAN_KEYS.length));
-    s.army[k] = s.army[k] * (1 - WAR.upkeep) + inc;
-  }
-  // The Night Raiders hunt the clan that holds clearly the most: its army bleeds, its weakest borders shake
-  const raid = nightRaid(s, phase);
-  if (raid) {
-    s.army[raid.clan] *= 1 - WAR.raidersHit;
-    for (const t of raid.ts) s.control[t] = Math.max(0, s.control[t] - WAR.huntControl);
-  }
-  // 2. Where the armies stand: defenders spread over the borders by last tick's pressure, attackers on their targets
+/**
+ * Where the armies stand for one tick (warTick step 2): each clan's defenders spread over its borders by last tick's
+ * pressure, its attackers on its legal targets (fed from the best-supplied adjacent own land, a tunnel's start for a
+ * Hide-Kin strike), with the time of day and the counter cycle. Pure: reads `s` (after the tick's income), never writes.
+ * The marching columns (marches.ts) size themselves by the attack it gives. `supply`: supplyMap(s), when known.
+ */
+export function deployments(s: WarState, orders: Partial<Record<ClanKey, Orders>>, phase: number, supply: number[] = supplyMap(s)): { attack: Partial<Record<ClanKey, number>>[]; defence: number[] } {
   const attack: Partial<Record<ClanKey, number>>[] = TERRITORIES.map(() => ({}));
   const defence = Array<number>(TERRITORIES.length).fill(0);
   for (const k of CLAN_KEYS) {
@@ -256,6 +246,33 @@ export function warTick(s: WarState, orders: Partial<Record<ClanKey, Orders>>, e
       const mult = timeBonus(k, phase) * (CLANS[k].counters === vs ? WAR.counter : 1);
       attack[a.t][k] = (attack[a.t][k] ?? 0) + ((force * a.share) / Math.max(1, ssum)) * src * mult;
     }
+  }
+  return { attack, defence };
+}
+
+/** One war tick. Mutates and returns `s`. A clan missing from `orders` (or with broken orders) only defends. */
+export function warTick(s: WarState, orders: Partial<Record<ClanKey, Orders>>, extra: TickExtra = {}): WarState {
+  const supply = supplyMap(s), phase = extra.phase ?? phaseOf(s.tick), rally = rallyClan(s);
+  const land = Object.fromEntries(CLAN_KEYS.map((k) => [k, landOf(s, k)])) as Record<ClanKey, number>;
+  // 1. Income and upkeep
+  for (const k of CLAN_KEYS) {
+    let inc = 0;
+    for (const t of TERRITORIES) if (s.owner[t.id] === k) inc += (t.capitalOf === k ? WAR.capitalIncome : WAR.income) * supply[t.id];
+    // Rally: the less land a clan holds below a fair share, the more its people take up arms
+    inc *= 1 + WAR.rally * Math.max(0, 1 - land[k] / (s.owner.length / CLAN_KEYS.length));
+    s.army[k] = s.army[k] * (1 - WAR.upkeep) + inc;
+  }
+  // The Night Raiders hunt the clan that holds clearly the most: its army bleeds, its weakest borders shake
+  const raid = nightRaid(s, phase);
+  if (raid) {
+    s.army[raid.clan] *= 1 - WAR.raidersHit;
+    for (const t of raid.ts) s.control[t] = Math.max(0, s.control[t] - WAR.huntControl);
+  }
+  // 2. Where the armies stand (deployments); then the marching columns players cut down (W4: the army share only)
+  const { attack, defence } = deployments(s, orders, phase, supply);
+  for (const m of extra.march ?? []) {
+    const a = Number.isInteger(m?.t) ? attack[m.t] : undefined, mult = typeof m?.mult === "number" && Number.isFinite(m.mult) ? Math.max(0, Math.min(1, m.mult)) : 1;
+    if (a && CLANS[m.k] && a[m.k] !== undefined) a[m.k] = a[m.k]! * mult;
   }
   // Players: valor for the owner defends, valor for a clan that may attack this territory pushes for that clan
   extra.valor?.forEach((vs, id) => {

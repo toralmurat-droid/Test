@@ -41,6 +41,8 @@ import { movesSheet, SkillMoves } from "./skillMoves";
 import { displayGrid } from "./tileset";
 import { CRAWL_CROP, heroTexture, itemTexture, potionTex, makeTileset, MOB_LOOK, mobLook, mobTexture, preloadPaintedMobs } from "./textures";
 import { parseTroop, troopName, troopStance, type TroopStance } from "../../shared/war/troops";
+import type { RoadEntry } from "../../shared/war/roads";
+import type { ColumnsMsg } from "../../shared/war/marches";
 import { WarFeud } from "./warFeud";
 import { clanOfIndex } from "../../shared/war/view";
 import { Minimap } from "./minimap";
@@ -80,6 +82,9 @@ import { WarStandards } from "./warStandards";
 import { WarSack } from "./warSack";
 import { WarTabards } from "./warTabards";
 import { WarNotice } from "./warNotice";
+import { WarColumns } from "./warColumns";
+import { CLAN_KEYS } from "../../shared/war/clans";
+import { WarRoadFx } from "./warRoads";
 import type { WarView } from "../../shared/war/view";
 import { ART_K, CHAR_GROW, CHAR_SCALE, CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, ensureCharSheet, HD_CHARS, playCharAnim, preloadArt } from "./artAssets";
 import { Ambient } from "./ambient";
@@ -438,6 +443,12 @@ export class TownScene extends Phaser.Scene {
   private warRituals?: WarRituals; // the Veiled noon ritual circle ("rituals", server/warRituals.ts)
   private feud?: WarFeud; // feuds: provoke, Wanted badge and marks ("feud", "wanted", server/warFeuds.ts)
   private sack?: WarSack; // sacking Holds: banner prompt, progress, sacked banners ("holds", "sack", server/warHolds.ts)
+  /** W4 marching columns: the war roads and the columns as last sent (server/warMarches.ts); kept for the map overlay to draw. */
+  warRoads: RoadEntry[] = [];
+  warColumns?: ColumnsMsg;
+  private warCols = new WarColumns(); // W4: roads and columns placed on the clock (warColumns.ts), read by the maps and the plaque
+  private warRoadFx?: WarRoadFx; // the trampled-track ground decal near the hero (warRoads.ts)
+  private warNotice?: WarNotice;
   /** How a server clan trooper sees this hero (shared/war/troops.ts troopStance), from the oath the "clan" message brought. */
   private troopStanceOf(weapon: string): TroopStance {
     const t = parseTroop(weapon), me = (this.room?.state as any)?.players?.get(this.me);
@@ -1629,7 +1640,7 @@ export class TownScene extends Phaser.Scene {
       // the Hold walls follow the holders (shared/war/holdWalls.ts): prediction and click-to-walk routes see the new forts
       const flipped = setHoldOwners(Array.isArray(v?.owner) ? v.owner : [], Array.isArray(v?.tier) ? v.tier : undefined); // (and their tiers, W3)
       if (flipped.length) refreshWalk(flipped.flatMap(holdTiles));
-      this.warTroops?.setWar(v); (this.warPlaque ??= new WarPlaque(document.getElementById("hud")!)).set(v); this.warStd?.setWar(v); this.warLast = v; });
+      this.warTroops?.setWar(v); (this.warPlaque ??= new WarPlaque(document.getElementById("hud")!)).set(v); this.warPlaque.setColumns(this.warCols); this.warStd?.setWar(v); this.warLast = v; });
     this.room.onMessage("clan", (m) => this.warStd?.setClan(m));
     this.room.onMessage("oaths", (m) => (this.tabards ??= new WarTabards(this)).set(m)); // server/warOaths.ts
     this.room.onMessage("siege", (m) => { // the server's live siege battle (server/warSieges.ts): front holders on the rings and the plaque
@@ -1638,8 +1649,16 @@ export class TownScene extends Phaser.Scene {
     });
     this.room.onMessage("rituals", (m) => { (this.warRituals ??= new WarRituals(this)).set(m); (this.warPlaque ??= new WarPlaque(document.getElementById("hud")!)).setRitual(this.warRituals); });
     this.room.onMessage("tunnels", (m) => { if (m && Array.isArray(m.mouths)) { this.tunnelMouths = m.mouths; if (this.minimap) this.minimap.tunnels = m.mouths; } });
+    this.room.onMessage("warroads", (m) => { if (Array.isArray(m)) { this.warRoads = m; this.warCols.setRoads(m); this.warRoadFx ??= new WarRoadFx(this, this.warCols); } }); // W4: every war road, once on join (and again when the server has built them all)
+    this.room.onMessage("columns", (m) => {
+      if (!m || !Array.isArray(m.cols)) return;
+      const first = !this.warCols.hasColumns, known = new Set(this.warCols.ids), own = this.warStd?.clan, v = this.warLast;
+      this.warColumns = m; this.warCols.setColumns(m);
+      if (first || !own || !v) return; // the join message only fills the map; later new columns on the clan's land are announced
+      for (const [id, ci, , to] of m.cols) if (!known.has(id) && CLAN_KEYS[ci] !== own && v.owner[to] === CLAN_KEYS.indexOf(own)) { this.warNotice?.column(CLAN_KEYS[ci], to); break; }
+    }); // W4: the marching columns (shared/war/marches.ts ColumnsMsg)
     this.room.onMessage("warplan", (m) => { if (this.minimap && m && Array.isArray(m.march)) this.minimap.plan = m; }); // the own clan's attacks of the last war tick (server/warIntel.ts)
-    const warNotice = new WarNotice(document.getElementById("hud")!);
+    const warNotice = this.warNotice = new WarNotice(document.getElementById("hud")!);
     this.room.onMessage("warev", (e) => warNotice.show(e, this.entities.get(this.me)?.sprite));
     this.room.onMessage("warraid", (r) => warNotice.raid(r, this.entities.get(this.me)?.sprite)); // the Night Raiders strike the leading clan's lands
     this.room.onMessage("mv", alive);
@@ -3585,7 +3604,7 @@ export class TownScene extends Phaser.Scene {
     this.ferry?.update(meEnt?.state, meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near || !!this.portals?.near);
     this.waygates?.update(meEnt?.state, meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near);
     this.portals?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near || !!this.shrine?.near);
-    if (this.minimap) { this.minimap.war = this.warLast; this.minimap.clan = this.warStd?.clan || undefined; this.minimap.sacked = this.sack?.sacked; } // the war table layer (warTable.ts) and the war overlays (warMap.ts)
+    if (this.minimap) { this.minimap.war = this.warLast; this.minimap.clan = this.warStd?.clan || undefined; this.minimap.sacked = this.sack?.sacked; this.minimap.lines = this.warCols; } // the war table layer (warTable.ts) and the war overlays (warMap.ts)
     if (this.minimap && this.npcs) this.minimap.markers = [...this.npcs.markers, ...(this.portals?.markers() ?? []), ...(this.bounty?.markers() ?? []), ...(this.dungeon?.markers() ?? []), ...(this.waygates?.markers() ?? []), ...(this.qcarry?.markers() ?? []), ...(this.tide?.markers() ?? [])];
 
     const mine = meEnt?.state;
@@ -3622,6 +3641,7 @@ export class TownScene extends Phaser.Scene {
       this.warTroops?.update(meEnt.state.dead ? undefined : meEnt.sprite, now);
       this.warRituals?.update(meEnt.state.dead ? undefined : meEnt.sprite); // the Veiled ritual circle (warRituals.ts)
       this.sack?.update(meEnt.state.dead ? undefined : meEnt.sprite, !!this.npcs?.isOpen || !!this.npcs?.busy || !!this.chests?.near || !!this.stash?.near || !!this.bounty?.near || !!this.portals?.near); // a hostile Hold's banner (warSack.ts)
+      if (!meEnt.state.dead) this.warRoadFx?.update(meEnt.sprite.x, meEnt.sprite.y);
       this.warPlaque?.update(tx, ty, this.warStd?.standing(meEnt.sprite)); // the clan war front plaque (warPlaque.ts)
       sfxFrame(this.me, this.entities as any);
       const cls = mine.cls as ClassKind;

@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-16",
+  "title": "War roads and marching columns",
+  "changes": [
+    "Roads now run between neighbouring Holds on the map, and clans march their war columns along them before an attack.",
+    "Cut a column down on the road to weaken the attack it brings. When two columns meet, they clash, and the leaders speak.",
+    "Sworn heroes can march beside their clan's column for valor and renown."
+  ]
+}
