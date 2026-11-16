@@ -242,7 +242,9 @@ test("works (room): the ram and its crew count inside maxSiegeTroops; total troo
     assert.ok(room.sieges.count <= Math.min(SIEGE_BATTLE.maxSiegeTroops, 30 - 12), `siege share ${room.sieges.count}`);
     assert.ok(12 + room.sieges.count + room.warTroops.count <= 30, `total ${12 + room.sieges.count + room.warTroops.count}`);
     let n = 0;
-    room.state.mobs.forEach((m: any) => { if (m.kind === "trooper" && !m.dead) n++; });
+    // the budget covers the land troops (wt*), the siege fronts (ws*) and the works (wr*: ram and crew); battles, marches,
+    // feud hunters and town guards field troopers of their own on their own clocks, so a slow run can see them here
+    room.state.mobs.forEach((m: any, id: string) => { if (m.kind === "trooper" && !m.dead && /^w[tsr]\d/.test(id)) n++; });
     assert.ok(n <= 30 - 12, `troopers in the room ${n}`);
     SIEGE_BATTLE.maxSiegeTroops = 10;
     room.sieges.tick(Date.now());
