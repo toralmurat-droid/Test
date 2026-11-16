@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  ACT_LEVEL, actMobLevel, actOfTile, actSpecialLevel, BADLANDS_H, BADLANDS_Y0, MAP_H, MAP_W, SINKHOLES_H, SINKHOLES_LEVEL, SINKHOLES_Y0, TILE, WORLD_H,
+  ACT_LEVEL, actMobLevel, actOfTile, actSpecialLevel, BADLANDS_H, BADLANDS_Y0, CROWN_Y0, MAP_H, MAP_W, SINKHOLES_H, SINKHOLES_LEVEL, SINKHOLES_Y0, TILE, WORLD_H,
 } from "../shared/constants";
 import { AREAS, EMPTY, GROUND, isSafeZone, isSolidAt, isSolidTile, OBJECTS, randomSpawn, T, TILE_COUNT } from "../shared/map";
 import {
@@ -37,10 +37,9 @@ const NEW_TILES = [T.MOSS, T.PIT, T.BURROW, T.CAVE];
 test("sinkholes: a band of its own under the badlands, built the same every time", () => {
   assert.equal(SINKHOLES_Y0, BADLANDS_Y0 + BADLANDS_H + 8);
   assert.equal(SINKHOLES_Y0, 964);
-  assert.equal(MAP_H, SINKHOLES_Y0 + SINKHOLES_H + 4);
-  assert.equal(MAP_H, 1144);
+  assert.equal(CROWN_Y0, SINKHOLES_Y0 + SINKHOLES_H + 8, "the Crown (Act 6) lies under the sinkholes' rock");
   assert.equal(GROUND.length, MAP_H);
-  assert.equal(TILE_COUNT, 64);
+  assert.ok(TILE_COUNT >= 64);
   assert.deepEqual(NEW_TILES, [60, 61, 62, 63]);
   const fresh = () => {
     const g = Array.from({ length: MAP_H }, () => Array<number>(MAP_W).fill(T.DIRT)), o = Array.from({ length: MAP_H }, () => Array<number>(MAP_W).fill(T.ROCK));
@@ -83,7 +82,8 @@ test("sinkholes: actOfTile knows all five acts, the rock strip under the badland
   assert.deepEqual([956, 959, 960, 963].map((y) => actOfTile(0, y)), [4, 4, 5, 5], "rows 956-959 Act 4, 960-963 Act 5");
   assert.equal(actOfTile(SINKWAY_SINKHOLES.x, SINKWAY_SINKHOLES.y), 5, "the Sinkway's sinkholes side");
   assert.equal(actOfTile(0, S0), 5);
-  assert.equal(actOfTile(287, MAP_H - 1), 5, "the last row (rock under the sinkholes)");
+  assert.equal(actOfTile(287, S1 + 3), 5, "the rock under the sinkholes, its upper half");
+  assert.equal(actOfTile(287, S1 + 4), 6, "its lower half is the Crown's");
   assert.equal(actAt(SINKWAY_SINKHOLES.y * TILE, SINKWAY_SINKHOLES.x * TILE), 5);
   assert.ok(inSinkholesRow(SR(0)) && inSinkholesRow(SR(SINKHOLES_H - 1)) && !inSinkholesRow(SR(-1)) && !inSinkholesRow(SR(SINKHOLES_H)));
 });
@@ -103,7 +103,7 @@ test("sinkholes: sealed in rock, every walkable tile reachable from the Sinkway,
   }
   assert.ok(walk > MAP_W * SINKHOLES_H * 0.5, "mostly open land");
   for (let y = BADLANDS_Y0 + BADLANDS_H; y < S0; y++) for (let x = 0; x < MAP_W; x++) assert.ok(isSolidTile(x, y), `rock at ${x},${y}`);
-  for (let y = S1; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) assert.ok(isSolidTile(x, y), `rock at ${x},${y}`);
+  for (let y = S1; y < CROWN_Y0; y++) for (let x = 0; x < MAP_W; x++) assert.ok(isSolidTile(x, y), `rock at ${x},${y}`);
   // Ropewell (just south-east of the gate) and Hidehall (far south-east), raised in tests/sinkholes-zones.test.ts: mostly
   // open ground inside their walls, every bit of it reachable through the gates
   for (const r of [ROPEWELL, HIDEHALL]) {
@@ -153,7 +153,7 @@ test("sinkholes: Lv 30-45 climbing south-east, the Sinkway opens at Lv 30, a war
   assert.equal(gateOpen(g, { level: 29 } as never), false);
   assert.equal(gateOpen(b, { level: 30 } as never), true);
   assert.equal(gateColdNote(g, undefined), "The tunnel is caved in. Return at level 30.");
-  assert.deepEqual(HOMELAND_GATES.map((h) => [h.act, h.level]), [[3, 20], [4, 25], [5, 30]]);
+  assert.deepEqual(HOMELAND_GATES.slice(0, 3).map((h) => [h.act, h.level]), [[3, 20], [4, 25], [5, 30]]);
   assert.ok(actOpen(5, { level: 30 } as never) && !actOpen(5, { level: 29 } as never));
   for (const act of [1, 2, 3, 4, 5]) { const q = actSpawn(act, randomSpawn); assert.equal(actAt(q.y, q.x), act, `act ${act} spawn`); }
   // its own monsters (tests/sinkholes-zones.test.ts); the war reaches the sinkholes as a land of their own
