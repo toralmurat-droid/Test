@@ -9,9 +9,10 @@ import {
   RESPAWN_MS, TICK_RATE, TILE,
   HOLLOW_KING, ELEM_BLOB, ELEM_MOVE, inputDir, ELITE, BOSS, URSK, SUNWRIGHT, act2MobLevel, act2SpecialLevel, BEAST, BEAST_BROOD, BEAST_FOLK, BEAST_KINDS, BEAST_MOVES, BEAST_RIDER, type BeastMove,
   MAP_W, MAP_H, WORLD_H, inDeepRow, actOfTile, actMobLevel, actSpecialLevel, MOORS_AI, BADLANDS_AI, REDFANG_KINDS,
-  SINKHOLES_AI, HIDEKIN_KINDS, PACK_KINDS,
+  SINKHOLES_AI, HIDEKIN_KINDS, PACK_KINDS, CROWN_AI, CROWN_KINDS, RIVEN_KING,
 } from "../shared/constants";
 import { HideKin, type HideKinState } from "./hidekin";
+import { CrownCourt, type CrownState } from "./crownMobs";
 import { ambushRoomAt, arrivalAt, CRACK_OPEN_MS, LINK_RANGE, linkById, LINKS, SHORTCUT_OPEN_MS, underground } from "../shared/dungeon";
 import {
   ATTACK_VARIANTS, basicDrain, CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, EMOTES, DASH_INVULN_MS, GUARD_REDUCTION, isActiveClass, isClassKind, levelFromXp, MAX_XP, XP_CURVE_VERSION, convertOldXp, capLevel, PVP_KILL_XP, xpForLevel,
@@ -51,7 +52,7 @@ import { soundMult } from "../shared/combat";
 import type { SoundFx } from "../shared/skills";
 import { sellPrice, shopBuys, shopFuses, SHOPS } from "../shared/shops";
 import { BLOB_KINDS, CHAINS, CROWN_CHAIN, packQuest, chainDone, chainOpen, chainState, cleanMentor, inZone, isBlob, type MentorState, npcPresent, QuestState, questFinished, questStep, stepFor, stepGoal, Summon, type BossVoice, TUT_CHAIN, TUT_QUESTS, USE_RANGE } from "../shared/quests";
-import { findHideSpot, HIDE, type HideSpot, MOTHER_KEEP_OUT, noMobsAt, spawnPoint, SPAWN_ZONES, villageDist, zoneCap } from "../shared/spawns";
+import { bossHallAt, findHideSpot, HIDE, type HideSpot, MOTHER_KEEP_OUT, noMobsAt, spawnPoint, SPAWN_ZONES, villageDist, zoneCap } from "../shared/spawns";
 import { blocked, moveStep } from "../shared/movement";
 import { NIGHT_RAID, raiderByKey, raiderIgnores, RAIDERS } from "../shared/raiders";
 import { SLOTS_BY_ZONE, WORK_SLOTS } from "../shared/siege";
@@ -222,6 +223,7 @@ export class Mob extends Schema {
   @type("number") champion = 0; // a champion's affixes, packed (shared/champions.ts packAffixes); 0 = a plain monster
   champ?: ChampState; // a champion's own state (server/champions.ts)
   hk?: HideKinState; // a Hide-Kin's burrow, stitch or pit (server/hidekin.ts)
+  cr?: CrownState; // one of the Crown's court: its oath, shield, decree, the Riven King's fight (server/crownMobs.ts)
   sk = newRuntime();
 
   stunUntil = 0;
@@ -531,6 +533,9 @@ const RANGED: Partial<Record<MobKind, RangedCfg>> = {
   // Act 5: the Quillbacks' quills; the Hide-Stitchers' hexes (and their stitch, server/hidekin.ts)
   quillback: { ...SINKHOLES_AI.quills, far: SINKHOLES_AI.quills.range * 0.85, shot: "arrow" },
   stitcher: { ...SINKHOLES_AI.hex, far: SINKHOLES_AI.hex.range * 0.85, shot: "shadowbolt" },
+  // Act 6: the Hollow Herald's cold decree and the Court Magus's bolt (their decrees and blinks, server/crownMobs.ts)
+  hollowherald: { ...CROWN_AI.decree, far: CROWN_AI.decree.range * 0.85, shot: "magicbolt" },
+  courtmagus: { ...CROWN_AI.arcane, far: CROWN_AI.arcane.range * 0.85, shot: "magicbolt" },
 };
 /** Dustrider archers (the nomads' other half, BEAST_FOLK "folk"): short desert bows. */
 const NOMAD_BOW: RangedCfg = { range: 125, keepAway: 60, far: 125 * 0.85, shot: "arrow", shotSpeed: 175, shotRadius: 3, mult: 0.85 };
@@ -553,7 +558,7 @@ const rangedOf = (m: Mob): RangedCfg | undefined =>
   : m.kind === "nomad" ? (m.weapon === "folk" ? NOMAD_BOW : undefined)
   : RANGED[m.kind];
 /** A warlord's war cry (the badlands' captains and Old Rourke, the sinkholes' Hide-Chieftains), if it cries war. */
-const warlordOf = (k: MobKind) => BADLANDS_AI.warlords[k] ?? SINKHOLES_AI.warlords[k];
+const warlordOf = (k: MobKind) => BADLANDS_AI.warlords[k] ?? SINKHOLES_AI.warlords[k] ?? CROWN_AI.warlords[k];
 /** A monster's stats: its kind's numbers, a bandit's role on top, and the camp's horn alert (they come from far). */
 function mobDef(m: Mob, now = Date.now()): MobDef {
   const d = mobDefOf(m, now);
@@ -572,6 +577,7 @@ function mobDefOf(m: Mob, now: number): MobDef {
   // The Sunwright as the Second Sun (SUNWRIGHT.sun)
   if (m.kind === "sunwright" && m.uPhase >= 3) return { ...base, speed: base.speed * SUNWRIGHT.sun.speed, attackCooldownMs: base.attackCooldownMs * SUNWRIGHT.sun.cooldown };
   if (m.kind === "hidemother" && m.hp < m.maxHp * BEAST.rockfall.hpFrac) return { ...base, speed: base.speed * BEAST.rockfall.speed, attackCooldownMs: base.attackCooldownMs * BEAST.rockfall.cooldown };
+  if (CROWN_KINDS.includes(m.kind)) return CrownCourt.def(m, base, now); // the Crown's court: a broken oath, a decree or war cry, Kingsfall (server/crownMobs.ts)
   if (BEAST_KINDS.includes(m.kind)) return now < m.rallyUntil ? { ...base, speed: base.speed * BEAST.howl.rallySpeed, damage: base.damage * BEAST.howl.rallyDmg } : base;
   // the Redfang (and the Hide-Kin, Hidehall's camp): a Hollow bandit's role, war cries (the Chief's, a badlands captain's,
   // a Hide-Chieftain's and his howl) and the horn alert; a camp's lookout sees far
@@ -671,6 +677,23 @@ export class TownRoom extends Room<TownState> {
       return true;
     },
     seekSpot: (m, radius) => this.claimSpot(m as Mob, m.homeX, m.homeY, radius, Date.now(), false),
+  });
+  /** The Crown's court (server/crownMobs.ts): oaths, shields, decrees, blinks, the hunt, ramparts, usurpers, the Riven King. */
+  private crown = new CrownCourt({
+    hero: (id) => this.state.players.get(id),
+    heroes: () => this.state.players.entries(),
+    mob: (id) => this.state.mobs.get(id),
+    mobsNear: (x, y, r) => this.state.mobs.inBox(x, y, r),
+    broadcast: (type, msg) => this.broadcast(type, msg),
+    dmg: (m, mult) => Math.max(1, Math.round(mobDef(m as Mob).damage * mobScale(m.level, "damage") * mult)),
+    hurtHero: (pid, dmg, fromId, what, push, kb, o) => {
+      const m = this.state.mobs.get(fromId);
+      this.damagePlayer(pid, dmg, `${m ? mobDef(m).name : "?"}'s ${what}`, push, kb, { atkLevel: m?.level, from: fromId, ...o });
+    },
+    canStand: (m, x, y) => { const h = bossHallAt(Math.floor(x / TILE), Math.floor(y / TILE)); return !isSolidAt(x, y) && !isSafeZone(x, y) && !noMobsAt(x, y) && (!h || h === SPAWN_ZONES[m.zone]?.name); },
+    clearLine: (x0, y0, x1, y1) => { const n = Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 8); for (let i = 1; i <= n; i++) if (isSolidAt(x0 + (x1 - x0) * i / n, y0 + (y1 - y0) * i / n)) return false; return true; },
+    say: (id, lines) => this.bossSay(id, lines),
+    provoke: (m, heroId) => { const o = m as Mob; o.target = heroId; o.foe = ""; o.nextAggro = Date.now() + AGGRO.everyMs; this.addHate(o, heroId, 0); },
   });
   private itemSeq = 0;
   /** The quest steps that need more than a count (server/questSteps.ts): choices, NPCs in any order, picks. */
@@ -1544,6 +1567,7 @@ export class TownRoom extends Room<TownState> {
     // An ambusher is already up in its tree when it comes (nobody is near: spawns keep NO_SPAWN_RANGE from heroes)
     if (m.ambusher && this.treeFor(m, Date.now())) this.hide(m, id, Date.now());
     this.hidekin.spawned(m, id); // (a Gullet Worm is already down in its pit)
+    this.crown.spawned(m); // (a Riven King on his throne gets his voice)
     m.lurk = "";
     if (zi >= 0) this.lurkIfAmbush(m, id);
   }
@@ -3544,7 +3568,7 @@ export class TownRoom extends Room<TownState> {
     m.stunned = now < m.stunUntil;
     if (m.stunned || m.broken) { m.winding = false; m.windUntil = 0; }
     m.slowed = now < m.slowUntil;
-    if (m.stunned) { m.moving = false; return; }
+    if (m.stunned) { m.moving = false; if (m.cr) this.crown.stunned(m, id, now); return; } // (a Crownguard's shield drops, a herald's decree is cut off)
     if (m.kind === "nightraider") return this.raiderStep(m, id, dt, now);
     // Nobody around: the monster dozes (no wandering, no budding), which keeps big monster counts cheap
     if (!m.target && !m.tide && !this.sleepNear(m)) {
@@ -3556,6 +3580,7 @@ export class TownRoom extends Room<TownState> {
     if (m.kind === "motherblob" && now >= m.nextBrood) this.brood(m, id, now);
     if (m.champ && this.champs.tick(m, id, now)) return; // a champion's affixes (server/champions.ts): busy under the sand, veiled, building
     if (HideKin.moves(m.kind) && this.hidekin.tick(m, id, now)) return; // the Hide-Kin's own (server/hidekin.ts): burrowed, coming up, sewing
+    if (CrownCourt.moves(m.kind) && this.crown.tick(m, id, now)) return; // the Crown's court (server/crownMobs.ts): a shield up, a decree read, a king's move
     if (m.hidden) return this.updateHidden(m, id, dt, now);
     // Answering a merge call: rush to the caller and fuse on contact
     if (m.mergeInto) {
@@ -3593,7 +3618,7 @@ export class TownRoom extends Room<TownState> {
     // Redfang Hollow: lookouts blow the horn, the chief rallies his camp and calls for more men
     if (t && m.perch && now >= m.nextHorn) this.blowHorn(m, id, now);
     if (t && (m.kind === "banditchief" || warlordOf(m.kind))) this.chiefOrders(m, id, now);
-    if (t && PACK_KINDS.includes(m.kind) && now >= m.nextCall) this.packCall(m, id, m.target, now); // its pack runs in (warhounds, cacklers)
+    if (t && PACK_KINDS.includes(m.kind) && now >= m.nextCall) this.packCall(m, id, m.target, now); // its pack runs in (warhounds, cacklers, gildhounds, crows)
 
     // Dizzy: run for the nearest grave/tree if there is one
     if (t && m.broken && !m.spot && HIDE.spots[m.kind]) this.claimSpot(m, m.x, m.y, HIDE.fleeRadius, now, true);
@@ -4081,7 +4106,7 @@ export class TownRoom extends Room<TownState> {
    * (SINKHOLES_AI.warlords) rallies the Hide-Kin round him the same way.
    */
   private chiefOrders(m: Mob, id: string, now: number) {
-    const lord = m.kind === "banditchief" ? undefined : warlordOf(m.kind), kin = HIDEKIN_KINDS.includes(m.kind) ? HIDEKIN_KINDS : REDFANG_KINDS;
+    const lord = m.kind === "banditchief" ? undefined : warlordOf(m.kind), kin = HIDEKIN_KINDS.includes(m.kind) ? HIDEKIN_KINDS : CROWN_KINDS.includes(m.kind) ? CROWN_KINDS : REDFANG_KINDS;
     const W = lord ?? CHIEF.warCry;
     if (now >= m.nextCry && !m.broken) {
       m.nextCry = now + W.cooldownMs;
@@ -5622,6 +5647,7 @@ export class TownRoom extends Room<TownState> {
     const def = mobDef(m);
     if (a && (m.camp || m.kind === "banditchief")) this.banditShout(m, targetId, attackerId, Date.now());
     dmg = Math.max(1, Math.round(dmg * takenMult(m, Date.now())));
+    if (m.cr) { const src = a ?? this.state.mobs.get(attackerId); dmg = Math.max(1, Math.round(dmg * this.crown.taken(m, src?.x, src?.y, Date.now()))); } // a Crownguard's shield, a Thronewarden's rampart
     const exec = a && !m.owner ? this.execute(a, m, dmg, opts) : 0; // a broken monster's first blow (shared/combat.ts EXECUTE)
     if (exec) dmg = exec;
     // A group fighting together faces a tougher monster (shared/party.ts): it soaks more per hit
@@ -5772,6 +5798,7 @@ export class TownRoom extends Room<TownState> {
     if (m.kind === "hidemother" && m.uPhase) this.bossSay(targetId, URSK.lines.death); // her last words
     if (m.kind === "sunwright" && m.uPhase) this.bossSay(targetId, SUNWRIGHT.lines.death);
     if (m.voice) this.bossSay(targetId, m.voice.death);
+    if (m.kind === "gildhound") this.crown.died(m, targetId, attackerId); // a Gildhound's hunt goes wild (server/crownMobs.ts)
     if (m.kind === "nightraider") this.raiderGone(m, targetId, true, killerName);
     if (m.kind === "trooper") { // its slot refills at the Hold; valor for a sworn killer, and a rout writ counts it
       this.caravans.killed(m, targetId, attackerId); // a caravan's cart or escort (server/warCaravans.ts)
@@ -6721,6 +6748,7 @@ export class TownRoom extends Room<TownState> {
     const killer = opts.from ? this.state.mobs.get(opts.from) : undefined;
     if (killer?.kind === "hidemother" && !killer.dead) this.bossSay(opts.from!, URSK.lines.kill);
     if (killer?.kind === "sunwright" && !killer.dead) this.bossSay(opts.from!, SUNWRIGHT.lines.kill);
+    if (killer?.kind === "rivenking" && !killer.dead) this.bossSay(opts.from!, RIVEN_KING.lines.kill);
     t.guarding = false;
     // No magic in Oakvale: dying pays for it, the hero comes back a free citizen (villagers and watch stand down)
     this.setOutlaw(tid, t, false);

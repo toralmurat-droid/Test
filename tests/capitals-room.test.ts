@@ -24,7 +24,8 @@ test("room: the Wardens' city gate admits the right heroes, its waystone the sam
     await wait(300);
     const room = srv.room, pid = c.sessionId, p = room.state.players.get(pid), client = room.clients.getById(pid);
     const out = waygateById("citygate_wardens")!, inn = waygateById("cityexit_wardens")!;
-    const tryGate = () => { at(p, out.x, out.y); p.gateNoteAt = 0; room.caps.noted.clear(); room.useWaygate(client); return !!cityAtPx(p.x, p.y); };
+    // lastHurt: Wardens war troops near Goldenreach may strike a hero sworn to a clan at war while the test waits (the gate refuses heroes in a fight)
+    const tryGate = () => { at(p, out.x, out.y); p.lastHurt = 0; p.dead = false; p.hp = p.maxHp; p.gateNoteAt = 0; room.caps.noted.clear(); room.useWaygate(client); return !!cityAtPx(p.x, p.y); };
     // below Lv 5 the gate is barred
     p.level = 4;
     assert.equal(tryGate(), false, "Lv 4 stays outside");
@@ -52,7 +53,7 @@ test("room: the Wardens' city gate admits the right heroes, its waystone the sam
     // the waystone: the same rule
     p.portals.add("farms"); p.portals.add("city_wardens");
     const farms = portalById("farms")!, ws = portalById("city_wardens")!;
-    const travel = () => { at(p, farms.x, farms.y); room.travel(client, "city_wardens"); return Math.hypot(p.x - ws.x, p.y - ws.y) < 2 * TILE; };
+    const travel = () => { at(p, farms.x, farms.y); p.lastHurt = 0; room.travel(client, "city_wardens"); return Math.hypot(p.x - ws.x, p.y - ws.y) < 2 * TILE; };
     assert.equal(travel(), false, "Wanted: the waystone refuses too");
     p.feud = {};
     setWarPairs([pairOf("redfang", "wardens")]); p.clan = "redfang";

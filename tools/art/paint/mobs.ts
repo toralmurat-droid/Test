@@ -7,6 +7,7 @@ import { lastRig, pixelAlpha, pixelize, shrink } from "./body";
 import { paintRaider, RAIDER_H, RAIDER_W } from "./raiders";
 import { HOUND_H, HOUND_W, WRAITH_H, WRAITH_W, paintHound, paintWraith } from "./moors";
 import { RATTLER_H, RATTLER_W, VULTURE_H, VULTURE_W, WARHOUND_H, WARHOUND_W, paintRattler, paintVulture, paintWarhound } from "./badlands";
+import { CROWNCROW_PAL, GILDHOUND_PAL } from "./crown";
 import { SINKWORM_H, SINKWORM_W, paintSinkworm } from "./sinkholes";
 import { paintWisp, WISP_H, WISP_W, type WispElement } from "./wisps";
 import { RAIDERS } from "../../../shared/raiders";
@@ -661,6 +662,17 @@ export function buildMobs(out: string, ONLY?: string[]) {
     humanoid("mob_hidechief", "hidechief", 34, 38, 35 / 38, 1.12),
     humanoid("mob_mawfather", "mawfather", 46, 50, 46 / 50, 1.34),
     { key: "mob_sinkworm", w: SINKWORM_W, h: SINKWORM_H, draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintSinkworm(c, SH, dir as "down" | "up" | "right", pose, f); } },
+    // Act 6, the Crown of the Marches: the court (look.ts oathbreaker..rivenking); the Gildhound and the Crown Crow are the
+    // badlands' hound and vulture in the Crown's colours (crown.ts palettes)
+    humanoid("mob_oathbreaker", "oathbreaker", 28, 32, 30 / 32, 0.95),
+    humanoid("mob_crownguard", "crownguard", 32, 34, 32 / 34, 1.0),
+    humanoid("mob_hollowherald", "hollowherald", 26, 32, 31.2 / 32, 0.93),
+    humanoid("mob_courtmagus", "courtmagus", 24, 34, 31.5 / 34, 0.92),
+    humanoid("mob_pretender", "pretender", 24, 32, 30 / 32, 0.9),
+    humanoid("mob_thronewarden", "thronewarden", 36, 40, 37.5 / 40, 1.15),
+    humanoid("mob_rivenking", "rivenking", 46, 50, 46 / 50, 1.3),
+    { key: "mob_gildhound", w: WARHOUND_W, h: WARHOUND_H, draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintWarhound(c, SH, dir as "down" | "up" | "right", pose, f, GILDHOUND_PAL); } },
+    { key: "mob_crowncrow", w: VULTURE_W, h: VULTURE_H, draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintVulture(c, SH, dir as "down" | "up" | "right", pose, f, CROWNCROW_PAL); } },
     // the clan war's soldiers (warLooks.ts): 36 px wide so the fallen body fits; officers are taller
     ...WAR_SOLDIERS.map((k) => k.endsWith("_cap") || k.endsWith("_chief") || k.endsWith("_adept") ? humanoid(`mob_${k}`, k, 36, 34, 32 / 34, 0.95, false, 0, true) : humanoid(`mob_${k}`, k, 36, 32, 30 / 32, 0.9, false, 0, true)),
     // the clan war's supply carts (warCarts.ts): 14 frames, 12 = staggering, 13 = wrecked
@@ -702,7 +714,7 @@ export function buildMobs(out: string, ONLY?: string[]) {
       const c = body.getContext("2d"), sc = shadow.getContext("2d");
       c.scale(HI, HI); sc.scale(HI, HI);
       SH = sc; s.draw(c, f); SH = null;
-      const blob = !/wisp|war_|skeleton|bandit|bride|necromancer|demon|crawler|hollowking|gnawkin|tuskborn|silkwretch|duskwing|packlord|hornbrute|hidemother|crowseer|gnasher|weaver|nomad|scorpion|sanddead|veiled|camelfolk|sphinx|sunwright|wight|boghag|bonehound|mistwraith|legionary|cairnlord|barrowking|nightraider|outrider|crossbowman|firebrand|redcaptain|rourke|warhound|vulture|rattler|delver|cackler|stagkin|quillback|stitcher|hidechief|mawfather|sinkworm/.test(s.key);
+      const blob = !/wisp|war_|skeleton|bandit|bride|necromancer|demon|crawler|hollowking|gnawkin|tuskborn|silkwretch|duskwing|packlord|hornbrute|hidemother|crowseer|gnasher|weaver|nomad|scorpion|sanddead|veiled|camelfolk|sphinx|sunwright|wight|boghag|bonehound|mistwraith|legionary|cairnlord|barrowking|nightraider|outrider|crossbowman|firebrand|redcaptain|rourke|warhound|vulture|rattler|delver|cackler|stagkin|quillback|stitcher|hidechief|mawfather|sinkworm|oathbreaker|crownguard|hollowherald|courtmagus|pretender|thronewarden|rivenking|gildhound|crowncrow/.test(s.key);
       const b = shrink(body, "mb", tw, th);
       if (s.key.startsWith("mob_champ_")) pixelize(b, tw, th, true); // a detail, not a body: no ground grime
       else pixelize(b, tw, th, true, blob ? { y0: Math.round(th * 0.7), y1: th, mud: 0.14, sat: 0.9 } : { y0: Math.round(th * 0.72), y1: th, mud: s.key.includes("bandit") ? 0.38 : 0.2 });

@@ -1424,5 +1424,59 @@
   "h": 28,
   "scale": 1.5,
   "frames": 12
+ },
+ "mob_oathbreaker": {
+  "w": 28,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_crownguard": {
+  "w": 32,
+  "h": 34,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_hollowherald": {
+  "w": 26,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_courtmagus": {
+  "w": 24,
+  "h": 34,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_pretender": {
+  "w": 24,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_thronewarden": {
+  "w": 36,
+  "h": 40,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_rivenking": {
+  "w": 46,
+  "h": 50,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_gildhound": {
+  "w": 34,
+  "h": 24,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_crowncrow": {
+  "w": 36,
+  "h": 34,
+  "scale": 1.5,
+  "frames": 12
  }
 }

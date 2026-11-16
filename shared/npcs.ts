@@ -4,6 +4,7 @@ import { D } from "./desert";
 import { MR } from "./moors";
 import { BR } from "./badlands";
 import { SR } from "./sinkholes";
+import { CR } from "./crown";
 import { CITIES, CITY_SOLIDS, CITY_TEMPLATE, cityNpcId, cityNpcPx, cityShopId, cityText } from "./capitals";
 
 /** Village NPCs: where they stand (feet, in pixels) and which sprite sheet they use. Server and client share this. */
@@ -79,6 +80,9 @@ export const NPCS: Npc[] = [
   { id: "ropewarden", name: "Lodge-Warden Brannoc Tull", title: "Warden of Ropewell", sprite: "ropewarden", x: 108.5 * TILE, y: SR(23.75) * TILE, dir: "down", where: "Ropewell (Act 5 sinkholes), before the Lodge-Warden's hall" },
   { id: "ropearmourer", name: "Hesta Coil", title: "Armour merchant", sprite: "ropearmourer", x: 114.5 * TILE, y: SR(23.75) * TILE, dir: "down", shop: "ropearmourer", where: "Ropewell (Act 5 sinkholes), before the armoury" },
   { id: "ropehealer", name: "Mother Fennick", title: "Herb-wife", sprite: "ropehealer", x: 119.5 * TILE, y: SR(23.75) * TILE, dir: "down", shop: "ropehealer", where: "Ropewell (Act 5 sinkholes), at her stall on the square" },
+  // ---- Tollcross, the Truce Market the Heralds' College keeps outside the Crown Keep's north gate (Act 6, shared/crown.ts):
+  // the Herald-Marshal stands at the head of the square; the Crown's quest chain (The Riven Throne) starts with her
+  { id: "crownherald", name: "Herald-Marshal Ysmay Corrant", title: "Herald-Marshal of the College", sprite: "crownherald", x: 143.5 * TILE, y: CR(42.75) * TILE, dir: "down", where: "Tollcross (Act 6, the Crown of the Marches), at the head of the Truce Market's square" },
   // ---- Zone quest givers (Murat 2026-11-10: "more zone quests, real exploration arcs"): each lives out in their zone and
   // starts a short arc there that moves on through it and ends out in the field (shared/quests.ts ZONE_ARCS)
   { id: "huntsman", name: "Huntmaster Bryn", title: "Hunter", sprite: "huntsman", ...standNear(28, 18), dir: "left", where: "the Hunter's Camp, north-west of Oakvale" },

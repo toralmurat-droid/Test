@@ -7,6 +7,7 @@ import { D, FURNACE, KEL_ASHAR } from "./desert";
 import { BARROW_FIELDS, CAIRN_SQUARE, KINGS_MOUND, MR } from "./moors";
 import { BR, FANGROCK_KEEP, RUSTWATER_SQUARE } from "./badlands";
 import { GREAT_MAW, ROPEWELL_SQUARE, SR } from "./sinkholes";
+import { CR, THRONE_DOOR, THRONE_HALL, TOLLCROSS_SQUARE } from "./crown";
 import { SALT_RACKS, WATCH_FIRE } from "./saltmere";
 import { xpStep } from "./classes";
 import { type BargainSpec, type CarrySpec, type ChoiceId, type ChoiceSpec, choiceOf, type HoldSpec, nextStage, type PickSpec, sayFor, stepObjects, type SyncSpec, type UnseenSpec } from "./questSteps";
@@ -2730,6 +2731,151 @@ const SINK_QUESTS: QuestDef[] = [
   },
 ];
 
+// ---- Act 6: the Crown of the Marches, from Tollcross (Lv 40-50; shared/crown.ts, docs/crown-progress.md) ----
+/** Where things are, said from Tollcross Square (the Crown's own compass). */
+function dirFromToll(tx: number, ty: number): string {
+  const q = TOLLCROSS_SQUARE, cx = q.x + q.w / 2, cy = CR(q.y + q.h / 2);
+  const k = (Math.round(Math.atan2(ty - cy, tx - cx) / (Math.PI / 4)) + 8) % 8;
+  return ["east", "south-east", "south", "south-west", "west", "north-west", "north", "north-east"][k];
+}
+const tdir = (name: string) => { const z = zoneByName(name); return dirFromToll(z.x + z.w / 2, z.y + z.h / 2); };
+const THRONE_SHRINES = [obj("throne_shrine1", "shrine", "Wayside shrine", "Read", "The Pilgrims' Way", 0.25, 0.4), obj("throne_shrine2", "shrine", "Wayside shrine", "Read", "The Pilgrims' Way", 0.55, 0.65), obj("throne_shrine3", "shrine", "Wayside shrine", "Read", "The Pilgrims' Way", 0.8, 0.45)];
+const THRONE_PENNANTS = [obj("throne_pennant1", "clue", "Torn hunting pennant", "Search", "The Tourney Grounds", 0.25, 0.45), obj("throne_pennant2", "clue", "Torn hunting pennant", "Search", "The Tourney Grounds", 0.5, 0.7), obj("throne_pennant3", "clue", "Torn hunting pennant", "Search", "The Tourney Grounds", 0.78, 0.4)];
+const THRONE_SEALS = [obj("throne_seal1", "seal", "Royal seal on a court door", "Break", "The Gilded Ruins", 0.25, 0.5), obj("throne_seal2", "seal", "Royal seal on a court door", "Break", "The Gilded Ruins", 0.5, 0.3), obj("throne_seal3", "seal", "Royal seal on a court door", "Break", "The Gilded Ruins", 0.75, 0.6)];
+const THRONE_BELLS = [obj("throne_bell1", "bell", "Herald's bell", "Silence", "The Mourning Gardens", 0.25, 0.4), obj("throne_bell2", "bell", "Herald's bell", "Silence", "The Mourning Gardens", 0.55, 0.7), obj("throne_bell3", "bell", "Herald's bell", "Silence", "The Mourning Gardens", 0.78, 0.35)];
+/** Before the Throne Hall's door, on the bailey's marble lane. */
+const THRONE_STEPS = at(THRONE_DOOR[0] + 0.5, CR(THRONE_HALL.y + THRONE_HALL.h + 1), 3, "the Throne Hall's door");
+const THRONE_QUESTS: QuestDef[] = [
+  {
+    id: "pilgrims", title: "The Pilgrims' Way", giver: "crownherald", zone: "The Pilgrims' Way", minLevel: 40,
+    description: `Herald-Marshal Ysmay Corrant says knights in the old king's colours are cutting down pilgrims on the Pilgrims' Way, ${tdir("The Pilgrims' Way")} of Tollcross. Put down the Oathbroken Knights and read the notices left at the wayside shrines.`,
+    offer: [
+      "You came through a Crownway. Then you have seen what the College keeps: a market on a parade ground, and a truce that every clan breaks a little and none breaks all the way.",
+      "I am Ysmay Corrant, Herald-Marshal. For three hundred years the Keep has been silent. This winter its bells began to ring at night, and the old king's knights rode out.",
+      `They are cutting down pilgrims on the Pilgrims' Way, ${tdir("The Pilgrims' Way")} of here. The same oath that bound them to guard the road. Put them down, and read the shrines: they leave notices there.`,
+    ],
+    acceptText: "I'll ride the Way",
+    steps: [
+      { type: "kill", zone: "The Pilgrims' Way", kinds: ["oathbreaker"], goal: 6, text: "Kill 6 Oathbroken Knights on the Pilgrims' Way", banner: ["New quest", "The Pilgrims' Way"], obj: "Oathbroken Knights slain: {n} / {goal}", nag: "{n} of {goal}. Hurt them badly and they break their last oath: finish them fast." },
+      { type: "use", zone: "The Pilgrims' Way", objects: THRONE_SHRINES, chest: false, text: "Read the notices at the 3 wayside shrines", banner: ["The shrines", "Read the notices"], obj: "Shrines read: {n} / {goal}", nag: "{n} of {goal}. The shrines stand along the old road." },
+    ],
+    outro: ["Each notice is the same, nailed up in a herald's hand three centuries old: \"By order of the High King, the Marches are not ended.\"", "Under the last one, a fresh line in new ink: \"The court sits again.\""],
+    reward: arcReward(41),
+    after: "\"The court sits again.\" Fresh ink. Somebody in that Keep can still write, and wants us to know it.",
+  },
+  {
+    id: "kingshunt", title: "The King's Hunt", giver: "crownherald", zone: "The Tourney Grounds", minLevel: 42, auto: true,
+    description: `The old king's hounds hunt again on the Tourney Grounds, ${tdir("The Tourney Grounds")} of Tollcross, gilded collars and all. Thin the Gildhounds and search the torn pennants of the hunt.`,
+    offer: [
+      "The royal hunt has been loosed. Gildhounds, the old huntsmen called them: bred for the king's table, collared in gold, and nobody has fed them in three hundred years.",
+      "They run the Tourney Grounds where the lists used to be. Kill one and the rest go mad for whoever did it, so do not kill one where you cannot kill them all.",
+      "The hunt flies pennants. Search them. I want to know whose hunt this is.",
+    ],
+    acceptText: "I'll break the hunt",
+    steps: [
+      { type: "kill", zone: "The Tourney Grounds", kinds: ["gildhound"], goal: 6, text: "Kill 6 Gildhounds on the Tourney Grounds", banner: ["New quest", "The King's Hunt"], obj: "Gildhounds slain: {n} / {goal}", nag: "{n} of {goal}. When one falls the pack turns on its killer. Pull them apart." },
+      { type: "use", zone: "The Tourney Grounds", objects: THRONE_PENNANTS, chest: false, text: "Search the 3 torn hunting pennants", banner: ["The pennants", "Search the pennants"], obj: "Pennants searched: {n} / {goal}", nag: "{n} of {goal}. They hang from the old lists." },
+    ],
+    outro: ["The pennants bear the High King's sun, but broken across the middle, sewn back together with gold thread.", "A riven crown. The heralds' rolls have a name for the king who flew it: Aldemar, the last."],
+    reward: arcReward(43),
+    after: "Aldemar. The College has a whole shelf on him. The last line of the last page says he would not let the realm go.",
+  },
+  {
+    id: "mirrors", title: "Court of Mirrors", giver: "crownherald", zone: "The Gilded Ruins", minLevel: 43, auto: true,
+    description: `The court's magi keep the Gilded Ruins, ${tdir("The Gilded Ruins")} of Tollcross, behind doors sealed with the riven crown. Cut down the Court Magi and break the royal seals.`,
+    offer: [
+      "In the Gilded Ruins the court's magi kept their halls, and they are keeping them still. They step through the air when you come close. Corner them against a wall.",
+      "Every door there is sealed with the riven crown. A seal is a claim: this is the king's. Break three, and the claim breaks with them.",
+      "And mind the pretenders. Every ruin in the Crown has someone in a paper crown who thinks the throne is his.",
+    ],
+    acceptText: "I'll break the seals",
+    steps: [
+      { type: "kill", zone: "The Gilded Ruins", kinds: ["courtmagus"], goal: 5, text: "Kill 5 Court Magi in the Gilded Ruins", banner: ["New quest", "Court of Mirrors"], obj: "Court Magi slain: {n} / {goal}", nag: "{n} of {goal}. They blink away when you close in. Make them run out of room." },
+      { type: "use", zone: "The Gilded Ruins", objects: THRONE_SEALS, chest: false, text: "Break the 3 royal seals", banner: ["The seals", "Break the royal seals"], obj: "Seals broken: {n} / {goal}", nag: "{n} of {goal}. The sealed doors are on the broken court walls." },
+    ],
+    outro: ["Behind the last door, a hall of mirrors with every glass cracked the same way: a single line down the middle.", "In each mirror the reflection of the Keep, and on its highest tower a light that should not be burning."],
+    reward: arcReward(44),
+    after: "A light in the Keep. The College's watchers swear they have never seen it. I believe you anyway.",
+  },
+  {
+    id: "silentheralds", title: "The Silent Heralds", giver: "crownherald", zone: "The Mourning Gardens", minLevel: 44, auto: true,
+    description: `Hollow Heralds ring their bells in the Mourning Gardens, ${tdir("The Mourning Gardens")} of Tollcross, and every decree they read rallies the old court. Silence the heralds and their bells.`,
+    offer: [
+      "These I take personally. The Hollow Heralds were the College's own, once: my order. They went into the Keep with the king's last decree and never came out.",
+      "Now they stand in the Mourning Gardens and read decrees to the dead, and the dead listen. A herald mid-decree can be cut off. Do it.",
+      "Then silence their bells. Every bell in the Crown is ringing for him.",
+    ],
+    acceptText: "I'll silence them",
+    steps: [
+      { type: "kill", zone: "The Mourning Gardens", kinds: ["hollowherald"], goal: 5, text: "Kill 5 Hollow Heralds in the Mourning Gardens", banner: ["New quest", "The Silent Heralds"], obj: "Hollow Heralds slain: {n} / {goal}", nag: "{n} of {goal}. Break a herald's decree with a stun or a heavy blow, or the whole court comes on harder." },
+      { type: "use", zone: "The Mourning Gardens", objects: THRONE_BELLS, chest: false, text: "Silence the 3 heralds' bells", banner: ["The bells", "Silence the bells"], obj: "Bells silenced: {n} / {goal}", nag: "{n} of {goal}. The bells hang in the garden arches." },
+    ],
+    outro: ["The last bell stops. In the quiet you can hear, very far off, someone in the Keep counting under their breath.", "Names. A roll-call of every land the Marches ever held, and after each one: \"Mine.\""],
+    reward: arcReward(45),
+    after: "My order is quiet at last. I will write their names in the College's roll myself. Thank you.",
+  },
+  {
+    id: "vigil", title: "The Pretender of the Vigil", giver: "crownherald", zone: "The Vigil Courts", minLevel: 45, auto: true,
+    description: `A pretender who calls himself Prince Ottrin holds the Vigil Courts, ${tdir("The Vigil Courts")} of Tollcross, with the old Crownguard at his back. Break the Crownguard, then bring the pretender down.`,
+    offer: [
+      "Of all the pretenders in the Crown, one has the Crownguard following him: Ottrin, who says he is Aldemar's heir. He may even be. It does not matter.",
+      "The Crownguard plant their shields and hold. Go round them, never through. He hides behind his own men, too: when he is hurt he trades places with one of them.",
+      "Break the guard. Then break the prince. The Keep's gate will not stay shut once its guard is gone.",
+    ],
+    acceptText: "I'll unmake the prince",
+    steps: [
+      { type: "kill", zone: "The Vigil Courts", kinds: ["crownguard"], goal: 5, text: "Kill 5 Crownguards in the Vigil Courts", banner: ["New quest", "The Pretender of the Vigil"], obj: "Crownguards slain: {n} / {goal}", nag: "{n} of {goal}. Their shields stop blows from the front. Step round them." },
+      { type: "kill", zone: "The Vigil Courts", kinds: ["pretender"], goal: 1, own: true,
+        summon: { parts: ["pretender"], level: 47, title: "Prince Ottrin, the Pretender", hpMult: 4, ...spotIn("The Vigil Courts", 0.5, 0.5),
+          voice: { wake: ["Ah. A petitioner. You may approach the heir.", "Kneel, and I will remember your name when I am crowned."], taunt: ["Guard! To your prince!", "The throne is mine by blood. Whose is it by yours?", "My father broke the crown for us. I will wear the pieces."], half: ["You strike the heir of the Marches? There will be a reckoning for that. There is always a reckoning."], death: ["Father... I only wanted... to sit... beside you..."] } },
+        text: "Bring down Prince Ottrin", banner: ["PRINCE OTTRIN", "Bring down the Pretender"], obj: "Prince Ottrin brought down: {n} / {goal}", nag: "He calls his sworn knights and swaps places with his men when hurt. Keep your eyes on the paper crown." },
+    ],
+    outro: ["The prince's crown is paper after all, painted gold. Inside it, in a child's hand: \"For when Father lets me.\"", "From the Keep, a single horn. The gate is open."],
+    reward: arcReward(47, true),
+    after: "His son, then. Or a boy who wanted to be. The College will record him as both and let history argue.",
+  },
+  {
+    id: "crownkeep", title: "The Crown Keep", giver: "crownherald", zone: "The Crown Keep", minLevel: 47, auto: true,
+    description: `The Crown Keep's gate stands open ${tdir("The Crown Keep")} of Tollcross. A Thronewarden holds the bailey. Bring it down and reach the door of the Throne Hall.`,
+    offer: [
+      "The gate is open. In three hundred years nobody has seen it open. I do not like that he wants us to come in.",
+      "A Thronewarden walks the bailey: the throne's own armour, walking, and it guards the court like a hen guards chicks. It shields whichever of them is worst hurt.",
+      "Bring it down, and go to the Throne Hall's door. Do not go in. Not yet.",
+    ],
+    acceptText: "I'll take the bailey",
+    steps: [
+      { type: "kill", zone: "The Crown Keep", kinds: ["thronewarden"], goal: 1, text: "Bring down the Thronewarden in the Crown Keep", banner: ["New quest", "The Crown Keep"], obj: "Thronewarden brought down: {n} / {goal}", nag: "It walks the bailey round the Throne Hall. Kill the ones it shields last, or it wastes its ward on them." },
+      { type: "reach", at: { ...THRONE_STEPS }, zone: "The Crown Keep", text: "Go to the door of the Throne Hall", banner: ["The Throne Hall", "Go to its door"], obj: "Go to the door of the Throne Hall, in the middle of the Keep", nag: "The marble lane runs round the hall. Its door faces south." },
+    ],
+    outro: ["Through the door, a long marble nave lined with the old kings in stone, every one of them broken in the same place.", "At the far end, on a throne built from the shards of a crown, someone sits up and says, quite pleasantly: \"At last. Petitioners.\""],
+    reward: arcReward(48),
+    after: "He spoke? Of course he spoke. Kings always do. Rest, and then go back. The College will be here when you return. That is all the College has ever been for.",
+  },
+  {
+    id: "rivenking", title: "The Riven King", giver: "crownherald", zone: "The Throne Hall", minLevel: 48, auto: true,
+    description: `Aldemar, the Riven King, sits his throne of shards in the Throne Hall at the heart of the Crown Keep, ${tdir("The Crown Keep")} of Tollcross. End his reign.`,
+    offer: [
+      "Aldemar broke the crown of the Marches when the realm split, so that every land would carry a piece of it and none could say the kingdom was gone.",
+      "That was three hundred years ago. He has been holding court ever since, and now he wants the pieces back.",
+      "He cuts down a line before him, and drops the shards where you stand once he is hurt. At the end he will bring the hall down round himself: be far from him when he does. Go, and let the Marches end.",
+    ],
+    acceptText: "I'll end his reign",
+    steps: [
+      { type: "reach", at: { ...THRONE_STEPS }, zone: "The Crown Keep", text: "Go to the Throne Hall", banner: ["New quest", "The Riven King"], obj: "Go to the door of the Throne Hall, in the middle of the Crown Keep", nag: "Through the Keep's gate and round the marble lane to the hall's south door." },
+      { type: "kill", zone: "The Throne Hall", kinds: ["rivenking"], goal: 1, own: true,
+        summon: { parts: ["rivenking"], level: 50, title: "Aldemar, the Riven King", hpMult: 2, ...spotIn("The Throne Hall", 0.5, 0.35),
+          voice: { wake: ["Petitioners. Come forward, all of you. It has been a long time since anyone came to court.", "You bring a piece of my crown in every one of you. Every land does. I will have them back now."],
+            taunt: ["I broke the crown so the realm would never end. It is very rude of you to try.", "The heralds still cry my name. Can you not hear them?", "Every land took a shard. Every land owes me.", "Kneel. It is easier on the knees than dying."],
+            half: ["You mistake me for a man. I am a kingdom, and kingdoms take a long time to fall."],
+            death: ["The crown... was always... too heavy... Let them... keep... the pieces..."] } },
+        text: "Defeat Aldemar, the Riven King", banner: ["THE RIVEN KING", "Defeat Aldemar"], obj: "The Riven King defeated: {n} / {goal}", nag: "Step out of his Edge's lane, out of the marked shards, and far from him when the hall shakes." },
+    ],
+    outro: ["The Riven King sags on his throne of shards and is still, and for the first time in three hundred years every bell in the Crown is silent.", "The shards of the throne are only stone now. Tollcross will want to hear it from you, and the clans will want the Crown. That war is still to come."],
+    reward: arcReward(50, true),
+    after: "The bells stopped. The whole market stopped to listen to them stop. The College will write it down, and then, I suspect, the clans will start fighting over who owns the silence.",
+  },
+];
+
 // ---- Saltmere Ways (Lv 16-17; docs/saltmere-rework-progress.md phase 6): Bess Tanner of the smokehouse ----
 /** The smoke-pit in the gap between the fish racks (shared/saltmere.ts SALT_RACKS), reached from the path beside the smokehouse. */
 const SMOKE_PIT = objAt("salt_smokepit", "clue", "Cold smoke-pit under the fish racks", "Light", SALT_RACKS[0][0], SALT_RACKS[0][1] + 1);
@@ -2802,6 +2948,8 @@ export const SIDE_ARCS: { id: string; name: string; quests: QuestDef[]; needs?: 
   { id: "sinkholes", name: "The Rope and the Maw", quests: SINK_QUESTS },
   // Saltmere's own (phase 6 of the rework): The Watch-Fire is offered once Salt and Steel is done
   { id: "saltways", name: "Saltmere Ways", quests: SALT_WAYS, needs: (p) => (chainState(p, chainIx("saltways"))?.questId ?? 0) < WATCH_QUEST || questFinished(p, "cod") },
+  // Act 6: the Crown of the Marches, from Tollcross (a side arc, last, so no chain index moves; not "crown": that key is the Hollow Crown's)
+  { id: "throne", name: "The Riven Throne", quests: THRONE_QUESTS },
 ];
 const ARC_OBJECTS: QuestObject[] = [...ZONE_ARCS, ...SIDE_ARCS].flatMap((a) => a.quests.flatMap((d) => d.steps.flatMap(stepObjects)));
 
@@ -3072,6 +3220,7 @@ const IDLE: Record<string, string> = {
   mourner3: "I build boats. Corin built better ones. I keep thinking he'll walk up the lane and say so.",
   ilka: "Don't look at me like that. Keep walking.",
   rustmarshal: "Water's free, the roof's free, and nobody here pays the Redfang a copper. That's the Post's whole law. Fangrock doesn't like it, and now that you've been out there, neither do you.",
+  crownherald: "The truce is simple: no blade drawn on the square, no clan's banner over the market, and every herald's word written down. The College has kept it three hundred years. We did not expect to keep it while the old king woke up.",
   ropewarden: "Hold the rope and watch your footing. The ground round here gives way when it likes, and the Hide-Kin are no steadier. Every trapper at Ropewell has lost somebody to the Mawdeep, and none of us has stopped looking.",
   cairncaptain: "Keep to the corpse roads, and if a barrow calls your name, don't answer. Four hundred years the Wardens have held these cairns shut. I mean to be the captain who doesn't lose them.",
   smoker: "Cod on the left, herring on the right, and don't lean on the racks. Alder smoke gets into everything, your coat included. You'll smell like Saltmere for a week. Folk say it suits you.",

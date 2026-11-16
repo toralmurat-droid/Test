@@ -3,7 +3,7 @@ import { D, SUNSTONE } from "./desert";
 import { MOORSGATE_MOORS } from "./moors";
 import { REDPASS_BADLANDS } from "./badlands";
 import { MAW_LEDGE_RECT, SINKWAY_SINKHOLES, SR } from "./sinkholes";
-import { crownGateTile, CROWNWAYS } from "./crown";
+import { CR, crownGateTile, CROWNWAYS, THRONE_HALL } from "./crown";
 import { AREAS, isSafeZone, isSolidAt, OBJECTS, T, VILLAGE } from "./map";
 import { CAMP_POSTS, campMobs } from "./bandits";
 import { AMBUSH_ROOMS, chamberAtPx, FLOORS, LAIRS, LANDING, pointInChamber } from "./dungeon";
@@ -33,7 +33,8 @@ export function rollLevel(z: SpawnZone): number {
 export const NO_MOB_AREAS = ["Saltmere", "Kel Ashar", "The Sunstone Circle", "The Sun Furnace", // Act 2: the oasis town, the waygate's circle and the final fight's plateau
   "Cairnwatch", "The Moorgate", // Act 3: the outpost (walls and all) and the moorgate's arrival clearing
   "The Rustwater Post", "The Red Pass", // Act 4: the outpost (walls and all) and the Red Pass's arrival clearing
-  "Ropewell", "The Sinkway"]; // Act 5: the outpost (walls and all) and the Sinkway's arrival clearing
+  "Ropewell", "The Sinkway", // Act 5: the outpost (walls and all) and the Sinkway's arrival clearing
+  "Tollcross", ...CROWNWAYS.map((c) => c.name)]; // Act 6: the Truce Market and the five Crownways' daises on the rim
 const NO_MOB_RECTS = NO_MOB_AREAS.flatMap((n) => AREAS.filter((a) => a.name === n)).map((a) => ({ x0: a.x - 2, y0: a.y - 2, x1: a.x + a.w + 2, y1: a.y + a.h + 2 }));
 /** True where monsters may not go (pixel coords). */
 export function noMobsAt(px: number, py: number): boolean {
@@ -188,11 +189,35 @@ const ZONE_MOBS: { name: string; mobs: Partial<Record<MobKind, number>>; respawn
   { name: "The Great Maw", mobs: { mawfather: 1 }, respawnMs: 300000, fixed: true, levels: [45, 45] },
   // the open sinkholes: cackler packs, stray stagkin and delvers, worms in the lesser sinks; levels by distance (last in its block)
   { name: "The Mawdeep Sinkholes", mobs: { cackler: 4, stagkin: 3, delver: 3, sinkworm: 1 }, respawnMs: 6000, wild: true },
+  // ---- Act 6, the Crown of the Marches (shared/crown.ts): Lv 40-48, the five approaches inside the Crownways first
+  // (40-44), the four lands round the Keep's hill next (43-47), the Keep's bailey last (46-48); the Riven King (Lv 50) on
+  // his throne in the Throne Hall. The living and the cursed dead alike walk by day and night. Every land keeps its 7x7
+  // hold patch clear for the war (shared/crown.ts CROWN_LANDS).
+  { name: "The Pilgrims' Way", mobs: { oathbreaker: 6, gildhound: 3, crowncrow: 2 }, respawnMs: 6500, levels: [40, 43] },
+  { name: "The Field of Statues", mobs: { oathbreaker: 5, crownguard: 3, crowncrow: 2, hollowherald: 2 }, respawnMs: 6500, levels: [40, 43] },
+  { name: "The Spirefall", mobs: { crowncrow: 3, courtmagus: 3, gildhound: 3, oathbreaker: 3 }, respawnMs: 6500, levels: [40, 43] },
+  { name: "The Sunken Courts", mobs: { crownguard: 4, hollowherald: 3, oathbreaker: 3 }, respawnMs: 6500, levels: [41, 44] },
+  { name: "The Ember Gardens", mobs: { gildhound: 4, pretender: 3, courtmagus: 2, crowncrow: 2 }, respawnMs: 6500, levels: [41, 44] },
+  { name: "The Tourney Grounds", mobs: { oathbreaker: 4, gildhound: 4, pretender: 2, thronewarden: 1 }, respawnMs: 7000, levels: [42, 45] },
+  { name: "The Gilded Ruins", mobs: { courtmagus: 4, pretender: 4, crowncrow: 2 }, respawnMs: 7000, levels: [43, 46] },
+  { name: "The Mourning Gardens", mobs: { hollowherald: 4, oathbreaker: 4, crowncrow: 2 }, respawnMs: 7000, levels: [43, 46] },
+  { name: "The Vigil Courts", mobs: { crownguard: 4, pretender: 3, hollowherald: 2, thronewarden: 1 }, respawnMs: 7000, levels: [44, 47] },
+  // the Riven King on his broken throne: his alone, by day and night, a long wait for him to sit again (before the
+  // Keep, so the hall inside the bailey is his zone)
+  { name: "The Throne Hall", mobs: { rivenking: 1 }, respawnMs: 300000, fixed: true, levels: [50, 50] },
+  { name: "The Crown Keep", mobs: { crownguard: 4, oathbreaker: 3, courtmagus: 2, hollowherald: 2, thronewarden: 1 }, respawnMs: 7500, levels: [46, 48] },
+  // the open Crown: knights who never found the road home, stray hounds of the old hunt, crows over the ruins; levels by
+  // distance (last in its block)
+  { name: "The Crown of the Marches", mobs: { oathbreaker: 5, gildhound: 3, crowncrow: 2 }, respawnMs: 6500, wild: true },
 ];
 /** Wild zones that are not map areas (no banner, no map label): their rect in tiles. */
 const WILD_RECTS: Record<string, { x: number; y: number; w: number; h: number }> = {
   "Oakvale Countryside": { x: 0, y: 0, w: 109, h: 184 },
 };
+/** Boss halls inside a bigger zone (rect in tiles): only their own zone spawns there (the Riven King's Throne Hall in the Keep). */
+const BOSS_HALLS: { name: string; x: number; y: number; w: number; h: number }[] = [{ name: "The Throne Hall", ...THRONE_HALL, y: CR(THRONE_HALL.y) }];
+/** The boss hall a tile lies in, if any (a monster from another zone must not end up inside one). */
+export const bossHallAt = (tx: number, ty: number) => BOSS_HALLS.find((l) => tx >= l.x && tx < l.x + l.w && ty >= l.y && ty < l.y + l.h)?.name;
 /** Zones smaller than their map area (rect in tiles): the Maw-Father keeps to his ledge down in the Great Maw. */
 const ZONE_RECTS: Record<string, { x: number; y: number; w: number; h: number }> = {
   "The Great Maw": { ...MAW_LEDGE_RECT, y: SR(MAW_LEDGE_RECT.y) },
@@ -205,7 +230,8 @@ const ZONE_RECTS: Record<string, { x: number; y: number; w: number; h: number }>
 export const DENSITY = { tilesPerMob: 9, wildTilesPerMob: 12, desertTilesPerMob: 18, desertWildTilesPerMob: 28, // the desert is wide open: thinner
   moorsTilesPerMob: 15, moorsWildTilesPerMob: 30, // the moors: packs on the barrows and fens, the open heather between them thin
   badlandsTilesPerMob: 16, badlandsWildTilesPerMob: 34, // the badlands: Redfang bands in the canyons and pits, the flats between them empty
-  sinkholesTilesPerMob: 18, sinkholesWildTilesPerMob: 46 }; // the sinkholes: Hide-Kin in their warrens and fens, the land between them quiet
+  sinkholesTilesPerMob: 18, sinkholesWildTilesPerMob: 46, // the sinkholes: Hide-Kin in their warrens and fens, the land between them quiet
+  crownTilesPerMob: 24, crownWildTilesPerMob: 60 }; // the Crown: the court in its ruined lands, the roads between them quiet
 /** Blob variants only appear from these levels (Murat: shooter + warrior above Lv 3, healer above Lv 5). */
 export const KIND_MIN_LEVEL: Partial<Record<MobKind, number>> = { shooterblob: 4, warriorblob: 4, healerblob: 6, venomblob: 12, frostblob: 14, fireblob: 16, stormblob: 18 };
 
@@ -260,6 +286,7 @@ function spawnable(z: { name: string; wild?: boolean }, tx: number, ty: number):
   if (tx >= v.x0 - 2 && tx <= v.x1 + 2 && ty >= v.y0 - 2 && ty <= v.y1 + 2) return false;
   if (z.wild && claimedByArea(z.name, tx, ty)) return false;
   if (LAIRS.some((l) => l.name !== z.name && inRect(l, tx, ty))) return false; // a lair is its elite's alone (and the boss bed nobody's)
+  if (BOSS_HALLS.some((l) => l.name !== z.name && inRect(l, tx, ty))) return false; // (the Riven King's hall is his)
   const x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE;
   if (noMobsAt(x, y) || isSafeZone(x, y)) return false;
   const solid = isSolidAt; // one getter call under tsx (the tests), not four
@@ -280,7 +307,8 @@ export const SPAWN_ZONES: SpawnZone[] = ZONE_MOBS.flatMap((z) => {
   const base = Math.max(1, Object.values(z.mobs).reduce((n, c) => n + (c ?? 0), 0));
   // each act its own density (the Undercity under the desert is hand-set, a dungeon floor like the Mawdeep's)
   const act = actOfTile(r.x, r.y), desert = act === 2 && !inDeepRow(r.y);
-  const per = act === 5 ? (z.wild ? DENSITY.sinkholesWildTilesPerMob : DENSITY.sinkholesTilesPerMob)
+  const per = act === 6 ? (z.wild ? DENSITY.crownWildTilesPerMob : DENSITY.crownTilesPerMob)
+    : act === 5 ? (z.wild ? DENSITY.sinkholesWildTilesPerMob : DENSITY.sinkholesTilesPerMob)
     : act === 4 ? (z.wild ? DENSITY.badlandsWildTilesPerMob : DENSITY.badlandsTilesPerMob)
     : act === 3 ? (z.wild ? DENSITY.moorsWildTilesPerMob : DENSITY.moorsTilesPerMob)
     : desert ? (z.wild ? DENSITY.desertWildTilesPerMob : DENSITY.desertTilesPerMob) : z.wild ? DENSITY.wildTilesPerMob : DENSITY.tilesPerMob;

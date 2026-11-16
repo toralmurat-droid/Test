@@ -66,7 +66,8 @@ export function signature(z: SpawnZone): MobKind | undefined {
   return best;
 }
 const GOAL: Partial<Record<MobKind, number>> = { bandit: 6, skeletonmage: 5, tuskborn: 5, crowseer: 3, duskwing: 5, silkwretch: 5, legionary: 6, boghag: 6, mistwraith: 6,
-  crossbowman: 6, firebrand: 6, quillback: 6, stitcher: 5 };
+  crossbowman: 6, firebrand: 6, quillback: 6, stitcher: 5,
+  hollowherald: 5, courtmagus: 5, pretender: 5 };
 
 /** Small seeded random (offers stay the same until the hero finishes one or levels up; rumours seed it with the day). */
 export function rng(seed: number) {

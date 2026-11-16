@@ -202,8 +202,8 @@ test("crown: Lv 40-50 climbing inward from the rim, the Crownways open at Lv 40,
   assert.deepEqual(HOMELAND_GATES.map((h) => [h.act, h.level]), [[3, 20], [4, 25], [5, 30], [6, 40]]);
   assert.ok(actOpen(6, { level: 40 } as never) && !actOpen(6, { level: 39 } as never));
   for (const act of [1, 2, 3, 4, 5, 6]) { const q = actSpawn(act, randomSpawn); assert.equal(actAt(q.y, q.x), act, `act ${act} spawn`); }
-  // no monsters and no war in the Crown yet: neutral ground, its zones and territories come later
-  assert.ok(!SPAWN_ZONES.some((z) => actOfTile(z.x, z.y) === 6), "no monster zones yet");
+  // the Crown's monster zones (tests/crown-zones.test.ts); no war in it yet: its territories come later
+  assert.ok(SPAWN_ZONES.some((z) => actOfTile(z.x, z.y) === 6), "the Crown has monster zones");
   assert.equal(regionOf(crownGateTile(CROWNWAYS[0]).x, crownGateTile(CROWNWAYS[0]).y), undefined, "not a war land yet");
   assert.ok(!TERRITORIES.some((t) => t.act === 6));
 });

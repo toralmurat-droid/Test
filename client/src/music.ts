@@ -84,8 +84,8 @@ const CITY_AREAS = new Map<string, string>(CITIES.flatMap((c) => [cityText(c).na
 const OASES = ["Palmshade Oasis", "Mirage Wells", "Jackal Springs"];
 const BURIED = ["Kharsun, the Buried City", "The Veiled Sanctum"];
 const FURNACE = "The Sun Furnace";
-const UNDEAD = ["skeleton", "skeletonmage", "necromancer", "sanddead", "wight", "bonehound", "mistwraith", "legionary", "cairnlord", "barrowking"];
-const FIGHT = ["slime", "shooterblob", "warriorblob", "healerblob", "motherblob", "bandit", "venomblob", "frostblob", "fireblob", "stormblob", "nomad", "scorpion", "veiled", "camelfolk", "sphinx", "sunwright", "nightraider", "boghag", "outrider", "crossbowman", "firebrand", "warhound", "vulture", "rattler", "redcaptain", "rourke", "delver", "cackler", "stagkin", "quillback", "stitcher", "sinkworm", "hidechief", "mawfather"];
+const UNDEAD = ["skeleton", "skeletonmage", "necromancer", "sanddead", "wight", "bonehound", "mistwraith", "legionary", "cairnlord", "barrowking", "oathbreaker", "crownguard", "hollowherald", "thronewarden", "rivenking"];
+const FIGHT = ["slime", "shooterblob", "warriorblob", "healerblob", "motherblob", "bandit", "venomblob", "frostblob", "fireblob", "stormblob", "nomad", "scorpion", "veiled", "camelfolk", "sphinx", "sunwright", "nightraider", "boghag", "outrider", "crossbowman", "firebrand", "warhound", "vulture", "rattler", "redcaptain", "rourke", "delver", "cackler", "stagkin", "quillback", "stitcher", "sinkworm", "hidechief", "mawfather", "gildhound", "courtmagus", "crowncrow", "pretender"];
 const TOWNS = ["Oakvale", "Market Square", "Chapel of the Dawn", "The Rusty Tankard", "The Smithy", "Saltmere", "Hunter's Camp"];
 
 const FADE_IN = 2.5;

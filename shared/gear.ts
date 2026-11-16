@@ -322,6 +322,17 @@ export const GEAR_DROP: Record<MobKind, { chance: number; tiers: [number, number
   sinkworm: { chance: 0.12, tiers: [0.3, 0.45, 0.25] },
   hidechief: { chance: 0.9, tiers: [0, 0.45, 0.55] },
   mawfather: { chance: 1, tiers: [0, 0.25, 0.75] },
+  // Act 6, the Crown (Lv 40-50): the endgame's regulars drop a little more and better; the Thronewarden like an elite,
+  // the Riven King always a top-tier piece most of the time
+  oathbreaker: { chance: 0.2, tiers: [0.2, 0.45, 0.35] },
+  crownguard: { chance: 0.2, tiers: [0.2, 0.45, 0.35] },
+  hollowherald: { chance: 0.2, tiers: [0.2, 0.45, 0.35] },
+  gildhound: { chance: 0.13, tiers: [0.25, 0.45, 0.3] },
+  courtmagus: { chance: 0.2, tiers: [0.2, 0.45, 0.35] },
+  crowncrow: { chance: 0.13, tiers: [0.25, 0.45, 0.3] },
+  pretender: { chance: 0.22, tiers: [0.2, 0.45, 0.35] },
+  thronewarden: { chance: 0.9, tiers: [0, 0.4, 0.6] },
+  rivenking: { chance: 1, tiers: [0, 0.2, 0.8] },
 };
 
 export function isGearId(v: unknown): v is string {
