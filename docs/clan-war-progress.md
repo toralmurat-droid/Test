@@ -858,3 +858,9 @@ Murat: attack an encampment on your own initiative; "stand at the standard" valo
   army; a land gain needs a force effect (valor that counts in the siege check, or a sacked land's defence weakened for
   the tick) or a smaller army brake on the winner.
 - Open: making sacks pay off in land (above); a banner-raise cosmetic on the pole for onlookers; sacked Holds on the war table (`warTable.ts`).
+
+#### W2b/W2c review fixes (PR #466)
+- Guards can't be starved away: `WarTroops.guardsDue(t)` = guards the Hold should field (garrisonCount, capped by spots; 0 while sacked) minus those fallen this war tick or not back yet; `why()` refuses while any are due. A land with a hero in sack reach takes trooper slots first, guards before marchers.
+- Sack valor and the sack siege need the sacker's clan at war with the holder (`atWar`); a grudge or Wanted alone robs the Hold (gold, half Control, no siege). `sackHold` calls a siege only on a full (not half) sack.
+- Hero-kill valor once per victim per killer per war tick (`heroKillValor`). A hero's creature's trooper kills (lone or patrol) pay its owner kill valor and writ credit.
+- Presence idle check restored (an idle hero counts no standard minutes for old hold writs). `WarHolds.forget` is called on leave.

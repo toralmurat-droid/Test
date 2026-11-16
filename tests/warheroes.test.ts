@@ -57,7 +57,7 @@ test("presence (W2c): ten minutes in an enemy ring add no valor; the minutes are
   assert.equal(held.pressure, quiet.pressure, "standing in the ring adds no valor");
   assert.equal(held.renown, 0, "and no renown");
   assert.equal(held.minutes, 10, "ten full minutes reported (an old hold writ still counts them)");
-  assert.equal((await run((i) => ({ ...active(i), lastAct: 0 }))).minutes, 10, "the idle check is retired: nothing to farm");
+  assert.equal((await run((i) => ({ ...active(i), lastAct: 0 }))).minutes, 0, "an idle hero counts no minutes");
   assert.equal((await run((i) => ({ ...active(i), dead: true }))).minutes, 0, "dead heroes hold nothing");
   assert.equal((await run((i) => ({ ...active(i), x: i % 60 === 59 ? std.x : 0 }))).minutes, 0, "a second in the ring per minute is not a minute");
   assert.equal(STANDARD.valorPerMin, 0);

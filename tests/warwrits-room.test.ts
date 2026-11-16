@@ -140,7 +140,7 @@ test("war writs (room): an old hold writ (no longer offered since W2c) still loa
     const std = STANDARDS.find((s) => s.t === LAND.id)!;
     p.writ = cleanWrit(JSON.parse(JSON.stringify(writOf("hold", owner, owner, 2))), owner); // (as a save brings it back)
     assert.equal(p.writ?.kind, "hold", "a saved hold writ still loads");
-    p.x = std.x; p.y = std.y; p.lastAct = 0; // (the standards' idle check is retired: they pay nothing now)
+    p.x = std.x; p.y = std.y; p.lastAct = Date.now(); // (an idle hero counts no minutes)
     room.warPresence.secs.set(id, { std: std.id, n: 58 }); // the room's tick (once a second) finishes the minute
     assert.ok(await until(() => p.writ?.n === 1, 4000), "a minute at the standard");
     const other = STANDARDS.find((s) => s.t !== LAND.id)!;

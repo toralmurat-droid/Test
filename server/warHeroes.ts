@@ -32,8 +32,8 @@ export function swear(p: WarHero, want: unknown, now = Date.now()): string {
 
 /**
  * Seconds each hero has stood in one ring since their last full minute (by session id; leaving the ring starts over). Since
- * W2c the minutes pay no valor (STANDARD.valorPerMin 0) and no idle check is needed; they still complete an old `hold` war
- * writ (`onMinute`), and would pay heroValor again if that number came back.
+ * W2c the minutes pay no valor (STANDARD.valorPerMin 0); they still complete an old `hold` war writ (`onMinute`), and
+ * would pay heroValor again if that number came back. An idle hero (STANDARD.idleMs) counts no minutes.
  */
 export class Presence {
   private secs = new Map<string, { std: number; n: number }>();
@@ -42,12 +42,12 @@ export class Presence {
    * Call once a second with every hero in the room. Returns the heroes who reached a new renown rank (id, rank name).
    * `onMinute` hears of every full minute a sworn hero stood at a standard of territory t (war writs count them).
    */
-  tick(heroes: Iterable<[string, WarHero]>, _now = Date.now(), onMinute?: (id: string, t: number) => void): [string, string][] {
+  tick(heroes: Iterable<[string, WarHero]>, now = Date.now(), onMinute?: (id: string, t: number) => void): [string, string][] {
     const ranked: [string, string][] = [];
     const seen = new Set<string>();
     for (const [id, p] of heroes) {
       seen.add(id);
-      const s = p.clan && !p.dead ? standardAt(p.x, p.y) : undefined;
+      const s = p.clan && !p.dead && now - p.lastAct <= STANDARD.idleMs ? standardAt(p.x, p.y) : undefined;
       if (!s) { this.secs.delete(id); continue; }
       const e = this.secs.get(id);
       const n = e && e.std === s.id ? e.n + 1 : 1;

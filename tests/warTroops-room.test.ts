@@ -190,7 +190,7 @@ test("war troops (room): a trooper kill gives no XP or loot, valor is capped; th
   } finally { WAR_TROOPS.respawnMs = respawn; await srv.stop(); }
 });
 
-test("war troops (room, W2c): any soldier of a clan at war pays kill valor (officer 2), an enemy sworn hero 3; never a party mate", async () => {
+test("war troops (room, W2c): any soldier of a clan at war pays kill valor (officer 2), an enemy sworn hero 3 once per war tick; never a party mate; a creature kills in its owner's name", async () => {
   const srv = await startRoom();
   freshWar();
   try {
@@ -212,6 +212,19 @@ test("war troops (room, W2c): any soldier of a clan at war pays kill valor (offi
     lone(true);
     assert.equal(p.renown, WAR_TROOPS.killPts.soldier + WAR_TROOPS.killPts.officer, "an officer counts double");
     assert.equal(_valorOf(LAND.id, foe) - v0, WAR_TROOPS.killPts.soldier + WAR_TROOPS.killPts.officer, "valor in the land the killer stands in");
+    // a hero's creature fells a lone trooper and a patrol guard: valor and renown in its owner's name
+    const sid = `pet${Math.random()}`;
+    room.spawnMob("skeleton", -1, sid, { x: p.x + 30, y: p.y, level: 20 }); room.state.mobs.get(sid).owner = id;
+    const rc = p.renown, mid = `test${Math.random()}`;
+    room.spawnMob("trooper", -1, mid, { x: p.x + 20, y: p.y, level: 20 });
+    const lm = room.state.mobs.get(mid); lm.weapon = owner;
+    room.mobDied(lm, mid, sid, "Skeleton");
+    assert.equal(p.renown - rc, WAR_TROOPS.killPts.soldier, "a creature's kill of a lone trooper pays its owner");
+    room.warTroops.tick(Date.now());
+    const [gid, gm] = guardOf(room);
+    const rg = p.renown;
+    gm.hp = 0; room.mobDied(gm, gid, sid, "Skeleton");
+    assert.ok(p.renown - rg > 0, "and of a patrol guard");
     // an enemy sworn hero
     const c2 = await srv.join({ cls: "wizard" });
     await wait(150);
@@ -221,6 +234,15 @@ test("war troops (room, W2c): any soldier of a clan at war pays kill valor (offi
     room.damagePlayer(c2.sessionId, 1e9, p.name, [0, 0], 0, { from: id });
     assert.ok(q.dead, "the enemy hero fell");
     assert.equal(p.renown - r0, WAR_TROOPS.killPts.hero, "an enemy sworn hero is worth 3");
+    // the same victim again in the same war tick: nothing (no farming a friend's respawns)
+    q.dead = false; q.hp = q.maxHp; q.invulnUntil = 0;
+    room.damagePlayer(c2.sessionId, 1e9, p.name, [0, 0], 0, { from: id });
+    assert.ok(q.dead);
+    assert.equal(p.renown - r0, WAR_TROOPS.killPts.hero, "once per victim per killer per war tick");
+    warState()!.tick++; // the next war tick: they are worth it again
+    q.dead = false; q.hp = q.maxHp; q.invulnUntil = 0;
+    room.damagePlayer(c2.sessionId, 1e9, p.name, [0, 0], 0, { from: id });
+    assert.equal(p.renown - r0, 2 * WAR_TROOPS.killPts.hero, "a new war tick, a new payout");
     // a party mate: nothing (no farming with alts)
     q.dead = false; q.hp = q.maxHp; q.invulnUntil = 0; p.party = q.party = "pt-test";
     const r1 = p.renown;

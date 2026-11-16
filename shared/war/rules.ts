@@ -199,8 +199,8 @@ export const valorForce = (v: number) => (v > 0 ? WAR.valorCap * (1 - Math.exp(-
 
 /**
  * A hero sacked territory t's Hold (shared/war/holdSack.ts): the holder's grip loosens by WAR.sackControl, half when
- * `half` (an unsworn hero, or a clan the war keeps out of the land). When that brings Control to WAR.siegeAt or below
- * and no siege is announced, clan `k` lays siege, but only where the war lets it attack (targetsOf) and never at a
+ * `half` (an unsworn hero, a clan not at war with the holder, or one the war keeps out of the land). When a full sack
+ * brings Control to WAR.siegeAt or below and no siege is announced, clan `k` lays siege, but only where the war lets it attack (targetsOf) and never at a
  * capital: the flip still waits for the siege (warTick). Mutates `s`. The live war (server/war.ts strikeHold) and the
  * war sim (tools/balance/war.ts --sack) share it. Undefined (nothing changed) for a bad land, the holder's own clan or a
  * land already under siege.
@@ -209,7 +209,7 @@ export function sackHold(s: WarState, t: number, k: ClanKey | undefined, half: b
   if (!Number.isInteger(t) || t < 0 || t >= s.owner.length || s.siege[t] || (k && s.owner[t] === k)) return undefined;
   s.control[t] = Math.max(0, s.control[t] - WAR.sackControl * (half ? 0.5 : 1));
   const out: { control: number; siege?: Siege } = { control: s.control[t] };
-  if (k && CLANS[k] && s.control[t] <= WAR.siegeAt && TERRITORIES[t]?.capitalOf !== s.owner[t] && targetsOf(s, k).includes(t))
+  if (k && CLANS[k] && !half && s.control[t] <= WAR.siegeAt && TERRITORIES[t]?.capitalOf !== s.owner[t] && targetsOf(s, k).includes(t))
     out.siege = s.siege[t] = { by: k, at: s.tick + WAR.siegeWarnTicks, sack: true };
   return out;
 }

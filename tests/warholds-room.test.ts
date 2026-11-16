@@ -4,10 +4,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startRoom, until, wait } from "./helpers/room";
 import { CLAN_KEYS, type ClanKey } from "../shared/war/clans";
-import { atWar } from "../shared/war/feuds";
+import { atWar, setWarPairs, warPairs } from "../shared/war/feuds";
 import { newMinds } from "../shared/war/doctrine";
 import { bannerSpot, HOLD_SACK, inSackReach, sackGold } from "../shared/war/holdSack";
-import { garrisonSpots, patrolOf, TROOP } from "../shared/war/patrols";
+import { garrisonCount, garrisonSpots, patrolOf, TROOP } from "../shared/war/patrols";
 import { newWar, targetsOf, WAR } from "../shared/war/rules";
 import { TERRITORIES } from "../shared/war/territories";
 import { troopLevel, WAR_TROOPS } from "../shared/war/troops";
@@ -224,4 +224,53 @@ test("holds (room): a siege at <= 25 Control only for a clan that may attack; an
     assert.ok(warLog().some((e) => e.kind === "siege" && e.t === LAND.id && e.by === FOE), "and the war log");
     await s.c.leave();
   } finally { await srv.stop(); }
+});
+
+test("holds (room): a busy room's budget never lets a Hold be sacked without a fight; a hero at the banner gets its guards first", async () => {
+  const srv = await startRoom(), max = WAR_TROOPS.maxTroops, respawn = WAR_TROOPS.respawnMs;
+  freshWar();
+  try {
+    const s = await setup(srv, FOE), { room } = s;
+    const want = Math.min(garrisonCount(warState()!.control[LAND.id]), garrisonSpots(LAND.id, TROOP.garrisonMax).length);
+    assert.ok(want > 2, "a land with more guards than the starved budget");
+    WAR_TROOPS.maxTroops = 0; // the room's troopers all spent elsewhere
+    room.warTroops.tick(Date.now());
+    assert.equal(room.warTroops.guardsAlive(LAND.id), 0, "starved: no guards in the field");
+    assert.equal(room.warTroops.guardsDue(LAND.id), want, "but they are still owed a fight");
+    assert.match(s.sack(), /guards/, "no free sack");
+    WAR_TROOPS.maxTroops = 2; WAR_TROOPS.respawnMs = 0;
+    room.warTroops.tick(Date.now());
+    assert.equal(room.warTroops.guardsAlive(LAND.id), 2, "a hero at the banner: the land's guards take the slots first");
+    let felled = 0;
+    for (let i = 0; i < 20 && room.warTroops.guardsDue(LAND.id) > 0; i++) { felled += room.warTroops.guardsAlive(LAND.id); s.rout(); assert.match(s.sack(), /guards/); }
+    assert.equal(felled, want, "every guard the Hold should field had to fall");
+    WAR_TROOPS.respawnMs = respawn; s.rout(); // the last pair, no more coming back this tick
+    assert.equal(room.warTroops.guardsDue(LAND.id), 0);
+    assert.equal(s.sack(), "", "cut through: the banner may go up");
+    await s.c.leave();
+  } finally { WAR_TROOPS.maxTroops = max; WAR_TROOPS.respawnMs = respawn; await srv.stop(); }
+});
+
+test("holds (room): a sworn hero whose clan is not at war with the holder (a grudge only) robs the Hold: gold, half the harm, no siege, no valor", async () => {
+  const srv = await startRoom(), wars = warPairs();
+  freshWar();
+  try {
+    const s = await setup(srv, FOE), { p } = s;
+    s.rout();
+    setWarPairs([]); // no clan at war: FOE may still reach the land on the war map, but only a grudge makes its hero an enemy
+    p.feud = { [OWN]: { until: Date.now() + 600_000 } };
+    warState()!.control[LAND.id] = 30;
+    assert.equal(s.sack(), "");
+    const gold0 = p.gold;
+    let items0 = 0; s.room.state.items.forEach((it: any) => { if (it.kind === "gold") items0 += it.amount; });
+    raise(s, Date.now());
+    assert.equal(warState()!.control[LAND.id], 26, "half the harm");
+    assert.equal(warState()!.siege[LAND.id], null, "no siege");
+    assert.equal(_valorOf(LAND.id, FOE), 0, "no valor");
+    assert.equal(p.renown, 0, "no renown");
+    let items = 0; s.room.state.items.forEach((it: any) => { if (it.kind === "gold") items += it.amount; });
+    assert.equal(items - items0 + (p.gold - gold0), sackGold(troopLevel(LAND.id)), "the war chest");
+    assert.ok(await until(() => s.chat.some((t) => /not at war/.test(t))), "the Herald says why");
+    await s.c.leave();
+  } finally { setWarPairs(wars); await srv.stop(); }
 });

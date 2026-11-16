@@ -17,6 +17,7 @@ import { CLANS, CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import { bannerSpot, HOLD_SACK, inSackReach, sackGold, sackReachPx, sackStep, type HoldsMsg, type SackRaise } from "../shared/war/holdSack";
 import { RENOWN_RANKS, rankOf } from "../shared/war/renown";
 import { rallyRenown, targetsOf } from "../shared/war/rules";
+import { atWar } from "../shared/war/feuds";
 import { STANDARD } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
 import { parseTroop, troopLevel, troopStance } from "../shared/war/troops";
@@ -36,6 +37,8 @@ export interface HoldSackHost {
   dropGold(x: number, y: number, amount: number): void;
   /** Living guards of the land's Hold where `near` (server/warTroops.ts guardsAlive), and keeping them down (holdGuardsOff). */
   guardsAlive(t: number, near: (x: number, y: number) => boolean): number;
+  /** Guards the land's Hold should field minus those felled this war tick, budget or not (warTroops guardsDue). */
+  guardsDue(t: number): number;
   guardsOff(t: number, untilTick: number): void;
   ranked?(heroId: string, rank: string): void;
 }
@@ -87,7 +90,7 @@ export class WarHolds {
     if (v.sieges.some((s) => s[0] === t)) return "A siege is announced here: fight for it at the fronts.";
     if (sacks.get(t)?.tick === v.tick) return "This Hold was sacked already: its new banner flies until the next war tick.";
     for (const [oid, r] of this.raises) if (r.t === t && oid !== id) return "Another hero is raising a banner here.";
-    if (this.h.guardsAlive(t, (x, y) => inSackReach(t, x, y)) > 0) return "Its guards still stand: cut them down first.";
+    if (this.h.guardsAlive(t, (x, y) => inSackReach(t, x, y)) > 0 || this.h.guardsDue(t) > 0) return "Its guards still stand: cut them down first.";
     if (this.defenders(t, holder, now, false) > 0) return `A hero sworn to ${CLANS[holder].name} stands watch here.`;
     return "";
   }
@@ -164,13 +167,14 @@ export class WarHolds {
 
   /**
    * The banner is up: settled once per land per war tick for every room. The war hears of it (Control, maybe a siege),
-   * the sacker's clan earns valor where the war lets it fight (an unsworn or out-of-reach sacker does half the harm and
+   * the sacker's clan earns valor where the war lets it fight (an unsworn sacker, a clan not at war with the holder or kept out of the land does half the harm and
    * earns none), its sworn heroes in the reach renown, the war chest drops, the guards stay down until the next tick.
    */
   private done(id: string, p: HoldHero, r: Raise, holder: ClanKey, tick: number, now: number) {
     this.raises.delete(id);
     if (sacks.get(r.t)?.tick === tick) { this.stop(id, "This Hold was sacked already."); return; }
-    const st = warState(), clan = p.clan, legal = !!st && !!clan && targetsOf(st, clan).includes(r.t), at = bannerSpot(r.t)!;
+    // a sacker whose clan is not at war with the holder (a grudge, Wanted only) robs it: no valor, no siege, half the harm
+    const st = warState(), clan = p.clan, legal = !!st && !!clan && atWar(clan, holder) && targetsOf(st, clan).includes(r.t), at = bannerSpot(r.t)!;
     sacks.set(r.t, { tick, by: clan ? CLAN_KEYS.indexOf(clan) : -1 });
     this.off.add(`${tick}:${r.t}`);
     this.h.guardsOff(r.t, tick + 1);
@@ -193,7 +197,7 @@ export class WarHolds {
     const land = TERRITORIES[r.t].name, siege = hit?.siege ? ` Control fell to ${hit.control}: ${CLANS[clan!].name} lay siege.` : hit ? ` Control ${hit.control}.` : "";
     this.h.send(id, "chat", { id: "", name: "Herald", text: valor
       ? `You sacked the Hold of ${land}: +${valor} valor for ${the(CLANS[clan!].name)}, a war chest of ${gold} gold.${siege}`
-      : `You sacked the Hold of ${land} and took its war chest (${gold} gold).${clan ? ` ${CLANS[clan].name} cannot push into ${land} yet: no valor, half the harm.` : " Unsworn, you fight for nobody: no valor, half the harm."}${siege}` });
+      : `You sacked the Hold of ${land} and took its war chest (${gold} gold).${clan ? (atWar(clan, holder) ? ` ${CLANS[clan].name} cannot push into ${land} yet: no valor, half the harm.` : ` ${CLANS[clan].name} are not at war with ${CLANS[holder].name}: no valor, half the harm.`) : " Unsworn, you fight for nobody: no valor, half the harm."}${siege}` });
     this.tell(now, true);
   }
 

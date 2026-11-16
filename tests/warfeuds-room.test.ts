@@ -205,7 +205,7 @@ test("feuds (room): a sworn killer claims the bounty on a Wanted hero once per U
     // again the same day: no second bounty
     revive(); wanted();
     room.damagePlayer(V.id, 1e9, K.p.name, [0, 0], 0, { from: K.id });
-    assert.equal(K.p.renown, FEUD.bounty.renown + 2 * kv, "once per target per day (the kill valor is not a bounty)");
+    assert.equal(K.p.renown, FEUD.bounty.renown + kv, "once per target per day (and kill valor once per victim per war tick)");
     assert.equal(wantedTier(V.p.feud, owner, Date.now()), 0, "still settled");
     // a javelin of the clan settles it too (no bounty: no hero killed them)
     revive(); wanted();

@@ -27,6 +27,7 @@ import { rallyRenown, targetsOf } from "../shared/war/rules";
 import { atWar, FEUD, wantedTier, type FeudState } from "../shared/war/feuds";
 import { STANDARD } from "../shared/war/standards";
 import { territoryAt } from "../shared/war/view";
+import { inSackReach } from "../shared/war/holdSack";
 import { addValor, warNow, warState } from "./war";
 
 /** The parts of a hero this module reads (TownRoom's Player). */
@@ -87,6 +88,10 @@ export class WarTroops {
   private valor = new Map<string, { tick: number; n: number }>();
   /** Lands whose Hold guards stay down until a war tick (holdGuardsOff). */
   private guardsOff = new Map<number, number>();
+  /** Hold guards fallen per land (war tick, time): guardsDue counts those of this war tick and those not back yet. */
+  private guardFalls = new Map<number, { tick: number; at: number }[]>();
+  /** Hero kills that paid kill valor this war tick, as `killer|victim` (one payout per victim per killer per tick). */
+  private heroKills = new Map<string, number>();
   private seq = 0;
 
   constructor(private h: WarTroopsHost) {}
@@ -129,6 +134,7 @@ export class WarTroops {
     if (!tr) return undefined;
     this.troops.delete(id);
     tr.slot.id = ""; tr.slot.fellAt = now;
+    if (tr.slot.role === "guard") this.guardFell(tr.t, now);
     const p = this.h.hero(killerId), t = TERRITORIES[tr.t];
     if (!p || !p.clan || p.clan === tr.clan || !t || !warNow()) return undefined;
     const tx = p.x / TILE, ty = p.y / TILE;
@@ -163,6 +169,52 @@ export class WarTroops {
     return add;
   }
 
+  /**
+   * Kill valor for felling hero `victimId` (sworn to `victim`): at most once per victim per killer per war tick, so a
+   * pair of heroes can't farm valor off each other's respawns.
+   */
+  heroKillValor(killerId: string, victimId: string, victim: ClanKey): number {
+    const p = this.h.hero(killerId), q = this.h.hero(victimId), v = warNow();
+    if (!p || !q || !v) return 0;
+    for (const [k, tick] of this.heroKills) if (tick !== v.tick) this.heroKills.delete(k);
+    const key = `${p.name}|${q.name}`;
+    if (this.heroKills.has(key)) return 0;
+    const add = this.killValor(killerId, victim, "hero");
+    if (add > 0) this.heroKills.set(key, v.tick);
+    return add;
+  }
+
+  /** A guard of land t's Hold fell. */
+  private guardFell(t: number, now: number) {
+    const l = this.guardFalls.get(t) ?? [];
+    l.push({ tick: warNow()?.tick ?? -1, at: now });
+    this.guardFalls.set(t, l);
+  }
+
+  /** Guards of land t's Hold that fell this war tick or are not back yet (WAR_TROOPS.respawnMs). */
+  private guardsDown(t: number, now: number): number {
+    const tick = warNow()?.tick ?? -1, l = (this.guardFalls.get(t) ?? []).filter((f) => f.tick === tick || now - f.at < WAR_TROOPS.respawnMs);
+    if (l.length) this.guardFalls.set(t, l); else this.guardFalls.delete(t);
+    return l.length;
+  }
+
+  /** How many guards territory t's Hold should field now (its Control, its garrison spots; none while sacked), whatever the room's budget. */
+  private guardsWanted(t: number): number {
+    const v = warNow();
+    if (!v || !CLAN_KEYS[v.owner[t]] || !patrolOf(t)) return 0;
+    const off = this.guardsOff.get(t);
+    if (off !== undefined && v.tick < off) return 0;
+    return Math.min(garrisonCount(v.control[t] ?? 100), garrisonSpots(t, TROOP.garrisonMax).length);
+  }
+
+  /**
+   * Guards territory t's Hold still owes a fight: those it should field minus those felled this war tick (or not back
+   * yet). A busy room's budget may field fewer (or none), but a sack must still cut through them all (server/warHolds.ts).
+   */
+  guardsDue(t: number, now = Date.now()): number {
+    return Math.max(0, this.guardsWanted(t) - this.guardsDown(t, now));
+  }
+
   /** Living guards of territory t's Hold (the guard slots of its patrol force), only those where `near(x, y)` when given. */
   guardsAlive(t: number, near?: (x: number, y: number) => boolean): number {
     let n = 0;
@@ -192,7 +244,7 @@ export class WarTroops {
     // troopers that vanished without a death (a test, a reset) free their slot at once
     for (const [id, tr] of this.troops) {
       const m = this.h.mob(id);
-      if (!m || m.dead) { this.troops.delete(id); tr.slot.id = ""; tr.slot.fellAt = m ? now : SLEEPING; }
+      if (!m || m.dead) { this.troops.delete(id); tr.slot.id = ""; tr.slot.fellAt = m ? now : SLEEPING; if (m && tr.slot.role === "guard") this.guardFell(tr.t, now); }
     }
     const v = WAR_TROOPS.live ? warNow() : undefined;
     const heroes: TroopHero[] = [];
@@ -214,7 +266,10 @@ export class WarTroops {
     }
     const awake = new Set(near.map(([t]) => t));
     for (const [t, land] of this.lands) if (!awake.has(t)) { this.clearLand(land); this.lands.delete(t); }
-    near.sort((a, b) => a[1] - b[1]);
+    // a land with a hero at its banner comes first, guards before marchers, so a busy room still fields the guards a sack must fight
+    const atBanner = new Set<number>();
+    for (const [t] of near) if (heroes.some((p) => inSackReach(t, p.x, p.y))) atBanner.add(t);
+    near.sort((a, b) => (atBanner.has(b[0]) ? 1 : 0) - (atBanner.has(a[0]) ? 1 : 0) || a[1] - b[1]);
     let budget = Math.max(0, WAR_TROOPS.maxTroops - (this.h.reserved?.() ?? 0)); // caravans (server/warCaravans.ts) claim their share first
     for (const [t] of near) {
       const land = this.lands.get(t)!, clan = CLAN_KEYS[v!.owner[t]];
@@ -229,9 +284,10 @@ export class WarTroops {
       const marchers = siege ? 0 : patrolCount(control), guards = this.guardsOff.has(t) ? 0 : Math.min(garrisonCount(control), garrisonSpots(t, TROOP.garrisonMax).length); // (a sacked Hold's guards stay down)
       const want = Math.min(marchers + guards, budget);
       budget -= want;
-      const slots: Slot[] = [];
-      for (let i = 0; i < marchers; i++) slots.push(this.slotOf(land, "march", i));
-      for (let i = 0; i < guards; i++) slots.push(this.slotOf(land, "guard", i));
+      const slots: Slot[] = [], m: Slot[] = [], g: Slot[] = [];
+      for (let i = 0; i < marchers; i++) m.push(this.slotOf(land, "march", i));
+      for (let i = 0; i < guards; i++) g.push(this.slotOf(land, "guard", i));
+      slots.push(...(atBanner.has(t) ? [...g, ...m] : [...m, ...g]));
       // fewer men now (lower control, a siege, the room's cap): the extra ones go
       for (const s of land.slots) if (!slots.slice(0, want).includes(s) && s.id) this.drop(s);
       land.slots = slots.slice(0, want);
