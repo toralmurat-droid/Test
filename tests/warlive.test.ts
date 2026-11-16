@@ -113,6 +113,7 @@ test("heralds: every leader has a line for every moment, filled in and capitalis
     assert.ok(l.text.length > 10 && !/[{}]/.test(l.text) && l.text[0] === l.text[0].toUpperCase(), `${k} ${m}: ${l.text}`);
   }
   for (const k of CLAN_KEYS) for (const m of ["march", "ambushed", "clash", "battle_called", "battle_start", "battle_banner", "battle_captain", "battle_won", "battle_lost"] as const) assert.equal(LEADERS[k].lines[m].length, 2, `${k} ${m}`);
+  for (const k of CLAN_KEYS) for (const m of ["town_claimed", "town_lost", "town_contested"] as const) assert.equal(LEADERS[k].lines[m].length, 2, `${k} ${m}`);
   const { CAPTAIN_NAMES, captainName } = await import("../shared/war/heralds");
   for (const k of CLAN_KEYS) { assert.ok(CAPTAIN_NAMES[k].length >= 3); assert.equal(captainName(k, "pitched-3-1", 1), captainName(k, "pitched-3-1", 1)); assert.ok(CAPTAIN_NAMES[k].includes(captainName(k, "storm-9-5", 0))); }
   assert.deepEqual(eventVoice("siege", "redfang", "wardens"), { k: "wardens", foe: "redfang", moment: "besieged" });
@@ -323,4 +324,24 @@ test("live war (W4 review): an old save with orders ahead on another map drops t
     assert.equal(warMarches().length > 0, want, want ? "orders given afresh" : "the saved orders ahead");
     assert.equal(marchCol("0-redfang-1-2").fallen, 0, "no column of the old interval");
   }
+});
+
+test("attachWar (W6): a town claim gives the Herald, the new holder's and the old holder's leader line, capped per tick", async () => {
+  const { attachWar, _resetWar: _r, _setTown, townClaim } = await import("../server/war");
+  const { TOWNS, TOWN } = await import("../shared/war/towns");
+  const t0 = 8_000_000_000_000;
+  _r(saved(t0));
+  const id = TOWNS[0].id;
+  _setTown(id, { k: "wardens", c: { by: "redfang", until: 99, ext: 0 } });
+  const sent: [string, any][] = [];
+  const off = attachWar({ broadcast: (t, m) => sent.push([t, m]) });
+  assert.ok(townClaim(id, "redfang", "Tester", t0));
+  off();
+  const chat = sent.filter(([t]) => t === "chat").map(([, m]) => m);
+  assert.equal(chat[0].name, "Herald");
+  assert.equal(chat.length, 3, "Herald plus two leaders");
+  assert.equal(chat[1].name, "The Redfang Chief");
+  assert.equal(chat[2].name, "Captain Hale");
+  assert.ok(chat.every((m) => !/[{}]/.test(m.text)));
+  assert.ok(TOWN.heraldPerTick >= 1);
 });

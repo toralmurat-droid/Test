@@ -1054,3 +1054,24 @@ in every act.
   - Bench, 20 bots `WAR=1 SPREAD=1` (load average about 4 from other jobs; two pairs): without `BATTLE` 15.48 ms
     avg / 27.1 p95, 19.4 ticks/s and 12.04 / 17.5, 19.7 ticks/s; with `BATTLE=1` 18.22 / 33.8, 19.4 ticks/s and
     16.24 / 26.0, 19.7 ticks/s (138 battle troopers); no dropped bots.
+
+## W6: capturable towns (2026-11-16)
+- **Design:** Saltmere, the Rustwater Post, Ropewell and Millbrook Mill follow their patron land. Oakvale, Cairnwatch,
+  Hunter's Camp (Wardens capitals) and Kel Ashar never change. No new territory, no map change, no hero save field,
+  no Player `@type`; the war save gains one optional `towns` field (`cleanTowns`, dropped on a map change).
+- **Contest:** when the patron land changes holder, the town is contested by the new holder for 3 ticks (30 min). The
+  old holder's town guard (a captain and 4 troopers) stands at a gate spot outside the no-monster rect and the safe
+  square. Each tick the old holder keeps the gate (a guard alive and an active defender) adds one tick, at most 3.
+- **Claim:** a hero sworn to the new holder, at oath level, raises the banner at the gate (12 s, `sackStep` rules),
+  only once the guards are dead and no defender is in reach. The town flips at once: 10 valor, 20 renown per sworn
+  hero in reach, a Herald line and the leaders' lines. With no claim, the town submits when grace ends.
+- **Effects:** a steward NPC per town (name, look and lines from `shared/war/townText.ts`; quest givers untouched),
+  holder banners and watch drawn on the client, 10% off for heroes sworn to the holder (never a surcharge), and
+  +0.5 troop income per held town per tick in the war. Shops, quests, stash, portals and safe squares unchanged.
+- **Text:** steward names per clan x town, 4 talk lines per clan; leaders speak in "town_claimed" (new holder),
+  "town_lost" (old holder) and "town_contested" (the defender), 2 lines each; at most `TOWN.heraldPerTick` (3) towns
+  announced per tick, each with its leader lines.
+- **Engine numbers** (`tools/balance/war.ts --battles --towns`): top-clan shares 21.8 / 22.1 / 19.7 / 16.3 / 20.2%,
+  5.85 flips a day, domination 0%; 0.75 town handovers a day. Gate fight at Lv 25 (`pve.ts --troops --garrison`):
+  Wizard 77%, Vampire 100%, Summoner 100%, Songweaver 40% win. Bench unchanged within noise.
+- **Open:** Kel Ashar left out (Act 2's main town); the Songweaver alone struggles at the gate.

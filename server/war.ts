@@ -14,7 +14,7 @@ import { regionByKey } from "../shared/war/regions";
 import { tunnelStrikes, type TunnelStrike } from "../shared/war/tunnels";
 import { warPhase, warView, type WarView } from "../shared/war/view";
 import type { WarPlan } from "../shared/war/intel";
-import { eventVoice, leaderLine } from "../shared/war/heralds";
+import { eventVoice, leaderLine, type WarMoment } from "../shared/war/heralds";
 import { holdGrew, HOLD_TIER_KEYS } from "../shared/war/holdTiers";
 import { bannerSpot } from "../shared/war/holdSack";
 import { atWar, setWarRelations, warPairs, warRelations } from "../shared/war/feuds";
@@ -902,6 +902,11 @@ export function _setTown(id: string, s: TownState) { if (saved) { (saved.towns ?
 function townNews(room: { broadcast(type: string, msg: unknown): void }, e: WarEvent, n: number) {
   if (n <= TOWN.heraldPerTick) room.broadcast("chat", { id: "", name: "Herald", text: e.text });
   const t = townById(e.town);
+  if (n <= TOWN.heraldPerTick && e.change !== "off") { // the leaders answer: the new holder boasts, the old one grieves (or the defender calls its gate)
+    const nm = townName(e.town!), say = (k: ClanKey, m: WarMoment, foe: ClanKey) => { const l = leaderLine(k, m, nm, foe, e.tick); room.broadcast("chat", { id: "", name: l.name, text: l.text }); };
+    if (e.change === "contested") say(e.from, "town_contested", e.by);
+    else { say(e.by, "town_claimed", e.from); say(e.from, "town_lost", e.by); }
+  }
   if (t && e.change !== "off") room.broadcast("sfx", { ev: e.change === "contested" ? "town_contested" : "town_claimed", id: t.id, x: Math.round((t.gate.x + 0.5) * TILE), y: Math.round((t.gate.y + 0.5) * TILE), by: e.by, from: e.from });
   room.broadcast("towns", townsNow());
 }
