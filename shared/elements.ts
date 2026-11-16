@@ -62,12 +62,18 @@ export const MOB_AFFINITY: Partial<Record<MobKind, Partial<Record<Element, numbe
   // the Gullet Worms are wet and cold-blooded
   delver: { fire: 1.2, cold: 0.8 }, cackler: { fire: 1.2 }, stagkin: { fire: 1.2, shock: 1.1 }, quillback: { fire: 1.25, shock: 0.85 },
   stitcher: { fire: 1.2, poison: 0.6 }, sinkworm: { cold: 1.3, poison: 0.7, fire: 0.85 }, hidechief: { fire: 1.15 }, mawfather: { fire: 1.1, cold: 0.85 },
+  // Act 6: the old court's plate carries a shock and turns a little fire; its dead are cold already; hounds and crows are
+  // flesh; the magi know their own lightning
+  oathbreaker: { shock: 1.2, cold: 0.85 }, crownguard: { shock: 1.25, fire: 0.85, cold: 0.85 }, hollowherald: { cold: 0.6, fire: 1.2 },
+  gildhound: { fire: 1.15, poison: 1.1 }, courtmagus: { shock: 0.6, poison: 1.2 }, crowncrow: { shock: 1.2, poison: 1.1 },
+  pretender: { poison: 1.15 }, thronewarden: { shock: 1.2, fire: 0.85 }, rivenking: { shock: 1.1, cold: 0.85 },
 };
 export const mobAffinity = (kind: string, el: Element) => MOB_AFFINITY[kind as MobKind]?.[el] ?? 1;
 
 /** The element of a monster's magic shot (hero resistances apply to it). Unset = Physical. */
 export const MOB_SHOT_ELEMENT: Partial<Record<MobKind, Element>> = { shooterblob: "poison", skeletonmage: "cold", necromancer: "poison", hollowking: "cold", crowseer: "poison", veiled: "fire", boghag: "poison", mistwraith: "cold",
-  stitcher: "poison" }; // Act 5: the Hide-Stitcher's bone-needle hex
+  stitcher: "poison", // Act 5: the Hide-Stitcher's bone-needle hex
+  hollowherald: "cold", courtmagus: "shock" }; // Act 6: the dead herald's cold decree, the court magus's bolt
 /** The element of a monster's melee blows and special moves (unset = Physical). */
 export const MOB_MELEE_ELEMENT: Partial<Record<MobKind, Element>> = { venomblob: "poison", frostblob: "cold", fireblob: "fire", stormblob: "shock",
   wight: "cold", mistwraith: "cold", barrowking: "cold", // Act 3: the barrow-cold in a wight's grip

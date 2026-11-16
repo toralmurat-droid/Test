@@ -112,6 +112,17 @@ export const MOB_COMBAT: Record<MobKind, { poise: number; windupMs: number; soun
   sinkworm: { poise: 60, windupMs: 320, sound: { tier: "normal", pitch: "L", mode: "minor" } },
   hidechief: { poise: 310, windupMs: 440, sound: { tier: "dull", pitch: "L", mode: "minor" } },
   mawfather: { poise: 480, windupMs: 470, sound: { tier: "dull", pitch: "L", mode: "minor" } },
+  // Act 6, the Crown: old plate rings dull and low, the herald's hollow armour hollow; hounds and crows fragile and high;
+  // the court's magi and the pretender in silk, the Thronewarden and the Riven King heavy as their thrones
+  oathbreaker: { poise: 90, windupMs: 380, sound: { tier: "dull", pitch: "M", mode: "minor" } },
+  crownguard: { poise: 130, windupMs: 440, sound: { tier: "dull", pitch: "L", mode: "minor" } },
+  hollowherald: { poise: 50, windupMs: 470, sound: { tier: "keen", pitch: "M", mode: "minor" } },
+  gildhound: { poise: 35, windupMs: 240, sound: { tier: "fragile", pitch: "H", mode: "minor" } },
+  courtmagus: { poise: 45, windupMs: 460, sound: { tier: "normal", pitch: "H", mode: "minor" } },
+  crowncrow: { poise: 25, windupMs: 260, sound: { tier: "fragile", pitch: "H", mode: "minor" } },
+  pretender: { poise: 70, windupMs: 340, sound: { tier: "normal", pitch: "M", mode: "minor" } },
+  thronewarden: { poise: 340, windupMs: 460, sound: { tier: "dull", pitch: "L", mode: "minor" } },
+  rivenking: { poise: 520, windupMs: 470, sound: { tier: "dull", pitch: "L", mode: "minor" } },
 };
 
 /**

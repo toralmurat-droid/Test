@@ -86,6 +86,10 @@ export const FAMILY_OF: Partial<Record<MobKind, ChampionFamily>> = {
   outrider: "redfang", crossbowman: "redfang", firebrand: "redfang", warhound: "redfang", rattler: "scorpion",
   // Act 5: the Hide-Kin come Hide-Stitched like their Mawdeep kin (beast-folk of the same rite); the Gullet Worms never come as champions
   delver: "beast", cackler: "beast", stagkin: "beast", quillback: "beast", stitcher: "beast",
+  // Act 6: the Crown's dead knights and heralds come back Risen like the Necromancer's dead; a Pretender buys outlaw
+  // swords and a Gildhound pack runs with the poachers who took the king's hunt (both whistle up cutthroats, like the
+  // Redfang's war dogs). The court's own family (and affix) is still to come; the crows and the magi never come as champions yet
+  oathbreaker: "necro", crownguard: "necro", hollowherald: "necro", pretender: "redfang", gildhound: "redfang",
 };
 
 export interface AffixDef {
