@@ -933,7 +933,7 @@ the 4 road gaps simulated; joining pays 8 valor and 10 renown; a column camps at
   - sfx: `column_march {id, x, y, clan}` (a column wakes near heroes), `column_clash {x, y, a, b}` (a, b clan keys),
     `column_gate {id, x, y, clan}` (a live column steps into a waygate). Stub recipes in `client/src/sfx.ts`.
   - Herald: one public line per war tick (at most 3 columns), a tell to sworn heroes whose land is marched on or whose
-    clan marches, a clash line. Leader lines (`WarMoment` march / ambushed / clash) are left to content.
+    clan marches, a clash line. Leader lines (`WarMoment` march / ambushed / clash) are added (heralds.ts march, ambushed, clash).
 - **Tools:** `tools/balance/war.ts` prints the column size histogram (`--per-soldier=<n>` to try another value) and has
   `--ambush=<clan|all>[:share]` and `--clash`; `tools/balance/pve.ts --column` (a hero alone vs a full column);
   `npm run bench` `COLUMN=1` (with `WAR=1`): a column marches past the first bot for the whole run.
