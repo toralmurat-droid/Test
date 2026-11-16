@@ -1,4 +1,5 @@
 import { MAP_W, SINKHOLES_H, SINKHOLES_Y0 } from "./constants";
+import { crownwayDais, crownwayFrom } from "./crown";
 
 /**
  * Act 5: the Mawdeep Sinkholes, the Hide-Kin's homeland (Lv 30-45). Damp green-brown country pocked with sinkholes,
@@ -413,5 +414,9 @@ export function buildSinkholes(T: SinkholesTiles, ground: number[][], objects: n
     }
     if (best) { setO(best[0], best[1], T.SIGNPOST); posts.push({ x: best[0], y: best[1] + Y0, to: p.to }); }
   }
+  // ---------- Last: the Deep Gate, the Crownway to the Crown of the Marches (Act 6, shared/crown.ts): a dais of old
+  // flagstones in the dells west of Hidehall. Cut after the reachability pass, so the rest of the band stays exactly as it
+  // was (outside its CROWNWAYS box) ----------
+  crownwayDais(crownwayFrom("sinkholes"), ground, objects, EMPTY, T, 381);
   return { areas, roads, posts };
 }

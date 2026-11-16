@@ -1,5 +1,5 @@
 /** Map sizes (w, h) that saved fog may have been stored at; rows keep their coordinates when the map grows downward. */
-export const OLD_FOG_SIZES: [number, number][] = [[288, 960], [288, 776], [288, 592], [288, 288], [288, 216], [224, 168], [160, 120]];
+export const OLD_FOG_SIZES: [number, number][] = [[288, 1144], [288, 960], [288, 776], [288, 592], [288, 288], [288, 216], [224, 168], [160, 120]];
 
 /**
  * Fills `seen` (mapW*mapH bytes) from a saved fog string: loads directly when it matches the current size,
