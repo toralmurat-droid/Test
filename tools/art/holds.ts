@@ -6,6 +6,7 @@ import { createCanvas } from "@napi-rs/canvas";
 import { mkdirSync, statSync, writeFileSync } from "node:fs";
 import { atlasFile, ATLAS_PAD, ATLAS_W, type AtlasMeta, fortLayout, groundPlan, paintGround, paintPiece, type Painted, type PieceSpec } from "../../client/src/holdArt";
 import { CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
+import { HOLD_TIERS } from "../../shared/war/holdTiers";
 import { fortOf } from "../../shared/war/holdWalls";
 import { HOLDS } from "../../shared/war/standards";
 
@@ -13,10 +14,12 @@ import { HOLDS } from "../../shared/war/standards";
 export function looksOf(clan: ClanKey) {
   const pieces = new Map<string, PieceSpec>(), ground = new Map<string, { mask: number; v: number; road: boolean }>();
   for (const h of HOLDS) {
-    const f = fortOf(h.t, clan);
-    if (!f) continue;
-    for (const i of fortLayout(f)) pieces.set(i.key, i.spec);
-    for (const g of groundPlan(f).tiles) ground.set(g.key, g);
+    for (const tier of HOLD_TIERS) {
+      const f = fortOf(h.t, clan, tier);
+      if (!f) continue;
+      for (const i of fortLayout(f)) pieces.set(i.key, i.spec);
+      for (const g of groundPlan(f).tiles) ground.set(g.key, g);
+    }
   }
   return { pieces, ground };
 }
