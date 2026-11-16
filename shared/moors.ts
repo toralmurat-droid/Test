@@ -1,4 +1,5 @@
 import { MAP_W, MOORS_H, MOORS_Y0 } from "./constants";
+import { crownwayDais, crownwayFrom } from "./crown";
 
 /**
  * Act 3: the Grey Barrow Moors, the Ossuary Host's homeland (Lv 20-35). Misty barrow country in its own band of the
@@ -405,5 +406,9 @@ export function buildMoors(T: MoorsTiles, ground: number[][], objects: number[][
     }
     if (best) { setO(best[0], best[1], T.SIGNPOST); posts.push({ x: best[0], y: best[1] + Y0, to: p.to }); }
   }
+  // ---------- Last: the Mourning Gate, the Crownway to the Crown of the Marches (Act 6, shared/crown.ts): a dais of old
+  // flagstones on the heather south of the Host's Muster. Cut after the reachability pass, so the rest of the band stays exactly as it
+  // was (outside its CROWNWAYS box) ----------
+  crownwayDais(crownwayFrom("moors"), ground, objects, EMPTY, T, 361);
   return { areas, roads, posts };
 }

@@ -25,27 +25,35 @@ export const BADLANDS_H = 176;
 /** Act 5, the Mawdeep Sinkholes (shared/sinkholes.ts): the Hide-Kin's homeland, its own band under the badlands' rock. */
 export const SINKHOLES_Y0 = BADLANDS_Y0 + BADLANDS_H + 8;
 export const SINKHOLES_H = 176;
-export const MAP_H = SINKHOLES_Y0 + SINKHOLES_H + 4; // tiles: overworld, underground band, rock, desert, rock, deep band, rock, moors, rock, badlands, rock, sinkholes
-/** The acts (one per land): 1 Oakvale (and the Mawdeep, the Lantern Crypt), 2 the Sunscar, 3 the moors, 4 the badlands, 5 the sinkholes. */
-export type Act = 1 | 2 | 3 | 4 | 5;
+/**
+ * Act 6, the Crown of the Marches (shared/crown.ts): the ruined kingdom of the last High King in the middle of the
+ * continent, neutral ground, its own band under the sinkholes' rock.
+ */
+export const CROWN_Y0 = SINKHOLES_Y0 + SINKHOLES_H + 8;
+export const CROWN_H = 176;
+export const MAP_H = CROWN_Y0 + CROWN_H + 4; // tiles: overworld, underground band, rock, desert, rock, deep band, rock, moors, rock, badlands, rock, sinkholes, rock, the Crown
+/** The acts (one per land): 1 Oakvale (and the Mawdeep, the Lantern Crypt), 2 the Sunscar, 3 the moors, 4 the badlands, 5 the sinkholes, 6 the Crown. */
+export type Act = 1 | 2 | 3 | 4 | 5 | 6;
 /** True in the deep band (tiles). */
 export const inDeepRow = (ty: number) => ty >= DEEP_Y0 && ty < DEEP_END;
 /**
- * True for a map row in the sinkholes band, with the rock strip round it: the 8 rows of rock between two bands split
+ * True for a map row in the Crown's band, with the rock strip round it: the 8 rows of rock between two bands split
  * evenly, 4 to each, so a tile there is never mistaken for the band above.
  */
-export const inSinkholesBand = (ty: number) => ty >= SINKHOLES_Y0 - 4;
+export const inCrownBand = (ty: number) => ty >= CROWN_Y0 - 4;
+/** True for a map row in the sinkholes band, with its share of the rock strips above and below. */
+export const inSinkholesBand = (ty: number) => ty >= SINKHOLES_Y0 - 4 && ty < CROWN_Y0 - 4;
 /** True for a map row in the badlands band, with its share of the rock strips above and below. */
 export const inBadlandsBand = (ty: number) => ty >= BADLANDS_Y0 - 4 && ty < SINKHOLES_Y0 - 4;
 /** True for a map row in the moors band, with its share of the rock strips above and below. */
 export const inMoorsBand = (ty: number) => ty >= MOORS_Y0 - 4 && ty < BADLANDS_Y0 - 4;
 /**
- * Which act a tile belongs to: the sinkholes band is Act 5, the badlands band Act 4, the moors band Act 3; the desert
- * and the Undercity Act 2; the rest (the Lantern Crypt too) Act 1. The homeland bands are tested first: every row from
- * the desert down would otherwise count as Act 2.
+ * Which act a tile belongs to: the Crown's band is Act 6, the sinkholes band Act 5, the badlands band Act 4, the moors
+ * band Act 3; the desert and the Undercity Act 2; the rest (the Lantern Crypt too) Act 1. The homeland bands are tested
+ * first: every row from the desert down would otherwise count as Act 2.
  */
 export const actOfTile = (tx: number, ty: number): Act =>
-  inSinkholesBand(ty) ? 5 : inBadlandsBand(ty) ? 4 : inMoorsBand(ty) ? 3 : ty >= DESERT_Y0 && !(ty >= DEEP_Y0 - 4 && tx < DEEP_SPLIT) ? 2 : 1;
+  inCrownBand(ty) ? 6 : inSinkholesBand(ty) ? 5 : inBadlandsBand(ty) ? 4 : inMoorsBand(ty) ? 3 : ty >= DESERT_Y0 && !(ty >= DEEP_Y0 - 4 && tx < DEEP_SPLIT) ? 2 : 1;
 export const TICK_RATE = 20; // server updates per second
 export const PLAYER_SPEED = 90; // px per second (default; classes override, see classes.ts)
 export const PLAYER_RADIUS = 5; // collision half-size in px
@@ -440,11 +448,17 @@ export const BADLANDS_LEVEL = { min: 25, mob: 38, special: 40, tilesPerLevel: 16
  */
 export const SINKHOLES_LEVEL = { min: 30, mob: 43, special: 45, tilesPerLevel: 12 };
 /**
+ * Act 6, the Crown of the Marches: the endgame, Lv 40-50, open from hero Lv 40 (the five Crownways, shared/act2.ts
+ * HOMELAND_GATES). Regular monsters Lv 40-48, a level every `tilesPerLevel` tiles from the nearest Crownway's arrival
+ * on the rim inward toward the Crown Keep in the middle (shared/spawns.ts baseLevelAt).
+ */
+export const CROWN_LEVEL = { min: 40, mob: 48, special: 50, tilesPerLevel: 10 };
+/**
  * Every act's level band in one table (min, regular ceiling, special ceiling), so a new homeland is one row here. Act 1
  * starts at Lv 1 (regionMobLevel); the others hold their monsters inside their own band.
  */
 export const ACT_LEVEL: Record<Act, { min: number; mob: number; special: number }> = {
-  1: { min: 1, ...REGION_LEVEL }, 2: ACT2_LEVEL, 3: MOORS_LEVEL, 4: BADLANDS_LEVEL, 5: SINKHOLES_LEVEL,
+  1: { min: 1, ...REGION_LEVEL }, 2: ACT2_LEVEL, 3: MOORS_LEVEL, 4: BADLANDS_LEVEL, 5: SINKHOLES_LEVEL, 6: CROWN_LEVEL,
 };
 const actLevels = (act: number) => ACT_LEVEL[act as Act] ?? ACT_LEVEL[1];
 /** A regular monster's level held to its act's band (act from actOfTile). */

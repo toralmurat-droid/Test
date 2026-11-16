@@ -98,6 +98,10 @@ Only the classes in `ACTIVE_CLASSES` can be played. Archived classes keep their 
   a bounty board and shops; Hidehall is the Hide-Kin's seat. Lodge-Warden Brannoc Tull's chain climbs the zones
   through a Hide-Chieftain at Tunneltop and Hidehall to the Maw-Father in the Great Maw. The sinkholes are a land of the
   clan war, joined to Oakvale by the Sinkway, with Hidehall as the Hide-Kin seat.
+- **Act 6 — the Crown of the Marches** (`shared/crown.ts`, being built): the ruined realm of the last High King in the
+  middle of the continent (levels 40-50), reached by five Crownways, one from each homeland, once a hero reaches level
+  40 (the Sun Gate also wants Act 2 unlocked). Tollcross, the Truce Market, is the safe outpost; the Crown Keep and its
+  Throne Hall stand on the hill at the centre.
 - **Dungeons** (`shared/dungeon.ts`): the Mawdeep, the Lantern Crypt and the Undercity.
 - **Quests** (`shared/quests.ts`): zone quest arcs in both acts, quest bosses (some only at night).
 - **Bounty boards** (`shared/bounty.ts`): pick a hunt for your level, paid when the last kill lands.
