@@ -12,7 +12,8 @@ import { noMobsAt } from "../shared/spawns";
 import { npcById } from "../shared/npcs";
 import { SHOPS } from "../shared/shops";
 import { gatePx, onTownGround, TOWN, townById, townPatron } from "../shared/war/towns";
-import { _resetWar, _setTown, _valorOf, warState, warTowns } from "../server/war";
+import { _resetWar, _setTown, _valorOf, townClaim, warState, warTowns } from "../server/war";
+import { pairOf, setWarPairs } from "../shared/war/feuds";
 import { _resetTowns } from "../server/warTowns";
 
 const TOWN_ = townById("saltmere")!, GATE = gatePx(TOWN_), P = townPatron("saltmere");
@@ -139,5 +140,83 @@ test("towns (room): the holder's sworn pay 10% less at the town's trader, everyo
     p.x = b.x; p.y = b.y + 10; p.clan = s.own; p.gold = 100_000; room.shopBuy(c, 0);
     assert.equal(100_000 - p.gold, SHOPS.weaponsmith.stock[0].price);
     await c.leave();
+  } finally { await srv.stop(); }
+});
+
+test("towns (room): a hero who falls mid-raise is told it stopped; the gate is free for the next hero", async () => {
+  const srv = await startRoom();
+  try {
+    const s = await setup(srv), { room, id, p } = s;
+    const t0 = Date.now();
+    s.tick(t0); s.rout(t0);
+    assert.equal(room.towns.claim(id, { id: "saltmere" }, t0), "");
+    s.tick(t0 + 1000);
+    p.invulnUntil = 0; p.hp = 1;
+    room.damagePlayer(id, 1e9, "Test", [0, 0]);
+    assert.ok(p.dead, "the raiser fell");
+    assert.equal(room.towns.raises.size, 0);
+    assert.ok(await until(() => s.got.some((m) => m.id === "saltmere" && m.state === "stop")), "the raiser's client hears the banner stopped");
+    const d = await srv.join({ cls: "wizard" });
+    await wait(150);
+    const q = room.state.players.get(d.sessionId);
+    q.level = 30; q.invulnUntil = Date.now() + 1e9; q.clan = s.foe; q.lastAct = Date.now(); q.x = GATE.x; q.y = GATE.y;
+    assert.equal(room.towns.claim(d.sessionId, { id: "saltmere" }, t0 + 2000), "", "the next hero may raise it");
+    await d.leave(); await s.c.leave();
+  } finally { await srv.stop(); }
+});
+
+test("towns (room): one raise per town for every room; the raiser leaving frees it", async () => {
+  const srv = await startRoom();
+  try {
+    const s = await setup(srv), { room, id } = s;
+    const t0 = Date.now();
+    s.tick(t0); s.rout(t0);
+    assert.equal(room.towns.claim(id, { id: "saltmere" }, t0), "");
+    const Other = room.towns.constructor as any, other = new Other(room.towns.h, room.warTroops); // a second room of the same process
+    const d = await srv.join({ cls: "wizard" });
+    await wait(150);
+    const q = room.state.players.get(d.sessionId);
+    q.level = 30; q.invulnUntil = Date.now() + 1e9; q.clan = s.foe; q.lastAct = Date.now(); q.x = GATE.x; q.y = GATE.y;
+    assert.match(other.why(d.sessionId, "saltmere", t0), /Another hero/, "another room's raise holds the town");
+    // the raiser leaves: the town is free for the other room
+    room.towns.forget(id);
+    assert.doesNotMatch(other.why(d.sessionId, "saltmere", t0), /Another hero/);
+    await d.leave(); await s.c.leave();
+  } finally { await srv.stop(); }
+});
+
+test("towns (room): a guard drops a target past its leash or on town ground; nobody hurts a guard from town ground or below level 12", async () => {
+  const srv = await startRoom();
+  try {
+    const s = await setup(srv), { room, id, p } = s;
+    s.tick(Date.now());
+    const [gid] = room.towns._guards("saltmere"), m = room.state.mobs.get(gid), gd = room.towns.guards.get(gid);
+    setWarPairs([pairOf(s.own, s.foe)]);
+    const fight = (x: number, y: number) => { p.x = x; p.y = y; m.target = id; room.warTroops.fight(m, gid, gd, gd.g, 0.05, Date.now()); return m.target; };
+    assert.equal(fight(GATE.x + 32, GATE.y), id, "an enemy at the gate is fought");
+    assert.equal(fight(GATE.x + TOWN.leashPx + 64, GATE.y), "", "past the leash: dropped");
+    const st = TOWN_.steward;
+    assert.equal(fight((st.x + 0.5) * 32, (st.y + 0.5) * 32), "", "on town ground: dropped");
+    assert.equal(room.canHurtMob(id, m), false, "and from town ground the hero cannot hurt it");
+    p.x = GATE.x + 32; p.y = GATE.y;
+    assert.equal(room.canHurtMob(id, m), true, "outside, an enemy can");
+    p.level = TOWN.minFoeLevel - 1;
+    assert.equal(room.canHurtMob(id, m), false, "below minFoeLevel: no");
+    assert.equal(fight(GATE.x + 32, GATE.y), "", "and the guard leaves them alone");
+    await s.c.leave();
+  } finally { await srv.stop(); }
+});
+
+test("towns (room): a claim in another room mid-tick sends this room's gate guard home", async () => {
+  const srv = await startRoom();
+  try {
+    const s = await setup(srv);
+    s.tick(Date.now());
+    assert.equal(s.guards().length, TOWN.guards + TOWN.captain);
+    assert.ok(townClaim("saltmere", s.foe, "Elsewhere"), "another room's hero raised the banner");
+    s.tick(Date.now());
+    assert.equal(s.guards().length, 0, "the contest is over: the guard goes");
+    assert.equal(s.room.towns.count, 0);
+    await s.c.leave();
   } finally { await srv.stop(); }
 });

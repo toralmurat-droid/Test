@@ -898,7 +898,7 @@ export function townClaim(id: string, k: ClanKey, hero = "A hero", now = Date.no
 /** Tests: set a town's state as it is (no checks). */
 export function _setTown(id: string, s: TownState) { if (saved) { (saved.towns ??= {})[id] = s; townVer++; } }
 
-/** A room passes on a town's news: the Herald (at most TOWN.heraldPerTick lines a tick: `n` counts them), a sound at the gate, the new towns view. */
+/** A room passes on a town's news: the Herald (at most TOWN.heraldPerTick lines a tick: `n` counts them) and a sound at the gate. */
 function townNews(room: { broadcast(type: string, msg: unknown): void }, e: WarEvent, n: number) {
   if (n <= TOWN.heraldPerTick) room.broadcast("chat", { id: "", name: "Herald", text: e.text });
   const t = townById(e.town);
@@ -908,5 +908,5 @@ function townNews(room: { broadcast(type: string, msg: unknown): void }, e: WarE
     else { say(e.by, "town_claimed", e.from); say(e.from, "town_lost", e.by); }
   }
   if (t && e.change !== "off") room.broadcast("sfx", { ev: e.change === "contested" ? "town_contested" : "town_claimed", id: t.id, x: Math.round((t.gate.x + 0.5) * TILE), y: Math.round((t.gate.y + 0.5) * TILE), by: e.by, from: e.from });
-  room.broadcast("towns", townsNow());
+  // (the "towns" view, with the banners going up there, goes out from each room's own WarTowns.onWar, the same news)
 }

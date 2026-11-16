@@ -26,6 +26,9 @@ export const TOWN = {
   guards: 4, captain: 1,
   /** Gate guards are at least this level, so a town on a beginner land (Millbrook, North Meadow) still needs a real fight. */
   minGuardLevel: 15,
+  /** ...and fight only heroes of this level and up (a Lv 5 hero on Millbrook's road is left alone); heroes below it
+   * cannot hurt them either. Heroes on town ground cannot hurt them at all (no striking from where they may not follow). */
+  minFoeLevel: 12,
   /** Time to raise the banner at the gate (ms): the Holds' sack rules (holdSack.ts sackStep). */
   raiseMs: HOLD_SACK.raiseMs,
   /** The raiser must stand this close to the gate (tiles): to start, and (x1.5) to keep raising. */

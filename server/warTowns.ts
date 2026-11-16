@@ -67,6 +67,8 @@ export class WarTowns {
   /** Guards fallen per contest and war tick ("<key>@<tick>" -> posts): they stay down until the next war tick. */
   private fallen = new Map<string, Set<number>>();
   private seq = 0;
+  /** The gate guards' monsters (canHurt asks by the monster). */
+  private mobs = new WeakSet<object>();
   private told = ""; private toldAt = 0;
 
   constructor(private h: TownHost, private soldiers: Soldiers) {}
@@ -136,6 +138,7 @@ export class WarTowns {
     if (err) return err;
     if (this.raises.get(pid)?.id === raw) return "";
     const p = this.h.hero(pid)!;
+    this.drop(pid); // (a banner at another gate stops: the town it was for is free again)
     this.raises.set(pid, { hero: pid, id: raw, progress: 0, paused: false, lastStep: now, hurtAt: p.lastHurt });
     raisingIn.set(raw, this);
     this.h.send(pid, "townclaim", { id: raw, progress: 0, state: "raise" } satisfies TownClaimMsg);
@@ -143,17 +146,30 @@ export class WarTowns {
     return "";
   }
 
-  private stop(pid: string, why = "") {
+  private stop(pid: string, why = "") { this.drop(pid, why); }
+  /** The hero's banner stops (left, fell, asked for another gate): their client hears it (a gone client: a no-op send). */
+  private drop(pid: string, why = "") {
     const r = this.raises.get(pid);
     if (!r) return;
-    this.drop(pid);
+    this.release(pid);
     this.h.send(pid, "townclaim", { id: r.id, state: "stop", ...(why ? { err: why } : {}) } satisfies TownClaimMsg);
   }
-  private drop(pid: string) {
+  /** Forgets the hero's banner without a word (it is done: the caller says so). */
+  private release(pid: string) {
     const r = this.raises.get(pid);
     if (!r) return;
     this.raises.delete(pid);
     if (raisingIn.get(r.id) === this) raisingIn.delete(r.id);
+  }
+
+  /**
+   * May hero `pid` hurt monster `m`? Not a gate guard while standing on town ground (where the guard may never follow:
+   * no free whittling from inside), nor below TOWN.minFoeLevel (the guards leave those heroes alone too). True for any other monster.
+   */
+  canHurt(pid: string, m: TroopMob): boolean {
+    if (!this.mobs.has(m)) return true;
+    const p = this.h.hero(pid);
+    return !!p && p.level >= TOWN.minFoeLevel && !onTownGround(p.x, p.y);
   }
 
   /** A hero left or died: their banner stops, no gate guard keeps chasing them. */
@@ -207,7 +223,8 @@ export class WarTowns {
       gt.slots[i] = gid; room--;
       const t = gt.town, g = gatePx(t);
       this.guards.set(gid, { ...newFighter(gt.k, officer), town: t, post: i, key: gt.key,
-        g: { leash: (x, y) => Math.hypot(x - g.x, y - g.y) <= TOWN.leashPx && !offLimits(x, y), hunt: () => false } }); // wild monsters only when they strike first
+        g: { leash: (x, y) => Math.hypot(x - g.x, y - g.y) <= TOWN.leashPx && !offLimits(x, y), hunt: () => false, foe: (h) => h.level >= TOWN.minFoeLevel } }); // wild monsters only when they strike first
+      this.mobs.add(m);
     }
   }
 
@@ -222,7 +239,7 @@ export class WarTowns {
     const towns = warTowns();
     for (const [pid, r] of this.raises) {
       const p = this.h.hero(pid), t = townById(r.id)!, st = towns[r.id], g = gatePx(t);
-      if (!p || p.dead) { this.drop(pid); continue; }
+      if (!p || p.dead) { this.drop(pid, p?.dead ? "You fell." : ""); continue; }
       if (underground(p.y) || Math.hypot(p.x - g.x, p.y - g.y) > TOWN.useTiles * TILE * 1.5) { this.stop(pid, "You left the gate."); continue; }
       if (!st?.c || p.clan !== st.c.by || p.level < STANDARD.minLevel) { this.stop(pid, `${cap(t.name)} is not yours to claim now.`); continue; }
       const hurt = p.lastHurt > r.hurtAt;
@@ -238,7 +255,7 @@ export class WarTowns {
 
   /** The banner is up: the town flips (server/war.ts townClaim: valor, the Herald, every room), the clan's sworn in the reach earn renown. */
   private done(pid: string, p: TownHero, r: Raise, k: ClanKey, now: number) {
-    this.drop(pid);
+    this.release(pid);
     const t = townById(r.id)!;
     if (!townClaim(r.id, k, p.name, now)) { this.h.send(pid, "townclaim", { id: r.id, state: "stop", err: `${cap(t.name)} is not yours to claim now.` } satisfies TownClaimMsg); return; }
     const st = warState();

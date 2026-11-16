@@ -69,6 +69,8 @@ export class WarTowns {
     if (!this.first) for (const [id, n] of next) this.notice(this.list.get(id), n);
     this.first = false;
     this.list = next;
+    // a banner the server no longer shows going up is not going up (a missed "stop": a fall, a reconnect)
+    if (this.mine && this.mine.state !== "done" && next.get(this.mine.id)?.raise === undefined) this.mine = undefined;
     this.drawBanners();
   }
 
@@ -157,6 +159,7 @@ export class WarTowns {
 
   /** Every frame: the watch, the prompt at a contested gate, the hero's progress bar, the creak of banners going up near. */
   update(me: { x: number; y: number } | undefined, blocked: boolean, now = Date.now()) {
+    if (!me && this.mine && this.mine.state !== "done") this.mine = undefined; // the hero fell: their banner stopped (the server says so too)
     this.drawWatch(me);
     const clan = this.h.clan();
     let near: Town | undefined;

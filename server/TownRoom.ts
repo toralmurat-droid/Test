@@ -2152,7 +2152,7 @@ export class TownRoom extends Room<TownState> {
 
   /** May this hero hurt that monster? The one gate for every hero blow: summons (canHurtSummon) and clan troopers (WarTroops.canHurt). */
   private canHurtMob(heroId: string, m: Mob): boolean {
-    return m.owner ? this.canHurtSummon(heroId, m) : m.kind !== "trooper" || this.warTroops.canHurt(heroId, m);
+    return m.owner ? this.canHurtSummon(heroId, m) : m.kind !== "trooper" || (this.warTroops.canHurt(heroId, m) && this.towns.canHurt(heroId, m)); // (a town's gate guard: never from town ground, server/warTowns.ts)
   }
 
   /**
