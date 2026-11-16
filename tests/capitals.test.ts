@@ -14,6 +14,7 @@ import { SHOPS } from "../shared/shops";
 import { STASHES } from "../shared/trade";
 import { TITLES } from "../shared/cosmetics";
 import { SPAWN_ZONES } from "../shared/spawns";
+import { POSTS } from "../shared/bandits";
 import { HOLDS, STANDARDS } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
 import { RENOWN_RANKS } from "../shared/war/renown";
@@ -52,14 +53,19 @@ test("capitals: the cities' band is appended under the Crown, five plots side by
   // each plot's columns are its clan's land
   CITY_ACTS.forEach((a, i) => { const b = plotBox(i); assert.equal(actOfTile(b.x + 5, b.y + 5), a); assert.equal(actOfTile(b.x + b.w - 1, CITIES_Y0 + CITIES_H + 3), a); });
   assert.equal(actOfTile(cityTile(W, CITY_TEMPLATE.gate).x, cityTile(W, CITY_TEMPLATE.gate).y), 1, "Hearthhold is in the Oakvale lands");
-  // only the Wardens' city is built; unbuilt plots are solid rock
-  assert.deepEqual(CITIES.map((c) => c.clan), ["wardens"]);
-  for (let i = 1; i < CITY_ACTS.length; i++) { const b = plotBox(i); for (let y = b.y; y < b.y + b.h; y++) for (let x = b.x; x < b.x + b.w; x++) assert.ok(isSolidTile(x, y), `rock in plot ${i}`); }
-  for (const c of CITIES) { assert.equal(c.act, CITY_ACTS[c.plot]); assert.equal(CITY_CLANS[c.plot], c.clan); }
+  // all five cities are built, one per plot, west to east in CITY_CLANS order, each in its clan's homeland
+  assert.deepEqual(CITIES.map((c) => c.clan), ["wardens", "veiled", "host", "redfang", "hidekin"]);
+  assert.deepEqual(CITIES.map((c) => c.act), [1, 2, 3, 4, 5]);
+  for (const c of CITIES) {
+    assert.equal(c.act, CITY_ACTS[c.plot]); assert.equal(CITY_CLANS[c.plot], c.clan);
+    const g = cityTile(c, CITY_TEMPLATE.gate);
+    assert.equal(actOfTile(g.x, g.y), c.act, `${c.clan}'s city counts as its homeland`);
+    assert.equal(actOfTile(c.outer.x, c.outer.y), c.act, `${c.clan}'s city gate stands in its homeland`);
+  }
 });
 
-test("capitals: Hearthhold is walled shut but for its gate, every tile reachable from the gate, at least 50x36 inside, all safe", () => {
-  const b = plotBox(W.plot), [gx, gy] = tileOf(waygateArrival(waygateById("cityexit_wardens")!));
+for (const W of CITIES) test(`capitals: ${W.clan}'s city is walled shut but for its gate, every tile reachable from the gate, at least 50x36 inside, all safe`, () => {
+  const b = plotBox(W.plot), [gx, gy] = tileOf(waygateArrival(waygateById(`cityexit_${W.clan}`)!));
   assert.ok(cityAt(gx, gy) === W && !isSolidTile(gx, gy), "the arrival is free, inside the city");
   const seen = flood(gx, gy);
   let walk = 0;
@@ -88,16 +94,24 @@ test("capitals: Hearthhold is walled shut but for its gate, every tile reachable
   assert.ok(TERRITORIES.every((t) => t.y + t.h <= CITIES_Y0 - 4), "no war territory in the band");
   // built from the template, deterministic, with no new tile ids
   const g = GROUND.map((r) => [...r]), o = OBJECTS.map((r) => [...r]);
-  for (let y = b.y; y < b.y + b.h; y++) for (let x = b.x; x < b.x + b.w; x++) { g[y][x] = -2; o[y][x] = -2; }
+  for (const c of CITIES) { const pb = plotBox(c.plot); for (let y = pb.y; y < pb.y + pb.h; y++) for (let x = pb.x; x < pb.x + pb.w; x++) { g[y][x] = -2; o[y][x] = -2; } }
   buildCities(T, g, o, -1);
   assert.deepEqual(g.slice(b.y, b.y + b.h), GROUND.slice(b.y, b.y + b.h));
   assert.deepEqual(o.slice(b.y, b.y + b.h), OBJECTS.slice(b.y, b.y + b.h));
   const tiles = new Set<number>(Object.values(T));
   for (let y = b.y; y < b.y + b.h; y++) for (let x = b.x; x < b.x + b.w; x++) assert.ok(tiles.has(GROUND[y][x]) && (OBJECTS[y][x] === -1 || tiles.has(OBJECTS[y][x])));
+  // laid in its style: its walls, its streets, its ground
+  assert.equal(OBJECTS[b.y][b.x], T[W.style.wall], "the outer wall");
+  const st = cityTile(W, { x: 25, y: 20 }), gr = new Set(W.style.ground.map((k) => T[k]));
+  assert.equal(GROUND[st.y][st.x], T[W.style.street], "the main street");
+  const open = cityTile(W, { x: 45, y: 26 - 6 });
+  assert.ok(gr.has(GROUND[open.y][open.x] as never) || GROUND[open.y][open.x] === T[W.style.street], "open ground in the city's own ground tiles");
 });
 
-test("capitals: Hearthhold's people, shop, waystone, stash and props stand on free ground in their districts", () => {
-  const seen = flood(...tileOf(waygateArrival(waygateById("cityexit_wardens")!)));
+/** Each city's quartermaster sells what its land's own armourer sells, and the flasks of its land's healers (no new power). */
+const LAND_ARMOURER: Record<string, string> = { wardens: "armourer", veiled: "sandarmourer", host: "moorarmourer", redfang: "rustarmourer", hidekin: "ropearmourer" };
+for (const W of CITIES) test(`capitals: ${W.clan}'s people, shop, waystone, stash and props stand on free ground in their districts`, () => {
+  const seen = flood(...tileOf(waygateArrival(waygateById(`cityexit_${W.clan}`)!)));
   for (const n of CITY_TEMPLATE.npcs) {
     const id = cityNpcId(W, n.role), npc = NPCS.find((o) => o.id === id)!;
     assert.ok(npc, `${id} is an NPC`);
@@ -107,19 +121,27 @@ test("capitals: Hearthhold's people, shop, waystone, stash and props stand on fr
     assert.equal(cityNpcRole(id)?.role, n.role);
     assert.equal(cityRoleNear(n.role, npc.x, npc.y + TILE * 0.8), W, `${id} can be talked to from in front`);
   }
-  assert.equal(cityNpcRole("cap_wardens_nobody"), undefined);
+  assert.equal(cityNpcRole(`cap_${W.clan}_nobody`), undefined);
   assert.equal(cityNpcRole("steward_saltmere"), undefined);
+  for (const r of ["leader", "oathkeeper", "trainer"] as const) assert.equal(W.sprites[r], `cap_${W.clan}_${r}`, "the city's own sheets");
   const qm = NPCS.find((o) => o.id === cityNpcId(W, "quartermaster"))!;
   assert.equal(qm.shop, cityShopId(W));
-  assert.equal(qm.sprite, "steward_wardens", "the W6 Wardens steward's look");
+  assert.equal(qm.sprite, `steward_${W.clan}`, "the W6 steward's look of its clan");
   const shop = SHOPS[cityShopId(W)];
   assert.ok(shop && shop.stock.length > 0 && shop.greeting);
-  assert.ok(shop.stock.every((e) => e.item === "potion" || e.item === "mpotion" || SHOPS.armourer.stock.some((a) => a.item === e.item)), "no new power: Oakvale's armour and the witch's flasks");
+  const land = SHOPS[LAND_ARMOURER[W.clan]];
+  assert.ok(shop.stock.every((e) => (e.item === "potion" || e.item === "mpotion" ? (e.size ?? 0) <= 2 : land.stock.some((a) => a.item === e.item && a.price === e.price))), "no new power: the land's own armour and flasks");
+  assert.ok(land.stock.every((a) => shop.stock.some((e) => e.item === a.item)), "every step of the land's armourer");
+  // the leader's, oath-keeper's and trainer's names, the title, every district named
+  const t = cityText(W);
+  assert.ok(t.name && t.leaderGreeting && t.oathGreeting && t.trainerGreeting && Object.values(t.districts).every(Boolean));
+  assert.ok(!/Redfang Chief|Hide-Mother|Pale Marshal|Veiled Oracle|Captain Hale/.test(t.npcs.leader[0]), "the leader is a figure of their own, not a boss or the herald");
   // waystone (append only: the older stones keep their order)
-  const ws = PORTAL_SPOTS.find((p) => p.id === "city_wardens")!;
+  const ws = PORTAL_SPOTS.find((p) => p.id === `city_${W.clan}`)!;
   assert.ok(ws && cityAt(ws.x, ws.y) === W && !isSolidTile(ws.x, ws.y) && seen[(ws.y + 1) * MAP_W + ws.x]);
   assert.deepEqual(PORTAL_SPOTS.slice(0, 10).map((p) => p.id), ["oakvale", "farms", "barrow", "saltmere", "ruins", "keep", "gravemoor", "cairnwatch", "rustwater", "ropewell"]);
-  assert.equal(cityOfPortal("city_wardens"), W);
+  assert.equal(cityOfPortal(`city_${W.clan}`), W);
+  assert.deepEqual(PORTAL_SPOTS.slice(-CITIES.length).map((p) => p.id), CITIES.map((c) => `city_${c.clan}`));
   assert.equal(cityOfPortal("farms"), undefined);
   // the stash chest opens the account stash; the props that block movement do
   assert.ok(STASHES.some((s) => cityAt(...tileOf(s)) === W));
@@ -158,6 +180,40 @@ test("capitals: the Wardens' city gate at Goldenreach, open from Lv 5; the city'
   assert.equal(actSpawn(actOfTile(ix, iy), () => home), home);
 });
 
+/** Each land's way in (its gate's arrival) and the clan's seat beside which its city gate stands. */
+const LANDS: Record<string, { entry: string; seat: string }> = {
+  veiled: { entry: "desert", seat: "The Veiled Sanctum" }, host: { entry: "moors", seat: "The Host's Muster" },
+  redfang: { entry: "badlands", seat: "Fangrock" }, hidekin: { entry: "sinkholes", seat: "Hidehall" },
+};
+for (const C of CITIES.filter((c) => c.act !== 1)) test(`capitals: ${C.clan}'s city gate beside ${LANDS[C.clan].seat}, reachable, on open ground, out of its camps' sight`, () => {
+  const L = LANDS[C.clan], out = waygateById(`citygate_${C.clan}`)!, inn = waygateById(`cityexit_${C.clan}`)!;
+  assert.equal(out.to, `cityexit_${C.clan}`); assert.equal(inn.to, `citygate_${C.clan}`);
+  assert.deepEqual(cityGateOf(out), { city: C, inner: false });
+  const [ox, oy] = tileOf(out), [ax, ay] = tileOf(waygateArrival(out));
+  assert.deepEqual([ox, oy], [C.outer.x, C.outer.y]);
+  const land = flood(...tileOf(waygateArrival(waygateById(L.entry as never)!)));
+  assert.ok(land[oy * MAP_W + ox] && land[ay * MAP_W + ax], "the gate and its arrival are reachable from the land's way in");
+  assert.ok([T.FLAGS, T.RUBBLE].includes(GROUND[oy][ox] as 39 | 40), "on old flagstones");
+  const B = C.outerBox;
+  assert.ok(ox - 4 >= B.x0 && ox + 4 <= B.x1 && oy - 4 >= B.y0 && oy + 4 <= B.y1 && ay <= B.y1, "the dais and the arrival are inside the box");
+  for (let y = B.y0; y <= B.y1; y++) for (let x = B.x0; x <= B.x1; x++) {
+    const d = ((x - C.outer.x) / 3.6) ** 2 + ((y - C.outer.y) / 3.2) ** 2;
+    if (d < 1) assert.ok(!isSolidTile(x, y), `open dais at ${x},${y}`);
+  }
+  // beside the seat, outside it, and out of sight of every camp post and patrol route (the horn's lookouts see 7.5 tiles)
+  const seat = AREAS.find((a) => a.name === L.seat)!, sx = seat.x + seat.w / 2, sy = seat.y + seat.h / 2;
+  assert.ok(!(ox >= seat.x - 6 && ox < seat.x + seat.w + 6 && oy >= seat.y - 6 && oy < seat.y + seat.h + 6), "outside the seat");
+  assert.ok(Math.hypot(ox - sx, oy - sy) < 60, "near the seat");
+  for (const p of POSTS) for (const [px, py] of [p.at, ...(p.route ?? [])]) assert.ok(Math.hypot(px - ox, py - oy) >= 20, `far from the post at ${px},${py}`);
+  for (const h of [...HOLDS, ...STANDARDS]) assert.ok(Math.hypot(h.x / TILE - ox, h.y / TILE - oy) >= 8, "clear of Holds and standards");
+  for (const g of WAYGATES) if (g !== out) assert.ok(Math.hypot(g.x / TILE - ox, g.y / TILE - oy) >= 8, `clear of the ${g.id} gate`);
+  // its levels: the gate opens at CITY.minLevel; the city counts as the land, so a hero logging out inside wakes in its town
+  assert.ok(!gateOpen(out, { level: 4 } as never) && gateOpen(out, { level: 5 } as never) && gateOpen(inn, { level: 1 } as never));
+  const [ix, iy] = tileOf(waygateArrival(inn));
+  assert.ok(iy < tileOf(inn)[1] && cityAt(ix, iy) === C && !isSolidTile(ix, iy));
+  assert.equal(actOfTile(ix, iy), C.act);
+});
+
 test("capitals: Goldenreach's Hold and standards stand where they did, the war map is untouched", () => {
   const t = TERRITORIES.find((o) => o.name === "Goldenreach Farms")!;
   assert.deepEqual(HOLDS.filter((h) => h.t === t.id).map((h) => [h.x / TILE, h.y / TILE]), [[26.5, 58.5]]);
@@ -191,11 +247,12 @@ test("capitals: who gets in, prices, rank rewards, the title, save values", () =
   assert.equal(rankRewardGold(2, 3), CITY.rankGold[3]);
   assert.equal(rankRewardGold(5, 3), 0, "a rank already paid is never paid again");
   assert.equal(RENOWN_RANKS[CITY.titleRank].name, "Banneret");
-  assert.equal(TITLES[cityTitle(W)], cityText(W).title);
+  for (const c of CITIES) assert.equal(TITLES[cityTitle(c)], cityText(c).title, `${c.clan}'s title`);
+  assert.equal(new Set(CITIES.map((c) => cityText(c).title)).size, CITIES.length, "a title per city");
   assert.deepEqual(TITLES.slice(0, 5), ["", "Mentor", "Captain's Own", "Warden of Oakvale", "Rumour-Chaser"], "titles are append only");
   // save values
   assert.equal(cleanCapPaid(undefined), 0); assert.equal(cleanCapPaid(-1), 0); assert.equal(cleanCapPaid(2.5), 0); assert.equal(cleanCapPaid("3"), 0);
   assert.equal(cleanCapPaid(3), 3); assert.equal(cleanCapPaid(99), CITY.rankGold.length - 1);
-  assert.equal(cleanHome("wardens"), "wardens"); assert.equal(cleanHome("veiled"), undefined, "no Veiled city yet"); assert.equal(cleanHome(7), undefined);
+  assert.equal(cleanHome("wardens"), "wardens"); assert.equal(cleanHome("veiled"), "veiled", "Duskveil is built"); assert.equal(cleanHome("nowhere"), undefined); assert.equal(cleanHome(7), undefined);
   assert.equal(cityOf("__proto__"), undefined);
 });

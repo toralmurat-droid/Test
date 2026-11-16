@@ -2,9 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
-  ACT_LEVEL, actMobLevel, actOfTile, actSpecialLevel, BADLANDS_H, BADLANDS_LEVEL, BADLANDS_Y0, DEEP_END, MAP_H, MAP_W, MOORS_H, MOORS_Y0, SINKHOLES_Y0, TILE, WORLD_H,
+  ACT_LEVEL, actMobLevel, actOfTile, actSpecialLevel, BADLANDS_H, BADLANDS_LEVEL, BADLANDS_Y0, DEEP_END, MAP_H, MAP_W, MOORS_H, MOORS_Y0, SINKHOLES_Y0, TILE, WORLD_H, inCitiesBand,
 } from "../shared/constants";
-import { EMPTY, GROUND, isSafeZone, isSolidAt, isSolidTile, MIRROR_POND, OBJECTS, randomSpawn, T, TILE_COUNT } from "../shared/map";
+import { EMPTY, GROUND, isSafeZone, isSolidAt, isSolidTile, MIRROR_POND, OBJECTS, randomSpawn, T, TILE_COUNT, NATURE } from "../shared/map";
 import {
   ARCHES, BR, buildBadlands, FANGROCK, inBadlandsRow, REDPASS, REDPASS_BADLANDS, REDPASS_OAKVALE, RUSTWATER_POST, RUSTWATER_SQUARE, TALON_FORT,
 } from "../shared/badlands";
@@ -12,7 +12,7 @@ import { MOORSGATE_MOORS } from "../shared/moors";
 import { SINKWAY_BOX } from "../shared/sinkholes";
 import { SALT_BOXES } from "../shared/saltmere";
 import { crownwayFrom } from "../shared/crown";
-import { CITIES } from "../shared/capitals";
+import { CITIES, cityGateDais } from "../shared/capitals";
 import { KEL_MARKET, D } from "../shared/desert";
 import {
   actAt, actOpen, actSpawn, badlandsOpen, badlandsSpawn, gateColdNote, gateOpen, HOMELAND_GATES, isBadlandsGate, isMoorsGate, waygateArrival, waygateById,
@@ -49,6 +49,7 @@ test("badlands: a band of its own under the moors, built the same every time", (
   const fresh = () => {
     const g = Array.from({ length: MAP_H }, () => Array<number>(MAP_W).fill(T.DIRT)), o = Array.from({ length: MAP_H }, () => Array<number>(MAP_W).fill(T.ROCK));
     const r = buildBadlands(T, g, o, EMPTY);
+    for (const c of CITIES) if (c.act === 4) cityGateDais(c, T, g, o, EMPTY, (t) => NATURE.has(t)); // the capital's city gate (W7), cut in after the land
     return { g: g.slice(B0, B1), o: o.slice(B0, B1), areas: r.areas, roads: [...r.roads], posts: r.posts };
   };
   const a = fresh(), b = fresh();
@@ -66,8 +67,8 @@ test("badlands: a band of its own under the moors, built the same every time", (
     assert.equal(OBJECTS[BR(r.y)][r.x], T.ARCH); assert.equal(OBJECTS[BR(r.y)][r.x + r.span], T.ARCH);
     for (let i = 1; i < r.span; i++) assert.ok(!isSolidTile(r.x + i, BR(r.y)), `under arch ${r.x},${r.y}`);
   }
-  // the new tiles stay in the badlands band
-  for (let y = 0; y < MAP_H; y++) if (!inBadlandsRow(y)) for (let x = 0; x < MAP_W; x++) {
+  // the new tiles stay in the badlands band (and the capitals' band)
+  for (let y = 0; y < MAP_H; y++) if (!inBadlandsRow(y) && !inCitiesBand(y)) for (let x = 0; x < MAP_W; x++) { // the capitals (W7) lay their streets in the lands' own ground tiles
     assert.ok(!NEW_TILES.includes(GROUND[y][x]) && !NEW_TILES.includes(OBJECTS[y][x]), `badlands tile at ${x},${y}`);
   }
 });

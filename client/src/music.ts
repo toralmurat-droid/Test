@@ -47,8 +47,12 @@ const TRACKS: Track[] = [
   // Act 6, the Crown: Tollcross and the open Marches (optional: without the files Tollcross plays the village tune, the rest the country tune)
   { id: "tollcross", name: "Tollcross tune", url: "/assets/music/tollcross-tune.mp3", optional: true },
   { id: "crown", name: "Crown of the Marches tune", url: "/assets/music/crown-of-the-marches.mp3", optional: true },
-  // W7 capital cities: one calm tune per city, named city-<clan> (optional: without the file a city plays its act's town tune, the village tune for the Wardens)
+  // W7 capital cities: one calm tune per city, named city-<clan> (optional: without the file a city plays its act's town tune: the Kel Ashar tune or the desert sounds for Duskveil, the village tune for the rest)
   { id: "city-wardens", name: "Hearthhold tune", url: "/assets/music/city-wardens.mp3", optional: true },
+  { id: "city-veiled", name: "Duskveil tune", url: "/assets/music/city-veiled.mp3", optional: true },
+  { id: "city-host", name: "Marrowkeep tune", url: "/assets/music/city-host.mp3", optional: true },
+  { id: "city-redfang", name: "Scarwall tune", url: "/assets/music/city-redfang.mp3", optional: true },
+  { id: "city-hidekin", name: "Deepden tune", url: "/assets/music/city-hidekin.mp3", optional: true },
   // Act 2, the Sunscar (optional until Murat's mp3s are added; file names in docs/music/act2-prompts.md)
   { id: "second-sun", name: "Song of the Second Sun", url: "/assets/music/song-of-the-second-sun.mp3", optional: true },
   { id: "kel-ashar", name: "Kel Ashar tune", url: "/assets/music/kel-ashar-tune.mp3", withSounds: true, desert: true, optional: true },

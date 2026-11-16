@@ -5,7 +5,7 @@ import { buildMoors, CAIRN_PORTAL, CAIRN_SQUARE, MOORSGATE_OAKVALE, MR } from ".
 import { BR, buildBadlands, REDPASS_OAKVALE, RUSTWATER_PORTAL, RUSTWATER_SQUARE } from "./badlands";
 import { buildSinkholes, ROPEWELL_PORTAL, ROPEWELL_SQUARE, SINKWAY_OAKVALE, SR } from "./sinkholes";
 import { buildCrown, CR, crownwayDais, crownwayFrom, TOLLCROSS_SQUARE } from "./crown";
-import { buildCities, CITIES, CITY_TEMPLATE, cityAt, cityText, cityTile } from "./capitals";
+import { buildCities, cityGateDais as carveCityGate, CITIES, CITY_TEMPLATE, cityAt, cityText, cityTile } from "./capitals";
 import { JETTY_RUNS, SALT_BUILDINGS, SALT_HARBOUR_STREET, SALT_LANE, SALT_PIERS, SALT_RACKS, SALT_SQUARE, SALT_TOWN, SALT_UPPER_LANE } from "./saltmere";
 
 /** Mirror Pond, in tiles (centre and radii of its water): the Songweaver's Mirror Pond Air is played on its shore (shared/songbook.ts). */
@@ -181,7 +181,7 @@ const MW = MAP_W, MH = FULL_H, TS = TILE;
 const SMALL_OBJECTS = new Set<number>([T.STUMP]);
 /** Half-size in px of a small object's solid core (centred in its tile). Bigger than a hero's feet box (5). */
 export const SMALL_CORE = 7;
-const NATURE = new Set<number>([T.TREE, T.PINE, T.BUSH, T.ROCK, T.STUMP]);
+export const NATURE = new Set<number>([T.TREE, T.PINE, T.BUSH, T.ROCK, T.STUMP]);
 
 function buildWorld() {
   const grid = (v: number) => Array.from({ length: FULL_H }, () => Array<number>(MAP_W).fill(v));
@@ -1001,15 +1001,10 @@ function buildWorld() {
 
   // ---------- 14f. The capitals' city gates (shared/capitals.ts CITIES `outer`): a dais of old flagstones beside each
   // clan's seat in its land, carved after the reachability pass and only inside the city's `outerBox`, so the rest of the
-  // land (and its Hold and standards) stays exactly as it was. Only Act 1's (the Wardens', at Goldenreach Farms) are here.
-  for (const c of CITIES) if (c.outer.y < MAP_H) {
-    const G = c.outer, B = c.outerBox;
-    disk(G.x + 0.5, G.y + 0.5, 3.6, 3.2, (x, y, d) => {
-      if (x < B.x0 || x > B.x1 || y < B.y0 || y > B.y1) return;
-      if (NATURE.has(objects[y][x])) setO(x, y, EMPTY);
-      if (objects[y][x] === EMPTY && ground[y][x] !== T.WATER) setG(x, y, d < 0.5 ? (hash(x, y, 361) < 0.8 ? T.FLAGS : T.RUBBLE) : d < 0.8 && hash(x, y, 362) < 0.5 ? T.RUBBLE : ground[y][x]);
-    });
-  }
+  // land (and its Hold and standards) stays exactly as it was. Act 1's (the Wardens', at Goldenreach Farms) is cut here; the
+  // other lands' after their own bands are built (section 20b), with the same dais.
+  const cityGateDais = (c: (typeof CITIES)[number]) => carveCityGate(c, T, ground, objects, EMPTY, (o) => NATURE.has(o));
+  for (const c of CITIES) if (c.act === 1) cityGateDais(c);
 
   const areas: Area[] = [
     { name: "Market Square", ...SQ },
@@ -1096,6 +1091,9 @@ function buildWorld() {
   for (const k of crown.roads) roads.add(k);
   areas.push(...crown.areas);
   posts.push(...crown.posts);
+  // ---------- 20b. The other lands' city gates (section 14f): the Veiled's by the Sanctum, the Host's by the Muster,
+  // Redfang's by Fangrock, the Hide-Kin's by Hidehall, each on open ground inside its `outerBox`
+  for (const c of CITIES) if (c.act !== 1) cityGateDais(c);
   // ---------- 21. The clans' capital cities, in their own band under the Crown (shared/capitals.ts) ----------
   // (their areas go first: a city's districts and walls lie inside no other area)
   areas.unshift(...buildCities(T, ground, objects, EMPTY).areas);

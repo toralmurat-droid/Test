@@ -24,7 +24,12 @@ the files Tollcross keeps the village tune and the rest of the Crown the country
 ## Capital cities (W7, optional)
 
 Each clan capital plays its own calm tune: slot `city-<clan>` in `TRACKS` (`client/src/music.ts`), file
-`city-<clan>.mp3`. So far only the Wardens' Hearthhold has one: `city-wardens.mp3` (slot `city-wardens`, "Hearthhold tune",
-`optional`). Without the file Auto plays the act's town tune in the city (the village tune for Hearthhold) and nothing errors.
+`city-<clan>.mp3`, all `optional`: `city-wardens.mp3` (Hearthhold), `city-veiled.mp3` (Duskveil), `city-host.mp3`
+(Marrowkeep), `city-redfang.mp3` (Scarwall) and `city-hidekin.mp3` (Deepden). Without the file Auto plays the act's town
+tune in the city (the Kel Ashar tune or the desert sounds in Duskveil, the village tune in the others) and nothing errors.
 - Mood (Hearthhold): warm and steady, a hearth-fire fanfare; strings and low horns, a march in the drums, safe walls.
+- Mood (Duskveil): hushed and sunlit; oud and frame drum, a low women's chant, bells far off, a veil of reverb.
+- Mood (Marrowkeep): slow and solemn; low bowed strings and a funeral drum, a bone xylophone, cold and orderly.
+- Mood (Scarwall): rough and loud; hand drums and a growling fiddle, stamping and laughter, a camp after a raid.
+- Mood (Deepden): close and earthy; hollow log drums, a bone flute, a low hum underground, warm and wary.
 - Length: 2 to 4 minutes, seamless loop. Format: mp3, 128 to 192 kbps, cover art stripped.
