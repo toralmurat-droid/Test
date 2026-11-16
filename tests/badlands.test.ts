@@ -12,6 +12,7 @@ import { MOORSGATE_MOORS } from "../shared/moors";
 import { SINKWAY_BOX } from "../shared/sinkholes";
 import { SALT_BOXES } from "../shared/saltmere";
 import { crownwayFrom } from "../shared/crown";
+import { CITIES } from "../shared/capitals";
 import { KEL_MARKET, D } from "../shared/desert";
 import {
   actAt, actOpen, actSpawn, badlandsOpen, badlandsSpawn, gateColdNote, gateOpen, HOMELAND_GATES, isBadlandsGate, isMoorsGate, waygateArrival, waygateById,
@@ -131,15 +132,16 @@ test("badlands: sealed in rock, every walkable tile reachable from the Red Pass,
 test("badlands: the Red Pass (and the Sinkway) leave the rest of Act 1 exactly as it was", () => {
   // the overworld's tiles outside the gates' carve boxes (the Red Pass: x <= 14, rows 113-123; the Sinkway, Act 5:
   // shared/sinkholes.ts SINKWAY_BOX; the Saltmere rework: shared/saltmere.ts SALT_BOXES; the Greenward Gate, Act 6:
-  // shared/crown.ts CROWNWAYS), hashed before any of them was added (the same hash before and after the Saltmere rework;
-  // re-hashed with the Greenward Gate's box masked on the map before the Crown). A deliberate change to the overworld
+  // shared/crown.ts CROWNWAYS; the capitals' city gates, W7: shared/capitals.ts CITIES outerBox), hashed before any of them was added (the same hash before and after the Saltmere rework;
+  // re-hashed with the Greenward Gate's box masked on the map before the Crown, and with Hearthhold's box masked on the
+  // map before W7: the only tiles the city gate changed lie inside it). A deliberate change to the overworld
   // map must update this hash.
   const S = SINKWAY_BOX, C = crownwayFrom("oakvale").box;
   const box = (x: number, y: number) => (x <= 14 && y >= 113 && y <= 123) || (x >= S.x0 && x <= S.x1 && y >= S.y0 && y <= S.y1)
-    || [...SALT_BOXES, C].some((b) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1);
+    || [...SALT_BOXES, C, ...CITIES.map((c) => c.outerBox)].some((b) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1);
   const h = createHash("sha256");
   for (let y = 0; y < WORLD_H; y++) h.update(GROUND[y].map((g, x) => (box(x, y) ? -9 : g)).join(",") + "|" + OBJECTS[y].map((o, x) => (box(x, y) ? -9 : o)).join(",") + "\n");
-  assert.equal(h.digest("hex"), "497c3776daa625b7ef6bf2c60437f9adea9950479fc5ec0ea083c65e0f941b1c");
+  assert.equal(h.digest("hex"), "79bd0bb175fce2f02ca6a538b3777caec3019ec9da45fe3047e711f60425f64e");
 });
 
 test("badlands: Lv 25-40 climbing west, the Red Pass opens at Lv 25, a war land of their own", () => {

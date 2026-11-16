@@ -31,7 +31,20 @@ export const SINKHOLES_H = 176;
  */
 export const CROWN_Y0 = SINKHOLES_Y0 + SINKHOLES_H + 8;
 export const CROWN_H = 176;
-export const MAP_H = CROWN_Y0 + CROWN_H + 4; // tiles: overworld, underground band, rock, desert, rock, deep band, rock, moors, rock, badlands, rock, sinkholes, rock, the Crown
+/**
+ * The clans' capital cities (W7, shared/capitals.ts): a band of five walled cities side by side under the Crown's rock,
+ * one per clan, reached through a city gate beside each clan's seat. Appended at the bottom so no band above moves.
+ */
+export const CITIES_Y0 = CROWN_Y0 + CROWN_H + 8;
+export const CITIES_H = 48;
+/** The city plots across the band (tiles): plot i starts at x0 + i * stride and is w wide; rock between and round them. */
+export const CITY_PLOT = { x0: 4, stride: 56, w: 52, y: 4, h: 40 } as const;
+/**
+ * The land (act) of each plot, west to east (shared/capitals.ts CITY_CLANS: Wardens, Veiled, Host, Redfang, Hide-Kin): a
+ * city counts as part of its clan's homeland for music, the login town, writ boards and respawns.
+ */
+export const CITY_ACTS = [1, 2, 3, 4, 5] as const;
+export const MAP_H = CITIES_Y0 + CITIES_H + 4; // tiles: overworld, underground band, rock, desert, rock, deep band, rock, moors, rock, badlands, rock, sinkholes, rock, the Crown, rock, the cities
 /** The acts (one per land): 1 Oakvale (and the Mawdeep, the Lantern Crypt), 2 the Sunscar, 3 the moors, 4 the badlands, 5 the sinkholes, 6 the Crown. */
 export type Act = 1 | 2 | 3 | 4 | 5 | 6;
 /** True in the deep band (tiles). */
@@ -40,7 +53,11 @@ export const inDeepRow = (ty: number) => ty >= DEEP_Y0 && ty < DEEP_END;
  * True for a map row in the Crown's band, with the rock strip round it: the 8 rows of rock between two bands split
  * evenly, 4 to each, so a tile there is never mistaken for the band above.
  */
-export const inCrownBand = (ty: number) => ty >= CROWN_Y0 - 4;
+export const inCrownBand = (ty: number) => ty >= CROWN_Y0 - 4 && ty < CITIES_Y0 - 4;
+/** True for a map row in the cities' band (shared/capitals.ts), with its share of the rock strip above and the rock below. */
+export const inCitiesBand = (ty: number) => ty >= CITIES_Y0 - 4;
+/** The plot index (0..4) whose columns hold tile column tx in the cities' band: the rock between two plots goes to the nearer. */
+export const cityPlotOf = (tx: number) => Math.max(0, Math.min(CITY_ACTS.length - 1, Math.floor((tx - CITY_PLOT.x0 + (CITY_PLOT.stride - CITY_PLOT.w) / 2) / CITY_PLOT.stride)));
 /** True for a map row in the sinkholes band, with its share of the rock strips above and below. */
 export const inSinkholesBand = (ty: number) => ty >= SINKHOLES_Y0 - 4 && ty < CROWN_Y0 - 4;
 /** True for a map row in the badlands band, with its share of the rock strips above and below. */
@@ -48,12 +65,12 @@ export const inBadlandsBand = (ty: number) => ty >= BADLANDS_Y0 - 4 && ty < SINK
 /** True for a map row in the moors band, with its share of the rock strips above and below. */
 export const inMoorsBand = (ty: number) => ty >= MOORS_Y0 - 4 && ty < BADLANDS_Y0 - 4;
 /**
- * Which act a tile belongs to: the Crown's band is Act 6, the sinkholes band Act 5, the badlands band Act 4, the moors
+ * Which act a tile belongs to: a city in the cities' band is its clan's homeland's act (CITY_ACTS), the Crown's band is Act 6, the sinkholes band Act 5, the badlands band Act 4, the moors
  * band Act 3; the desert and the Undercity Act 2; the rest (the Lantern Crypt too) Act 1. The homeland bands are tested
  * first: every row from the desert down would otherwise count as Act 2.
  */
 export const actOfTile = (tx: number, ty: number): Act =>
-  inCrownBand(ty) ? 6 : inSinkholesBand(ty) ? 5 : inBadlandsBand(ty) ? 4 : inMoorsBand(ty) ? 3 : ty >= DESERT_Y0 && !(ty >= DEEP_Y0 - 4 && tx < DEEP_SPLIT) ? 2 : 1;
+  inCitiesBand(ty) ? CITY_ACTS[cityPlotOf(tx)] : inCrownBand(ty) ? 6 : inSinkholesBand(ty) ? 5 : inBadlandsBand(ty) ? 4 : inMoorsBand(ty) ? 3 : ty >= DESERT_Y0 && !(ty >= DEEP_Y0 - 4 && tx < DEEP_SPLIT) ? 2 : 1;
 export const TICK_RATE = 20; // server updates per second
 export const PLAYER_SPEED = 90; // px per second (default; classes override, see classes.ts)
 export const PLAYER_RADIUS = 5; // collision half-size in px
