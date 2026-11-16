@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-16",
+  "title": "Holds grow",
+  "changes": [
+    "A Hold that its clan keeps in peace grows from an outpost into a camp and then a fortress, with bigger walls in the clan's own style and more guards at each step.",
+    "A land that is shaken or besieged shrinks its Hold back, and a land that is taken starts over as an outpost. A capital is always a fortress.",
+    "The map, the minimap, the plaque and the war table show each Hold's size, and the tooltip names it and counts its guards."
+  ]
+}

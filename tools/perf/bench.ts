@@ -130,8 +130,9 @@ async function main() {
     // heroes sworn to another clan stand about in the courtyards of three Act 1 Holds (moving tile to tile); the holders' troopers chase them
     const { warState } = await import("../../server/war"), { TERRITORIES } = await import("../../shared/war/territories");
     const { fortOf } = await import("../../shared/war/holdWalls"), { patrolOf } = await import("../../shared/war/patrols"), { SAFE_ZONE } = await import("../../shared/map");
+    const { holdTier } = await import("../../shared/war/holdTiers");
     const st = warState()!, lands = TERRITORIES.filter((t) => t.act === 1 && !t.capitalOf && patrolOf(t.id) && Math.hypot(t.cx - SAFE_ZONE.x, t.cy - SAFE_ZONE.y) > 40).slice(0, 3);
-    const yards = lands.map((t) => { st.owner[t.id] = "wardens"; st.control[t.id] = 100; const f = fortOf(t.id, "wardens")!; return f.cells.filter((c) => c.kind === "court").map((c) => ({ x: (f.cx + c.dx + 0.5) * TILE, y: (f.cy + c.dy + 0.5) * TILE })); });
+    const yards = lands.map((t) => { st.owner[t.id] = "wardens"; st.control[t.id] = 100; const f = fortOf(t.id, "wardens", holdTier(st, t.id))!; /* the courtyard of the live tier (W3) */ return f.cells.filter((c) => c.kind === "court").map((c) => ({ x: (f.cx + c.dx + 0.5) * TILE, y: (f.cy + c.dy + 0.5) * TILE })); });
     const heroes = [...room.state.players.values()];
     const pin = () => heroes.forEach((p: any, i: number) => {
       const yard = yards[i % yards.length], c = yard[Math.floor(Math.random() * yard.length)];

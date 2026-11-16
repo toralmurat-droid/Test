@@ -9,7 +9,8 @@
  * --tunnel: the hero alone collapses a Hide-Kin tunnel mouth (shared/war/tunnels.ts) while its waves come out: win = the mouth falls.
  * --caravan: the hero alone raids a supply cart (shared/war/caravans.ts) with its 3 escorts at Lv 15 / 30 / 45: win = the cart falls.
  * --hunters: the hero alone against a manhunter squad (shared/war/feuds.ts FEUD.hunt) at each tier that sends one, Lv 15 / 30 / 45.
- * --troops: the hero alone against a clan soldier, a captain and 3 soldiers of its level (shared/war/troops.ts), at Lv 8 / 20 / 45 (--clans: each clan at Lv 20).
+ * --troops: the hero alone against a clan soldier, a captain and 3 soldiers of its level (shared/war/troops.ts), at Lv 8 / 20 / 45 (--clans: each clan at Lv 20;
+ *   --garrison: a Hold's whole garrison at Control 100, 3 / 6 / 8 guards for an outpost / camp / fortress, at Lv 20 and 45).
  * --champions: one fight against each champion (shared/champions.ts, a 1D version of its affixes) beside the same plain monster.
  *
  * It reuses the PvP simulator (tools/balance/duel.ts): the same hero bot, skill engine, builds (rushing one branch),
@@ -38,6 +39,7 @@ import { AFFIX_FX as CF, CHAMPION, type AffixKey } from "../../shared/champions"
 import { addHeat } from "../../shared/overload";
 import { CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
 import { TROOP_OFFICER, troopStats, WAR_TROOPS } from "../../shared/war/troops";
+import { TROOP } from "../../shared/war/patrols";
 import { FEUD, WANTED_TIERS } from "../../shared/war/feuds";
 import { MAX_LEVEL } from "../../shared/classes";
 import { CARAVAN, caravanHp } from "../../shared/war/caravans";
@@ -842,6 +844,8 @@ if (process.argv[1]?.includes("pve")) {
     };
     for (const L of [8, 20, 45]) { row(`Lv${L} soldier`, L, 1, false); row(`Lv${L} captain`, L, 1, true); row(`Lv${L} x3`, L, 3, false); }
     if (process.argv.includes("--clans")) for (const k of CLAN_KEYS) row(`Lv20 ${k}`, 20, 1, false, k);
+    // --garrison (W3): a whole Hold garrison at full Control, outpost / camp / fortress (patrols.ts TROOP.garrison), all at once
+    if (process.argv.includes("--garrison")) for (const L of [20, 45]) TROOP.garrison.forEach(([, top], tier) => row(`Lv${L} ${["outpost", "camp", "fort"][tier]} x${top}`, L, top, false));
   }
   if (CHAMPS) {
     console.log("Champions: the hero alone at the monster's level, 3 heal + 3 mana potions. Cell = win% / HP lost / fight s (plain -> champion)");

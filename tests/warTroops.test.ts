@@ -12,6 +12,8 @@ import { STANDARD } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
 import { parseTroop, troopLevel, troopName, troopStance, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
 import { _resetWar, warState } from "../server/war";
+import { holdGuards } from "../shared/war/intel";
+import { holdTier } from "../shared/war/holdTiers";
 import { WarTroops, type TroopHero, type TroopMob } from "../server/warTroops";
 
 test("troops: the clan and part ride in Mob.weapon and round-trip; nothing else parses as a trooper", () => {
@@ -90,7 +92,7 @@ test("WarTroops: a land wakes near a hero with its column and guards, sleeps sle
   const { wt, mobs, heroes } = fake(), gate = patrolOf(LAND.id)!.pts[0], t0 = 1_000_000;
   heroes.set("a", hero(gate.x, gate.y));
   wt.tick(t0);
-  const want = patrolCount(100) + Math.min(garrisonCount(100), garrisonSpots(LAND.id, TROOP.garrisonMax).length);
+  const want = patrolCount(100) + holdGuards(LAND.id, 100, holdTier(warState()!, LAND.id)); // (W3: a fresh Hold is an outpost)
   const mine = troopsOf(mobs, LAND.id, wt);
   assert.equal(mine.length, want, "full strength at control 100");
   assert.ok(mine.every((m) => parseTroop(m.weapon)?.clan === warState()!.owner[LAND.id]), "the holder's men");
@@ -111,7 +113,7 @@ test("WarTroops: lower control fields fewer men, a siege leaves only the guards,
   const { wt, mobs, heroes } = fake(), gate = patrolOf(LAND.id)!.pts[0];
   heroes.set("a", hero(gate.x, gate.y));
   wt.tick(1000);
-  const guards = Math.min(garrisonCount(0), garrisonSpots(LAND.id, TROOP.garrisonMax).length);
+  const guards = holdGuards(LAND.id, 0, holdTier(s, LAND.id));
   assert.equal(troopsOf(mobs, LAND.id, wt).length, patrolCount(0) + guards);
   s.siege[LAND.id] = { by: CLAN_KEYS.find((k) => k !== s.owner[LAND.id])!, at: s.tick + 3 };
   wt.tick(2000);

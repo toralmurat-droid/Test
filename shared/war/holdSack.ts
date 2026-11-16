@@ -9,7 +9,8 @@
  */
 import { TILE } from "../constants";
 import { CLAN_KEYS, type ClanKey } from "./clans";
-import { fortOf, holdReachPx } from "./holdWalls";
+import { fortOf, holdReachPx, holdsLive, liveTier, tierReachPx } from "./holdWalls";
+import type { HoldTier } from "./holdTiers";
 import { WAR } from "./rules";
 import { HOLDS } from "./standards";
 
@@ -20,8 +21,8 @@ export const HOLD_SACK = {
   raiseMs: 12_000,
   /** The raiser must stand this close to the banner spot (tiles): to start, and to keep raising. */
   useTiles: 1.5,
-  /** The Hold's reach: the square round its middle that any clan's fort may wall (holdWalls.ts holdReachPx) plus this
-   * much (px), so the guard posts outside the walls (patrols.ts garrisonSpots) are inside it. */
+  /** The Hold's reach: the square round its middle that any clan's fort at the Hold's tier may wall (holdWalls.ts
+   * tierReachPx) plus this much (px), so the guard posts outside the walls (patrols.ts garrisonSpots) are inside it. */
   marginPx: 3 * TILE,
   /** Control the holder loses (WAR.sackControl, read by rules.ts sackHold; half for an unsworn or out-of-reach sacker). */
   control: WAR.sackControl,
@@ -34,7 +35,7 @@ export const HOLD_SACK = {
   sendMs: 1000,
 };
 
-/** The banner spot of territory t's Hold (px): the middle cell of its fort (the same for every clan's plan). */
+/** The banner spot of territory t's Hold (px): the middle cell of its fort (the same for every clan's plan and tier). */
 export function bannerSpot(t: number): { x: number; y: number } | undefined {
   const f = fortOf(t, CLAN_KEYS[0]);
   if (f) return { x: (f.cx + 0.5) * TILE, y: (f.cy + 0.5) * TILE };
@@ -42,11 +43,17 @@ export function bannerSpot(t: number): { x: number; y: number } | undefined {
   return h && { x: h.x, y: h.y };
 }
 
-/** Half-size (px) of the square round territory t's banner that counts as the Hold's reach. */
-export const sackReachPx = (t: number) => holdReachPx(t) + HOLD_SACK.marginPx;
-/** Is (x, y) within territory t's Hold reach (a square round its banner, like the forts and their guard ring)? */
-export function inSackReach(t: number, x: number, y: number): boolean {
-  const b = bannerSpot(t), r = sackReachPx(t);
+/**
+ * Half-size (px) of the square round territory t's banner that counts as the Hold's reach at `tier`; without one, at the
+ * Hold's live tier (holdWalls.ts setHoldOwners), or the largest any tier has while no war is known.
+ */
+export function sackReachPx(t: number, tier?: HoldTier): number {
+  const at = tier ?? (holdsLive() ? liveTier(t) : undefined);
+  return (at === undefined ? holdReachPx(t) : tierReachPx(t, at)) + HOLD_SACK.marginPx;
+}
+/** Is (x, y) within territory t's Hold reach (a square round its banner, like the forts and their guard ring) at `tier` (default: live)? */
+export function inSackReach(t: number, x: number, y: number, tier?: HoldTier): boolean {
+  const b = bannerSpot(t), r = sackReachPx(t, tier);
   return !!b && Math.abs(x - b.x) <= r && Math.abs(y - b.y) <= r;
 }
 

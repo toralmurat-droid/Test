@@ -5,7 +5,9 @@ import { TILE } from "../shared/constants";
 import { isSolidAt } from "../shared/map";
 import { CLAN_KEYS } from "../shared/war/clans";
 import { garrisonCount, garrisonSpots, patrolCount, patrolOf, patrolPos, patrols, SIEGE_FIGHT, siegeCounts, siegeLife, TROOP, TROOP_LOOK, type Patrol } from "../shared/war/patrols";
-import { holdReachPx } from "../shared/war/holdWalls";
+import { holdReachPx, tierReachPx, tierWallAt } from "../shared/war/holdWalls";
+import { HOLD_TIERS } from "../shared/war/holdTiers";
+import { inSackReach, sackReachPx } from "../shared/war/holdSack";
 import { HOLDS, STANDARD, STANDARDS } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
 
@@ -117,15 +119,38 @@ test("troops: counts scale with control, siege fits the sprite budget", () => {
   for (const k of CLAN_KEYS) assert.ok(TROOP_LOOK[k].officer);
 });
 
-test("garrisonSpots: outside the fort, walkable, distinct, deterministic", () => {
+test("garrisonSpots: outside the fort of each tier, inside its sack reach, walkable, distinct, deterministic", () => {
+  let short = 0;
   for (const t of TERRITORIES) {
     if (!HOLDS.some((h) => h.t === t.id)) continue;
-    const g = garrisonSpots(t.id, TROOP.garrisonMax);
-    assert.ok(g.length >= TROOP.garrisonMin, `${t.name} has room for ${g.length} guards`);
     const h = HOLDS.find((x) => x.t === t.id)!;
-    for (const p of g) { assert.ok(!isSolidAt(p.x, p.y)); assert.ok(Math.max(Math.abs(p.x - h.x), Math.abs(p.y - h.y)) >= holdReachPx(t.id), `${t.name} guard outside the fort`); assert.ok(Math.abs(Math.hypot(p.fx, p.fy) - 1) < 1e-9); }
-    assert.deepEqual(garrisonSpots(t.id, 3), g.slice(0, 3));
+    for (const tier of HOLD_TIERS) {
+      const g = garrisonSpots(t.id, TROOP.garrison[tier][1], tier), name = `${t.name} (tier ${tier})`;
+      if (g.length < TROOP.garrison[tier][1]) short++;
+      assert.ok(g.length >= TROOP.garrison[tier][0], `${name} has room for ${g.length} guards`);
+      for (const p of g) {
+        assert.ok(!isSolidAt(p.x, p.y));
+        assert.ok(Math.max(Math.abs(p.x - h.x), Math.abs(p.y - h.y)) >= tierReachPx(t.id, tier), `${name}: guard outside the fort`);
+        assert.ok(!tierWallAt(Math.floor(p.x / TILE), Math.floor(p.y / TILE), tier).wall, `${name}: on no wall of the tier`);
+        assert.ok(inSackReach(t.id, p.x, p.y, tier), `${name}: guard inside the sack reach`);
+        assert.ok(Math.abs(Math.hypot(p.fx, p.fy) - 1) < 1e-9);
+      }
+      assert.deepEqual(garrisonSpots(t.id, 2, tier), g.slice(0, 2));
+      assert.deepEqual(garrisonSpots(t.id, 99, tier), g, "no more than the tier's most");
+    }
+    assert.deepEqual(garrisonSpots(t.id, 3), garrisonSpots(t.id, 3, 1), "the camp by default");
+    assert.ok(sackReachPx(t.id, 0) <= sackReachPx(t.id, 1) && sackReachPx(t.id, 1) <= sackReachPx(t.id, 2) && sackReachPx(t.id, 2) <= holdReachPx(t.id) + 3 * TILE);
   }
+  assert.ok(short <= 6, `${short} Holds a guard short at some tier (cramped ground)`);
+});
+
+test("garrisonCount (W3): grows with the tier and with Control; the camp's numbers are the old ones", () => {
+  assert.deepEqual(HOLD_TIERS.map((tier) => garrisonCount(100, tier)), [3, 6, 8], "full Control: outpost 3, camp 6, fortress 8");
+  assert.deepEqual(HOLD_TIERS.map((tier) => garrisonCount(0, tier)), [2, 4, 6]);
+  assert.equal(garrisonCount(50), garrisonCount(50, 1));
+  for (const tier of HOLD_TIERS) for (let c = 0; c < 100; c += 5) assert.ok(garrisonCount(c, tier) <= garrisonCount(c + 5, tier));
+  assert.deepEqual(TROOP.garrison[1], [TROOP.garrisonMin, TROOP.garrisonMax]);
+  assert.equal(TROOP.garrisonTop, 8);
 });
 
 test("siegeLife: deterministic; fallen fighters leave and are replaced by walkers; some fall, most fight", () => {

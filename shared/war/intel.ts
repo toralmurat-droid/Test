@@ -10,6 +10,7 @@ import { garrisonCount, garrisonSpots, patrolCount, patrolOf, TROOP } from "./pa
 import { HOLDS } from "./standards";
 import { TERRITORIES } from "./territories";
 import { WAR_TROOPS } from "./troops";
+import type { HoldTier } from "./holdTiers";
 import type { WarView } from "./view";
 import type { WritKind } from "./writs";
 
@@ -17,7 +18,9 @@ import type { WritKind } from "./writs";
 export interface HoldIntel {
   clan?: ClanKey;
   control: number;
-  /** Hold guards (garrisonCount, capped by the guard posts the ground allows). */
+  /** The Hold's tier (holdTiers.ts): 0 outpost, 1 camp, 2 fortress (the camp when the snapshot has no tiers). */
+  tier: HoldTier;
+  /** Hold guards (garrisonCount at the tier, capped by the guard posts the ground allows). */
   guards: number;
   /** Soldiers in the patrol column (none while a siege is announced: they man the walls). */
   patrol: number;
@@ -31,16 +34,24 @@ export interface HoldIntel {
  */
 export function holdIntel(v: WarView, t: number): HoldIntel {
   const clan = CLAN_KEYS[v.owner[t]], control = v.control[t] ?? 100, sg = v.sieges.find((s) => s[0] === t);
-  const fields = WAR_TROOPS.live && !!clan && !!patrolOf(t);
+  const fields = WAR_TROOPS.live && !!clan && !!patrolOf(t), tier = viewTier(v, t);
   const out: HoldIntel = {
-    clan, control,
-    guards: fields ? Math.min(garrisonCount(control), garrisonSpots(t, TROOP.garrisonMax).length) : 0,
+    clan, control, tier,
+    guards: fields ? holdGuards(t, control, tier) : 0,
     patrol: fields && !sg ? patrolCount(control) : 0,
   };
   const by = sg && CLAN_KEYS[sg[1]];
   if (sg && by) out.siege = [by, sg[2]];
   return out;
 }
+
+/** Territory t's Hold tier in a war snapshot (missing or junk: the camp, as before the tiers). */
+export function viewTier(v: Pick<WarView, "tier">, t: number): HoldTier {
+  const x = v.tier?.[t];
+  return x === 0 || x === 1 || x === 2 ? x : 1;
+}
+/** Guards an awake land of Control `control` fields at its Hold of `tier`: garrisonCount, capped by the posts the ground allows (server/warTroops.ts and the map read the same). */
+export const holdGuards = (t: number, control: number, tier: HoldTier) => Math.min(garrisonCount(control, tier), garrisonSpots(t, TROOP.garrison[tier][1], tier).length);
 
 /** Neighbouring territory pairs [a, b] (a < b) held by different clans: the front lines. `owner` as in WarView. */
 export function frontEdges(owner: readonly number[]): [number, number][] {

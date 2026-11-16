@@ -14,6 +14,8 @@ import { tunnelStrikes, type TunnelStrike } from "../shared/war/tunnels";
 import { warPhase, warView, type WarView } from "../shared/war/view";
 import type { WarPlan } from "../shared/war/intel";
 import { eventVoice, leaderLine } from "../shared/war/heralds";
+import { holdGrew, HOLD_TIER_KEYS } from "../shared/war/holdTiers";
+import { bannerSpot } from "../shared/war/holdSack";
 import { setWarRelations, warPairs, warRelations } from "../shared/war/feuds";
 import { openKv, type Kv } from "./store";
 
@@ -22,8 +24,13 @@ import { openKv, type Kv } from "./store";
  * clan, and the Rally when the clan it is for changed (`rally` undefined: nobody is rallied any more).
  */
 export interface WarNews { raid?: { clan: ClanKey; ts: number[] }; rally?: { clan?: ClanKey; was?: ClanKey } }
-/** `sack` (server/warHolds.ts): a hero sacked the Hold of t; `by` is the sacker's clan, or the holder itself when the hero was unsworn. */
-export interface WarEvent { at: number; tick: number; kind: "siege" | "flip" | "held" | "sack"; t: number; by: ClanKey; from: ClanKey; text: string }
+/**
+ * `sack` (server/warHolds.ts): a hero sacked the Hold of t; `by` is the sacker's clan, or the holder itself when the hero was unsworn.
+ * `grow` (W3): the holder (`by` = `from`) built its Hold of t up to `tier` (1 camp, 2 fortress; shared/war/holdTiers.ts).
+ */
+export interface WarEvent { at: number; tick: number; kind: "siege" | "flip" | "held" | "sack" | "grow"; t: number; by: ClanKey; from: ClanKey; text: string; tier?: number }
+/** Most Holds the Herald announces growing in one war tick (a new war raises every camp at once; the log keeps the rest quiet). */
+const GROW_NEWS = 3;
 /** `names`: the territory names in id order (optional: saves before 2026-11-15 have none, and their ids are today's). */
 /** `rel`: the last war tick each pair of clans shared a border (shared/war/feuds.ts warRelations; optional: older saves have none). */
 interface Saved { v: 1; state: WarState; minds: Record<ClanKey, Mind>; next: number; log: WarEvent[]; names?: string[]; rel?: (number | null)[] }
@@ -194,7 +201,7 @@ export async function step(now: number) {
 }
 
 function tickOnce(at: number, news: WarNews): WarEvent[] {
-  const s = saved!.state, before = { owner: [...s.owner], siege: s.siege.map((x) => x && { ...x }) };
+  const s = saved!.state, before = { owner: [...s.owner], siege: s.siege.map((x) => x && { ...x }), fort: [...s.fort], control: [...s.control] };
   const orders = scriptedOrders(s, saved!.minds, rng(s.tick * 2654435761 + 1)), phase = warPhase(at);
   lastStrikes = tunnelStrikes(s, orders); // (before warTick moves the owners: the strikes the rules fed)
   lastPlans = plansOf(s, orders, lastStrikes, s.tick + 1); // (likewise; the view after this tick carries tick + 1)
@@ -212,6 +219,10 @@ function tickOnce(at: number, news: WarNews): WarEvent[] {
     else if (sg && !s.siege[id]) out.push({ at, tick: s.tick, kind: "held", t: id, by: sg.by, from: was, text: `${name(was)} held ${t.name} against ${name(sg.by)}` });
     else if (!sg && s.siege[id]) out.push({ at, tick: s.tick, kind: "siege", t: id, by: s.siege[id]!.by, from: was, text: `${name(s.siege[id]!.by)} lay siege to ${t.name}, held by ${name(was)}` });
   }
+  // Holds built up to a camp or a fortress (W3): the biggest news first, a few a tick
+  const grew = TERRITORIES.flatMap((t) => { const g = holdGrew(before, s, t.id); return g ? [{ t, g }] : []; }).sort((a, b) => b.g - a.g || a.t.id - b.t.id);
+  for (const { t, g } of grew.slice(0, GROW_NEWS))
+    out.push({ at, tick: s.tick, kind: "grow", t: t.id, by: s.owner[t.id], from: s.owner[t.id], tier: g, text: `${name(s.owner[t.id])} raise a ${HOLD_TIER_KEYS[g]} at ${t.name}` });
   return out;
 }
 
@@ -315,6 +326,11 @@ export function attachWar(room: { broadcast(type: string, msg: unknown): void })
     room.broadcast("war", v);
     for (const e of events) {
       room.broadcast("chat", { id: "", name: "Herald", text: e.text });
+      if (e.kind === "grow") { // a hammer chord where the Hold grew (client/src/sfx.ts hold_grow); no leader line, no horn
+        const at = bannerSpot(e.t);
+        if (at) room.broadcast("sfx", { ev: "hold_grow", t: e.t, x: Math.round(at.x), y: Math.round(at.y), by: e.by, tier: e.tier ?? 1 });
+        continue;
+      }
       const v = eventVoice(e.kind, e.by, e.from), line = leaderLine(v.k, v.moment, TERRITORIES[e.t].name, v.foe, e.tick);
       if (e.by !== e.from) room.broadcast("chat", { id: "", name: line.name, text: line.text }); // (an unsworn hero's sack: no clan to answer)
       room.broadcast("warev", { kind: e.kind, t: e.t, by: e.by, from: e.from }); // horn and notice (client/src/warNotice.ts)

@@ -13,6 +13,8 @@ import { TERRITORIES } from "../shared/war/territories";
 import { troopLevel, WAR_TROOPS } from "../shared/war/troops";
 import { SAFE_ZONE, isSafeZone } from "../shared/map";
 import { _resetWar, _valorOf, warLog, warNow, warState } from "../server/war";
+import { holdGuards } from "../shared/war/intel";
+import { holdTier } from "../shared/war/holdTiers";
 import { _resetHolds } from "../server/warHolds";
 
 /**
@@ -231,7 +233,8 @@ test("holds (room): a busy room's budget never lets a Hold be sacked without a f
   freshWar();
   try {
     const s = await setup(srv, FOE), { room } = s;
-    const want = Math.min(garrisonCount(warState()!.control[LAND.id]), garrisonSpots(LAND.id, TROOP.garrisonMax).length);
+    warState()!.fort[LAND.id] = 0.3; room.holdWalls.syncWar(warState()); // a camp (W3: a fresh Hold is an outpost of 3 guards)
+    const want = holdGuards(LAND.id, warState()!.control[LAND.id], holdTier(warState()!, LAND.id));
     assert.ok(want > 2, "a land with more guards than the starved budget");
     WAR_TROOPS.maxTroops = 0; // the room's troopers all spent elsewhere
     room.warTroops.tick(Date.now());
@@ -242,7 +245,9 @@ test("holds (room): a busy room's budget never lets a Hold be sacked without a f
     room.warTroops.tick(Date.now());
     assert.equal(room.warTroops.guardsAlive(LAND.id), 2, "a hero at the banner: the land's guards take the slots first");
     let felled = 0;
-    for (let i = 0; i < 20 && room.warTroops.guardsDue(LAND.id) > 0; i++) { felled += room.warTroops.guardsAlive(LAND.id); s.rout(); assert.match(s.sack(), /guards/); }
+    // (W3: the fallen come back at the gate, which a fortress's reach can push just past a camp's sack reach: once every
+    // guard owed has fallen, the sack may go up even while they walk back)
+    for (let i = 0; i < 20 && room.warTroops.guardsDue(LAND.id) > 0; i++) { felled += room.warTroops.guardsAlive(LAND.id); s.rout(); if (room.warTroops.guardsDue(LAND.id) > 0) assert.match(s.sack(), /guards/); }
     assert.equal(felled, want, "every guard the Hold should field had to fall");
     WAR_TROOPS.respawnMs = respawn; s.rout(); // the last pair, no more coming back this tick
     assert.equal(room.warTroops.guardsDue(LAND.id), 0);

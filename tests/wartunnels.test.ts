@@ -6,7 +6,7 @@ import { WAYGATE_DESERT, WAYGATE_OAKVALE } from "../shared/desert";
 import { CRYPT_DOOR, LINKS, SINKHOLE, UNDER_SHAFT, underground } from "../shared/dungeon";
 import { NPC_DECOR, NPCS } from "../shared/npcs";
 import { BOARDS } from "../shared/bounty";
-import { anyHoldWall, holdReachPx } from "../shared/war/holdWalls";
+import { anyHoldWall, holdCellAt, holdReachPx, tierReachPx } from "../shared/war/holdWalls";
 import { HOLDS, STANDARD, STANDARDS } from "../shared/war/standards";
 import { caravanOffLimits } from "../shared/war/caravans";
 import { CLAN_KEYS, CLANS, type ClanKey } from "../shared/war/clans";
@@ -103,6 +103,7 @@ test("tunnels: every possible mouth is deterministic, walkable, reachable and in
   };
   const pairs = tunnelPairs();
   assert.ok(pairs.length > 20, `${pairs.length} pairs`);
+  let crampedN = 0;
   for (const { t, from } of pairs) {
     const T = TERRITORIES[t], F = TERRITORIES[from], m = tunnelMouth(t, from), name = `${T.name} <- ${F.name}`;
     assert.ok(m, `${name}: a mouth`);
@@ -112,12 +113,18 @@ test("tunnels: every possible mouth is deterministic, walkable, reachable and in
     assert.ok(tx >= T.x && ty >= T.y && tx < T.x + T.w && ty < T.y + T.h, `${name}: inside the target`);
     assert.ok(!isSolidAt(m.x, m.y) && !caravanOffLimits(m.x, m.y), `${name}: walkable, not off limits`);
     assert.ok(reachOf(t).has(ty * MAP_W + tx), `${name}: reachable from the Hold gate`);
-    assert.ok((m.x / TILE - T.cx) * (F.cx - T.cx) + (m.y / TILE - T.cy) * (F.cy - T.cy) > 0, `${name}: on the side facing the start`);
+    // (W3: in a cramped land a fortress's outer works can fill the side facing the start; the mouth comes up nearby)
+    if ((m.x / TILE - T.cx) * (F.cx - T.cx) + (m.y / TILE - T.cy) * (F.cy - T.cy) <= 0) crampedN++;
     // territory rects overlap (Saltwind Coast holds Gullrock Cove): no Hold's fort and no standard's ring of any land
-    for (const h of HOLDS) assert.ok(Math.max(Math.abs(h.x - m.x), Math.abs(h.y - m.y)) >= holdReachPx(h.t), `${name}: clear of ${TERRITORIES[h.t].name}'s fort`);
+    // (a cramped land, W3: outside the reach of every camp and off every fort's cells, a fortress's outer works included)
+    for (const h of HOLDS) {
+      const d = Math.max(Math.abs(h.x - m.x), Math.abs(h.y - m.y));
+      assert.ok(d >= holdReachPx(h.t) || (d >= tierReachPx(h.t, 1) && holdCellAt(tx, ty) < 0), `${name}: clear of ${TERRITORIES[h.t].name}'s fort`);
+    }
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) assert.ok(!anyHoldWall(tx + dx, ty + dy), `${name}: no Hold wall by the mouth`);
     for (const st of STANDARDS) assert.ok(Math.hypot(st.x - m.x, st.y - m.y) >= STANDARD.range + TILE, `${name}: clear of ${TERRITORIES[st.t].name}'s standard`);
   }
+  assert.ok(crampedN <= 6, `${crampedN} mouths off the side facing the start (a few cramped lands only)`);
   // every strike the war can order has its pair
   for (const s of STATES) for (const t of targetsOf(s, HK)) for (const g of tunnelStrikes(s, only({ defend: 0.5, attack: [{ t, share: 1 }] }))) {
     assert.ok(pairs.some((p) => p.t === g.t && p.from === g.from), "strike pair is listed");

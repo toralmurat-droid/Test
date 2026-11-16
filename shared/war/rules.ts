@@ -66,6 +66,9 @@ export const WAR = {
   // A siege a sack called (Siege.sack) that fails when it comes due leaves Control where it is, plus this (an army's failed
   // siege resets it to 50): a raid on the Hold should not end up strengthening the holder
   sackSiegeFail: 2,
+  // A sack also tears down part of the Hold's works (W3): `fort` (built-up time, the defence bonus and the Hold's tier,
+  // holdTiers.ts) loses this much (half for an unsworn hero, like the Control)
+  sackFort: 0.02,
 };
 
 /** `sack`: called by a sacked Hold (sackHold), not by the armies (optional: older saves have none). */
@@ -198,9 +201,9 @@ export interface TickExtra { phase?: number; valor?: Partial<Record<ClanKey, num
 export const valorForce = (v: number) => (v > 0 ? WAR.valorCap * (1 - Math.exp(-v / WAR.valorScale)) : 0);
 
 /**
- * A hero sacked territory t's Hold (shared/war/holdSack.ts): the holder's grip loosens by WAR.sackControl, half when
- * `half` (an unsworn hero, a clan not at war with the holder, or one the war keeps out of the land). When a full sack
- * brings Control to WAR.siegeAt or below and no siege is announced, clan `k` lays siege, but only where the war lets it attack (targetsOf) and never at a
+ * A hero sacked territory t's Hold (shared/war/holdSack.ts): the holder's grip loosens by WAR.sackControl and its works
+ * by WAR.sackFort, half when `half` (an unsworn hero, a clan not at war with the holder, or one the war keeps out of the
+ * land). When a full sack brings Control to WAR.siegeAt or below and no siege is announced, clan `k` lays siege, but only where the war lets it attack (targetsOf) and never at a
  * capital: the flip still waits for the siege (warTick). Mutates `s`. The live war (server/war.ts strikeHold) and the
  * war sim (tools/balance/war.ts --sack) share it. Undefined (nothing changed) for a bad land, the holder's own clan or a
  * land already under siege.
@@ -208,6 +211,7 @@ export const valorForce = (v: number) => (v > 0 ? WAR.valorCap * (1 - Math.exp(-
 export function sackHold(s: WarState, t: number, k: ClanKey | undefined, half: boolean): { control: number; siege?: Siege } | undefined {
   if (!Number.isInteger(t) || t < 0 || t >= s.owner.length || s.siege[t] || (k && s.owner[t] === k)) return undefined;
   s.control[t] = Math.max(0, s.control[t] - WAR.sackControl * (half ? 0.5 : 1));
+  s.fort[t] = Math.max(0, (s.fort[t] ?? 0) - WAR.sackFort * (half ? 0.5 : 1));
   const out: { control: number; siege?: Siege } = { control: s.control[t] };
   if (k && CLANS[k] && !half && s.control[t] <= WAR.siegeAt && TERRITORIES[t]?.capitalOf !== s.owner[t] && targetsOf(s, k).includes(t))
     out.siege = s.siege[t] = { by: k, at: s.tick + WAR.siegeWarnTicks, sack: true };

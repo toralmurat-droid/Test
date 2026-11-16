@@ -770,7 +770,7 @@ export class TownRoom extends Room<TownState> {
   onCreate() {
     liveRooms.add(this);
     const offNews = attachWar(this), offTroops = onWar((v, _e, news) => {
-      this.holdWalls.sync(warState()?.owner); // a land that changed hands raises its new holder's fort at once
+      this.holdWalls.syncWar(warState()); // a land that changed hands raises its new holder's fort at once, a Hold that grew its new tier's
       this.sieges.tick(Date.now()); this.warTroops.onWar(v); this.writs.onWar(v);
       planAll(this.state.players.entries(), (id) => this.clients.getById(id)); // each clan's new plan to its sworn only (server/warIntel.ts)
       const r = news.rally?.clan; // the Rally came to a clan: its sworn heroes here hear what it means for them
@@ -840,7 +840,7 @@ export class TownRoom extends Room<TownState> {
         const c = this.clients.getById(id), p = this.state.players.get(id);
         if (c && p) { c.send("clan", clanView(p)); c.send("chat", { id: "", name: "Herald", text: `Your renown grows: you are now ${rank}.` }); }
       }
-      this.holdWalls.sync(warState()?.owner);
+      this.holdWalls.syncWar(warState());
       this.caravans.tick(Date.now()); // (caravans claim their share of WAR_TROOPS.maxTroops first, then the sieges)
       this.sieges.tick(Date.now());
       this.tunnels.tick(Date.now());
@@ -1182,7 +1182,7 @@ export class TownRoom extends Room<TownState> {
     if (back) this.resume(p, back);
     // Never start boxed in (between crates and a barrel, say): step out to the nearest open ground
     if (boxedInAt(p.x, p.y)) { const o = openGroundNear(p.x, p.y); if (o) { p.x = o.x; p.y = o.y; } }
-    this.holdWalls.admit(p, warState()?.owner); // a Hold wall rose where they stood: step out of it now
+    this.holdWalls.admitWar(p, warState()); // a Hold wall rose where they stood: step out of it now
     if (options?.newGame) saveHero(p.name, p.cls, this.snapshot(p));
     else if (loaded) this.writeLoaded(p, loaded);
     // A quest that carries on by itself (QuestDef.auto) but did not start (they left right after the last one, or its

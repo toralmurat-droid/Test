@@ -7,9 +7,13 @@
 import { TILE } from "../constants";
 import { isSolidAt, isSolidTile } from "../map";
 import type { ClanKey } from "./clans";
-import { anyHoldWall, holdReachPx } from "./holdWalls";
+import { anyHoldWall, holdReachPx, tierReachPx, tierWallAt } from "./holdWalls";
+import type { HoldTier } from "./holdTiers";
 import { HOLDS, STANDARDS } from "./standards";
 import { TERRITORIES } from "./territories";
+
+/** Hold guards of an outpost, a camp and a fortress (holdTiers.ts): [at control 0, at control 100]. */
+const GARRISON: readonly [number, number][] = [[2, 3], [4, 6], [6, 8]];
 
 export const TROOP = {
   /** Soldiers in a full-strength patrol column (marching two abreast). */
@@ -24,9 +28,12 @@ export const TROOP = {
   rankGap: 24,
   /** Pause at each stop (Hold, standard): the squad "checks in" there before moving on. */
   pauseMs: 2500,
-  /** Hold guards of a land at control 0 and at control 100 (px ring around the Hold, see garrisonSpots). */
-  garrisonMin: 4,
-  garrisonMax: 6,
+  /** Hold guards by the Hold's tier (GARRISON above: a ring round the Hold, see garrisonSpots); the camp's are the min and
+   * max that held before the tiers, and garrisonTop the most any tier fields. */
+  garrison: GARRISON,
+  garrisonMin: GARRISON[1][0],
+  garrisonMax: GARRISON[1][1],
+  garrisonTop: Math.max(...GARRISON.map((g) => g[1])),
   /** Fraction of a column / siege defence a land at control 0 still fields (scales linearly up to 1 at control 100). */
   weakShare: 0.5,
   /** The client draws squads whose territory has a stop this close to the hero (px); farther ones are off screen. */
@@ -67,9 +74,11 @@ export function troopShare(control: number): number {
 }
 /** Soldiers in a land's patrol column at `control`. */
 export const patrolCount = (control: number) => Math.max(TROOP.patrolMin, Math.round(TROOP.perPatrol * troopShare(control)));
-/** Hold guards at `control`. */
-export const garrisonCount = (control: number) =>
-  Math.round(TROOP.garrisonMin + (TROOP.garrisonMax - TROOP.garrisonMin) * Math.max(0, Math.min(100, control)) / 100);
+/** Hold guards at `control` for a Hold of `tier` (default the camp). */
+export function garrisonCount(control: number, tier: HoldTier = 1): number {
+  const [lo, hi] = TROOP.garrison[tier] ?? TROOP.garrison[1], c = Math.max(0, Math.min(100, Number.isFinite(control) ? control : 100));
+  return Math.round(lo + ((hi - lo) * c) / 100);
+}
 /** Fighters per side at each of a land's `stds` standards; defenders shrink with the land's control, attackers do not. */
 export function siegeCounts(stds: number, control: number): { atk: number; def: number } {
   const per = Math.max(1, Math.min(SIEGE_FIGHT.perSide, Math.floor(SIEGE_FIGHT.budget / (2 * Math.max(1, stds)))));
@@ -258,25 +267,30 @@ export function patrolPos(p: Patrol, dist: number): { x: number; y: number; dx: 
 }
 
 const spots = new Map<number, { x: number; y: number; fx: number; fy: number }[]>();
+const AROUND: [number, number][] = [[0, 0], [8, 0], [-8, 0], [0, 8], [0, -8], [8, 8], [8, -8], [-8, 8], [-8, -8]];
 /**
- * Up to `n` guard posts around territory `t`'s Hold, outside its walls: deterministic ring points on walkable ground, each with the
- * unit direction pointing away from the Hold (the way a guard faces). Fewer come back if the ground is cramped.
+ * Up to `n` guard posts around territory `t`'s Hold at `tier` (default the camp), outside the walls any clan's fort has at
+ * that tier: deterministic ring points on walkable ground, each with the unit direction pointing away from the Hold (the
+ * way a guard faces). Fewer come back if the ground is cramped. A bigger tier's posts stand farther out; an outpost's may
+ * stand where a fortress would wall (it is not up: a Hold that grows moves its guards out, server/holdWalls.ts).
  */
-export function garrisonSpots(t: number, n: number): { x: number; y: number; fx: number; fy: number }[] {
-  if (!spots.has(t)) {
-    const hold = HOLDS.find((h) => h.t === t), out: { x: number; y: number; fx: number; fy: number }[] = [];
-    if (hold) for (let k = 0; k < 64 && out.length < TROOP.garrisonMax; k++) {
-      // a square ring outside the fort's walls (any clan's): Chebyshev distance from the Hold, so no guard stands in the compound
-      const a = k * 2.399963 + t * 0.7, fx = Math.cos(a), fy = Math.sin(a), r = (holdReachPx(t) + FORT_MARGIN + (k % 3) * 18) / Math.max(Math.abs(fx), Math.abs(fy));
+export function garrisonSpots(t: number, n: number, tier: HoldTier = 1): { x: number; y: number; fx: number; fy: number }[] {
+  const ck = t * 3 + tier;
+  if (!spots.has(ck)) {
+    const hold = HOLDS.find((h) => h.t === t), out: { x: number; y: number; fx: number; fy: number }[] = [], reach = tierReachPx(t, tier);
+    if (hold) for (let k = 0; k < 64 && out.length < TROOP.garrison[tier][1]; k++) {
+      // a square ring outside the fort's walls (any clan's at this tier): Chebyshev distance from the Hold, so no guard stands in the compound
+      const a = k * 2.399963 + t * 0.7, fx = Math.cos(a), fy = Math.sin(a), r = (reach + FORT_MARGIN + (k % 3) * 18) / Math.max(Math.abs(fx), Math.abs(fy));
       const x = hold.x + fx * r, y = hold.y + fy * r;
-      if (isSolidAt(x, y) || isSolidAt(x + 8, y) || isSolidAt(x - 8, y) || isSolidAt(x, y + 8) || isSolidAt(x, y - 8)) continue;
-      if (anyHoldWall(Math.floor(x / TILE), Math.floor(y / TILE))) continue; // (a neighbour's fort)
+      if (AROUND.some(([ax, ay]) => isSolidAt(x + ax, y + ay))) continue; // (corners too: a post tucked into a rock's corner can't be stood on)
+      const walled = (px: number, py: number) => { const w = tierWallAt(Math.floor(px / TILE), Math.floor(py / TILE), tier); return w.t >= 0 && (w.t !== t || w.wall); };
+      if (walled(x, y) || walled(x + 8, y) || walled(x - 8, y) || walled(x, y + 8) || walled(x, y - 8)) continue; // a wall of this tier, or a neighbour's fort (any tier)
       if (out.some((o) => Math.hypot(o.x - x, o.y - y) < 28)) continue;
       out.push({ x, y, fx, fy });
     }
-    spots.set(t, out);
+    spots.set(ck, out);
   }
-  return spots.get(t)!.slice(0, n);
+  return spots.get(ck)!.slice(0, n);
 }
 
 /**

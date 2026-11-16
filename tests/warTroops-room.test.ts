@@ -5,7 +5,10 @@ import { TILE, WORLD_H } from "../shared/constants";
 import { CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import { atWar } from "../shared/war/feuds";
 import { newMinds } from "../shared/war/doctrine";
-import { garrisonSpots, patrolOf, TROOP } from "../shared/war/patrols";
+import { garrisonCount, garrisonSpots, patrolOf, TROOP } from "../shared/war/patrols";
+import { holdIntel } from "../shared/war/intel";
+import { inSackReach } from "../shared/war/holdSack";
+import { tierWallAt } from "../shared/war/holdWalls";
 import { newWar, targetsOf } from "../shared/war/rules";
 import { TERRITORIES } from "../shared/war/territories";
 import { parseTroop, WAR_TROOPS } from "../shared/war/troops";
@@ -16,7 +19,8 @@ import { _resetWar, warNow, warState } from "../server/war";
 /** An Act 1 land with a patrol and guard posts, away from Oakvale. */
 const LAND = TERRITORIES.find((t) => patrolOf(t.id) && garrisonSpots(t.id, TROOP.garrisonMax).length >= 4 && t.act === 1 && !t.capitalOf
   && Math.hypot(t.cx - (SAFE_ZONE.x + SAFE_ZONE.w / 2), t.cy - (SAFE_ZONE.y + SAFE_ZONE.h / 2)) > 60)!;
-const freshWar = () => _resetWar({ v: 1, state: newWar(), minds: newMinds(), next: Date.now() + 1e9, log: [] });
+/** A new war, LAND's Hold a camp (W3: a fresh Hold is an outpost; the camp fields the guards these tests count on). */
+const freshWar = () => { const s = newWar(); s.fort[LAND.id] = 0.3; _resetWar({ v: 1, state: s, minds: newMinds(), next: Date.now() + 1e9, log: [] }); };
 
 /** The room's troopers of LAND (id, mob). */
 const landTroops = (room: any): [string, any][] =>
@@ -250,5 +254,31 @@ test("war troops (room, W2c): any soldier of a clan at war pays kill valor (offi
     assert.ok(q.dead);
     assert.equal(p.renown, r1, "a party mate pays nothing");
     await c2.leave();
+  } finally { await srv.stop(); }
+});
+
+test("war troops (room, W3): the guards follow the Hold's tier: 3 at an outpost, 6 at a camp, 8 at a fortress (Control 100), at that tier's posts", async () => {
+  const srv = await startRoom();
+  freshWar();
+  try {
+    const { room } = await setup(srv);
+    const guards = () => landTroops(room).filter(([id]) => room.warTroops._land(LAND.id).slots.some((s: any) => s.id === id && s.role === "guard"));
+    for (const n of LAND.near) warState()!.owner[n] = warState()!.owner[LAND.id]; // an inner land (a front land is a camp at most)
+    for (const [fort, tier] of [[0, 0], [0.3, 1], [0.7, 2], [0.1, 0]] as const) {
+      warState()!.fort[LAND.id] = fort;
+      room.warTroops.tick(Date.now());
+      const want = Math.min(garrisonCount(100, tier), garrisonSpots(LAND.id, TROOP.garrison[tier][1], tier).length);
+      assert.equal(want, [3, 6, 8][tier], `tier ${tier}: the land has room for its guards`);
+      assert.equal(guards().length, want, `tier ${tier}: ${guards().length} guards`);
+      assert.equal(holdIntel(warNow()!, LAND.id).guards, want, "the map's count matches");
+      assert.equal(holdIntel(warNow()!, LAND.id).tier, tier);
+      assert.equal(room.warTroops.guardsDue(LAND.id), want, "a sack must cut through them all");
+    }
+    // at a fortress the guards walk out to the fortress's posts: outside its walls, inside its sack reach
+    warState()!.fort[LAND.id] = 0.7;
+    const posts = garrisonSpots(LAND.id, 8, 2);
+    for (const p of posts) assert.ok(!tierWallAt(Math.floor(p.x / TILE), Math.floor(p.y / TILE), 2).wall && inSackReach(LAND.id, p.x, p.y, 2));
+    const ok = await until(() => { room.warTroops.tick(Date.now()); return guards().length === 8 && guards().every(([, m]) => posts.some((q) => Math.hypot(q.x - m.x, q.y - m.y) < 6)); }, 15000);
+    assert.ok(ok, `every guard at a fortress post: ${JSON.stringify(guards().map(([, m]) => [Math.round(m.x), Math.round(m.y), m.target]))} posts ${JSON.stringify(posts.map((q) => [Math.round(q.x), Math.round(q.y)]))}`);
   } finally { await srv.stop(); }
 });

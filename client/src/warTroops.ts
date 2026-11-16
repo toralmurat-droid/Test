@@ -9,7 +9,8 @@
  */
 import Phaser from "phaser";
 import { CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
-import { garrisonCount, garrisonSpots, mix, patrolCount, patrolOf, patrolPos, SIEGE_FIGHT, siegeCounts, siegeLife, TROOP, TROOP_LOOK, type Patrol } from "../../shared/war/patrols";
+import { viewTier, holdGuards } from "../../shared/war/intel";
+import { garrisonSpots, mix, patrolCount, patrolOf, patrolPos, SIEGE_FIGHT, siegeCounts, siegeLife, TROOP, TROOP_LOOK, type Patrol } from "../../shared/war/patrols";
 import { HOLDS, STANDARDS } from "../../shared/war/standards";
 import type { WarView } from "../../shared/war/view";
 import { underground } from "../../shared/dungeon";
@@ -115,9 +116,9 @@ export class WarTroops {
 
   /** What a land's squad looks like now: holder, the attacker while a siege is called, and the strength by control. */
   private sigOf(t: number): string {
-    const v = this.view!, c = v.control?.[t] ?? 100, n = STANDARDS.filter((s) => s.t === t).length;
+    const v = this.view!, c = v.control?.[t] ?? 100, tier = viewTier(v, t), n = STANDARDS.filter((s) => s.t === t).length;
     const sg = v.sieges.find((s) => s[0] === t);
-    return `${v.owner[t]}|${sg ? sg[1] : ""}|${sg && this.liveSiege === t ? "live" : ""}|${patrolCount(c)}|${garrisonCount(c)}|${siegeCounts(n, c).def}`;
+    return `${v.owner[t]}|${sg ? sg[1] : ""}|${sg && this.liveSiege === t ? "live" : ""}|${patrolCount(c)}|${tier}|${holdGuards(t, c, tier)}|${siegeCounts(n, c).def}`;
   }
 
   update(me: { x: number; y: number } | undefined, _now: number) {
@@ -192,7 +193,7 @@ export class WarTroops {
   }
 
   private build(t: number): Squad | undefined {
-    const v = this.view!, clan = CLAN_KEYS[v.owner[t]], p = patrolOf(t), c = v.control?.[t] ?? 100;
+    const v = this.view!, clan = CLAN_KEYS[v.owner[t]], p = patrolOf(t), c = v.control?.[t] ?? 100, tier = viewTier(v, t);
     if (!clan || !p) return undefined;
     const sg = v.sieges.find((s) => s[0] === t), atk = sg ? CLAN_KEYS[sg[1]] : undefined;
     const sq: Squad = { t, sig: this.sigOf(t), men: [], cycle: 0, phase: 0, alpha: 0, target: 1 };
@@ -215,7 +216,7 @@ export class WarTroops {
       sq.men.push(m);
     }
     sq.men[0].flag = this.scene.add.image(0, 0, flagTexture(this.scene, clan)).setOrigin(0.5, 1).setVisible(false).setAlpha(0);
-    garrisonSpots(t, garrisonCount(c)).forEach((g, i) => {
+    garrisonSpots(t, holdGuards(t, c, tier), tier).forEach((g, i) => {
       const m = this.soldier(clan, i + 1, "guard", i === 0);
       const inward = i % 3 === 2;
       m.guard = { pos: { x: g.x, y: g.y }, fx: inward ? -g.fx : g.fx, fy: inward ? -g.fy : g.fy, h: mix(t, i, 7) };

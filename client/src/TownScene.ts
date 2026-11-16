@@ -1627,7 +1627,7 @@ export class TownScene extends Phaser.Scene {
     this.room.onMessage("sack", (m) => this.sack?.setSack(m));
     this.room.onMessage("war", (v) => {
       // the Hold walls follow the holders (shared/war/holdWalls.ts): prediction and click-to-walk routes see the new forts
-      const flipped = setHoldOwners(Array.isArray(v?.owner) ? v.owner : []);
+      const flipped = setHoldOwners(Array.isArray(v?.owner) ? v.owner : [], Array.isArray(v?.tier) ? v.tier : undefined); // (and their tiers, W3)
       if (flipped.length) refreshWalk(flipped.flatMap(holdTiles));
       this.warTroops?.setWar(v); (this.warPlaque ??= new WarPlaque(document.getElementById("hud")!)).set(v); this.warStd?.setWar(v); this.warLast = v; });
     this.room.onMessage("clan", (m) => this.warStd?.setClan(m));

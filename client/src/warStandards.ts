@@ -10,6 +10,8 @@ import { RENOWN_RANKS, rankOf } from "../../shared/war/renown";
 import { HOLDS, STANDARD, STANDARDS, type Standard } from "../../shared/war/standards";
 import { ensureHold, HoldDraw, HOLD_KEEP, HOLD_RANGE } from "./holdAssets";
 import { fortOf } from "../../shared/war/holdWalls";
+import type { HoldTier } from "../../shared/war/holdTiers";
+import { viewTier } from "../../shared/war/intel";
 import { bannerSpot } from "../../shared/war/holdSack";
 import { TILE } from "../../shared/constants";
 import { targetsOf, type WarState } from "../../shared/war/rules";
@@ -75,7 +77,7 @@ export class WarStandards {
   /** The sacker's banner over each Hold sacked this war tick (client/src/warSack.ts). */
   private sackBanners = new Map<number, Phaser.GameObjects.Image>();
   private holds = new Map<number, HoldDraw | Phaser.GameObjects.Graphics>();
-  private holdClan = new Map<number, ClanKey>();
+  private holdClan = new Map<number, string>(); // owner and tier: "redfang:1"
   /** Holds shown as flat blocks for now (the atlas is loading, or the top-down view): solid cells are never left bare. */
   private holdFlat = new Set<number>();
   private rings = new Map<number, Phaser.GameObjects.Ellipse>();
@@ -181,22 +183,22 @@ export class WarStandards {
     const v = this.view;
     if (!v || !me) return;
     for (const h of HOLDS) {
-      const k = CLAN_KEYS[v.owner[h.t]], have = this.holds.get(h.t), d = Math.hypot(h.x - me.x, h.y - me.y);
+      const k = CLAN_KEYS[v.owner[h.t]], tier = viewTier(v, h.t), id = `${k}:${tier}`, have = this.holds.get(h.t), d = Math.hypot(h.x - me.x, h.y - me.y);
       if (have && (!k || d > HOLD_KEEP)) { have.destroy(); this.holds.delete(h.t); this.holdClan.delete(h.t); this.holdFlat.delete(h.t); continue; }
       if (!k || d > HOLD_RANGE) continue;
       // the baked art of this clan is there: build the Hold in one go (the old one goes the same frame, so a wall is never bare)
       const ready = ISO && ensureHold(this.scene, k, () => this.syncHolds(this.hero));
-      if (have && this.holdClan.get(h.t) === k && !(ready && this.holdFlat.has(h.t))) continue;
-      const draw: HoldDraw | Phaser.GameObjects.Graphics = ready ? new HoldDraw(this.scene, h.t, k) : this.flatHold(h.t, k);
+      if (have && this.holdClan.get(h.t) === id && !(ready && this.holdFlat.has(h.t))) continue;
+      const draw: HoldDraw | Phaser.GameObjects.Graphics = ready ? new HoldDraw(this.scene, h.t, k, tier) : this.flatHold(h.t, k, tier);
       have?.destroy();
-      this.holds.set(h.t, draw); this.holdClan.set(h.t, k);
+      this.holds.set(h.t, draw); this.holdClan.set(h.t, id); // (the old Hold goes in this same frame: a tier change never shows a bare wall)
       if (ready) this.holdFlat.delete(h.t); else this.holdFlat.add(h.t);
     }
   }
 
   /** The fort's cells as flat blocks (walls solid, gates and gaps open): the top-down view, and the stand-in while the art loads. */
-  private flatHold(t: number, k: ClanKey) {
-    const g = this.scene.add.graphics().setDepth(-0.4), f = fortOf(t, k);
+  private flatHold(t: number, k: ClanKey, tier: HoldTier) {
+    const g = this.scene.add.graphics().setDepth(-0.4), f = fortOf(t, k, tier);
     if (f) for (const c of f.cells) {
       const x = (f.cx + c.dx) * TILE, y = (f.cy + c.dy) * TILE;
       if (c.kind === "court") g.fillStyle(CLANS[k].cloth, 0.25).fillRect(x, y, TILE, TILE);

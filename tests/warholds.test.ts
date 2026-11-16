@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import { TILE } from "../shared/constants";
 import { CLAN_KEYS } from "../shared/war/clans";
 import { bannerSpot, cleanHoldsMsg, HOLD_SACK, inSackReach, sackGold, sackReachPx, sackStep, type SackRaise } from "../shared/war/holdSack";
-import { fortOf, holdReachPx } from "../shared/war/holdWalls";
+import { fortOf, holdReachPx, setHoldOwners, tierReachPx } from "../shared/war/holdWalls";
+import { HOLD_TIERS } from "../shared/war/holdTiers";
 import { garrisonSpots, TROOP } from "../shared/war/patrols";
 import { newWar, sackHold, targetsOf, WAR, warTick, type WarState } from "../shared/war/rules";
 import { HOLDS } from "../shared/war/standards";
@@ -25,6 +26,23 @@ test("holdSack: the banner is the fort's middle cell (a courtyard in every clan'
     assert.ok(!inSackReach(h.t, b.x + sackReachPx(h.t) + 2, b.y));
   }
   assert.equal(bannerSpot(9999), undefined);
+});
+
+test("holdSack (W3): the reach follows the Hold's tier (the live one by default); the banner spot is the same at every tier", () => {
+  const h = HOLDS[0], b = bannerSpot(h.t)!;
+  try {
+    setHoldOwners([]);
+    assert.equal(sackReachPx(h.t), holdReachPx(h.t) + HOLD_SACK.marginPx, "no war known: the widest reach");
+    const r = HOLD_TIERS.map((tier) => sackReachPx(h.t, tier));
+    assert.deepEqual(r, HOLD_TIERS.map((tier) => tierReachPx(h.t, tier) + HOLD_SACK.marginPx));
+    assert.ok(r[0] < r[2], "an outpost's reach is smaller than a fortress's");
+    for (const tier of HOLD_TIERS) {
+      setHoldOwners(TERRITORIES.map(() => "host"), TERRITORIES.map(() => tier));
+      assert.equal(sackReachPx(h.t), r[tier], `live tier ${tier}`);
+      assert.ok(inSackReach(h.t, b.x + r[tier] - 1, b.y) && !inSackReach(h.t, b.x + r[tier] + 1, b.y));
+      for (const k of CLAN_KEYS) { const f = fortOf(h.t, k, tier)!; assert.deepEqual([Math.floor(b.x / TILE), Math.floor(b.y / TILE)], [f.cx, f.cy]); }
+    }
+  } finally { setHoldOwners([]); }
 });
 
 test("sackStep: raiseMs of work, a defender pauses it, a blow starts it over", () => {

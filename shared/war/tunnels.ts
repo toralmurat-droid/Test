@@ -16,7 +16,7 @@ import { caravanOffLimits } from "./caravans";
 import { CLANS, CLAN_KEYS, type ClanKey } from "./clans";
 import { patrolOf } from "./patrols";
 import { cleanOrders, supplyMap, targetsOf, type Orders, type WarState } from "./rules";
-import { anyHoldWall, holdReachPx } from "./holdWalls";
+import { anyHoldWall, holdCellAt, holdReachPx, tierReachPx } from "./holdWalls";
 import { HOLDS, STANDARD, STANDARDS } from "./standards";
 import { TERRITORIES } from "./territories";
 import { troopStats } from "./troops";
@@ -161,27 +161,30 @@ export function tunnelMouth(t: number, from: number): { x: number; y: number } |
     const fx = ux ? (ux > 0 ? T.x + T.w - T.cx : T.cx - T.x) / Math.abs(ux) : Infinity, fy = uy ? (uy > 0 ? T.y + T.h - T.cy : T.cy - T.y) / Math.abs(uy) : Infinity;
     const reachTo = Math.max(0, Math.min(fx, fy) - TUNNEL.edgeTiles);
     const ex = T.cx + ux * reachTo, ey = T.cy + uy * reachTo;
-    const ok = (tx: number, ty: number, strict: boolean) => {
+    // strict: well clear of every Hold's reach and standard; then just clear; last (a cramped land, W3: a fortress's outer
+    // works fill the side facing `from`) outside every fort's cells and the camps' reach, nearest the edge point on any side
+    const ok = (tx: number, ty: number, strict: boolean, cramped = false) => {
       if (tx < T.x + 1 || ty < T.y + 1 || tx >= T.x + T.w - 1 || ty >= T.y + T.h - 1 || !reach.has(ty * MAP_W + tx)) return false;
-      if ((tx + 0.5 - T.cx) * ux + (ty + 0.5 - T.cy) * uy <= 0) return false; // on the side facing `from`
+      if (!cramped && (tx + 0.5 - T.cx) * ux + (ty + 0.5 - T.cy) * uy <= 0) return false; // on the side facing `from`
       if (!clearTile(tx, ty)) return false;
       const x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE;
-      if (HOLDS.some((h) => Math.max(Math.abs(h.x - x), Math.abs(h.y - y)) < holdReachPx(h.t) + (strict ? 2 * TILE : 0))) return false; // (clearTile keeps it off the walls)
+      if (cramped) { if (holdCellAt(tx, ty) >= 0 || HOLDS.some((h) => Math.max(Math.abs(h.x - x), Math.abs(h.y - y)) < tierReachPx(h.t, 1))) return false; }
+      else if (HOLDS.some((h) => Math.max(Math.abs(h.x - x), Math.abs(h.y - y)) < holdReachPx(h.t) + (strict ? 2 * TILE : 0))) return false; // (clearTile keeps it off the walls)
       return !STANDARDS.some((s) => Math.hypot(s.x - x, s.y - y) < STANDARD.range + (strict ? 2 * TILE : TILE));
     };
-    for (const strict of [true, false]) {
+    for (const [strict, cramped] of [[true, false], [false, false], [false, true]]) {
       let bd = Infinity;
       const cx = Math.floor(ex), cy = Math.floor(ey), R = TUNNEL.searchTiles;
       for (let r = 0; r <= R && bd === Infinity; r++)
         for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
-          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r || !ok(cx + dx, cy + dy, strict)) continue;
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r || !ok(cx + dx, cy + dy, strict, cramped)) continue;
           const d = Math.hypot(cx + dx + 0.5 - ex, cy + dy + 0.5 - ey);
           if (d < bd) { bd = d; best = { x: (cx + dx + 0.5) * TILE, y: (cy + dy + 0.5) * TILE }; }
         }
       if (best) break;
       // nothing near the edge point: any good tile on that side, the nearest to it
       for (let ty = T.y + 1; ty < T.y + T.h - 1; ty++) for (let tx = T.x + 1; tx < T.x + T.w - 1; tx++) {
-        if (!ok(tx, ty, strict)) continue;
+        if (!ok(tx, ty, strict, cramped)) continue;
         const d = Math.hypot(tx + 0.5 - ex, ty + 0.5 - ey);
         if (d < bd) { bd = d; best = { x: (tx + 0.5) * TILE, y: (ty + 0.5) * TILE }; }
       }
