@@ -1079,3 +1079,7 @@ in every act.
 ## W7 capital cities (in progress)
 
 City band below the Crown, one walled city per clan behind a city gate beside its seat (Murat 2026-11-16). Wardens first (gate at Goldenreach Farms). Plan: see the PR.
+
+## Map clarity (2026-11-16)
+
+War table: "You are here", gates between lands, routes to any territory (client/src/warRoute.ts). Zone map: land title, where-you-are caption, labelled exits, "Ways out" and route cards (client/src/warHere.ts). One button switches maps and keeps the pick.
