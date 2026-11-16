@@ -119,11 +119,11 @@ function court() {
     broadcast: (type, msg) => evs.push({ type, msg }),
     dmg: (_m, mult) => Math.round(100 * mult),
     hurtHero: (pid, dmg, _f, what, _p, _kb, o) => { hurt.push({ pid, dmg, what, stunMs: o.stunMs }); heroes.get(pid)!.hp -= dmg; },
-    canStand: () => true, say: (_id, lines) => said.push([...lines]), provoke: (m) => provoked.push(m.kind),
+    canStand: () => true, clearLine: () => true, say: (_id, lines) => said.push([...lines]), provoke: (m) => provoked.push(m.kind),
   };
   const add = (id: string, kind: MobKind, x: number, y: number, o: Partial<CrownMob> = {}) => {
     const m: CrownMob = { kind, level: 45, x, y, hp: 1000, maxHp: 1000, zone: 0, dead: false, hidden: false, moving: true, winding: false, broken: false, stunned: false,
-      owner: "", target: "", specialAt: 0, rushUntil: 0, windUntil: 0, lastAttack: 0, rallyUntil: 0, aimX: 0, aimY: 1, dir: "down", ...o };
+      owner: "", target: "", specialAt: 0, rushUntil: 0, windUntil: 0, lastAttack: 0, rallyUntil: 0, aimX: 0, aimY: 1, dir: "down", halfSaid: false, nextTaunt: 0, ...o };
     mobs.set(id, m);
     return m;
   };
@@ -197,6 +197,43 @@ test("court: a Court Magus blinks away from a hero who closes in, then waits out
   assert.equal(k.ev("blink").length, 1, "on cooldown");
   k.c.tick(m, "cm", T0 + CROWN_AI.blink.cooldownMs);
   assert.equal(k.ev("blink").length, 2, "and again");
+});
+
+test("court: a stun drops a Crownguard's shield and cuts a herald's decree off (hush, no rally)", () => {
+  const k = court(), g = k.add("g", "crownguard", 0, 0, { target: "h" }), hh = k.add("hh", "hollowherald", 300, 0, { target: "h" }), ally = k.add("a", "oathbreaker", 330, 0);
+  k.hero("h", 100, 0);
+  k.c.tick(g, "g", T0); k.c.tick(hh, "hh", T0);
+  k.c.tick(g, "g", T0 + CROWN_AI.ward.firstMs);
+  assert.equal(k.c.taken(g, 100, 0, T0 + CROWN_AI.ward.firstMs + 10), CROWN_AI.ward.mult, "shield up");
+  k.c.tick(hh, "hh", T0 + CROWN_AI.proclaim.firstMs);
+  assert.equal(k.ev("proclaim").length, 1, "reading");
+  const t = T0 + CROWN_AI.proclaim.firstMs + 100;
+  k.c.stunned(g, "g", t); k.c.stunned(hh, "hh", t);
+  assert.equal(k.c.taken(g, 100, 0, t), 1, "the shield is down");
+  assert.equal(k.ev("hush").length, 1, "hushed");
+  assert.ok(!hh.winding);
+  k.c.tick(hh, "hh", t + CROWN_AI.proclaim.castMs);
+  assert.equal(k.ev("decree").length, 0, "no decree");
+  assert.equal(ally.rallyUntil, 0, "no rally");
+});
+
+test("court: a Court Magus never blinks through a wall; the Riven King's taunts wait after his wake line; a respawn says its half line again", () => {
+  const k = court(), m = k.add("cm", "courtmagus", 0, 0, { target: "h" });
+  k.hero("h", 30, 0);
+  const host = (k.c as any).host;
+  host.clearLine = () => false; // walled in on every side
+  k.c.tick(m, "cm", T0);
+  assert.equal(k.ev("blink").length, 0, "no blink through walls");
+  assert.deepEqual([m.x, m.y], [0, 0]);
+  host.canStand = (_m: CrownMob, x: number) => x > -100; host.clearLine = () => true; // only the far landings are in another zone's hall
+  k.c.tick(m, "cm", T0 + 1000);
+  const b = k.ev("blink")[0];
+  assert.ok(b && b.x > -100, "it picks a landing it may stand on");
+  const rk = k.add("rk", "rivenking", 500, 0, { target: "h", voice: RIVEN_KING.voice, halfSaid: true });
+  k.c.spawned(rk);
+  assert.equal(rk.halfSaid, false, "a fresh king has his half line again");
+  k.c.tick(rk, "rk", T0);
+  assert.ok(rk.nextTaunt >= T0 + RIVEN_KING.tauntMs[0] && rk.nextTaunt <= T0 + RIVEN_KING.tauntMs[1], "no taunt straight after his wake line");
 });
 
 test("court: a Gildhound's fall drives the rest of its hunt wild onto its killer", () => {
@@ -320,6 +357,33 @@ test("room: the Crown comes alive (its court in its lands, the Riven King on his
     (room as any).hitTarget(c.sessionId, "cg", 100, [1, 0], { kb: 0 });
     const cut = hp0 - g.hp;
     assert.ok(cut > 0 && cut <= 100 * CROWN_AI.ward.mult * 1.5 + 2, `the shield took most of it (${cut} of 100)`);
+    await c.leave();
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("room: a stun through the room cuts a casting herald off: hush goes out, the court is not rallied", async () => {
+  const srv = await startRoom();
+  try {
+    const c = await srv.join({ cls: "wizard" });
+    const got: any[] = [];
+    c.onMessage("crown", (m: any) => got.push(m));
+    await wait(200);
+    const room = srv.room, p = room.state.players.get(c.sessionId);
+    const z = SPAWN_ZONES.find((s) => s.name === "The Mourning Gardens")!, at = randomPointInZone(z);
+    p.x = at.x; p.y = at.y; p.level = 45; p.maxHp = p.hp = 100000; p.invulnUntil = 0;
+    room.state.mobs.forEach((m: any, id: string) => { if (Math.hypot(m.x - p.x, m.y - p.y) < 20 * TILE) room.state.mobs.delete(id); });
+    room.spawnMob("hollowherald", -1, "hh", { x: p.x + 100, y: p.y, level: 44 });
+    room.spawnMob("oathbreaker", -1, "ob", { x: p.x + 130, y: p.y + 20, level: 44 });
+    const h = room.state.mobs.get("hh"), ally = room.state.mobs.get("ob");
+    h.target = c.sessionId; h.hateId = c.sessionId; h.hate = 3;
+    assert.ok(await until(() => got.some((e) => e.ev === "proclaim" && e.id === "hh"), 8000), "it starts a decree");
+    h.stunUntil = Date.now() + 2500; // a stun lands mid-decree
+    assert.ok(await until(() => got.some((e) => e.ev === "hush" && e.id === "hh"), 2000), "hush goes out");
+    await wait(CROWN_AI.proclaim.castMs + 300);
+    assert.ok(!got.some((e) => e.ev === "decree" && e.id === "hh"), "no decree");
+    assert.ok(!(ally.rallyUntil > Date.now()), "the court is not rallied");
     await c.leave();
   } finally {
     await srv.stop();

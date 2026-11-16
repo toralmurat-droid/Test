@@ -216,6 +216,8 @@ const WILD_RECTS: Record<string, { x: number; y: number; w: number; h: number }>
 };
 /** Boss halls inside a bigger zone (rect in tiles): only their own zone spawns there (the Riven King's Throne Hall in the Keep). */
 const BOSS_HALLS: { name: string; x: number; y: number; w: number; h: number }[] = [{ name: "The Throne Hall", ...THRONE_HALL, y: CR(THRONE_HALL.y) }];
+/** The boss hall a tile lies in, if any (a monster from another zone must not end up inside one). */
+export const bossHallAt = (tx: number, ty: number) => BOSS_HALLS.find((l) => tx >= l.x && tx < l.x + l.w && ty >= l.y && ty < l.y + l.h)?.name;
 /** Zones smaller than their map area (rect in tiles): the Maw-Father keeps to his ledge down in the Great Maw. */
 const ZONE_RECTS: Record<string, { x: number; y: number; w: number; h: number }> = {
   "The Great Maw": { ...MAW_LEDGE_RECT, y: SR(MAW_LEDGE_RECT.y) },

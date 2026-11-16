@@ -43,7 +43,7 @@ export interface CrownMob {
   kind: MobKind; level: number; x: number; y: number; hp: number; maxHp: number; zone: number;
   dead: boolean; hidden: boolean; moving: boolean; winding: boolean; broken: boolean; stunned: boolean; owner: string;
   target: string; specialAt: number; rushUntil: number; windUntil: number; lastAttack: number; rallyUntil: number;
-  aimX: number; aimY: number; dir: string; voice?: BossVoice;
+  aimX: number; aimY: number; dir: string; voice?: BossVoice; halfSaid: boolean; nextTaunt: number;
   cr?: CrownState;
 }
 export interface CrownHero { x: number; y: number; dead: boolean }
@@ -58,8 +58,10 @@ export interface CrownHost {
   /** The monster's own damage at its level, times mult. */
   dmg(m: CrownMob, mult: number): number;
   hurtHero(pid: string, dmg: number, fromId: string, what: string, push: [number, number], kb: number, opts: { stunMs?: number; slowMs?: number }): void;
-  /** Open ground a monster may stand on (not solid, not a safe square, not a monster-free place). */
-  canStand(x: number, y: number): boolean;
+  /** Open ground this monster may stand on (not solid, not a safe square, not a monster-free place, not another zone's boss hall). */
+  canStand(m: CrownMob, x: number, y: number): boolean;
+  /** No wall on the straight line between the two points (a blink never passes through one). */
+  clearLine(x0: number, y0: number, x1: number, y1: number): boolean;
   /** A line in a speech bubble over the monster. */
   say(id: string, lines: readonly string[]): void;
   /** Make a monster chase a hero (sets its target and anger). */
@@ -87,8 +89,19 @@ export class CrownCourt {
 
   /** A monster that just (re)spawned: it starts afresh; a Riven King with no quest voice gets the throne's own. */
   spawned(m: CrownMob) {
-    m.cr = undefined;
+    m.cr = undefined; m.halfSaid = false;
     if (m.kind === "rivenking" && !m.voice) m.voice = RIVEN_KING.voice;
+  }
+
+  /**
+   * It is stunned (TownRoom skips its tick while it is): a Crownguard's shield drops and a herald's decree is cut off.
+   * The Riven King's marked move keeps its time and lands once he is up again (it was already shown on the ground).
+   */
+  stunned(m: CrownMob, id: string, now: number) {
+    const s = m.cr;
+    if (!s) return;
+    s.wardUntil = 0;
+    if (s.castUntil) { s.castUntil = 0; s.nextCast = now + CROWN_AI.proclaim.everyMs / 2; m.winding = false; this.host.broadcast("crown", { ev: "hush", id }); }
   }
 
   /**
@@ -212,7 +225,7 @@ export class CrownCourt {
     const a0 = Math.atan2(m.y - t.y, m.x - t.x);
     for (const da of [0, 0.5, -0.5, 1, -1, 1.6, -1.6]) {
       const x = t.x + Math.cos(a0 + da) * B.dist, y = t.y + Math.sin(a0 + da) * B.dist;
-      if (!this.host.canStand(x, y)) continue;
+      if (!this.host.canStand(m, x, y) || !this.host.clearLine(m.x, m.y, x, y)) continue;
       const x0 = Math.round(m.x), y0 = Math.round(m.y);
       m.x = x; m.y = y; m.moving = false; s.nextBlink = now + B.cooldownMs;
       this.host.broadcast("crown", { ev: "blink", id, x0, y0, x: Math.round(x), y: Math.round(y) });
@@ -260,7 +273,10 @@ export class CrownCourt {
   /** His phases, his voice, and his own three moves: the Riven Edge, the falling Shards, Kingsfall. */
   private king(m: CrownMob, id: string, s: CrownState, now: number): boolean {
     const R = RIVEN_KING, H = this.host, frac = m.hp / Math.max(1, m.maxHp), t = this.foe(m);
-    if (t && !s.woke) { s.woke = true; if (m.zone >= 0 && m.voice) H.say(id, m.voice.wake); } // (a quest's king has had his say as he rose)
+    if (t && !s.woke) { // (a quest's king has had his say as he rose, and his taunts are timed)
+      s.woke = true;
+      if (m.zone >= 0 && m.voice) { H.say(id, m.voice.wake); m.nextTaunt = now + R.tauntMs[0] + Math.random() * (R.tauntMs[1] - R.tauntMs[0]); }
+    }
     if (s.phase < 2 && frac < R.phase[0]) { s.phase = 2; s.nextShards = now + R.shards.firstMs; H.say(id, R.lines.shards); H.broadcast("crown", { ev: "phase", id, phase: 2 }); }
     if (s.phase < 3 && frac < R.phase[1]) { s.phase = 3; s.nextFall = now + R.kingsfall.firstMs; H.say(id, R.lines.kingsfall); H.broadcast("crown", { ev: "phase", id, phase: 3 }); }
     // a move on its way

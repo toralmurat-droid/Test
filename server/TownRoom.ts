@@ -52,7 +52,7 @@ import { soundMult } from "../shared/combat";
 import type { SoundFx } from "../shared/skills";
 import { sellPrice, shopBuys, shopFuses, SHOPS } from "../shared/shops";
 import { BLOB_KINDS, CHAINS, CROWN_CHAIN, packQuest, chainDone, chainOpen, chainState, cleanMentor, inZone, isBlob, type MentorState, npcPresent, QuestState, questFinished, questStep, stepFor, stepGoal, Summon, type BossVoice, TUT_CHAIN, TUT_QUESTS, USE_RANGE } from "../shared/quests";
-import { findHideSpot, HIDE, type HideSpot, MOTHER_KEEP_OUT, noMobsAt, spawnPoint, SPAWN_ZONES, villageDist, zoneCap } from "../shared/spawns";
+import { bossHallAt, findHideSpot, HIDE, type HideSpot, MOTHER_KEEP_OUT, noMobsAt, spawnPoint, SPAWN_ZONES, villageDist, zoneCap } from "../shared/spawns";
 import { blocked, moveStep } from "../shared/movement";
 import { NIGHT_RAID, raiderByKey, raiderIgnores, RAIDERS } from "../shared/raiders";
 import { SLOTS_BY_ZONE, WORK_SLOTS } from "../shared/siege";
@@ -690,7 +690,8 @@ export class TownRoom extends Room<TownState> {
       const m = this.state.mobs.get(fromId);
       this.damagePlayer(pid, dmg, `${m ? mobDef(m).name : "?"}'s ${what}`, push, kb, { atkLevel: m?.level, from: fromId, ...o });
     },
-    canStand: (x, y) => !isSolidAt(x, y) && !isSafeZone(x, y) && !noMobsAt(x, y),
+    canStand: (m, x, y) => { const h = bossHallAt(Math.floor(x / TILE), Math.floor(y / TILE)); return !isSolidAt(x, y) && !isSafeZone(x, y) && !noMobsAt(x, y) && (!h || h === SPAWN_ZONES[m.zone]?.name); },
+    clearLine: (x0, y0, x1, y1) => { const n = Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 8); for (let i = 1; i <= n; i++) if (isSolidAt(x0 + (x1 - x0) * i / n, y0 + (y1 - y0) * i / n)) return false; return true; },
     say: (id, lines) => this.bossSay(id, lines),
     provoke: (m, heroId) => { const o = m as Mob; o.target = heroId; o.foe = ""; o.nextAggro = Date.now() + AGGRO.everyMs; this.addHate(o, heroId, 0); },
   });
@@ -3567,7 +3568,7 @@ export class TownRoom extends Room<TownState> {
     m.stunned = now < m.stunUntil;
     if (m.stunned || m.broken) { m.winding = false; m.windUntil = 0; }
     m.slowed = now < m.slowUntil;
-    if (m.stunned) { m.moving = false; return; }
+    if (m.stunned) { m.moving = false; if (m.cr) this.crown.stunned(m, id, now); return; } // (a Crownguard's shield drops, a herald's decree is cut off)
     if (m.kind === "nightraider") return this.raiderStep(m, id, dt, now);
     // Nobody around: the monster dozes (no wandering, no budding), which keeps big monster counts cheap
     if (!m.target && !m.tide && !this.sleepNear(m)) {
