@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-17",
+  "title": "Dungeon props rebuilt in 3D",
+  "changes": [
+    "Fire braziers, torch stakes, hide racks, skull poles and rock spikes in the dungeons are now 3D models baked to pixel art, with firelight on the iron and stone.",
+    "Same size on screen and no cost to performance."
+  ]
+}
