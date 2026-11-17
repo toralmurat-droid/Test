@@ -1,12 +1,16 @@
 import fs from "node:fs";
 import path from "node:path";
-import { postgresStore, type Store } from "./store";
+import { LEASE, Leases } from "./lease";
+import { openLeases, postgresStore, type Store } from "./store";
 
 /**
  * State of the world that belongs to no hero and must survive a restart: for now the Gloam Tide's meter (server/tide.ts).
  * JSON file (WORLD_FILE; default world.json next to SAVE_FILE, else data/world.json), written like the idea log (a temp
  * file renamed over the old one); with DATABASE_URL a "world" table of the same shape as the accounts table, one row.
  * Until initWorld() runs (tests, the bench) it lives in memory only and nothing is written.
+ * Several servers on one Postgres (Ages, a deploy's overlap): only the holder of lease `lease:world` (server/lease.ts; a
+ * primary Age) writes the row, and on taking the lease over it first reloads what the last holder wrote. The others keep
+ * their world in memory only (their meter's kills are not merged: a follower Age's Tide is its own until M5 goes further).
  */
 export interface WorldState {
   v: 1;
@@ -38,6 +42,8 @@ export function cleanWorld(raw: unknown): WorldState {
 let state: WorldState = fresh();
 let pg: Store<WorldState> | undefined;
 let live = false, dirty = false, writing: Promise<void> | undefined;
+const LEASE_KEY = "lease:world";
+let lease: Leases | undefined, mine = false;
 
 /** The world state (the same object until a restart: change it in place, then call worldChanged). */
 export function world(): WorldState { return state; }
@@ -65,13 +71,34 @@ export async function initWorld() {
     pg = await postgresStore<WorldState>(url, undefined, "world");
     state = cleanWorld((await pg.load())[KEY]);
   } else state = readFile();
+  lease = new Leases(url ? await openLeases(url) : undefined).want(LEASE_KEY);
+  await lease.renew();
+  mine = lease.held(LEASE_KEY);
   live = true;
   setInterval(() => { if (dirty) void flushWorld(); }, FLUSH_MS).unref();
+  if (lease.shared) setInterval(() => { void claimWorld(); }, LEASE.renewMs).unref();
+}
+
+/** Renews the world's lease; on taking it over, reloads the row the last holder wrote (in place: callers keep `world()`). */
+async function claimWorld() {
+  if (!lease) return;
+  await lease.renew();
+  const now = lease.held(LEASE_KEY);
+  if (now && !mine && pg) {
+    try {
+      const got = cleanWorld(await (pg.loadOne ? pg.loadOne(KEY) : pg.load().then((r) => r[KEY])));
+      delete state.marchAt;
+      Object.assign(state, got);
+      dirty = false;
+      console.log("World: took over the world's writes (reloaded the saved world)");
+    } catch (e: any) { console.error("World: could not reload on taking over, not writing yet:", e?.message ?? e); return; }
+  } else if (!now && mine) console.log("World: another server writes the world now");
+  mine = now;
 }
 
 /** Writes the world if it changed (one write at a time). */
 export async function flushWorld() {
-  if (!live || !dirty) return;
+  if (!live || !dirty || !(lease?.held(LEASE_KEY) ?? true) || !mine) return;
   if (writing) return writing;
   dirty = false;
   const snap = structuredClone(state);
@@ -92,4 +119,6 @@ export async function flushWorldFinal() {
   if (!live) return;
   if (writing) await writing;
   await flushWorld();
+  await lease?.release(); // (the next server takes the world over at once, reloading what was just written)
+  mine = false;
 }
