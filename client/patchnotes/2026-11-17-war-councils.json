@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-17",
+  "patch": 295,
+  "title": "War councils get ready",
+  "changes": [
+    "Each clan can now be led by a war council that meets once a war day, picks the lands to fight for and has the Herald read out its proclamation.",
+    "No council leads yet: the clan leaders you know still give every order. When a council takes over, its plans follow the same war rules as everyone else."
+  ]
+}
