@@ -6,6 +6,16 @@
 import { cap, chain, cone, custom, ell, mat, noise3, rng, sphere, torus, type Model, type Prim, type V3 } from "./mob3d";
 import type { HoundPalette, BirdPalette } from "./badlands";
 
+/** The same model S times bigger (a distance field scales as S * d(p / S)). */
+function scaleModel(m: Model, S: number): Model {
+  const sv = (p: V3): V3 => [p[0] * S, p[1] * S, p[2] * S];
+  return {
+    ...m, prims: m.prims.map((p) => ({ ...p, k: p.k * S, lo: sv(p.lo), hi: sv(p.hi), d: (x: number, y: number, z: number) => S * p.d(x / S, y / S, z / S) })),
+    eyes: m.eyes?.map((e) => ({ ...e, p: sv(e.p) })), halos: m.halos?.map((h) => ({ ...h, p: sv(h.p), r: h.r * S })),
+    shadow: { ...m.shadow, x: m.shadow.x * S, y: m.shadow.y * S, rx: m.shadow.rx * S, ry: m.shadow.ry * S }, lift: m.lift !== undefined ? m.lift * S : undefined,
+  };
+}
+
 export type Pose = "stand" | "step" | "wind" | "strike";
 const v = (a: V3, b: V3): V3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 const fur = (c: number, g = 0.3) => mat(c, { lo: 0.36, hi: 1.3, grain: g });
@@ -255,4 +265,69 @@ export function sinkworm(pose: Pose, f: number): Model {
     P.push(cone(q, v(q, [0.2, -Math.cos(a) * len, -Math.sin(a) * len]), 0.28, tooth));
   }
   return { prims: P, shadow: { x: 0, y: 0, rx: 9, ry: 8, a: 0.35 } };
+}
+
+// ------------------------------------------------------------------ the crawler
+/** The top half of a skeleton dragging itself along on its arms: skull up, ribs on the ground, a broken spine trailing. */
+export function crawler(pose: Pose, f: number): Model {
+  const P: Prim[] = [], step = pose === "step", wind = pose === "wind", strike = pose === "strike";
+  const B = boneM(), dark = mat(0x120d10, { lo: 0.6, hi: 1 }), rag = mat(0x3b3640, { lo: 0.4, hi: 1.3, grain: 0.3 });
+  const bx = (strike ? 2.4 : wind ? -1.2 : 0) - 2.6, rise = wind ? 2.2 : strike ? 0.6 : 0;
+  const at = (x: number, y: number, z: number): V3 => [bx + x, y, z];
+  // spine from the broken end up to the neck, ribcage hooped round it
+  const sp: V3[] = [at(-9, 0.4, 1.4), at(-6, 0, 2.2), at(-3, 0, 3.0 + rise * 0.3), at(0.5, 0, 4.0 + rise * 0.6), at(3.5, 0, 5.2 + rise)];
+  P.push(...chain(sp, 0.55, 0.65, B));
+  for (let i = 0; i < sp.length; i++) P.push(sphere(sp[i], 0.75, B, { k: 0.2 }));
+  P.push(ell(at(-0.6, 0, 3.0 + rise * 0.5), [3.0, 2.6, 2.2], dark, { k: 0.3 }));
+  for (let i = 0; i < 4; i++) {
+    const x = -2.6 + i * 1.2, cz = 3.0 + rise * 0.5;
+    P.push(custom(at(x - 1, -4, cz - 4), at(x + 1, 4, cz + 4), (px, py, pz) => {
+      const ring = Math.hypot(Math.hypot(py / 2.9, (pz - cz) / 2.4) - 1, (px - bx - x) / 0.42) * 2.3;
+      return Math.max(ring - 0.32, -(pz - 0.6));
+    }, B, { k: 0.15 }));
+  }
+  P.push(ell(at(-8.6, 0.4, 1.6), [1.4, 1.6, 0.9], rag, { k: 0.5 })); // grave-rag on the broken end
+  // the skull, raised, jaw working
+  const hd = at(5.8, 0, 7.0 + rise);
+  P.push(ell(hd, [2.3, 2.0, 2.1], B, { k: 0.5 }), ell(v(hd, [1.2, 0, -1.3]), [1.5, 1.5, 1.0], B, { k: 0.6 }));
+  const open = strike ? 0.9 : wind ? 0.6 : 0.2;
+  P.push(ell(v(hd, [1.2, 0, -2.3 - open]), [1.2, 1.2, 0.5], B, { k: 0.2 }));
+  for (const s of [-1, 1]) P.push({ ...sphere(v(hd, [1.7, s * 0.85, 0.1]), 0.75, dark, { k: 0.3 }), cut: true });
+  // arms: one reaching forward to claw the ground, the other pulling back, swapping on the step
+  for (const s of [-1, 1]) {
+    const reach = (step ? (s > 0 ? 1 : -1) : 0) * 2.4 + (strike ? 3.5 : wind ? -1 : 0) + (s > 0 ? 0.8 : -0.8);
+    const sh = at(2.4, s * 2.6, 4.6 + rise), hand: V3 = at(6.5 + reach, s * 4.0, 0.6 + (strike && s > 0 ? 3 : 0));
+    const el: V3 = [(sh[0] + hand[0]) / 2 - 0.6, s * 4.6, Math.max(sh[2], hand[2]) + 1.6];
+    P.push(cap(sh, el, 0.6, 0.5, B, { k: 0.2 }), sphere(el, 0.7, B, { k: 0.2 }), cap(el, hand, 0.5, 0.4, B, { k: 0.2 }));
+    for (let k = -1; k <= 1; k++) P.push(cap(hand, v(hand, [1.4, k * 0.5, -0.4]), 0.25, 0.12, B, { k: 0.1 }));
+  }
+  const eyes = [-1, 1].map((s) => ({ p: v(hd, [1.9, s * 0.8, 0.1]) as V3, col: 0xff5a3c }));
+  return scaleModel({ prims: P, eyes, shadow: { x: bx, y: 0, rx: 11, ry: 5.5, a: 0.4 } }, 1.28);
+}
+
+// ------------------------------------------------------------------ the mist wraith
+/** A hooded shape of grey-white mist, no legs, its body trailing to a swaying tail; long thin hands, a cold core, two cold eyes. */
+export function mistWraith(pose: Pose, f: number): Model {
+  const P: Prim[] = [], wind = pose === "wind", strike = pose === "strike";
+  const mist = mat(0xb8c4cc, { lo: 0.4, hi: 1.25, jelly: 0.45, spec: 0.3, grain: 0.15 }), core = mat(0x7ae8ff, { emit: 1, lo: 0.7, hi: 1.4 });
+  const hoodIn = mat(0x0c1014, { lo: 0.6, hi: 1 }), hand = mat(0xd0dce2, { lo: 0.45, hi: 1.2, jelly: 0.25 });
+  const sw = Math.sin(f * 1.3) * 1.2, lean = strike ? 2.2 : wind ? -1.2 : 0;
+  // the body: a cloak of mist from the hood down to a tail curling behind
+  const pts: V3[] = [[lean, 0, 21], [lean * 0.7, 0, 16], [-0.4, sw * 0.4, 10.5], [-1.4, sw, 5.5], [-2.2, sw * 1.8, 1.2]];
+  const rs = [3.5, 4.7, 4.1, 2.5, 0.6];
+  for (let i = 1; i < pts.length; i++) P.push(cap(pts[i - 1], pts[i], rs[i - 1], rs[i], mist, { k: 0.8 }));
+  const hd: V3 = [lean + 0.6, 0, 22.2];
+  P.push(ell(hd, [3.0, 3.0, 3.2], mist, { k: 0.8 }));
+  P.push({ ...ell(v(hd, [2.3, 0, -0.5]), [1.6, 1.9, 2.1], hoodIn, { k: 0.3 }), cut: true });
+  P.push({ ...ell([lean * 0.7 + 0.4, 0, 16], [1.5, 1.5, 1.7], core, { k: 0.4 }), inner: true });
+  // long thin arms reaching out, clawing on the strike
+  for (const s of [-1, 1]) {
+    const sh: V3 = [lean * 0.8, s * 3.6, 18.5], reach = strike ? 6 : wind ? 1.5 : 3.0, up = wind ? 4 : strike ? -1 : 0;
+    const hnd: V3 = [lean + reach * 0.5, s * (wind ? 10 : 8.5), 13 + up + (s > 0 ? sw * 0.4 : -sw * 0.4)];
+    const elb: V3 = [(sh[0] + hnd[0]) / 2, s * 6.4, (sh[2] + hnd[2]) / 2 + 0.6];
+    P.push(cap(sh, elb, 1.0, 0.5, mist, { k: 0.6 }), cap(elb, hnd, 0.45, 0.32, hand, { k: 0.3 }));
+    for (let k = -1; k <= 1; k++) P.push(cap(hnd, v(hnd, [0.6, s * 1.4, -1.0 + k * 0.7]), 0.25, 0.08, hand, { k: 0.1 }));
+  }
+  const eyes = [-1, 1].map((s) => ({ p: v(hd, [2.0, s * 0.8, -0.2]) as V3, col: 0x9ae4ff }));
+  return { prims: P, eyes, halos: [{ p: [lean * 0.7 + 0.4, 0, 16], r: 4, col: 0x7ae8ff, a: 0.25 }], shadow: { x: 0, y: 0, rx: 6.5, ry: 4, a: 0.35 }, lift: 3 + Math.sin(f * 1.7) * 1.2 };
 }
