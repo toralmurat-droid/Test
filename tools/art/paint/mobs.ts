@@ -82,7 +82,7 @@ function humanoid(key: string, kind: string, w: number, h: number, oy: number, s
   const base = kind.replace(/_(axe|spear|bow|champ|folk)$/, "").replace(/_champ$/, "");
   const pix = MOB3D.has(base) && !rip && !fall ? (f: number): MobFrame => {
     const up = lift ? lift + Math.sin(f * 1.7) * 1.2 : 0;
-    setMob3D({ tw: Math.round(w * TX), th: Math.round(h * TX), k: scale * TX, x0: 16 - w / 2 / scale, y0: 29 - (oy * h - up) / scale });
+    setMob3D({ tw: Math.round(w * TX), th: Math.round(h * TX), k: scale * TX, x0: 16 - w / 2 / scale, y0: 29 - (oy * h - up) / scale, lift: up / scale });
     humanoidFrame(kind, f, fall);
     const body = lastMob3D!;
     setMob3D(null);
