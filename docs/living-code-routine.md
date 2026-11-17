@@ -15,11 +15,11 @@ like any other, the pin is the gate. No email (not approved).
   the clan key. Suggested schedule: once a week per clan, on different days, so two clan PRs rarely wait on CI together.
 - The routine needs the repository cloned, Node 22 and `npm ci`, and a GitHub token for `gh` that can push branches
   and open pull requests on `toralmurat-droid/Test`. It needs no game-server secret and must never get one.
-- The routine never sets Railway variables or pins. To let a merged version run: read its `sha256` from the PR's verify
-  block (or `GET /admin/clan-plugins`), set `CLAN_PLUGINS=<clan>:<sha256>` in Railway, and switch the clan's council
+- The routine never sets Railway variables or pins. To let a merged version run: re-run `npm run clans:verify -- <clan>` on the
+  merged default branch, take the `sha256` from `GET /admin/clan-plugins` on the deployed server (not from the PR body), set `CLAN_PLUGINS=<clan>:<sha256>` in Railway, and switch the clan's council
   to the plug-in (`WAR_COUNCIL_PROVIDER=<clan>:plugin`, `WAR_COUNCIL=<clan>:shadow`, later `lead`).
-- PRs open ready (not draft), so they merge by themselves once CI passes (Murat's call). To look at each one first,
-  change `draft=false` to `draft=true` in step 7.
+- PRs open as drafts; the routine marks one ready only when the reviewer agent says OK TO MERGE (CLAUDE.md's merge
+  rule), and it then merges by itself once CI passes. A draft left by the routine waits for a look.
 - A branch named `claude/clan-<clan>-...` may change only `shared/clans/<clan>/`: CI (`tools/ci/clan-scope.mjs`)
   fails it otherwise, and runs the static check and the sandbox gate on that folder.
 
@@ -131,8 +131,12 @@ Shell variables may not survive between your commands: when one is gone, set it 
    Then:
    gh api -X POST repos/toralmurat-droid/Test/pulls \
      -f title="[clan code] <Clan>: <what> [no patch note]" \
-     -f head="$BRANCH" -f base="$DEFAULT" -F draft=false -F body=@/tmp/pr-body.md --jq .html_url
+     -f head="$BRANCH" -f base="$DEFAULT" -F draft=true -F body=@/tmp/pr-body.md --jq .number
    <Clan> is the clan's short name (Wardens, Redfang, Host, Hidekin, Veiled); <what> is at most 60 characters.
+   Then follow CLAUDE.md's merge rule: run the `reviewer` agent (.claude/agents/) on `git diff "$DEFAULT"...HEAD` with
+   the verify block. Only if it says OK TO MERGE, mark the PR ready:
+     gh api -X POST repos/toralmurat-droid/Test/pulls/<number>/ccr/ready_for_review
+   Otherwise leave it as a draft and put the reviewer's findings in your log line.
    Report the PR's URL and stop. Do not open a second PR, comment on other PRs, or retry a failed push or PR call
    more than once.
 

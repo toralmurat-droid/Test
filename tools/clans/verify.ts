@@ -54,6 +54,7 @@ export function simGate(clan: ClanKey, before: SimSummary, after: SimSummary): S
   if (a >= P.domWars) problems.push(`dominated wars ${pct(a)}: a clan held over ${pct(P.domShare)} of the land for more than ${P.domDays} days in a row in ${pct(P.domWars)} or more of the wars`);
   if (gain > P.landGainMax + 1e-9) problems.push(`${clan} averages ${pct(after.avg[clan])} of the land, ${(gain * 100).toFixed(1)} points over the baseline (at most +${(P.landGainMax * 100).toFixed(0)})`);
   if (!after.pluginCalls) problems.push("the plug-in never ran in the sim");
+  if (after.pluginFails > 0) problems.push(`the plug-in failed ${after.pluginFails} of ${after.pluginCalls} sim calls (live, 3 in a row switch it off)`);
   if (before.runs !== after.runs || before.days !== after.days) problems.push("the two sim runs differ in wars or days");
   return { ok: !problems.length, before: b, after: a, gain, problems };
 }
@@ -140,7 +141,7 @@ export async function verifyClan(clan: ClanKey, wars: number = CLAN_PLUGIN.verif
 }
 
 if (require.main === module) {
-  const args = process.argv.slice(2), opt = (n: string) => args.find((a) => a.startsWith(`--${n}=`))?.split("=")[1];
+  const args = process.argv.slice(2), opt = (n: string) => args.find((a) => a.startsWith(`--${n}=`))?.slice(n.length + 3);
   const clan = args.find((a) => !a.startsWith("--")) as ClanKey | undefined;
   if (!clan || !CLAN_KEYS.includes(clan)) { console.error(`usage: npm run clans:verify -- <clan> [--wars=${CLAN_PLUGIN.verifyWars}] [--days=${CLAN_PLUGIN.verifyDays}] [--out=<file>]   (clan: ${CLAN_KEYS.join(", ")})`); process.exit(2); }
   const wars = Number(opt("wars") ?? CLAN_PLUGIN.verifyWars), days = Number(opt("days") ?? CLAN_PLUGIN.verifyDays);

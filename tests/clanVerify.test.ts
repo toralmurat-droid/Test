@@ -58,6 +58,7 @@ test("sim gate: passes a quiet plug-in; fails on 5% dominated wars, on more than
   assert.match(land.problems[0], /wardens averages 23\.1% of the land, 3\.1 points over the baseline/);
   assert.equal(simGate("host", sim(quiet), sim(quiet, avg(0.3))).ok, true);
   assert.match(simGate("wardens", sim(quiet), sim(quiet, of(0.2), 0)).problems.join(), /never ran/);
+  assert.match(simGate("wardens", sim(quiet), { ...sim(quiet), pluginFails: 1 }).problems.join(), /failed 1 of 100/);
 });
 
 test("the PR block names clan, version, full sha256 and sha16, every step, and the sim before/after", () => {
