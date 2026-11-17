@@ -160,7 +160,14 @@ gameServer.define("town", TownRoom);
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 gameServer.onBeforeShutdown(async () => { announceUpgrade(); await wait(400); });
 // The rooms are gone by now (everyone saved and remembered where they stood): hand those spots to the next server
-gameServer.onShutdown(async () => { writeHandoff(); flushWar(); flushForge(); await flushFinal(); await flushWorldFinal(); await wait(800); });
+// The war's and the Forge's last writes and their leases handed on (Ages: server/war.ts flushWar, server/forge.ts
+// flushForge) run alongside, given at most 5 s together.
+gameServer.onShutdown(async () => {
+  writeHandoff();
+  const war = flushWar(), forge = flushForge();
+  await flushFinal(); await flushWorldFinal();
+  await Promise.all([wait(800), Promise.race([Promise.all([war, forge]), wait(5_000)])]);
+});
 
 // Accounts first (Postgres when DATABASE_URL is set): players must never join before their saves are loaded.
 // The world state (the Gloam Tide's meter, server/worldStore.ts) loads with them; the clan war (server/war.ts, its

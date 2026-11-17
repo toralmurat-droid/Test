@@ -5,7 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import pg from "pg";
-import { postgresStore } from "../server/store";
+import { openKv, pgLeases, postgresStore } from "../server/store";
 
 const url = process.env.TEST_DATABASE_URL;
 
@@ -50,4 +50,46 @@ test("postgres store: the world table saves and loads one row, and a bad table n
   await s.close!();
 
   for (const bad of ["world; DROP TABLE accounts", "Wor ld", "world1", "a-b"]) await assert.rejects(postgresStore(url!, undefined, bad), /Bad store table name/);
+});
+
+test("postgres store: loadOne reads one row; kv insertIfAbsent writes only a new key, list reads a prefix", { skip: !url }, async () => {
+  const admin = new pg.Client({ connectionString: url });
+  await admin.connect();
+  await admin.query("DROP TABLE IF EXISTS world");
+  await admin.query("DELETE FROM kv WHERE key LIKE 'agetest%'").catch(() => {});
+  await admin.end();
+  const s = await postgresStore<{ n: number }>(url!, undefined, "world");
+  await s.save({ a: { n: 1 }, b: { n: 2 } }, {});
+  assert.deepEqual(await s.loadOne!("b"), { n: 2 });
+  assert.equal(await s.loadOne!("nope"), undefined);
+  await s.close!();
+
+  const kv = await openKv(url);
+  assert.equal(await kv.insertIfAbsent!("agetest-pre", { n: 1 }), true);
+  assert.equal(await kv.insertIfAbsent!("agetest-pre", { n: 2 }), false, "an existing key is kept");
+  assert.deepEqual(await kv.get("agetest-pre"), { n: 1 });
+  await kv.set("agetest-q:a", { x: 1 }); await kv.set("agetest-q:b", { x: 2 }); await kv.set("agetest-r", { x: 3 });
+  assert.deepEqual(await kv.list!("agetest-q:"), { "agetest-q:a": { x: 1 }, "agetest-q:b": { x: 2 } });
+  assert.ok(kv.leases, "Postgres brings the shared lease table");
+  await kv.close!();
+});
+
+test("postgres leases: one holder at a time, renewal in one call, takeover only after the lease ran out", { skip: !url }, async () => {
+  const pool = new pg.Pool({ connectionString: url, max: 2 });
+  try {
+    await pool.query("DROP TABLE IF EXISTS leases");
+    const l = await pgLeases(pool);
+    assert.deepEqual((await l.acquire(["lease:a", "lease:b"], "x", 60_000)).sort(), ["lease:a", "lease:b"]);
+    assert.deepEqual(await l.acquire(["lease:a", "lease:b"], "y", 60_000), [], "held by x");
+    assert.deepEqual((await l.acquire(["lease:a", "lease:b"], "x", 60_000)).sort(), ["lease:a", "lease:b"], "x renews");
+    // both try at once: exactly one wins a free key
+    const [p, q] = await Promise.all([l.acquire(["lease:c"], "x", 60_000), l.acquire(["lease:c"], "y", 60_000)]);
+    assert.equal(p.length + q.length, 1);
+    await pool.query("UPDATE leases SET until = now() - interval '1 second' WHERE key = 'lease:a'");
+    assert.deepEqual(await l.acquire(["lease:a", "lease:b"], "y", 60_000), ["lease:a"], "ran out: y takes it, b stays x's");
+    await l.release(["lease:b"], "y");
+    assert.deepEqual(await l.acquire(["lease:b"], "y", 60_000), [], "y cannot release x's lease");
+    await l.release(["lease:b"], "x");
+    assert.deepEqual(await l.acquire(["lease:b"], "y", 60_000), ["lease:b"], "released: free at once");
+  } finally { await pool.end(); }
 });

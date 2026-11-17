@@ -143,7 +143,10 @@ emailed code (`server/mailer.ts`). Each account keeps one saved hero per class.
 
 Saves are written by the server on leave, every 30 seconds and on shutdown: to `data/saves.json` (change with
 `SAVE_FILE=...`), or to Postgres when `DATABASE_URL` is set (`server/accounts.ts`). World state (the Tide meter) goes to
-`world.json` next to the save file (`WORLD_FILE=...`), or to a `world` Postgres table (`server/worldStore.ts`). Passwords are stored hashed
+`world.json` next to the save file (`WORLD_FILE=...`), or to a `world` Postgres table (`server/worldStore.ts`).
+Several servers on one Postgres (Ages, a deploy's overlap) take turns through a `leases` table (`server/lease.ts`): only
+the holder ticks the clan war and writes the world; `AGE_ROLE` (`primary` default, `vanguard`, `draining`: only a
+primary competes) and `AGE_SLOT` (default `main`) name the server (`docs/ages-progress.md`). Passwords are stored hashed
 (scrypt). Back up the save file; it is not in git. During a restart, players are handed over through
 `data/handoff.json` and come back where they stood.
 
