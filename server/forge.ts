@@ -14,10 +14,16 @@
  *   and the listeners (each room re-sends the pack and recomputes its heroes' stats).
  * - Saved under its own kv key "forge" (the war's store, not the war save), one write at a time (like server/war.ts).
  * - Kill switch: killForge(on) or FORGE_KILL=1 stops spawns, drops, sales and commissions at once; items keep working.
+ * - Ages (roadmap M5, docs/ages-progress.md): several servers may share the store. Only the holder of lease `lease:forge`
+ *   (server/lease.ts; always, without a shared store; with one, only the war's owner competes for it, and a forge owner
+ *   that loses the war hands the forge on) runs the clock and the gates, takes commissions and admin changes,
+ *   and writes. The others reload the row every LEASE.renewMs and rebuild the registry when it changed, so items forged
+ *   elsewhere stay known. A save of a newer FORGE_API (shared/forgeApi.ts) is never written: read-only or hidden.
  * - No email: everything is logged (capped), forgeDayLines(day) gives the day's lines for the war digest.
  * - The Herald (M4 PR4): a lead commission ("the forges are burning"), a forging gone live and a failed gate queue a
  *   plain-text line; server/war.ts takes them (takeForgeNews) with the next war tick's news.
  */
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { Worker } from "node:worker_threads";
@@ -26,11 +32,13 @@ import {
   defFromRecipe, FORGE, liveWeapons, FORGED_GEAR_RE, forgeLookup, forgedGearId, forgedMobId, parseForgedGearId, parseForgedMobId, validateRecipe,
   type Forged, type ForgedMob, type ForgedWeapon, type ForgeRecipe, type ForgeStatus, type MonsterRecipe, type WeaponRecipe,
 } from "../shared/forge";
+import { FORGE_API, forgeAccess } from "../shared/forgeApi";
 import { rollAffixes, setForgedGear, withLevel } from "../shared/gear";
 import { CLANS, CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import { warDay, type ForgeBriefCtx } from "../shared/war/council";
+import { buildId, LEASE, Leases } from "./lease";
 import { openKv, type Kv } from "./store";
-import { warSpendArmy, warState } from "./war";
+import { warRole, warSpendArmy, warState } from "./war";
 
 export type ForgeMode = "lead" | "shadow";
 /** A commission in research: its registry number is taken, it goes live on `liveDay` once the gate passed. */
@@ -38,7 +46,12 @@ export interface ForgeProject { seq: number; recipe: ForgeRecipe; day: number; l
 export type ForgeLogKind = "commission" | "shadow" | "refused" | "cost" | "gate_pass" | "gate_fail" | "live" | "retire" | "revoke" | "kill" | "load";
 export interface ForgeLogEntry { at: number; day?: number; clan?: ClanKey; kind: ForgeLogKind; id?: string; text: string }
 export interface ForgeSave {
+  /** FORGE_API of the build that wrote it (shared/forgeApi.ts). */
   v: 1;
+  /** Ages (M5): the oldest FORGE_API that may show this save (a newer build sets it; missing: `v` itself). Optional. */
+  minReader?: number;
+  /** Ages (M5): a stamp of the write (unique per write, shared store only), so a server regaining the lease knows whether anyone else wrote. Optional. */
+  wrote?: string;
   /** Last registry number given (weapons and monsters share it). */
   seq: number;
   /** Every forging that ever went live, any status. Never deleted. */
@@ -161,11 +174,9 @@ function rebuild() {
 
 /** Forge saves run one after another, each writing the forge as it stands then (never two writes in flight). */
 let saving: Promise<void> = Promise.resolve();
-function persist(): Promise<void> {
-  const write = async () => { if (kv) await kv.set(KEY, save).catch((e) => console.error("Forge: could not save:", e)); };
-  saving = saving.then(write, write);
-  return saving;
-}
+function chain(write: () => Promise<void>) { saving = saving.then(write, write); return saving; }
+// (checked when the write runs: a server that lost the lease meanwhile, or follows, never writes the forge)
+const persist = (): Promise<void> => chain(async () => { if (kv && canWrite()) await kv.set(KEY, stamped(save)).catch((e) => console.error("Forge: could not save:", e)); });
 function log(e: Omit<ForgeLogEntry, "at"> & { at?: number }) {
   save.log.push({ at: Date.now(), ...e });
   if (save.log.length > FORGE.logMax) save.log.splice(0, save.log.length - FORGE.logMax);
@@ -186,25 +197,172 @@ export function forgeLine(moment: "burning" | "live" | "failed", clan: ClanKey, 
 /** The current war day (undefined before the war is loaded: then nothing goes live). */
 const today = (): number | undefined => { const s = warState(); return s ? warDay(s.tick) : undefined; };
 
-/** Loads the forge (before the server listens: saves with forged items need the registry) and starts its clock. */
-export async function initForge(store?: Kv) {
+/**
+ * Loads the forge (before the server listens: saves with forged items need the registry) and starts its clock: every
+ * LEASE.renewMs renew the lease, then run the research clock (holder) or reload the saved row (the others).
+ * `leases`: tests. Safe to call more than once (a fresh start).
+ */
+export async function initForge(store?: Kv, leases?: Leases) {
+  stopForge();
   kv = store ?? (await openKv());
-  const got = await kv.get<unknown>(KEY);
-  save = cleanForge(got);
-  if (got !== undefined && (!got || typeof got !== "object" || Array.isArray(got))) {
-    await kv.set(`${KEY}-old-${Date.now()}`, got); // a forge that cannot be read at all: kept aside, not lost
-    console.log("Forge: the saved forge cannot be read, a new registry begins (old one kept)");
-  }
-  rebuild();
-  for (const k of CLAN_KEYS) for (const p of save.projects[k] ?? []) if (p.gate === "pending") startGate(k, p);
+  role = "follower"; stopping = false; pulsing = false; seenRow = ""; ours.clear(); save = fresh();
+  lease = (leases ?? new Leases(kv.leases)).want(LEASE_KEY);
+  if (warOwned()) await lease.renew();
+  if (lease.held(LEASE_KEY)) await takeOver();
+  else { await follow(); rebuild(); } // (a registry of this start, never the one a previous init left installed)
   if (envKill()) console.log("Forge: FORGE_KILL=1, the forge is off");
   console.log(`Forge: ${save.defs.length} forgings (${save.defs.filter((d) => d.status === "active").length} live)`);
-  if (timer) clearInterval(timer);
-  timer = setInterval(() => { try { forgeClock(); } catch (e) { console.error("Forge: clock failed:", e); } }, 15_000);
+  timer = setInterval(() => { void pulse(); }, LEASE.renewMs);
   timer.unref?.();
 }
-/** Last write while shutting down (blocking where the store can). */
-export function flushForge() { if (kv?.setSync) try { kv.setSync(KEY, save); } catch (e) { console.error("Forge: could not save:", e); } }
+export function stopForge() { if (timer) clearInterval(timer); timer = undefined; }
+
+/**
+ * Last write while shutting down (blocking where the store can). With a shared store (Ages) the clock stops and a beat
+ * under way stops at its next step (`stopping`: no takeover, research or save after it), the holder writes the forge one
+ * last time and the lease is given back, so the next server takes over at once. Resolves when that is done
+ * (server/index.ts waits for it with the war's, capped).
+ */
+export function flushForge(): Promise<void> {
+  const own = canWrite();
+  if (own && kv?.setSync) try { kv.setSync(KEY, stamped(save)); } catch (e) { console.error("Forge: could not save:", e); }
+  if (!lease?.shared) return Promise.resolve();
+  stopping = true; stopForge();
+  const l = lease, snap = save, store = kv;
+  const last = own && store && !store.setSync ? chain(() => store.set(KEY, stamped(snap)).catch((e) => console.error("Forge: could not save:", e))) : Promise.resolve();
+  if (role === "owner") role = "follower";
+  return last.then(() => saving).then(() => l.release());
+}
+
+// ---- Ages (roadmap M5: two builds side by side on one Postgres; docs/ages-progress.md) ------------------------------------
+
+/**
+ * This server's part in the forge, like the war's (server/war.ts WarRole): the "owner" (holder of lease `lease:forge`;
+ * always, without a shared store) researches, gates, takes commissions and writes; a "follower" reloads the saved row;
+ * "read" shows a forge saved by a newer build that allows it, "hidden" one that does not. Only the owner writes.
+ */
+export type ForgeRole = "owner" | "follower" | "read" | "hidden";
+let role: ForgeRole = "owner";
+let lease: Leases | undefined;
+const LEASE_KEY = "lease:forge";
+/** The saved row as a follower last read it (JSON text: any difference is a change). */
+let seenRow = "";
+let pulsing = false;
+/** Shutting down (flushForge): a beat under way takes over, researches and saves nothing more. */
+let stopping = false;
+/** This server's part in the forge (tests, logs, /admin/forge). */
+export const forgeRole = (): ForgeRole => role;
+const canWrite = () => !stopping && role === "owner" && (!lease || lease.held(LEASE_KEY));
+
+/** Stamps of the forge writes this process made (ForgeSave.wrote; NONE: a row without one, as loaded). Trimmed to the last 64. */
+const ours = new Set<string>(), NONE = "-";
+const ownStamp = (got: unknown) => { const w = (got as ForgeSave | undefined)?.wrote; return ours.has(typeof w === "string" ? w : NONE); };
+/** The forge with a new stamp of this process, about to be written (a shared store only: JSON files stay as they were). */
+function stamped(s: ForgeSave): ForgeSave {
+  if (!lease?.shared) return s;
+  const id = randomUUID();
+  ours.add(id);
+  if (ours.size > 64) ours.delete(ours.values().next().value!);
+  s.wrote = id;
+  return s;
+}
+
+/** Every LEASE.renewMs: renew the lease, take the forge over when it became ours, then research (owner) or follow. */
+async function pulse() {
+  if (pulsing || stopping || !kv) return;
+  pulsing = true;
+  try {
+    if (lease) {
+      if (role === "owner" && !warOwned()) await handOver(); // (the war went to another server: the forge follows it there)
+      else if (role === "read" || role === "hidden" || !warOwned()) await lease.release(); // (a newer forge, or not the war's owner: never competes)
+      else await lease.renew();
+      if (stopping) return;
+      const mine = lease.held(LEASE_KEY);
+      if (role === "owner" && !mine) { role = "follower"; seenRow = ""; console.log("Forge: lost the forge's lease (another server holds it, or the database cannot be reached): following, not writing"); }
+      if (role === "follower" && mine) await takeOver();
+      if (stopping) return;
+    }
+    if (role === "owner") forgeClock(); else await follow();
+  } catch (e) { console.error("Forge: clock failed:", e); }
+  finally { pulsing = false; }
+}
+/**
+ * With a shared store the forge's lease goes with the war's: commissions are paid from the war save, so a forge owner
+ * that does not tick the war could take none. Only the war's owner competes for `lease:forge`.
+ */
+const warOwned = () => !lease?.shared || warRole() === "owner";
+/** The forge's owner lost the war: write the forge once more and give the lease back, so the war's owner takes it at its next beat. */
+async function handOver() {
+  const l = lease!, store = kv, snap = save, own = canWrite();
+  role = "follower"; seenRow = "";
+  console.log("Forge: this server no longer ticks the war: the forge is written once more and handed on with it");
+  if (own && store) await chain(() => store.set(KEY, stamped(snap)).catch((e) => console.error("Forge: could not save:", e)));
+  await l.release();
+}
+/** Tests: one clock beat as the timer would run it. */
+export const _forgePulse = () => pulse();
+
+/**
+ * This server becomes the forge's owner (at the start, or on taking the lease over): reads the saved forge, snapshots it
+ * once per build (`forge-pre-<build>`, shared store only), loads it and restarts the gates of research still pending.
+ * A save of a newer version is never written over (read-only or hidden, and the lease given back); one that is not an
+ * object at all is kept aside and a new registry begins, as before the Ages.
+ */
+async function takeOver() {
+  const got = await kv!.get<unknown>(KEY), access = got === undefined ? undefined : forgeAccess(got);
+  if (stopping) return;
+  if (access === "read" || access === "hide") { adoptNewer(got, access); await lease?.release(); return; }
+  if (role !== "owner" && got !== undefined && ownStamp(got)) { // (the lease is back, e.g. after a database outage, and nobody wrote meanwhile)
+    role = "owner"; seenRow = "";
+    console.log("Forge: the forge's lease is back and nobody wrote the forge meanwhile: going on with this server's forge (unsaved changes kept)");
+    gatePending();
+    return;
+  }
+  if (got !== undefined && lease?.shared) {
+    const pre = `${KEY}-pre-${buildId().replace(/[^a-z0-9_-]/gi, "_").slice(0, 80)}`;
+    if (kv!.insertIfAbsent) await kv!.insertIfAbsent(pre, got);
+    else if ((await kv!.get(pre)) === undefined) await kv!.set(pre, got);
+    if (stopping) return;
+  }
+  if (access === "corrupt") {
+    await kv!.set(`${KEY}-old-${Date.now()}`, got); // a forge that cannot be read at all: kept aside, not lost
+    if (stopping) return;
+    console.log("Forge: the saved forge cannot be read, a new registry begins (old one kept)");
+  }
+  if (got !== undefined && access !== "corrupt") ours.add(typeof (got as ForgeSave).wrote === "string" ? (got as ForgeSave).wrote! : NONE); // (the row as loaded)
+  const was = role;
+  save = cleanForge(got);
+  role = "owner"; seenRow = "";
+  if (was !== "owner" && lease?.shared) console.log(`Forge: ${lease.holder} runs the forge`);
+  rebuild();
+  gatePending();
+}
+/** A save of a newer version: its forgings shown read-only when it allows this build (`minReader`), else none. Never written. */
+function adoptNewer(got: unknown, access: "read" | "hide") {
+  const next: ForgeRole = access === "read" ? "read" : "hidden";
+  if (role !== next) console.log(`Forge: the saved forge is version ${(got as ForgeSave).v} (this build knows ${FORGE_API}): ${next === "read" ? "shown read-only" : "hidden"}, never written`);
+  role = next;
+  save = next === "read" ? cleanForge(got) : fresh();
+  rebuild();
+}
+/**
+ * Not the owner: read the saved forge; when another server wrote it, take it as it is and rebuild the registry (the gear
+ * lookup, forged monsters, capital stock, the rooms' pack), so items forged there are known here too.
+ */
+async function follow() {
+  const got = await kv!.get<unknown>(KEY);
+  if (stopping) return;
+  const row = got === undefined ? "" : JSON.stringify(got), changed = row !== seenRow;
+  seenRow = row;
+  const access = got === undefined ? undefined : forgeAccess(got);
+  if (access === "read" || access === "hide") { if (changed || role === "owner" || role === "follower") adoptNewer(got, access); return; }
+  if (role !== "follower") console.log(`Forge: ${lease?.holder ?? "this server"} follows the forge (another server runs it)`);
+  role = "follower";
+  if (!changed || got === undefined || ownStamp(got)) return; // (nothing yet, or our own last write: keep ours, it may be newer)
+  if (access === "corrupt") { console.error("Forge: the saved forge cannot be read here, showing the last one read"); return; }
+  save = cleanForge(got);
+  rebuild();
+}
 
 // ---- Commissions, research, the gate --------------------------------------------------------------------------------
 
@@ -213,8 +371,17 @@ export type CommissionResult = { ok: true; seq?: number; liveDay?: number } | { 
 /**
  * Clan `clan` orders a forging for war day `day` (PR4: a council's order). `shadow`: only logged, nothing spent or made.
  * `lead`: validated, paid, gated in the background, live FORGE.researchDays later. Never trusts `recipe`.
+ * Ages: refused ("not_owner", nothing spent or saved) unless this server holds the forge's lease and ticks the war (the
+ * army is paid from the war save, which only its owner writes).
  */
 export function commission(clan: unknown, recipe: unknown, day: unknown, mode: ForgeMode = "lead", now = Date.now()): CommissionResult {
+  if (!canWrite() || warRole() !== "owner") {
+    const why = !canWrite() ? `the forge is run by another server (this one: ${role})` : `the war is ticked by another server (this one: ${warRole()})`;
+    const k = isClan(clan) ? clan : undefined, text = `${k ? CLANS[k].name : "?"}: forging refused (not_owner: ${why})`;
+    if (canWrite()) log({ at: now, kind: "refused", clan: k, day: isDay(day) ? day : undefined, text }); // (the forge's own log: /admin/forge shows it)
+    else if (!process.env.NODE_TEST_CONTEXT) console.log(`Forge: ${text}`); // (a follower's log is the owner's, replaced at each reload)
+    return { ok: false, code: "not_owner", msg: why };
+  }
   const no = (code: string, msg: string, k?: ClanKey): CommissionResult => {
     log({ at: now, kind: "refused", clan: k, day: isDay(day) ? day : undefined, text: `${k ? CLANS[k].name : "?"}: forging refused (${code}: ${msg})` });
     return { ok: false, code, msg };
@@ -243,20 +410,27 @@ export function commission(clan: unknown, recipe: unknown, day: unknown, mode: F
 }
 const idOf = (p: ForgeProject) => (p.recipe.kind === "weapon" ? forgedGearId(p.seq, p.recipe.base) : forgedMobId(p.seq));
 
-/** Gates run one after another (each takes a few seconds of CPU). */
+/** Gates run one after another (each takes a few seconds of CPU). `queued`: the projects waiting or under way. */
 let gating: Promise<void> = Promise.resolve();
+const queued = new Set<ForgeProject>();
 function startGate(clan: ClanKey, p: ForgeProject) {
+  if (queued.has(p)) return;
+  queued.add(p);
   const run = async () => {
-    if (!(save.projects[clan] ?? []).includes(p)) return; // gone meanwhile (a reset)
-    let v: GateVerdict;
-    try { v = await runGate(defFromRecipe(p.recipe, p.seq)); } catch (e) { v = { ok: false, reasons: [`error: ${(e as Error)?.message ?? e}`] }; }
-    gateDone(clan, p, v);
+    try {
+      if (!(save.projects[clan] ?? []).includes(p) || !canWrite()) return; // gone meanwhile (a reset, a reload), or no longer ours
+      let v: GateVerdict;
+      try { v = await runGate(defFromRecipe(p.recipe, p.seq)); } catch (e) { v = { ok: false, reasons: [`error: ${(e as Error)?.message ?? e}`] }; }
+      gateDone(clan, p, v);
+    } finally { queued.delete(p); }
   };
   gating = gating.then(run, run);
 }
+/** The owner gates every project still pending (at takeover; the gate of one queued already is not run twice). */
+function gatePending() { for (const k of CLAN_KEYS) for (const p of save.projects[k] ?? []) if (p.gate === "pending") startGate(k, p); }
 function gateDone(clan: ClanKey, p: ForgeProject, v: GateVerdict) {
   const list = save.projects[clan] ?? [];
-  if (!list.includes(p)) return;
+  if (!list.includes(p) || !canWrite()) return; // (Ages: the lease went meanwhile: still pending, the next owner gates it)
   const name = CLANS[clan].name;
   if (v.ok) {
     p.gate = "pass";
@@ -320,7 +494,7 @@ function inWorker(file: string, def: Forged, timeoutMs: number): Promise<GateVer
 
 /** Research done: projects that passed the gate go live on their day. Runs every 15 s and after each gate. */
 export function forgeClock(day = today()) {
-  if (day === undefined || forgeKilled()) return;
+  if (day === undefined || forgeKilled() || !canWrite()) return; // (Ages: the owner only)
   const due: [ClanKey, ForgeProject][] = [];
   for (const k of CLAN_KEYS) for (const p of save.projects[k] ?? []) if (p.gate === "pass" && day >= p.liveDay) due.push([k, p]);
   if (!due.length) return;
@@ -350,7 +524,7 @@ function goLive(def: Forged, day?: number) {
 const defById = (id: string) => save.defs.find((d) => d.id === id);
 /** No new copies (items and living monsters keep their stats). */
 export function retireForged(id: string): boolean {
-  const d = defById(id);
+  const d = canWrite() ? defById(id) : undefined; // (Ages: the owner only)
   if (!d || d.status !== "active") return false;
   d.status = "retired";
   log({ kind: "retire", clan: d.clan, id, text: `"${d.name}" (${id}) retired by an admin` });
@@ -359,19 +533,20 @@ export function retireForged(id: string): boolean {
 }
 /** Back to the base's stats everywhere (names kept); rooms recompute their heroes' stats. */
 export function revokeForged(id: string): boolean {
-  const d = defById(id);
+  const d = canWrite() ? defById(id) : undefined; // (Ages: the owner only)
   if (!d || d.status === "revoked") return false;
   d.status = "revoked";
   log({ kind: "revoke", clan: d.clan, id, text: `"${d.name}" (${id}) revoked: its items fall back to the base` });
   rebuild(); void persist();
   return true;
 }
-/** The kill switch: no forged spawns, drops, sales or commissions while on. */
-export function killForge(on: boolean) {
-  if (!!save.killed === on) return;
+/** The kill switch: no forged spawns, drops, sales or commissions while on. False: unchanged (already so, or not the owner). */
+export function killForge(on: boolean): boolean {
+  if (!!save.killed === on || !canWrite()) return false; // (Ages: the owner only; FORGE_KILL=1 works anywhere)
   if (on) save.killed = true; else delete save.killed;
   log({ kind: "kill", text: on ? "the forge was switched off" : "the forge was switched back on" });
   rebuild(); void persist();
+  return true;
 }
 export const forgeKilled = () => envKill() || !!save.killed;
 
@@ -398,7 +573,7 @@ export const forgeTicking = () => !!timer;
 export function forgeAdmin(n = 50) {
   const d = today();
   return {
-    killed: forgeKilled(), envKill: envKill(), seq: save.seq, day: d,
+    killed: forgeKilled(), envKill: envKill(), seq: save.seq, day: d, role, holder: lease?.holder,
     defs: save.defs.map((x) => ({ id: x.id, kind: x.kind, clan: x.clan, name: x.name, status: x.status })),
     projects: save.projects, lost: save.lost?.length ?? 0, log: save.log.slice(-n),
     digest: d !== undefined && d > 0 ? forgeDigest(d - 1) : undefined,
@@ -414,7 +589,7 @@ export function mountForgeAdmin(app: Express, ok: (req: Request) => boolean) {
   app.post("/admin/forge", (req, res) => {
     if (!ok(req)) { res.sendStatus(404); return; }
     const q = req.query, done: Record<string, boolean> = {};
-    if (q.kill === "1" || q.kill === "0") killForge(q.kill === "1");
+    if (q.kill === "1" || q.kill === "0") done.kill = killForge(q.kill === "1");
     if (typeof q.retire === "string" && FORGE_ID_RE.test(q.retire)) done.retired = retireForged(q.retire);
     if (typeof q.revoke === "string" && FORGE_ID_RE.test(q.revoke)) done.revoked = revokeForged(q.revoke);
     res.setHeader("Cache-Control", "no-store");
@@ -463,8 +638,9 @@ export function forgeQuery(msg: unknown): string[] | undefined {
 
 /** Tests: start over from this save (cleaned) and store (none: nothing written). */
 export function _resetForge(raw?: unknown, store?: Kv) {
-  save = cleanForge(raw); kv = store; runner = undefined; gating = Promise.resolve(); news.length = 0;
-  if (timer) { clearInterval(timer); timer = undefined; }
+  stopForge();
+  save = cleanForge(raw); kv = store; runner = undefined; gating = Promise.resolve(); queued.clear(); news.length = 0;
+  role = "owner"; lease = undefined; seenRow = ""; pulsing = false; stopping = false; ours.clear();
   rebuild();
 }
 /** Tests only (no route or message reaches it): commission and force a recipe live at once, no cost, no gate. */
