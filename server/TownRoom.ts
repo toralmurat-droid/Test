@@ -118,6 +118,7 @@ import { byPart, hitBy } from "./hitBy";
 import { addValor, attachWar, onWar, rallyTell, relate, warNow, warState, warTowns } from "./war";
 import { boonGold, boonGoldMult, WarCrown } from "./warCrown";
 import { HoldWalls } from "./holdWalls";
+import { fortGroundAt, isWildMob, wildSpawnPoint } from "../shared/war/fortGround";
 import { routeFrame } from "../shared/war/holdRoutes";
 import { clanView, cleanOath, Presence, swear } from "./warHeroes";
 import { WarTroops } from "./warTroops";
@@ -861,7 +862,7 @@ export class TownRoom extends Room<TownState> {
   });
 
   /** Hold walls (server/holdWalls.ts): the forts follow the war's holders; nobody is left standing in a wall. */
-  private holdWalls = new HoldWalls({ heroes: () => this.state.players.entries(), mobs: () => this.state.mobs.entries() });
+  private holdWalls = new HoldWalls({ heroes: () => this.state.players.entries(), mobs: () => this.state.mobs.entries(), wild: (m) => this.wildMob(m as Mob) });
 
   /** Tabards (server/warOaths.ts): every hero's clan and Renown rank, by message (the Player schema is full). */
   private oaths = new WarOaths({ heroes: () => this.state.players.entries(), broadcast: (msg) => this.broadcast("oaths", msg) });
@@ -1606,15 +1607,14 @@ export class TownRoom extends Room<TownState> {
       const at = postPos(POSTS[post]);
       return this.playerNear(at.x, at.y, NO_SPAWN_RANGE) ? null : { ...at, level: spawnPoint(SPAWN_ZONES[zi], kind).level };
     }
-    for (let i = 0; i < 12; i++) {
-      const pt = spawnPoint(SPAWN_ZONES[zi], kind);
-      if (!this.playerNear(pt.x, pt.y, NO_SPAWN_RANGE)) return pt;
-    }
-    return null;
+    // never on a clan's fort ground (shared/war/fortGround.ts): only its holder's troopers stand there
+    return wildSpawnPoint(SPAWN_ZONES[zi], kind, (x, y) => !this.playerNear(x, y, NO_SPAWN_RANGE));
   }
 
   /** A zone monster (re)spawns: in a land a clan holds, maybe as its forged monster (server/forgeMobs.ts), else maybe a champion. */
   private zoneSpawn(kind: MobKind, zi: number, id: string, at?: ReturnType<typeof spawnPoint>) {
+    // off fort ground (shared/war/fortGround.ts); a zone whose every roll lands in a fort goes one short (camps take posts)
+    if (!at && campOfZone(SPAWN_ZONES[zi].name) < 0) { at = wildSpawnPoint(SPAWN_ZONES[zi], kind) ?? undefined; if (!at) return; }
     const fv = zoneVariant(zi, kind);
     this.spawnMob(kind, zi, id, at, fv);
     if (!fv) this.champs.roll(this.state.mobs.get(id)!, id); // about one in twenty comes as a champion (shared/champions.ts)
@@ -1699,7 +1699,11 @@ export class TownRoom extends Room<TownState> {
   private takeJob(m: Mob, id: string, zone: string) {
     const slots = SLOTS_BY_ZONE.get(zone);
     if (!slots) return;
-    const free = slots.filter((k) => { const o = this.state.mobs.get(this.jobs.get(k) ?? ""); return !o || o.dead || o.job !== k || this.jobs.get(k) === id; });
+    const free = slots.filter((k) => {
+      const w = WORK_SLOTS[k], o = this.state.mobs.get(this.jobs.get(k) ?? "");
+      if (fortGroundAt(w.x, w.y) || (w.fromX !== undefined && fortGroundAt(w.fromX, w.fromY!))) return false; // a site a clan's fort stands on: left idle (shared/war/fortGround.ts)
+      return !o || o.dead || o.job !== k || this.jobs.get(k) === id;
+    });
     if (!free.length) return; // every job taken: this one patrols
     const k = free[Math.floor(Math.random() * free.length)];
     this.jobs.set(k, id);
@@ -4124,7 +4128,15 @@ export class TownRoom extends Room<TownState> {
     // monster-free ground (the towns, the Sun Furnace's plateau): only a quest boss and what it calls walk there
     if (noMobsAt(x, y) && !m.summonFor && !(m.mother && this.state.mobs.get(m.mother)?.summonFor)) return false;
     if (m.kind === "motherblob") { const d = villageDist(x, y); if (d < MOTHER_KEEP_OUT && d < villageDist(m.x, m.y)) return false; }
+    // a clan's fort (shared/war/fortGround.ts): no wild monster walks in; one that stands on it may still walk out
+    if (fortGroundAt(x, y) && !fortGroundAt(m.x, m.y) && this.wildMob(m)) return false;
     return true;
+  }
+  /** Wild (shared/war/fortGround.ts isWildMob), and not budded by a monster that isn't (a quest or guardian Mother Blob's brood). */
+  private wildMob(m: Mob): boolean {
+    if (!isWildMob(m)) return false;
+    const mo = m.mother ? this.state.mobs.get(m.mother) : undefined;
+    return !mo || isWildMob(mo);
   }
 
   // ---- Redfang Hollow bandits (shared/bandits.ts) -----------------------------
