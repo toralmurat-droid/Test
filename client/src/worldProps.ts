@@ -69,7 +69,7 @@ export function pen(buf: Uint32Array, W: number, H: number): Pen {
 export const BAKED_PROPS: Record<string, [number, number]> = {
   wp_lantern_pole: [32, 90], wp_dummy: [34, 58], wp_skull_pike: [26, 72], wp_pennant_red: [44, 100], wp_pennant_black: [44, 100],
   wp_net_rack: [54, 50], wp_spear_rack: [56, 80], wp_weapon_rack: [56, 80], wp_watchtower: [60, 126], wp_spears_ground: [40, 54],
-  wp_cow0: [COW_W, COW_H], wp_cow1: [COW_W, COW_H], wp_millwheel: [MILL_W, MILL_H],
+  wp_cow0: [COW_W, COW_H], wp_cow1: [COW_W, COW_H], wp_millwheel: [MILL_W, MILL_H], wp_shipwreck: [300, 200],
   siege_catapult: [152, 118], siege_ram: [144, 104], siege_tower: [116, 192], siege_lumber: [112, 62], siege_sawhorse: [60, 40],
   dg_brazier: [32, 50], dg_torch: [18, 58], dg_rack: [50, 54], dg_pole: [30, 58], dg_spike: [22, 44],
   dp_candles: [30, 30], dp_skulls: [40, 40], dp_jar: [24, 30],
