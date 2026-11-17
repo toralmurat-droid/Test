@@ -6,10 +6,13 @@
 // An update (the server said "upgrading", closed with code 4000, or came back as a new build) gets a cheerful
 // gilded "New lands are being forged!" notice; anything else gets a plain "Connection lost" one.
 
+import { AGE_SLOT_RE, CROSS_SPEAKER, CROSS_TEXT } from "../../shared/ageCross";
+
 const KEY = "rejoin";
+const NOTE = "crossnote";
 const BACKSTORY = "rejoinchat";
 
-export interface Rejoin { name: string; password: string; cls: string; color: number }
+export interface Rejoin { name: string; password: string; cls: string; color: number; /** Slot of the Age we just crossed to (its login may be refused for a moment: see `crossArrival`). */ cross?: string }
 
 /** Login saved by a previous reconnect (read once, then forgotten). */
 export function takeRejoin(): Rejoin | null {
@@ -19,9 +22,15 @@ export function takeRejoin(): Rejoin | null {
     if (!raw) return null;
     const r = JSON.parse(raw);
     // Only use it if it is fresh: a manual reload later shows the normal login screen
-    return Date.now() - (r.at ?? 0) < 5 * 60_000 ? r : null;
+    const ok = Date.now() - (r.at ?? 0) < 5 * 60_000;
+    arrival = ok && typeof r.cross === "string" ? r.cross : undefined;
+    return ok ? r : null;
   } catch { return null; }
 }
+
+let arrival: string | undefined;
+/** Set when the page was loaded by a crossing (takeRejoin had `cross`): the login retries "playing on another server" for a while. */
+export function crossArrival() { return arrival; }
 
 const base = import.meta.env.DEV ? `${location.protocol}//${location.hostname}:2567` : "";
 /** The build that served this page (server header X-Build), so a restart into a new build reads as an update. */
@@ -159,3 +168,52 @@ export function takeBackToStart(): { name: string; password: string } | null {
 
 /** True once the game is leaving on purpose or reconnecting (later drops are ignored). */
 export function leaving() { return started; }
+
+/** A chat line left by a crossing that failed (read once): "That Age just closed". */
+export function takeCrossNote(): { name: string; text: string } | null {
+  try {
+    const raw = sessionStorage.getItem(NOTE);
+    sessionStorage.removeItem(NOTE);
+    return raw && Date.now() - Number(raw.split("|")[0]) < 60_000 ? { name: CROSS_SPEAKER, text: raw.slice(raw.indexOf("|") + 1) } : null;
+  } catch { return null; }
+}
+
+/**
+ * The server said "cross" (hero saved, connection closing with 4410): leave for `/age/<slot>` on the gateway, which sets the
+ * cookie that routes this browser to that Age, then reload; the rejoin logs in there. A closed Age (404) or a gateway that
+ * does not answer reloads into the same Age instead.
+ */
+export async function crossNow(login: Rejoin, slot: string) {
+  started = true; // the close that follows is on purpose: no "Connection lost" notice, no reconnect
+  if (!AGE_SLOT_RE.test(slot)) { location.reload(); return; }
+  const store = (cross?: string) => { try { sessionStorage.setItem(KEY, JSON.stringify({ ...login, cross, at: Date.now() })); } catch { /* ignore */ } };
+  store(slot);
+  carry();
+  let ok = false;
+  try {
+    const r = await fetch(`${base}/age/${slot}`, { redirect: "manual", credentials: "same-origin", signal: AbortSignal.timeout(8000) });
+    ok = r.type === "opaqueredirect" || (r.status >= 300 && r.status < 400);
+    if (r.status === 404) { try { sessionStorage.setItem(NOTE, `${Date.now()}|${CROSS_TEXT.justClosed}`); } catch { /* ignore */ } }
+  } catch { /* gateway not answering */ }
+  if (ok) location.replace("/");
+  else { store(); location.reload(); }
+}
+
+/** Close code 4409: this hero was opened on another server. A card with one way out; no reconnect, no reload loop. */
+export function takenElsewhere(login: { name: string; password: string }) {
+  if (started) return;
+  started = true;
+  if (!box) { box = document.createElement("div"); box.id = "reconnectnote"; document.body.appendChild(box); }
+  box.className = "lost";
+  box.replaceChildren();
+  const card = document.createElement("div");
+  card.className = "card";
+  const title = document.createElement("h2");
+  title.textContent = CROSS_TEXT.taken;
+  const btn = document.createElement("button");
+  btn.className = "takenback";
+  btn.textContent = "Back to start screen";
+  btn.onclick = () => { try { sessionStorage.setItem(BACK_KEY, JSON.stringify({ ...login, at: Date.now() })); } catch { /* ignore */ } location.reload(); };
+  card.append(title, btn);
+  box.append(card);
+}

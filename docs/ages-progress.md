@@ -328,3 +328,56 @@ or on Postgres, keeps `data/handoff.json` and the idea file exactly as before.
   also holds across a restart, in every mode (the only change a single server sees).
 - Turning on multi-server mode the first time copies the idea file into the `ideas` row once (if the row does not
   exist); `data/handoff.json` from the previous build is still read once. Ideas on the other service's volume are not merged.
+
+## Built: part 8, crossing between servers (branch `claude/ages-crossing`, server and shared half)
+A hero moves to another open Age without logging out by hand. Owner's decisions (defaults, changeable): names are
+the slots capitalised ("Blue"), `AGE_NAMES` on the gateway overrides; crossing anywhere outside combat (10 s quiet rule),
+not while dead, trading or crossing; no level minimum; 5 min cooldown; open Ages = weight > 0 in `AGE_SPLIT` (the primary
+is not special).
+- `shared/ageCross.ts`: `CROSS` (quietMs 10 s, cooldownMs 5 min, listCacheMs 15 s, fetchMs 2 s, gatewayCacheMs 10 s,
+  saveMs 8 s), `CROSS_CLOSE` (4410), `AGE_TAKEN_CLOSE` (4409), `CROSS_TEXT`, `CROSS_SPEAKER`, `AGE_SLOT_RE`, the message
+  shapes (`AgesMsg`, `AgeRow`, `CrossMsg`, documented at the top of the file for the client), `AgeInfo` / `AgesList` /
+  `AgeSelf`, `cleanAgesList`, `ageName`, and the pure `crossRefusal` (own slot, not open, down, target account version
+  missing or older, class not there, crossing, dead, trading, fought within 10 s, cooldown).
+- `server/ageCross.ts`: on only with shared accounts (`accountsShared`), `AGE_SLOT` and `GATEWAY_URL` (`crossOn`). The
+  gateway's list (injectable fetcher; cached 15 s for the menu, fetched afresh for a crossing, one fetch at a time),
+  per-account cooldowns in memory, counters (`crossStats`), `ageInfo` for `/age-info.json`, and `AgeCross` per room:
+  - `gate` (every message, in TownRoom's `limitMessages`): a frozen hero's messages are dropped (but `ping`); `attack`,
+    `cast`, `useslot`, `ranged` count as fighting (with `Player.lastHurt`) for the quiet rule.
+  - `cross`: validate `{slot}`, fresh list, `crossRefusal`; then freeze (input cleared, unhurt for the save), set the
+    cooldown, save (`saveHero` + the handoff spot, which now carries `crossed`), await the spot's write
+    (`handoffWritten`, 3 s cap) and the account's commit (`settleAccount`), all capped at 8 s. Failed: unfrozen, cooldown
+    restored, "Could not save your hero; try again". Done: `cross {slot}`, then `client.leave(4410)`; onLeave saves again and
+    gives the lease back after the spot's write, as before.
+  - `join`: the spot's `crossed` (another Age's crossing; a clock ahead counts as now) restarts the cooldown here, so
+    A -> B -> A within 5 min is refused; `ages {on: true, here}` only when crossing is on.
+  - `/age` (list as chat lines) and `/age <slot>` in chat; "ages" and "cross" messages. All through `allow("ask")`.
+- `server/handoff.ts`: `LiveState.crossed?` (spot only, never the save); `cleanLive` keeps it when a number.
+- `server/accounts.ts`: `settleAccount(name)`: waits for the account's commit (false on a failed or refused write, or
+  when another server took it).
+- `server/index.ts`: public `GET /age-info.json` (`{slot, build, accountApi, classes}`).
+- `server/gateway.ts`: `AGE_NAMES` (`parseNames`), public `GET /gateway/ages` (no-store): `{primary, ages: [{slot, name, up,
+  accountApi, classes}]}` for the open Ages only, no addresses; each probed at `/age-info.json` (2 s), the list cached 10 s.
+  An Age that answers without the page (older build) is listed with `accountApi` / `classes` null. `/age/<slot>` unchanged
+  (weight 0 still needs the key).
+- `server/agesStatus.ts`: `api.account` and `crossing` (`on`, `here`, `gateway`, `cooldowns`, `crossed`, `refused`,
+  `failed`, `listFails`).
+- `server/TownRoom.ts`: wiring only (the `AgeCross` field and its host, the gate in `limitMessages`, two handlers, the
+  chat command, `join` in onJoin, `leave` in onLeave, `crossed` in `rememberHero`).
+- No Player / Mob schema change; no save field (`crossed` lives in the handoff spot only).
+- Tests: `tests/ageCross.test.ts` (the rule, the list's cleaning, `cleanLive` `crossed`, AgeCross on a fake room: off,
+  list and cache, bad messages, refusals, freeze / commit / 4410, failed save, cooldown carried in),
+  `tests/ageCross-room.test.ts` (the real room on shared accounts: quiet rule, a failed commit, a crossing committed
+  and the lease given back, the spot's `crossed`; off: no `ages`, `/age` says one Age), `tests/gateway.test.ts`
+  (`/gateway/ages`, names, cache, a down Age, weight-0 `/age` still 404).
+- Client half (Esc menu panel, `crossTo`, close codes 4409 / 4410, rejoin retry): `client/` by the client engineer.
+
+### Open (part 8)
+- Crossing needs `AGE_SLOT` too (the server must know its own slot to leave it out); `ACCOUNT_LEASES=1` alone is not enough.
+- The cooldown follows the account through the handoff spot of the class that crossed; a hero who crosses and then
+  plays another class on the target Age starts without it there (the Age it left still remembers it, in memory).
+  A restart forgets in-memory cooldowns.
+- The gateway's list is up to 10 s old: an Age that went down in that time is still offered; the reload then waits
+  for it like a restart (`/matchmake` is pinned to the cookie's Age).
+- A crossing hero's later death or damage while frozen is ignored (unhurt for at most 10 s); mobs keep chasing them.
+

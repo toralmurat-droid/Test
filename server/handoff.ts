@@ -18,6 +18,9 @@ export interface LiveState {
   /** Names of the other heroes in this hero's group (empty when solo). */
   group: string[];
   at: number;
+  /** Ages crossing (server/ageCross.ts): when this hero's account last crossed to another Age (ms), so the next Age
+   *  keeps its cooldown (no A -> B -> A bounce). Only in the spot, never in the save. */
+  crossed?: number;
 }
 
 /** How long a hero's spot is kept after they left (a deploy takes well under a minute). */
@@ -83,7 +86,7 @@ export function cleanLive(raw: unknown): LiveState | undefined {
   const r = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : undefined;
   if (!r || ![r.x, r.y, r.hp, r.mana, r.energy, r.at].every(num) || typeof r.dir !== "string" || r.dir.length > 16) return undefined;
   const group = Array.isArray(r.group) ? r.group.filter((g): g is string => typeof g === "string" && g.length <= 64).slice(0, 16) : [];
-  return { x: r.x as number, y: r.y as number, dir: r.dir, hp: r.hp as number, mana: r.mana as number, energy: r.energy as number, group, at: r.at as number };
+  return { x: r.x as number, y: r.y as number, dir: r.dir, hp: r.hp as number, mana: r.mana as number, energy: r.energy as number, group, at: r.at as number, ...(num(r.crossed) ? { crossed: r.crossed as number } : {}) };
 }
 
 /**

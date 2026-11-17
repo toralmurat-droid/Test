@@ -3,7 +3,9 @@ import { MobFeed } from "./mobFeed";
 import type { MobViewMsg } from "../../shared/mobView";
 import { quake } from "./camfx";
 import { chargeIcon } from "./chargeIcon";
-import { leaving, noteBuild, reconnectSoon, returnToStart, takeCarried, upgradeAnnounced } from "./reconnect";
+import { crossArrival, crossNow, leaving, noteBuild, reconnectSoon, returnToStart, takeCarried, takeCrossNote, takenElsewhere, upgradeAnnounced } from "./reconnect";
+import { AgeCrossPanel } from "./ageCross";
+import { AGE_TAKEN_CLOSE, CROSS_CLOSE, type AgesMsg, type CrossMsg } from "../../shared/ageCross";
 import { Client, getStateCallbacks, Room } from "colyseus.js";
 /** Beast-folk that lurk in the Mawdeep's ambush rooms (their eyes show through the dark). */
 const LURKERS = new Set<string>(["gnawkin", "tuskborn", "silkwretch", "duskwing", "crowseer"]);
@@ -406,6 +408,7 @@ export class TownScene extends Phaser.Scene {
   private patchNotes?: PatchNotesPanel;
   private minimap?: Minimap;
   private gameMenu?: GameMenu;
+  private ageCross?: AgeCrossPanel;
   private quitting = false; // "Save and return to start screen" in progress
   private dial?: DayDial;
   private signPanel = new SignPanel();
@@ -678,11 +681,14 @@ export class TownScene extends Phaser.Scene {
     menuButton("partybtn", toggleParty);
     // Patch notes: what changed in each update (N, or News in the Esc game menu)
     const toggleNews = () => { if (!this.patchNotes!.open) this.closeMenus(); this.patchNotes!.toggle(); };
+    this.ageCross = new AgeCrossPanel((type, msg) => this.room?.send(type, msg));
+    const toggleAges = () => { const open = this.ageCross!.open; this.closeMenus(); if (!open) this.ageCross!.show(); };
     const toggleMusic = () => { const open = musicPanelOpen(); this.closeMenus(); if (!open) showMusicPanel(true); };
     this.gameMenu = new GameMenu([ // before the patch notes: it holds their badge
       { id: "music", label: `${icon("note")}Music &amp; sound`, onClick: toggleMusic },
       { id: "ideas", label: `${icon("candle")}Ideas board`, key: "I", onClick: toggleIdeas },
       { id: "news", label: `${icon("scroll")}News`, key: "N", onClick: toggleNews },
+      { id: "ages", label: `${icon("star")}Cross to another Age`, onClick: toggleAges },
       { id: "barnums", label: `${icon("potion")}Bar numbers on / off`, onClick: () => this.resBars?.toggleNumbers() },
       { id: "keys", label: "", onClick: () => { setKeyMode(keyMode() === "classic" ? "spells" : "classic"); this.gameMenu?.show(); } },
       { id: "worldsize", label: "", onClick: () => {},
@@ -696,6 +702,7 @@ export class TownScene extends Phaser.Scene {
       { id: "fullscreen", label: "", onClick: () => toggleFullscreen() },
       { id: "quit", label: `${icon("fire")}Save and return to start screen`, onClick: () => void this.saveAndQuit() },
     ]);
+    this.gameMenu.setHidden("ages", true); // shown once the server says crossing is on ("ages" at join)
     // Keyboard layout setting (client/src/keymode.ts): its entry says which one is on; clicking switches
     const keysLabel = () => this.gameMenu?.setLabel("keys", `${icon("scroll")}Keyboard: ${keyModeName()} <small>click to switch</small>`);
     keysLabel();
@@ -719,7 +726,14 @@ export class TownScene extends Phaser.Scene {
     const proto = location.protocol === "https:" ? "wss" : "ws";
     const url = import.meta.env.DEV ? `${proto}://${location.hostname}:2567` : `${proto}://${location.host}`;
     try {
-      this.room = await new Client(url).joinOrCreate("town", this.opts);
+      // After a crossing the old server may still hold the account for a moment: retry that refusal for ~8 s
+      const until = Date.now() + 8000, cross = crossArrival();
+      for (;;) {
+        try { this.room = await new Client(url).joinOrCreate("town", this.opts); break; } catch (e: any) {
+          if (!cross || Date.now() > until || !/playing on another server/i.test(String(e?.message))) throw e;
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+      }
       this.room.send("lootfilter", lootFilter());
     } catch (e: any) {
       const msg = typeof e?.message === "string" && e.message && !/websocket|connect/i.test(e.message) ? e.message : "Could not connect to server.";
@@ -1633,7 +1647,7 @@ export class TownScene extends Phaser.Scene {
       this.deathTimer = window.setInterval(tick, 100);
     });
     this.room.onMessage("xp", ({ amount, x, y }) => this.floatText(x, y - 10, `+${amount} XP`, "#ffd166"));
-    this.room.onMessage("chat", ({ id, name, text }) => this.chatMessage(id, name, text));
+    this.room.onMessage("chat", ({ id, name, text }) => { this.ageCross?.onChat(name); this.chatMessage(id, name, text); });
     this.room.onMessage("pinvite", ({ from, name, ms }) => this.party?.invited(from, name, ms));
     this.room.onMessage("party", ({ text }) => this.party?.notice(text));
     this.room.onMessage("ideas", (view) => this.ideaBoard?.update(view));
@@ -1652,7 +1666,16 @@ export class TownScene extends Phaser.Scene {
     const chatlog = document.getElementById("chatlog")!;
     for (const t of takeCarried()) { const el = document.createElement("div"); el.textContent = t; chatlog.prepend(el); }
     this.room.onMessage("upgrading", () => upgradeAnnounced());
-    this.room.onLeave((code: number) => { if (this.quitting) return; this.warBattle.disconnected(); this.feed("Disconnected from server"); reconnectSoon(login, code === 4000); }); // (the battle din stops with the connection)
+    const note = takeCrossNote();
+    if (note) this.chatMessage("", note.name, note.text);
+    // Ages (shared/ageCross.ts): the join notice turns the Esc item on; a list answers the panel; "cross" starts the move
+    this.room.onMessage("ages", (m: AgesMsg) => { if (m?.on) this.gameMenu?.setHidden("ages", false); this.ageCross?.onAges(m); });
+    this.room.onMessage("cross", (m: CrossMsg) => { this.quitting = true; this.closeMenus(); void crossNow(login, m.slot); });
+    this.room.onLeave((code: number) => {
+      if (code === CROSS_CLOSE) return; // the crossing flow above handles it
+      if (code === AGE_TAKEN_CLOSE) { this.quitting = true; this.warBattle.disconnected(); takenElsewhere(login); return; }
+      if (this.quitting) return; this.warBattle.disconnected(); this.feed("Disconnected from server"); reconnectSoon(login, code === 4000);
+    }); // (the battle din stops with the connection)
     // A connection that silently died (nothing heard for 15s) is treated the same way. A quiet spot sends no
     // state patch, so the server's heartbeat ("hb", every 4s) and the monster feed also count as signs of life.
     let lastPatch = Date.now();
@@ -2657,6 +2680,7 @@ export class TownScene extends Phaser.Scene {
     this.bounty?.close();
     this.warStd?.close();
     this.patchNotes?.close();
+    this.ageCross?.close();
     this.portals?.close();
     this.ferry?.close();
     this.gameMenu?.close();
@@ -2680,7 +2704,7 @@ export class TownScene extends Phaser.Scene {
     return shown("hero") || shown("tree") || shown("slotpick") || musicPanelOpen() ||
       !!(this.npcs?.isOpen || this.npcs?.log.open || this.gearMenu?.open || this.ideaBoard?.open || this.party?.open ||
         this.trade?.open || this.stash?.open || this.bounty?.open || this.warStd?.open || this.patchNotes?.open || this.portals?.isOpen || this.ferry?.isOpen || this.minimap?.isOpen ||
-        this.gameMenu?.open || this.talentMenu?.open);
+        this.gameMenu?.open || this.talentMenu?.open || this.ageCross?.open);
   }
 
   /** Owned titles as small buttons (plus None); a pick is an intent, the server answers "title" and the label follows `Player.cosm`. */

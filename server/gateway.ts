@@ -7,6 +7,7 @@
 import http from "node:http";
 import net from "node:net";
 import crypto from "node:crypto";
+import { AGE_INFO_PATH, CROSS, GATEWAY_AGES_PATH, ageName, type AgeInfo, type AgesList } from "../shared/ageCross";
 
 export interface Backend { slot: string; url: URL }
 export interface GatewayConfig {
@@ -15,6 +16,8 @@ export interface GatewayConfig {
   /** Weight per slot for new visitors (missing = 0). */
   split: Record<string, number>;
   adminKey?: string;
+  /** Shown names per slot (AGE_NAMES; default the slot capitalised: shared/ageCross.ts ageName). */
+  names?: Record<string, string>;
   /** Cut an HTTP exchange silent this long once connected (default 60 s). */
   idleMs?: number;
   log?: (msg: string) => void;
@@ -55,12 +58,25 @@ export function parseSplit(spec: string | undefined, slots: string[], primary: s
   return Object.keys(out).length ? out : { [primary]: 100 };
 }
 
-/** Config from the environment (GATEWAY_TARGETS, GATEWAY_PRIMARY, AGE_SPLIT, ADMIN_KEY). */
+/** `AGE_NAMES="blue=Age of Embers,green=Age of Tides"`: the names players see when crossing. Unknown slots, empty or
+ *  over-long names (40) are ignored; control characters are dropped. */
+export function parseNames(spec: string | undefined, slots: string[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const part of (spec ?? "").split(",")) {
+    const eq = part.indexOf("=");
+    if (eq < 1) continue;
+    const slot = part.slice(0, eq).trim(), name = part.slice(eq + 1).replace(/[\u0000-\u001f\u007f]/g, "").trim();
+    if (slots.includes(slot) && name && name.length <= 40) out[slot] = name;
+  }
+  return out;
+}
+
+/** Config from the environment (GATEWAY_TARGETS, GATEWAY_PRIMARY, AGE_SPLIT, AGE_NAMES, ADMIN_KEY). */
 export function configFromEnv(env = process.env): GatewayConfig {
   const targets = parseTargets(env.GATEWAY_TARGETS ?? "");
   const slots = targets.map((b) => b.slot);
   const primary = env.GATEWAY_PRIMARY && slots.includes(env.GATEWAY_PRIMARY) ? env.GATEWAY_PRIMARY : slots[0];
-  return { targets, primary, split: parseSplit(env.AGE_SPLIT, slots, primary), adminKey: env.ADMIN_KEY };
+  return { targets, primary, split: parseSplit(env.AGE_SPLIT, slots, primary), names: parseNames(env.AGE_NAMES, slots), adminKey: env.ADMIN_KEY };
 }
 
 /** A cookie-less visitor's draw in [0, 1), fixed by their address (first X-Forwarded-For hop, else the socket), so
@@ -192,6 +208,42 @@ export function createGateway(cfg: GatewayConfig): http.Server {
     r.on("timeout", () => r.destroy(new Error("timeout")));
     r.on("error", (e) => ok({ agesError: (e as NodeJS.ErrnoException).message === "timeout" ? "timeout" : (e as NodeJS.ErrnoException).code ?? e.message }));
   });
+  /**
+   * The open Ages (weight > 0 in the split, the same rule as /age/<slot>) for crossing (server/ageCross.ts): each one's
+   * own AGE_INFO_PATH, probed within CROSS.fetchMs. Up = it answered at all; an answer without a usable version (an
+   * older build: 404) lists it with accountApi / classes null (the game server then refuses to send heroes there).
+   */
+  const info = (b: Backend) => new Promise<AgeInfo>((ok) => {
+    const row = (up: boolean, j?: Record<string, unknown>): AgeInfo => ({
+      slot: b.slot, name: ageName(b.slot, cfg.names), up,
+      accountApi: Number.isInteger(j?.accountApi) && (j!.accountApi as number) >= 1 ? (j!.accountApi as number) : null,
+      classes: Array.isArray(j?.classes) ? (j!.classes as unknown[]).filter((c): c is string => typeof c === "string" && c.length <= 24).slice(0, 32) : null,
+    });
+    const r = http.get({ host: b.url.hostname, port: port(b), path: AGE_INFO_PATH, agent: false, timeout: CROSS.fetchMs }, (res) => {
+      let body = "";
+      res.setEncoding("utf8");
+      res.on("data", (c) => { body += c; if (body.length > 8_192) r.destroy(new Error("too big")); });
+      res.on("end", () => {
+        let j: Record<string, unknown> | undefined;
+        if (res.statusCode === 200) try { const v = JSON.parse(body); if (v && typeof v === "object") j = v; } catch { /* an older build's page */ }
+        ok(row(true, j));
+      });
+      res.on("error", () => ok(row(false)));
+    });
+    const hard = setTimeout(() => r.destroy(new Error("timeout")), CROSS.fetchMs);
+    r.on("close", () => clearTimeout(hard));
+    r.on("timeout", () => r.destroy(new Error("timeout")));
+    r.on("error", () => ok(row(false)));
+  });
+  let agesCache: { at: number; p: Promise<AgesList> } | undefined;
+  const openAges = (): Promise<AgesList> => {
+    const now = Date.now();
+    if (!agesCache || now - agesCache.at >= CROSS.gatewayCacheMs) {
+      const open = cfg.targets.filter((b) => cfg.split[b.slot] > 0);
+      agesCache = { at: now, p: Promise.all(open.map(info)).then((ages) => ({ primary: cfg.primary, ages })) };
+    }
+    return agesCache.p;
+  };
   const json = (res: http.ServerResponse, code: number, body: unknown) => {
     res.writeHead(code, { "content-type": "application/json", "cache-control": "no-store" });
     res.end(JSON.stringify(body));
@@ -206,6 +258,8 @@ export function createGateway(cfg: GatewayConfig): http.Server {
       void Promise.all(cfg.targets.map(async (b) => { const [h, a] = await Promise.all([probe(b), ages(b)]); return { ...h, ...a }; })).then((backends) => json(res, 200, { primary: cfg.primary, split: cfg.split, backends }));
       return;
     }
+    // Public: the open Ages' names, whether each answers, its account version and classes (no addresses)
+    if (u.pathname === GATEWAY_AGES_PATH) { void openAges().then((body) => json(res, 200, body)); return; }
     const age = /^\/age\/([^/]+)\/?$/.exec(u.pathname);
     if (age) {
       // An Age open to no new visitors (weight 0) is for invited players only: it needs the admin key

@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import net from "node:net";
 import { WebSocket, WebSocketServer } from "ws";
-import { COOKIE, addressDraw, configFromEnv, createGateway, parseSplit, parseTargets, pickSlot } from "../server/gateway";
+import { COOKIE, addressDraw, configFromEnv, createGateway, parseNames, parseSplit, parseTargets, pickSlot } from "../server/gateway";
 
 const listen = (s: http.Server) => new Promise<number>((ok) => s.listen(0, "127.0.0.1", () => ok((s.address() as net.AddressInfo).port)));
 
@@ -21,6 +21,13 @@ function backend(name: string) {
       const ok = new URL(req.url, "http://x").searchParams.get("key") === "a-long-admin-key";
       res.writeHead(ok ? 200 : 404, { "content-type": "application/json" });
       res.end(ok ? JSON.stringify({ slot: name, roles: { war: "owner" } }) : "");
+      return;
+    }
+    // Crossing (server/ageCross.ts): blue answers its info, green is an older build (no such page)
+    if (req.url === "/age-info.json") {
+      if (name === "green") { res.writeHead(404); res.end(); return; }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ slot: name, build: `${name}-build`, accountApi: 1, classes: ["wizard", "vampire"] }));
       return;
     }
     let body = "";
@@ -255,4 +262,37 @@ test("/gateway/health answers itself; /gateway/status needs the admin key", asyn
   // Without a key configured, status stays closed
   const open = await gateway("blue=100");
   assert.equal((await fetch(`${open.url}/gateway/status?key=`)).status, 404);
+});
+
+test("/gateway/ages: the open Ages only (weight > 0), named, probed, cached; no addresses; weight-0 /age still 404", async () => {
+  assert.deepEqual(parseNames("blue=Age of Embers, green = Age of Tides ,red=X,green2=,=Y", ["blue", "green"]), { blue: "Age of Embers", green: "Age of Tides" });
+  assert.deepEqual(parseNames(`blue=${"x".repeat(41)},green=A\u0007B`, ["blue", "green"]), { green: "AB" });
+  const g = await gateway("blue=100,green=0", { AGE_NAMES: "blue=Age of Embers" });
+  let r = await fetch(`${g.url}/gateway/ages`);
+  assert.equal(r.status, 200);
+  assert.equal(r.headers.get("cache-control"), "no-store");
+  assert.deepEqual(await r.json(), { primary: "blue", ages: [{ slot: "blue", name: "Age of Embers", up: true, accountApi: 1, classes: ["wizard", "vampire"] }] });
+  assert.equal((await fetch(`${g.url}/age/green`, { redirect: "manual" })).status, 404, "weight 0: closed without the key");
+
+  const both = await gateway("blue=50,green=50");
+  const n = seen.filter((l) => l.endsWith("/age-info.json")).length;
+  const body = await (await fetch(`${both.url}/gateway/ages`)).text();
+  assert.ok(!body.includes("127.0.0.1"), "no backend addresses");
+  assert.deepEqual(JSON.parse(body).ages, [
+    { slot: "blue", name: "Blue", up: true, accountApi: 1, classes: ["wizard", "vampire"] },
+    { slot: "green", name: "Green", up: true, accountApi: null, classes: null }, // an older build: listed, no version
+  ]);
+  await fetch(`${both.url}/gateway/ages`);
+  assert.equal(seen.filter((l) => l.endsWith("/age-info.json")).length, n + 2, "the second ask is cached");
+
+  // An Age that does not answer is listed as down
+  const dead = net.createServer();
+  const deadPort = await new Promise<number>((ok) => dead.listen(0, "127.0.0.1", () => ok((dead.address() as net.AddressInfo).port)));
+  await new Promise((ok) => dead.close(ok));
+  const gp = (green.address() as net.AddressInfo).port;
+  const cfg = configFromEnv({ GATEWAY_TARGETS: `blue=http://127.0.0.1:${deadPort},green=http://127.0.0.1:${gp}`, AGE_SPLIT: "blue=1,green=1" });
+  const gw = createGateway({ ...cfg, log: () => {} });
+  servers.push(gw);
+  const list = await (await fetch(`http://127.0.0.1:${await listen(gw)}/gateway/ages`)).json() as { ages: { slot: string; up: boolean }[] };
+  assert.deepEqual(list.ages.map((a) => [a.slot, a.up]), [["blue", false], ["green", true]]);
 });

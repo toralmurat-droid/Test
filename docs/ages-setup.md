@@ -40,6 +40,7 @@ Create two services from this repository (same Dockerfile, same image as today).
 | `PORT` | `2567` | `2567` | fixed, so the gateway knows where to call |
 | `ADMIN_KEY` | as today | as today | admin pages (`/admin/...`) |
 | `TRUST_PROXY` | `1` (image default) | `1` | the player's address comes from `X-Forwarded-For` (the gateway passes the edge's on) |
+| `GATEWAY_URL` | `http://${{gateway.RAILWAY_PRIVATE_DOMAIN}}:8080` | the same | the gateway over the private network (give the gateway a fixed `PORT`, here `8080`): turns on crossing between Ages (section 6). Unset: no crossing |
 
 Other variables (mail, `WAR_COUNCIL_TOKEN`, ...) as on today's service. Each one gets its own volume at `/app/data`.
 Leave both **without a public domain**: players reach them only through the gateway. Keep the config file
@@ -57,6 +58,7 @@ A third service from the same repository and image. It starts the gateway instea
 | `GATEWAY_TARGETS` | `blue=http://${{blue.RAILWAY_PRIVATE_DOMAIN}}:2567,green=http://${{green.RAILWAY_PRIVATE_DOMAIN}}:2567` | the Ages, `slot=http://host:port`, over Railway's private network (http only) |
 | `GATEWAY_PRIMARY` | `blue` | where new players go when no split is set (default: the first target) |
 | `AGE_SPLIT` | `blue=100,green=0` | weights for new visitors (default: 100 % to the primary) |
+| `AGE_NAMES` | `blue=Age of Embers,green=Age of Tides` | optional: the names players see when crossing (default: the slot capitalised, "Blue") |
 | `ADMIN_KEY` | 12+ characters | opens `/gateway/status?key=...` |
 | `PORT` | set by Railway | the gateway's own port |
 
@@ -96,6 +98,23 @@ Then **move the public domain** (e.g. `play.fmtpa.ch`) from today's game service
 - **Back from a bad new Age:** `AGE_SPLIT=blue=100`, remove green from `GATEWAY_TARGETS` (its players' cookies are drawn
   again), keep or set blue as `primary`.
 - The gateway has no state of its own: deleting it loses nothing.
+
+## 6. Crossing between Ages
+With `GATEWAY_URL` set on a game service (and `AGE_SLOT`, `DATABASE_URL`, `ACCOUNT_LEASES=1` as above), its players can
+move their hero to another open Age from the Esc menu ("Cross to another Age") or by chat (`/age` lists, `/age green`
+crosses). Without `GATEWAY_URL` (or without shared accounts) nothing changes: `/age` answers "Only one Age is open."
+- **Which Ages are listed:** the open ones, weight above 0 in `AGE_SPLIT` (the same rule as `/age/<slot>`). An Age with
+  weight 0 is not listed and cannot be crossed to, not even the primary; open it a little (`green=1`) to let players
+  cross. The gateway's public `GET /gateway/ages` (names, up, account version, classes; no addresses; 10 s cache) asks
+  each open Age's public `GET /age-info.json` (slot, build, `ACCOUNT_API`, the playable classes).
+- **Refused:** an Age that does not answer; one that runs an older account version (or no `/age-info.json`: a build
+  before part 8), or does not have the hero's class; a dead, trading or already crossing hero; a hero hit, attacking
+  or casting in the last 10 s; a second crossing within 5 min (the cooldown follows the hero to the next Age). No level
+  minimum.
+- **What happens:** the hero stops (unhurt), is saved, and the account's write is committed; then the server sends the
+  client on (close code 4410) and gives the account back; the page reloads through `/age/<slot>` and logs in on the new
+  Age where the hero stood. A save that fails keeps the hero where they are ("Could not save your hero; try again").
+- `/admin/ages.json` shows `crossing` (`on`, `here`, `crossed`, `refused`, `failed`, `listFails`) and `api.account`.
 
 ## Checks
 Both Ages at a glance: **`https://<domain>/gateway/status?key=<ADMIN_KEY>`**. The gateway and both game services must

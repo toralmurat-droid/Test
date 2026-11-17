@@ -8,6 +8,8 @@ import { Server } from "colyseus";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { TownRoom, announceUpgrade, onlineNow } from "./TownRoom";
 import { mountAgesStatus } from "./agesStatus";
+import { ageInfo } from "./ageCross";
+import { AGE_INFO_PATH } from "../shared/ageCross";
 import { flushIdeas, ideaLog, initIdeas, publicLog } from "./ideaStore";
 import { backupAccounts, flushFinal, initAccounts, peek, releaseAccounts, requestReset, resetPassword, setEmail } from "./accounts";
 import { useHandoffKv, writeHandoff } from "./handoff";
@@ -89,6 +91,8 @@ app.get("/war.json", (_req, res) => {
   res.setHeader("Cache-Control", "no-store");
   res.json({ war: warNow() ?? null, log: warLog(50) });
 });
+// Ages (server/ageCross.ts): this server's slot, build, account version and classes, for the gateway's list of open Ages
+app.get(AGE_INFO_PATH, (_req, res) => { res.setHeader("Cache-Control", "no-store"); res.json(ageInfo(BUILD)); });
 // The player idea log (read-only), newest first
 app.get("/ideas.json", (_req, res) => { res.json(publicLog()); });
 
