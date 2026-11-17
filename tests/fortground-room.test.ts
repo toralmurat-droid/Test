@@ -42,8 +42,12 @@ test("fort ground (room): a wild monster can't step into a fort but can step out
     wild.x = inX; wild.y = inY;
     assert.equal(room.canStep(wild, OUT.x, OUT.y), true, "it may step out");
     assert.equal(room.canStep(wild, inX + 2, inY), true, "and walk on inside until it is out");
-    // not wild: a clan's trooper, a hero's summon, a quest monster
-    for (const set of [(m: any) => { m.kind = "trooper"; }, (m: any) => { m.owner = "someone"; }, (m: any) => { m.summonFor = "someone"; }]) {
+    // a wild monster chasing a hero (or a monster) follows it in, so a fort is no refuge from melee monsters
+    wild.x = OUT.x; wild.y = OUT.y;
+    wild.target = "hero"; assert.equal(room.canStep(wild, inX, inY), true, "a chasing monster may follow its target in"); wild.target = "";
+    wild.foe = "rival"; assert.equal(room.canStep(wild, inX, inY), true, "a fighting monster may follow its foe in"); wild.foe = "";
+    // not wild: a clan's trooper, a hero's summon, a quest monster, a Night Raider
+    for (const set of [(m: any) => { m.kind = "trooper"; }, (m: any) => { m.owner = "someone"; }, (m: any) => { m.summonFor = "someone"; }, (m: any) => { m.kind = "nightraider"; }]) {
       const was = { kind: wild.kind, owner: wild.owner, summonFor: wild.summonFor };
       set(wild); wild.x = OUT.x; wild.y = OUT.y;
       assert.equal(room.canStep(wild, inX, inY), true, `${wild.kind}/${wild.owner}/${wild.summonFor} may go in`);

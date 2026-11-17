@@ -4128,8 +4128,9 @@ export class TownRoom extends Room<TownState> {
     // monster-free ground (the towns, the Sun Furnace's plateau): only a quest boss and what it calls walk there
     if (noMobsAt(x, y) && !m.summonFor && !(m.mother && this.state.mobs.get(m.mother)?.summonFor)) return false;
     if (m.kind === "motherblob") { const d = villageDist(x, y); if (d < MOTHER_KEEP_OUT && d < villageDist(m.x, m.y)) return false; }
-    // a clan's fort (shared/war/fortGround.ts): no wild monster walks in; one that stands on it may still walk out
-    if (fortGroundAt(x, y) && !fortGroundAt(m.x, m.y) && this.wildMob(m)) return false;
+    // a clan's fort (shared/war/fortGround.ts): no wild monster wanders in; one that stands on it may still walk out, and one
+    // chasing a hero or monster may follow it in (its home stays outside, so the leash or walking home takes it back out)
+    if (fortGroundAt(x, y) && !fortGroundAt(m.x, m.y) && !m.target && !m.foe && this.wildMob(m)) return false;
     return true;
   }
   /** Wild (shared/war/fortGround.ts isWildMob), and not budded by a monster that isn't (a quest or guardian Mother Blob's brood). */

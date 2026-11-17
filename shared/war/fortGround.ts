@@ -43,11 +43,11 @@ export const fortGroundAt = (px: number, py: number): boolean => fortGroundTile(
 export interface FortMob { kind: string; owner: string; summonFor: string; tide?: boolean; camp?: boolean; guard?: string }
 /**
  * A wild monster: kept off fort ground. Not wild: a clan's trooper, a hero's summon or charmed monster (owner), a quest
- * monster (summonFor), a Gloam Tide marcher (it follows its march round the walls; server/tide.ts), and the monsters
+ * monster (summonFor), a Night Raider (it rides the whole map after its prey), a Gloam Tide marcher (it follows its march round the walls; server/tide.ts), and the monsters
  * whose posts were there before the Holds: Redfang camp bandits (the Hollow, Fangrock and Hidehall Holds stand in their
  * camps, shared/bandits.ts) and lair chest guardians (a few lair chests lie in a Hold's courtyard, shared/chests.ts).
  */
-export const isWildMob = (m: FortMob): boolean => m.kind !== "trooper" && !m.owner && !m.summonFor && !m.tide && !m.camp && !m.guard;
+export const isWildMob = (m: FortMob): boolean => m.kind !== "trooper" && m.kind !== "nightraider" && !m.owner && !m.summonFor && !m.tide && !m.camp && !m.guard;
 
 /** The nearest open tile centre (px) off fort ground within maxTiles of (px, py): where a wild monster's home moves. */
 export function nearestOffFort(px: number, py: number, maxTiles = 16): { x: number; y: number } | undefined {
