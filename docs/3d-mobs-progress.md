@@ -54,4 +54,5 @@ and baked by `npx tsx tools/art/bake-props.ts [key...]` (PREVIEW=dir writes pain
 | D5 | Deep dungeon props (deep3d.ts): candles, skull pyramid, urns (sarcophagus, pillar already iso) | | done |
 | D6 | Mawdeep quest objects (dungeon3d.ts): silk cocoon whole/cut, Hide Rite totem whole/burnt | | done |
 | D7 | Shipwreck (wreck3d.ts): shell hull in its own pitched/rolled frame, breach + ribs + ooze hold, torn sail | | done |
-| D8 | Witch camp, Saltmere harbour, element props, throne/crown stones, lanterns | | next |
+| D8 | Throne, crown/ward stones, element props (elements3d.ts; fw()/fbox() face-the-viewer frame) | | done |
+| D9 | Witch camp, Saltmere harbour, lanterns | | next |
