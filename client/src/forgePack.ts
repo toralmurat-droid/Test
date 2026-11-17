@@ -1,4 +1,4 @@
-import { forgeLookup, type Forged, type ForgedMob, type ForgedWeapon } from "../../shared/forge";
+import { forgeLookup, liveWeapons, type Forged, type ForgedMob, type ForgedWeapon } from "../../shared/forge";
 import { baseId, parseForgedGearId, setForgedGear } from "../../shared/gear";
 import { shopWithForged, type Shop } from "../../shared/shops";
 import { CLANS } from "../../shared/war/clans";
@@ -10,17 +10,21 @@ import { CLANS } from "../../shared/war/clans";
  */
 const known = new Map<string, Forged>();
 let version = 0;
+/** The kill switch of the server (pack.killed): no forged stock in the shops. */
+let switchedOff = false;
 
 /**
  * Merges forgings from the server and refreshes the gear registry. Malformed entries are skipped. `pack`: the list is
  * the server's live set, so a forging we held as active that is missing now has changed state: forget it and ask again.
  */
-export function takeForged(defs: unknown, pack = false) {
+export function takeForged(defs: unknown, pack = false, killed = false) {
   if (!Array.isArray(defs)) return;
   const ids = new Set<string>();
   for (const d of defs) if (d && typeof d === "object" && typeof (d as Forged).id === "string") { known.set((d as Forged).id, d as Forged); ids.add((d as Forged).id); asked.delete((d as Forged).id); }
   // The pack lists live forgings only: one we held as active that is missing was retired or revoked: ask for its current state
-  if (pack) for (const [id, d] of known) if (d.status === "active" && !ids.has(id)) { asked.add(id); queue.add(id); if (!timer) timer = setTimeout(flush, 400); }
+  // (provisionally "retired" at once: it leaves the shop stock now, and keeps its stats until the answer says more)
+  if (pack) for (const [id, d] of known) if (d.status === "active" && !ids.has(id)) { known.set(id, { ...d, status: "retired" }); asked.add(id); queue.add(id); if (!timer) timer = setTimeout(flush, 400); }
+  if (pack) switchedOff = killed;
   version++;
   setForgedGear(forgeLookup([...known.values()].filter((d): d is ForgedWeapon => d.kind === "weapon")));
 }
@@ -38,8 +42,7 @@ export function forgedLine(id: string): string {
 }
 
 /** Clan k's live forged weapons in the server's order (seq), for shopWithForged: the indices must match the server's. */
-const stockOf = (clan: string): string[] =>
-  [...known.values()].filter((d): d is ForgedWeapon => d.kind === "weapon" && d.clan === clan && d.status === "active").sort((a, b) => a.seq - b.seq).map((d) => d.id);
+const stockOf = (clan: string): string[] => (switchedOff ? [] : liveWeapons(known.values(), clan).map((d) => d.id));
 /** A shop as the server sells it: a capital quartermaster also stocks its clan's forged weapons. */
 export const shopOf = (id: string | undefined): Shop | undefined =>
   id ? shopWithForged(id, id.startsWith("cap_") ? stockOf(id.slice(4)) : []) : undefined;

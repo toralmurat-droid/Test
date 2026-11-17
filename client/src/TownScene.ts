@@ -865,8 +865,7 @@ export class TownScene extends Phaser.Scene {
       if (e && text) this.floatText(e.sprite.x, e.sprite.y - 22, text, "#ffa22e", PIXEL_FONT);
     });
     setForgeSender((ids) => this.room?.send("forgeQ", { ids }));
-    this.room.onMessage("forge", (m: { defs?: unknown }) => takeForged(m?.defs, true));
-    this.room.onMessage("forgeQ", (m: { defs?: unknown }) => takeForged(m?.defs)); // forged weapons and monsters (client/src/forgePack.ts)
+    this.room.onMessage("forge", (m: { defs?: unknown; killed?: boolean }) => takeForged(m?.defs, true, !!m?.killed)); // forged weapons and monsters (client/src/forgePack.ts)
     this.room.onMessage("forgeQ", (m: { defs?: unknown }) => takeForged(m?.defs));
     this.room.onMessage("travelno", () => {
       const e = this.entities.get(this.me);
@@ -2123,7 +2122,10 @@ export class TownScene extends Phaser.Scene {
     return p.forge ? forgedMobTexture(this, key, p.forge) : key;
   }
   private syncForged(e: Entity, p: any) {
-    const key = this.mobTex(p);
+    // the recoloured key is kept on the entity once it exists (the source sheet is only asked again when its inputs change)
+    const sig = `${p.kind}|${p.level}|${p.weapon}|${p.bones}|${p.forge}|${forgeVersion()}`, c = (e as any).forgeTex as { sig: string; key: string } | undefined;
+    let key = c && c.sig === sig ? c.key : undefined;
+    if (!key) { key = this.mobTex(p); if (key.includes("__fm")) (e as any).forgeTex = { sig, key }; }
     if (e.sprite.texture.key !== key) { const f = e.sprite.frame.name; e.sprite.setTexture(key, f); }
   }
 
@@ -2930,12 +2932,14 @@ export class TownScene extends Phaser.Scene {
   private weaponIcon(mine: any, cls = "") {
     const w = activeOf(mine).weapon;
     if (!w) return `<span class="${cls} fist">Fists</span>`;
-    const key = `${baseId(w)}:${forgeVersion()}`; // (a forged weapon's icon is remade when the pack changes)
+    if (this.iconVer !== forgeVersion()) { this.iconVer = forgeVersion(); this.weaponIcons.clear(); } // (a forged weapon's icon is remade when the pack changes; old ones are dropped)
+    const key = baseId(w);
     let url = this.weaponIcons.get(key);
     if (!url) { url = iconCanvas(this, w, 32).toDataURL(); this.weaponIcons.set(key, url); }
     return `<img class="${cls}" src="${url}" alt="">`;
   }
   private weaponIcons = new Map<string, string>();
+  private iconVer = -1;
 
   /** Healing (Q) and mana (V) potion cells right of the skill bar: the flask in pixel art, how many you carry. */
   private potionCells(mine: any) {

@@ -112,6 +112,13 @@ function ensureGear(scene: Phaser.Scene, hero: string, id: string, done?: () => 
   return false;
 }
 
+/** The overlay to draw now: the item's own sheet once ready; a forged weapon whose recolour is pending (or unknown) wears its base sheet meanwhile. "" when nothing is loaded. */
+function overlayKey(scene: Phaser.Scene, hero: string, id: string, done?: () => void): string {
+  if (ensureGear(scene, hero, id, done)) return gearKey(hero, id);
+  const art = artId(id);
+  return art !== baseId(id) && scene.textures.exists(gearKey(hero, art)) ? gearKey(hero, art) : "";
+}
+
 /** Overlay texture of an item on a hero (every item level of an item looks the same; gearfx.ts adds the effects). */
 export const gearKey = (hero: string, id: string) => `gear_${hero}_${baseId(id)}`;
 
@@ -177,9 +184,9 @@ export class GearLayer {
     const sheet = base.texture.key === `${this.hero}-moves` ? base.texture.key : this.hero;
     LAYER_ORDER.forEach((slot, i) => {
       const id: string = state[slot] ?? "";
-      const key = id ? gearKey(sheet, id) : "";
+      const key = id ? overlayKey(this.scene, sheet, id) : "";
       let s = this.sprites[slot];
-      if (!key || !ensureGear(this.scene, sheet, id)) {
+      if (!key) {
         if (s) { s.destroy(); delete this.sprites[slot]; delete this.ids[slot]; }
         return;
       }
@@ -336,7 +343,10 @@ export class GearMenu {
     ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, pv.width, pv.height);
     drawFrame(this.scene, ctx, cls, 0, 0, 0, pv.width / CHAR_FRAME);
-    for (const slot of LAYER_ORDER) if (state[slot] && ensureGear(this.scene, cls, state[slot], () => { this.sig = ""; this.refresh(state); })) drawFrame(this.scene, ctx, gearKey(cls, state[slot]), 0, 0, 0, pv.width / CHAR_FRAME);
+    for (const slot of LAYER_ORDER) {
+      const k = state[slot] ? overlayKey(this.scene, cls, state[slot], () => { this.sig = ""; this.refresh(state); }) : "";
+      if (k) drawFrame(this.scene, ctx, k, 0, 0, 0, pv.width / CHAR_FRAME);
+    }
 
     // Slots
     const slots = document.getElementById("gearslots")!;
