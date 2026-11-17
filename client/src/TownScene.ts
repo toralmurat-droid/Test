@@ -108,6 +108,7 @@ type ClickSide = "left" | "right";
 const costWords = (s: { cost?: number; mana?: number; blood?: number }) => [s.mana ? `${s.mana} mana` : "", s.cost ? `${s.cost} heat` : "", s.blood ? `${s.blood}% HP` : ""].filter(Boolean).join(" · ") || "free";
 import { GearFx } from "./gearfx";
 import { Element, ELEMENT_COLORS } from "../../shared/elements";
+import { takeForged } from "./forgePack";
 import { baseId, canWear, GEAR_SLOTS, gearName, gearDef, reqProblem, gearReachMult, gearSpeedMult, gearStats, itemRarity, WEAPON_TYPE_NAMES } from "../../shared/gear";
 import { attackProfile, ATTACK_WORDS, isWeaponType, poseSheet, profileOf, weaponAttackMult, weaponOk } from "../../shared/weapons";
 import { talentMult, talentPoints, spentPoints } from "../../shared/talents";
@@ -861,6 +862,8 @@ export class TownScene extends Phaser.Scene {
       const text = FERRY_NO[String(why)];
       if (e && text) this.floatText(e.sprite.x, e.sprite.y - 22, text, "#ffa22e", PIXEL_FONT);
     });
+    this.room.onMessage("forge", (m: { defs?: unknown }) => takeForged(m?.defs)); // forged weapons and monsters (client/src/forgePack.ts)
+    this.room.onMessage("forgeQ", (m: { defs?: unknown }) => takeForged(m?.defs));
     this.room.onMessage("travelno", () => {
       const e = this.entities.get(this.me);
       if (e) this.floatText(e.sprite.x, e.sprite.y - 22, "Not while fighting", "#ffa22e", PIXEL_FONT);
