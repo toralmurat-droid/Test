@@ -6,6 +6,8 @@
 import type express from "express";
 import { WAR_API } from "../shared/war/api";
 import { FORGE_API } from "../shared/forgeApi";
+import { ACCOUNT_API } from "../shared/accountApi";
+import { crossStats } from "./ageCross";
 import { ageRole, holderId } from "./lease";
 import { accountStats } from "./accounts";
 import { warLease, warRole } from "./war";
@@ -22,7 +24,7 @@ export function agesStatus(build: string, online: () => Online, env = process.en
     slot: env.AGE_SLOT || "main",
     role: ageRole(env),
     build,
-    api: { war: WAR_API, forge: FORGE_API },
+    api: { war: WAR_API, forge: FORGE_API, account: ACCOUNT_API },
     holder: holderId(env),
     holders: { war: war.holder, world: world.holder, forge: forge.holder, accounts: acc.holder },
     roles: { war: warRole(), world: world.role, forge: forgeRole() },
@@ -32,6 +34,8 @@ export function agesStatus(build: string, online: () => Online, env = process.en
       shared: acc.shared, leasesHeld: acc.leasesHeld, inUse: acc.inUse, claims: acc.claims, fencedRefused: acc.refused,
     },
     flush: { dirty: acc.dirty, lagMs: acc.lagMs, failures: acc.failures },
+    // Crossing between Ages (server/ageCross.ts): on, this slot, counts since boot (crossed, refused, failed saves, list fetch failures)
+    crossing: crossStats(),
     uptimeS: Math.round(process.uptime()),
     at: new Date().toISOString(),
   };

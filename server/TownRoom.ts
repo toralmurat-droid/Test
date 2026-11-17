@@ -85,6 +85,7 @@ const lvlName = (id: string, cls: string) => parseRune(id) ? runeIdName(id) : `$
 import { Asker, boardFor } from "../shared/ideas";
 import { hashAddr, ideaLog, ideaNews, ideaRoundNow, saveIdeas, submitIdea, voteIdea } from "./ideaStore";
 import { dropLive, fetchLive, handoffWritten, LiveState, rememberLive, takeLive } from "./handoff";
+import { AgeCross } from "./ageCross";
 import { MobView } from "./mobView";
 import { copyPatches } from "./patchCopy";
 import { act1Home, actAt, actOpen, actSpawn, cityGateOf, gateColdNote, gateOpen, WAYGATE_RANGE, waygateArrival, waygateById, WAYGATES } from "../shared/act2";
@@ -1109,6 +1110,9 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("paccept", (client, msg: { from?: string }) => this.partyAnswer(client.sessionId, msg?.from, true));
     this.onMessage("pdecline", (client, msg: { from?: string }) => this.partyAnswer(client.sessionId, msg?.from, false));
     this.onMessage("pleave", (client) => this.partyLeave(client.sessionId));
+    // Crossing to another Age (server/ageCross.ts, shapes in shared/ageCross.ts): "ages" asks for the list, "cross" {slot} goes
+    this.onMessage("ages", (client) => { if (this.allow("ask", client)) void this.ageCross.ask(client.sessionId); });
+    this.onMessage("cross", (client, msg: unknown) => { if (this.allow("ask", client)) void this.ageCross.cross(client.sessionId, msg); });
 
     this.onMessage("chat", (client, text: string) => {
       const p = this.state.players.get(client.sessionId);
@@ -1118,6 +1122,7 @@ export class TownRoom extends Room<TownState> {
       const v = text.trim().match(/^\/(up|down|unvote)\s+#?(\d+)$/i);
       if (v) return this.voteIdea(client, Number(v[2]), v[1].toLowerCase() === "up" ? 1 : v[1].toLowerCase() === "down" ? -1 : 0);
       if (/^\/max$/i.test(text.trim())) return this.maxHero(client);
+      if (this.ageCross.isCmd(text)) { if (this.allow("ask", client)) void this.ageCross.chat(client.sessionId, text); return; } // "/age", "/age <slot>"
       // Skill clip capture only (tools/skill-clips, SKILL_CAPTURE=1, never set on the live server): a fresh stage per clip
       const stage = process.env.SKILL_CAPTURE === "1" && text.trim().match(/^\/stage(\s+weak)?$/i);
       if (stage) return this.stageCapture(client.sessionId, !!stage[1]);
@@ -1189,6 +1194,7 @@ export class TownRoom extends Room<TownState> {
         if (++e.over === MSG_KICK_AFTER) { console.warn(`Flood: ${c.sessionId} disconnected`); c.leave(4429); }
         return;
       }
+      if (!this.ageCross.gate(c.sessionId, type)) return; // (a hero crossing to another Age is frozen: server/ageCross.ts)
       cb(c, m);
     });
   }
@@ -1207,6 +1213,13 @@ export class TownRoom extends Room<TownState> {
   private addrs = new Map<string, string | undefined>();
   /** Account leases on (server/accountGuard.ts): the account each session claimed, given back when it leaves. */
   private accts = new Map<string, string>();
+  /** Crossing to another Age (server/ageCross.ts): frozen heroes, the quiet rule, the "ages" / "cross" messages. */
+  private ageCross = new AgeCross({
+    hero: (sid) => this.state.players.get(sid), trading: (sid) => this.trades.has(sid),
+    save: (sid) => { const p = this.state.players.get(sid); if (p) { saveHero(p.name, p.cls, this.snapshot(p)); this.rememberHero(sid, p); } },
+    send: (sid, t, m) => this.clients.find((c) => c.sessionId === sid)?.send(t, m),
+    leave: (sid, code) => this.clients.find((c) => c.sessionId === sid)?.leave(code),
+  });
 
   /** Another server has this account now (lower-case name): its heroes here leave, their changes no longer saved. */
   sendAway(k: string) {
@@ -1348,6 +1361,7 @@ export class TownRoom extends Room<TownState> {
     client.view.add(p);
     if (back?.group.length) this.regroupOnJoin(client.sessionId, p, back.group);
     this.sendBoard(client); // the Ideas board is ready as soon as it is opened
+    this.ageCross.join(p.name, back?.crossed, (t, m) => client.send(t, m)); // a crossing's cooldown carried in, and "ages" when crossing is on
     this.tide.join(client.sessionId); // the Gloam Tide's meter (server/tide.ts)
     this.rumours.join(client.sessionId); // today's rumours (server/rumours.ts)
     this.apprentice.join(client.sessionId); // mentoring state (server/apprentice.ts)
@@ -1402,6 +1416,7 @@ export class TownRoom extends Room<TownState> {
     this.chatBuckets.delete(client.sessionId);
     this.askBuckets.delete(client.sessionId);
     this.craftBuckets.delete(client.sessionId);
+    this.ageCross.leave(client.sessionId);
     // (last, after every save above) the account is written, then its lease given back (server/accountGuard.ts), once
     // the hero's handoff spot is in the shared store too (capped: server/handoff.ts handoffWritten), for the next server
     const acct = this.accts.get(client.sessionId);
@@ -1428,7 +1443,7 @@ export class TownRoom extends Room<TownState> {
   private rememberHero(id: string, p: Player) {
     if (p.dead) return; // the dead come back at the square anyway
     const group = p.party ? this.members(p.party).filter((m) => m !== id).map((m) => this.state.players.get(m)!.name) : [];
-    rememberLive(p.name, p.cls, { x: p.x, y: p.y, dir: p.dir, hp: p.hp, mana: p.mana, energy: p.energy, group });
+    rememberLive(p.name, p.cls, { x: p.x, y: p.y, dir: p.dir, hp: p.hp, mana: p.mana, energy: p.energy, group, ...this.ageCross.spot(p.name) });
   }
 
   /** The server is going down for an update: remember every hero at once, before anyone leaves and groups break up. */

@@ -214,6 +214,15 @@ export async function claimAccount(name: string, play = true): Promise<Claim> {
 export function leaveAccount(name: string, play = true): Promise<void> {
   return guard ? guard.leave(key(name), play) : Promise.resolve();
 }
+/**
+ * Ages crossing (server/ageCross.ts): waits until this account's changes are committed, before its hero is sent to
+ * another Age (which reads the row). False when the write failed, was refused, or another server took the account.
+ */
+export async function settleAccount(name: string): Promise<boolean> {
+  const k = key(name);
+  if (guard?.takenElsewhere(k)) return false;
+  return (await settle(k)) && !guard?.takenElsewhere(k);
+}
 /** Renews the account leases now (tests; the guard's own timer does it every 15 s). */
 export const renewAccounts = () => (guard ? guard.renewAll() : Promise.resolve());
 /** Shutting down, after flushFinal: gives back every account lease (not those of accounts left unsaved). */
