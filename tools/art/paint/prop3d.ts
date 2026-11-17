@@ -225,3 +225,14 @@ export const grain = (axis: 0 | 1 | 2, amt = 0.16) => (x: number, y: number, z: 
   const p = [x, y, z], a = p[axis], b = p[(axis + 1) % 3], c = p[(axis + 2) % 3];
   return (hash3(Math.floor(b * 1.4 + c * 1.4), Math.floor(a / 4), 7) - 0.5) * amt + (hash3(Math.floor(a), Math.floor(b * 2), Math.floor(c * 2)) < 0.03 ? -0.14 : 0);
 };
+
+/** The whole model `k` times bigger (about its foot): for props modelled small, to fill their painted frame. */
+export function scaleProp(m: PropModel, k: number): PropModel {
+  const sv = (p: V3): V3 => [p[0] * k, p[1] * k, p[2] * k];
+  return {
+    ...m,
+    prims: m.prims.map((p) => ({ ...p, lo: sv(p.lo), hi: sv(p.hi), k: p.k * k, d: (x: number, y: number, z: number) => p.d(x / k, y / k, z / k) * k })),
+    eyes: m.eyes?.map((e) => ({ ...e, p: sv(e.p) })), halos: m.halos?.map((h) => ({ ...h, p: sv(h.p), r: h.r * k })),
+    shadow: m.shadow?.map((s) => ({ ...s, u: s.u * k, v: s.v * k, r: s.r * k })), cast: (m.cast ?? 0) * k,
+  };
+}

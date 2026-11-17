@@ -49,4 +49,5 @@ and baked by `npx tsx tools/art/bake-props.ts [key...]` (PREVIEW=dir writes pain
 |---|---|---|---|
 | D1 | Village and camp | lantern pole, dummy, skull pike, pennants red/black, net rack, spear/weapon rack | done |
 | D2 | Watchtower, spears on the ground, mill wheel, cows | | done (shipwreck stays painted for now: a 300x200 2D painting) |
-| D3 | Smithy, witch camp, Saltmere harbour, element props, throne/crown stones, lanterns | | next |
+| D3 | Siege works (siegeWorks3d.ts): catapult, ram, siege tower, lumber, sawhorse | | done |
+| D4 | Brann's weapon rack (sm_rack), dungeon props (dg_*, dp_*), smithy, witch camp, Saltmere harbour, element props, throne/crown stones, lanterns | | next |
