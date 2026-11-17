@@ -2266,7 +2266,7 @@ export class TownScene extends Phaser.Scene {
     if (!t || p.dead || p.hidden) { e.label?.setVisible(false); return; }
     // inside a big battle only officers and captains (Mob.title), the hovered trooper and the hero's target carry a name
     if (this.warBattle.inField && !p.title && !t.officer && id !== this.pointer?.hoverId && id !== this.pointer?.inspectId && id !== this.pointer?.targetId) { e.label?.setVisible(false); return; }
-    if (!e.label) e.label = isoAnchor(this.add.text(x, y, p.title || troopName(t.clan, t.officer, t.cart, t.part === "ram", t.part === "mouth"), { // (manhunters carry a title)
+    if (!e.label) e.label = isoAnchor(this.add.text(x, y, p.title || troopName(t.clan, t.officer, t.cart, t.part === "ram", t.part === "mouth", t.role ?? "foot"), { // (manhunters carry a title)
       fontFamily: TEXT_FONT, fontSize: `${TEXT_PX}px`, color: "#c8c8c8", stroke: "#000", strokeThickness: 2,
     }).setOrigin(0.5, 1).setScale(WT * 0.85).setResolution(1), e.sprite) as Phaser.GameObjects.Text;
     const col = this.feud?.colour(t.clan) ?? TROOP_COLOURS[this.troopStanceOf(p.weapon)]; // orange: fighting only because the hero provoked them
@@ -3121,6 +3121,21 @@ export class TownScene extends Phaser.Scene {
     this.burst(e.sprite.x, e.sprite.y + 4, 5, 0xd7ccc8, 250);
   }
 
+  private troopShots = 0;
+  /** A clan archer's shot: a cosmetic projectile flown from (x, y) to (tx, ty) over `ms`, its impact where the server lands the hit. */
+  private troopShot(ev: any) {
+    const [x, y, tx, ty, ms] = [ev.x, ev.y, ev.tx, ev.ty, ev.ms].map(Number);
+    if (![x, y, tx, ty, ms].every(Number.isFinite) || ms <= 0) return;
+    const kind = ["arrow", "stone", "sunbolt"].includes(ev.kind) ? ev.kind : "arrow", d = Math.hypot(tx - x, ty - y) || 1;
+    const id = `troopshot${this.troopShots++}`;
+    const g = this.fx.addShot(id, { kind, x, y, vx: (tx - x) / d, vy: (ty - y) / d, size: 1, owner: "" });
+    if (!g) return;
+    const k = { t: 0 };
+    this.tweens.add({ targets: k, t: 1, duration: ms, ease: "Linear",
+      onUpdate: () => g.setPosition(x + (tx - x) * k.t, y + (ty - y) * k.t - Math.sin(k.t * Math.PI) * Math.min(10, d * 0.06)), // a small arc
+      onComplete: () => { g.destroy(); this.fx.removeShot(id); this.fx.impact(tx, ty, kind, 0); } });
+  }
+
   /** Skill visual event from the server (shared/skillEngine.ts): drawn by SkillFx, plus the hero's cast animation. */
   private onSkillFx(ev: any) {
     if (typeof ev.ev === "string" && ev.ev.startsWith("tide")) { this.tideFx(ev); return; }
@@ -3133,6 +3148,7 @@ export class TownScene extends Phaser.Scene {
         this.burst(e.sprite.x, e.sprite.y - 14, oath ? 8 : 6, oath ? 0xffe090 : 0xffd166, 450);
       }
     }
+    if (ev.ev === "troop_shot") { this.troopShot(ev); return; } // a clan archer's shot (sound: sfx.ts)
     if (DI_EVENTS.has(ev.ev)) this.diEvent(ev); // newsong, matpick, lutefit, break
     if (ev.ev === "cast") {
       const e = this.entities.get(ev.id);

@@ -1478,5 +1478,47 @@
   "h": 34,
   "scale": 1.5,
   "frames": 12
+ },
+ "mob_war_warden_bow": {
+  "w": 36,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_warden_pike": {
+  "w": 36,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_redfang_sling": {
+  "w": 36,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_host_bow": {
+  "w": 36,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_host_pike": {
+  "w": 36,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_hidekin_spear": {
+  "w": 36,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_veiled_caster": {
+  "w": 36,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 14
  }
 }

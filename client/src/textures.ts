@@ -361,7 +361,10 @@ const PAINTED_LOOK: Record<string, { top: number; bar: number; oy: number; scale
   gildhound: { top: 14, bar: 12, oy: 21 / 24 }, crowncrow: { top: 30, bar: 16, oy: 31 / 34 },
   thronewarden: { top: 54, bar: 30, oy: 37.5 / 40, scale: 1.45 }, rivenking: { top: 70, bar: 40, oy: 46 / 50, scale: 1.7 },
   // the clan war's soldiers (tools/art/paint/warLooks.ts): art-only keys, not MobKinds; line soldiers 36x32 frames, officers 36x34
-  ...Object.fromEntries(["war_warden", "war_redfang", "war_host", "war_hidekin", "war_veiled"].map((k) => [k, { top: 27, bar: 14, oy: 30 / 32 }])),
+  ...Object.fromEntries(["war_warden", "war_redfang", "war_host", "war_hidekin", "war_veiled",
+    // role soldiers (shared/war/patrols.ts TROOP_LOOK roles): same frame size as the line soldier
+    "war_warden_bow", "war_warden_pike", "war_warden_rider", "war_redfang_sling", "war_redfang_rider", "war_host_bow", "war_host_pike", "war_host_rider",
+    "war_hidekin_spear", "war_hidekin_rider", "war_veiled_caster", "war_veiled_rider"].map((k) => [k, { top: 27, bar: 14, oy: 30 / 32 }])),
   ...Object.fromEntries(["war_warden_cap", "war_redfang_chief", "war_host_cap", "war_hidekin_chief", "war_veiled_adept"].map((k) => [k, { top: 30, bar: 16, oy: 32 / 34 }])),
   // the clan war's supply carts (tools/art/paint/warCarts.ts): 72x44 frames, a cart and its beast about 2 tiles long; the ground line is at 40/44
   ...Object.fromEntries(WAR_CART_CLANS.map((c) => [`war_cart_${c}`, { top: 36, bar: 30, oy: 40 / 44 }])),
@@ -405,7 +408,9 @@ export function trooperArt(weapon: string): string {
   if (t?.part === "mouth") return warMissing.has(`mob_war_tunnel_${t.clan}`) ? `war_cart_${t.clan}` : `war_tunnel_${t.clan}`; // a tunnel mouth: its own sheet, the clan's cart until that exists
   if (t?.part === "ram") return warMissing.has(`mob_war_ram_${t.clan}`) ? `war_cart_${t.clan}` : `war_ram_${t.clan}`; // a siege ram: its own sheet, the clan's cart until that exists
   if (t?.cart) return `war_cart_${t.clan}`; // a supply cart: its own sheet (not a soldier's)
-  return t ? troopLook(t.clan, 0, t.officer) : "war_warden";
+  if (!t) return "war_warden";
+  const art = troopLook(t.clan, 0, t.officer, t.role ?? "foot");
+  return warMissing.has(`mob_${art}`) ? troopLook(t.clan, 0, t.officer) : art; // a role whose sheet is absent wears the line soldier
 }
 /** A monster's look entry (size, label height): a trooper's comes from its clan's soldier sheet. */
 export const mobLook = (kind: string, weapon = "") => MOB_LOOK[kind === "trooper" ? trooperArt(weapon) : kind];
@@ -432,7 +437,7 @@ export function mobTexture(scene: Phaser.Scene, kind: string, level = 1, weapon 
   if (kind === "trooper") { // a clan soldier: its painted sheet once loaded, an old monster look meanwhile (the watchman is a hero sheet: a bandit stands in)
     const art = trooperArt(weapon), painted = warSoldierTexture(scene, art);
     if (painted) return painted;
-    const [k, w] = (WAR_LEGACY[art] ?? "bandit").replace("watchman", "bandit").split("_");
+    const [k, w] = (WAR_LEGACY[art] ?? WAR_LEGACY[troopLook(parseTroop(weapon)?.clan ?? "wardens", 0, parseTroop(weapon)?.officer)] ?? "bandit").replace("watchman", "bandit").split("_");
     return mobTexture(scene, k, level, w ?? "");
   }
   if (kind === "wisp") {
