@@ -14,6 +14,8 @@ import { flushWorldFinal, initWorld } from "./worldStore";
 import { clientIp } from "./ratelimit";
 import { flushWar, startWar, warLog, warNow } from "./war";
 import { councilAdmin, killCouncils, mountCouncilRoutes } from "./warCouncil";
+import { flushForge, initForge, mountForgeAdmin } from "./forge";
+import { openKv } from "./store";
 
 const PORT = Number(process.env.PORT ?? 2567);
 const app = express();
@@ -115,6 +117,8 @@ app.post("/admin/war-council", (req, res) => {
   res.setHeader("Cache-Control", "no-store");
   res.json(councilAdmin(0));
 });
+// The Forge (M4, server/forge.ts): GET /admin/forge (registry, research, log), POST ?kill=1|0&retire=<id>&revoke=<id>
+mountForgeAdmin(app, adminOk);
 // The remote councils (scheduled Claude routines): briefings and orders, behind WAR_COUNCIL_TOKEN (off when unset)
 mountCouncilRoutes(app);
 
@@ -156,13 +160,14 @@ gameServer.define("town", TownRoom);
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 gameServer.onBeforeShutdown(async () => { announceUpgrade(); await wait(400); });
 // The rooms are gone by now (everyone saved and remembered where they stood): hand those spots to the next server
-gameServer.onShutdown(async () => { writeHandoff(); flushWar(); await flushFinal(); await flushWorldFinal(); await wait(800); });
+gameServer.onShutdown(async () => { writeHandoff(); flushWar(); flushForge(); await flushFinal(); await flushWorldFinal(); await wait(800); });
 
 // Accounts first (Postgres when DATABASE_URL is set): players must never join before their saves are loaded.
 // The world state (the Gloam Tide's meter, server/worldStore.ts) loads with them; the clan war (server/war.ts, its
-// own kv table / data/war.json) starts after both, before the server listens.
+// own kv table / data/war.json) starts after both, before the server listens. The Forge's registry (server/forge.ts, its
+// own key in the same store) loads after the war and before the server listens: forged items in saves need it.
 Promise.all([initAccounts(), initWorld()])
-  .then(() => startWar())
+  .then(async () => { const kv = await openKv(); await startWar(kv); await initForge(kv); })
   .then(() => gameServer.listen(PORT))
   .then(() => console.log(`Game server on http://localhost:${PORT}`))
   .catch((e) => { console.error("Could not start:", e); process.exit(1); });

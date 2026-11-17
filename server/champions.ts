@@ -76,6 +76,21 @@ export class Champions {
     void id;
   }
 
+  /**
+   * A forged monster's affixes (The Forge, server/forgeMobs.ts): run like a champion's, but no champion HP, name or
+   * sword (its forging sets its life and weapon; the room skips the champion's damage, XP, gold and rune for it).
+   */
+  makeForged(m: ChampMob, affixes: AffixKey[]) {
+    if (!affixes.length) return;
+    const now = Date.now();
+    m.champion = packAffixes(affixes);
+    m.champ = {
+      affixes: [...affixes], split: false, rose: false, shifted: false, called: false,
+      nextPool: 0, nextBallista: 0, castUntil: 0,
+      nextBlink: now + (affixes.includes("veil") ? F.veil.firstMs : F.buried.firstMs), goneUntil: 0, goneKind: "", nextAura: 0,
+    };
+  }
+
   /** Back to a plain monster (a respawn reusing the same Mob). */
   clear(m: ChampMob) { m.champion = 0; m.champ = undefined; }
 

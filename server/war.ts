@@ -995,3 +995,17 @@ export function warCouncilChanged(now: number, atOnce = false) {
 }
 /** When the next war tick is due (ms), or undefined before the war is loaded. */
 export const warNextTick = (): number | undefined => saved?.next;
+
+// ---- The Forge (M4: server/forge.ts) ------------------------------------------------------------------------------------
+
+/**
+ * A clan pays for a forging with a share of its army (FORGE.armyCost): the men are gone at once, and the war save is
+ * written with the next step's save. Returns the men spent, or undefined before the war is loaded.
+ */
+export function warSpendArmy(k: ClanKey, share: number, now = Date.now()): number | undefined {
+  if (!saved || !CLANS[k] || !(share > 0 && share < 1)) return undefined;
+  const s = saved.state, spent = Math.max(0, s.army[k] * share);
+  s.army[k] -= spent;
+  dirtyAt ||= now;
+  return spent;
+}
