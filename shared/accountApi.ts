@@ -3,8 +3,10 @@
  * war's rules (shared/war/api.ts) for each account row. A build writes accounts as version ACCOUNT_API (field `av`) and
  * may write any account up to it; a build whose saves older code would misread or damage bumps ACCOUNT_API (and writes
  * ACCOUNT_MIN_READER, the oldest build that may still *show* them). An older build never writes a newer account: it
- * refuses its login and edits (server/accounts.ts). New optional fields need no bump: older builds keep the fields they
- * do not know (server/accounts.ts saveHero).
+ * refuses its login and edits (server/accounts.ts). Only new top-level optional fields need no bump (older builds keep
+ * the fields they do not know: server/accounts.ts saveHero). Bump with any save-version bump (xpv, SUMMONER_TREE, song
+ * tree, a quest *Ver), new item/gear/rune/skill ids, a level-cap raise, or new sub-fields inside existing save objects:
+ * an older build's restore rewrites those (drops unknown ids, caps levels, refunds trees) and would save the damage.
  */
 import { warAccess } from "./war/api";
 
