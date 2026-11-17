@@ -3,7 +3,7 @@ import { GOLEM_H, GOLEM_W, paintGolemFrame, type GolemDir, type GolemElement } f
 import { createCanvas } from "@napi-rs/canvas";
 import { addChampPose, MOB_POSES, posed, setPainted, type Dir } from "../characters";
 import { C2, P, blobPath, css, ellipseP, fillShape, glow, limb, line, mix, sh, vol } from "./brush";
-import { lastRig, pixelAlpha, pixelize, shrink } from "./body";
+import { lastMob3D, lastRig, MOB3D, pixelAlpha, pixelize, setMob3D, shrink } from "./body";
 import { paintRaider, RAIDER_H, RAIDER_W } from "./raiders";
 import { HOUND_H, HOUND_W, WRAITH_H, WRAITH_W, paintHound, paintWraith } from "./moors";
 import { RATTLER_H, RATTLER_W, VULTURE_H, VULTURE_W, WARHOUND_H, WARHOUND_W, paintRattler, paintVulture, paintWarhound } from "./badlands";
@@ -72,8 +72,18 @@ function humanoid(key: string, kind: string, w: number, h: number, oy: number, s
     if (rip && lastRig) hands.push([...toSheet(lastRig.nearH), ...toSheet(lastRig.farH)]);
     return fr;
   });
+  // 3D-built bodies (body3d.ts via body.ts MOB3D): ray-cast straight onto this sheet's texel grid
+  const base = kind.replace(/_(axe|spear|bow|champ|folk)$/, "").replace(/_champ$/, "");
+  const pix = MOB3D.has(base) && !rip && !fall ? (f: number): MobFrame => {
+    const up = lift ? lift + Math.sin(f * 1.7) * 1.2 : 0;
+    setMob3D({ tw: Math.round(w * TX), th: Math.round(h * TX), k: scale * TX, x0: 16 - w / 2 / scale, y0: 29 - (oy * h - up) / scale });
+    humanoidFrame(kind, f, fall);
+    const body = lastMob3D!;
+    setMob3D(null);
+    return { body, under: new Uint8ClampedArray(body.length), done: true };
+  } : undefined;
   return {
-    key, w, h, frames: nf, get hands() { if (!rip) return undefined; paint(); return hands; },
+    key, w, h, frames: nf, pix, get hands() { if (!rip) return undefined; paint(); return hands; },
     draw: (c, f) => {
       const fr = paint()[f], n = createCanvas(fr.w, fr.h), x = n.getContext("2d"), img = x.createImageData(fr.w, fr.h);
       img.data.set(fr.data); x.putImageData(img, 0, 0);
@@ -483,8 +493,7 @@ export function buildMobs(out: string, ONLY?: string[]) {
     for (let f = 0; f < NF; f++) {
       if (s.pix) { // 3D-built: already on the texel grid; pixelize only posterizes, rims, outlines and weathers it
         const m = s.pix(f), b = m.body, u = m.under;
-        pixelize(b, tw, th, true, { y0: Math.round(th * 0.7), y1: th, mud: 0.12, sat: 0.95 });
-        pixelAlpha(u);
+        if (!m.done) { pixelize(b, tw, th, true, { y0: Math.round(th * 0.7), y1: th, mud: 0.12, sat: 0.95 }); pixelAlpha(u); }
         for (let y = 0; y < th; y++) for (let x = 0; x < tw; x++) {
           const i = (y * tw + x) * 4, o = (y * tw * NF + f * tw + x) * 4, src = b[i + 3] ? b : u;
           for (let k = 0; k < 4; k++) sheet.data[o + k] = src[i + k];

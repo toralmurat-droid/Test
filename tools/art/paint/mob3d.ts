@@ -169,7 +169,8 @@ function scene(ps: Prim[], x: number, y: number, z: number, want: { m: Mat | nul
   return d;
 }
 
-export interface MobFrame { body: Uint8ClampedArray; under: Uint8ClampedArray }
+/** `done`: already pixelized and composited (humanoids from body.ts), copy as it is. */
+export interface MobFrame { body: Uint8ClampedArray; under: Uint8ClampedArray; done?: boolean }
 
 /**
  * Ray-casts `model` facing `yaw` into a frame of w x h world px (tw x th texels at `tx` per px), the model's origin

@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-17",
+  "title": "Skeletons rebuilt in 3D",
+  "changes": [
+    "Skeletons, skeleton mages and the Necromancer are now built as 3D models and drawn as pixel art: real bones and ribcages, hollow skulls with burning eyes, torn loincloths, and robes and deep cowls that hide the face in shadow.",
+    "Same size on screen and no cost to performance."
+  ]
+}
