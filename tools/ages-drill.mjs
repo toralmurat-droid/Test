@@ -2,16 +2,17 @@
 // `npm run build`:  npm run ages:drill   (or: node tools/ages-drill.mjs)
 // Starts blue (primary) and green (vanguard) on one Postgres and the gateway in front of them, then walks through
 // routing, crossing, the account lease and the role handover. One PASS / FAIL line per step; exit 1 on any failure.
-// DATABASE_URL: used when set; otherwise a throwaway cluster is started (initdb in a temp dir, unix socket, a free
+// AGES_DRILL_DATABASE_URL (a local scratch database; never DATABASE_URL): used when set; otherwise a throwaway cluster is started (initdb in a temp dir, unix socket, a free
 // port; as the user `postgres` through runuser when run as root) and removed on exit.
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, chmodSync } from "node:fs";
 import net from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { Client } from "colyseus.js";
 
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PG_BIN = process.env.PG_BIN || "/usr/lib/postgresql/16/bin";
 const KEY = "drill-admin-key-123456";
 const HERO = { name: "DrillHero", password: "drillpass1", cls: "wizard" };
@@ -50,14 +51,24 @@ const freePort = () => new Promise((res, rej) => {
 
 // --- Postgres ---------------------------------------------------------------------------------------------------
 async function databaseUrl() {
-  if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
+  // Never DATABASE_URL (it may be production's: the drill takes leases and writes war/world rows). A drill-only
+  // variable, and a local host unless --allow-remote-db.
+  const own = process.env.AGES_DRILL_DATABASE_URL;
+  if (own) {
+    let host = "";
+    try { host = new URL(own).hostname; } catch { die("AGES_DRILL_DATABASE_URL is not a URL"); }
+    const local = host === "" || host === "localhost" || host === "127.0.0.1" || host === "[::1]" || host === "::1";
+    if (!local && !process.argv.includes("--allow-remote-db")) die(`refusing database host ${host}: the drill writes leases, war and world rows. Use a local scratch database, or pass --allow-remote-db for a scratch one elsewhere (never production).`);
+    console.log(`Postgres: AGES_DRILL_DATABASE_URL on host ${host || "(unix socket)"}`);
+    return own;
+  }
   const initdb = path.join(PG_BIN, "initdb");
-  if (!existsSync(initdb)) { console.log(`SKIP: no DATABASE_URL and no Postgres binaries in ${PG_BIN} (set DATABASE_URL or PG_BIN)`); process.exit(0); }
+  if (!existsSync(initdb)) { console.log(`SKIP: no AGES_DRILL_DATABASE_URL and no Postgres binaries in ${PG_BIN} (set AGES_DRILL_DATABASE_URL or PG_BIN)`); process.exit(0); }
   const root = process.getuid?.() === 0;
   let asUser = (cmd, args) => [cmd, args];
   if (root) {
     if (spawnSync("id", ["postgres"]).status !== 0 || spawnSync("which", ["runuser"]).status !== 0) {
-      console.log("SKIP: running as root, and there is no `postgres` user (or no runuser) to run Postgres as. Set DATABASE_URL.");
+      console.log("SKIP: running as root, and there is no `postgres` user (or no runuser) to run Postgres as. Set AGES_DRILL_DATABASE_URL.");
       process.exit(0);
     }
     asUser = (cmd, args) => ["runuser", ["-u", "postgres", "--", cmd, ...args]];
