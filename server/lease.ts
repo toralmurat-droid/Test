@@ -57,17 +57,22 @@ export class Leases {
     if (!this.backend) return true;
     return (this.got.get(key) ?? -Infinity) > this.now();
   }
-  /** Takes or renews every wanted key (one call). A failed call keeps what was held until it runs out. */
-  async renew(): Promise<void> {
-    if (!this.primary || !this.backend || !this.wanted.size) return;
+  /**
+   * Takes or renews every wanted key (one call). A failed call keeps what was held until it runs out. Returns the keys
+   * another holder has (the call went through and did not get them), undefined when the call failed.
+   */
+  async renew(): Promise<string[] | undefined> {
+    if (!this.primary || !this.backend || !this.wanted.size) return [];
     const at = this.now(), asked = [...this.wanted];
     try {
       const keys = new Set(await this.backend.acquire(asked, this.holder, this.ttlMs));
       const until = at + this.ttlMs - LEASE.skewMs;
       // (only the keys asked about: a take() or drop() that ran meanwhile keeps its own answer)
       for (const k of asked) if (keys.has(k) && this.wanted.has(k)) this.got.set(k, until); else this.got.delete(k);
+      return asked.filter((k) => !keys.has(k));
     } catch (e: any) {
       console.error("Leases: could not renew:", e?.message ?? e);
+      return undefined;
     }
   }
   /**

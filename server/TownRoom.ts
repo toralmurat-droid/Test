@@ -58,7 +58,8 @@ import { NIGHT_RAID, raiderByKey, raiderIgnores, RAIDERS } from "../shared/raide
 import { SLOTS_BY_ZONE, WORK_SLOTS } from "../shared/siege";
 import { DAY_CYCLE_MS, dayFrac, isUndeadNight, NIGHT_BOSSES, UNDEAD_NIGHT } from "../shared/daynight";
 import { AMBUSH, BANDIT_AI, BANDIT_ROLES, CAMPS, campOfZone, CHIEF, clearWalk, findPath, POSTS, postKind, postPos, roleOf } from "../shared/bandits";
-import { accountsShared, claimAccount, flush, flushFinal, HeroSave, leaveAccount, loadHero, loadStash, login, markChest, openedChests, resetChests, saveHero, saveStash, type Stash } from "./accounts";
+import { accountsShared, claimAccount, onAccountLost, flush, flushFinal, HeroSave, leaveAccount, loadHero, loadStash, login, markChest, openedChests, resetChests, saveHero, saveStash, type Stash } from "./accounts";
+import { ACCOUNT_LEASE } from "./accountGuard";
 import { offerFrom, Offer, settle, stashNear, STASH_GOLD_MAX, STASH_RANGE, STASH_SIZE, TRADE } from "../shared/trade";
 import { arrivalOf, cleanPortals, PORTAL_COMBAT_MS, PORTAL_RANGE, PORTAL_WAKE_RANGE, portalById, PORTALS } from "../shared/portals";
 import { rideFerry } from "./ferry";
@@ -620,6 +621,8 @@ const CAPTURE_SPOT: [number, number] = [101, 72];
 const liveRooms = new Set<TownRoom>();
 let announced = false;
 /** The server is about to restart for an update: tell every player right away (TownScene shows the update notice). */
+// Another server took the account of a hero playing here (server/accountGuard.ts): saves are refused, so send them away
+onAccountLost((k) => liveRooms.forEach((r) => r.sendAway(k)));
 export function announceUpgrade() {
   if (announced) return;
   announced = true;
@@ -1198,6 +1201,15 @@ export class TownRoom extends Room<TownState> {
   /** Account leases on (server/accountGuard.ts): the account each session claimed, given back when it leaves. */
   private accts = new Map<string, string>();
 
+  /** Another server has this account now (lower-case name): its heroes here leave, their changes no longer saved. */
+  sendAway(k: string) {
+    for (const c of this.clients) {
+      if (this.accts.get(c.sessionId)?.toLowerCase() !== k) continue;
+      c.send("chat", { id: "", name: "Oakvale", text: "This hero was opened on another server." });
+      c.leave(4409);
+    }
+  }
+
   /** Name + password check (server/accounts.ts); a new name creates the account. Also notes the network address for ideas. */
   async onAuth(client: Client, options: { name?: string; password?: string; cls?: string }, context: AuthContext) {
     if (!playable(options?.cls)) throw new Error("This class is archived and cannot be played for now");
@@ -1217,7 +1229,7 @@ export class TownRoom extends Room<TownState> {
       setTimeout(() => {
         if (this.accts.get(sid) !== name || this.clients.some((c) => c.sessionId === sid)) return;
         this.accts.delete(sid); void leaveAccount(name);
-      }, 10_000).unref();
+      }, ACCOUNT_LEASE.orphanMs).unref();
     }
     // Local addresses are skipped so several tabs on one computer can still test ideas and votes
     this.addrs.set(client.sessionId, isLocalIp(ip) ? undefined : hashAddr(ip));

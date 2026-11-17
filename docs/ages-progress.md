@@ -77,8 +77,14 @@ on A after B started created a second account over it (password takeover), and "
   then skips `onLeave`) gives its account back after 10 s.
 - **Write fence** (`Store.saveFenced`, Postgres): in the flush's transaction, the lease rows still held by this holder
   (`until > clock_timestamp()`) are locked `FOR SHARE` in key order, so no server takes one over until the commit; only
-  those rows are updated, rows are never created by it. Refused accounts are logged and dropped from the dirty set.
-  `pgLeases` takes keys in key order too (no deadlock with the fence).
+  those rows are updated, rows are never created by it. A refused account whose lease only lapsed (a database outage,
+  nobody took it) stays dirty and keeps its lease (`settle` is false), so the next renewal takes it again and the write
+  goes through; one a renewal showed another server holds is given up (logged). `pgLeases` takes and releases keys in
+  the same byte order (`COLLATE "C"`, JavaScript's sort), so no deadlock with the fence.
+- **Taken over while playing:** when a renewal shows another server holds an account in use here, its heroes are sent
+  away (chat "This hero was opened on another server.", close code 4409) and nothing of it is written from here again.
+- **Holder:** account leases use `AGE_SLOT:build:<random per process>` (`accountHolder`), so two processes of one build
+  never share a holder; a restarted process gets a new one (its old leases were released at shutdown or run out).
 - **HTTP edits** (email, reset code, new password) for an account not playing here: take the lease, reload, change,
   save, release; held elsewhere: "Leave the game first, then try again". A reset guess takes a lease only when a code
   is pending.
@@ -90,8 +96,8 @@ on A after B started created a second account over it (password takeover), and "
 ### Open (part 3)
 - A trade's two accounts are written in one transaction, but if one side's lease were lost, the other side is still
   written (the fence refuses rows, not the whole flush). Both traders are on one server, so this needs a lease lost mid-trade.
-- A player whose lease is lost (database outage, then another server took it) keeps playing here with saves refused;
-  nothing kicks them yet (logged).
+- An account whose row is missing (deleted by hand) while held: its refused writes are retried at each flush and the
+  lease kept until the server stops.
 - During a deploy's overlap with leases on, a player reconnecting to the new server while the old one still saves waits
   up to ~3 s and may be refused once; the client shows the message (no automatic retry yet).
 - Held leases are trusted locally until 5 s before they run out; a server paused longer than that is fenced by SQL.

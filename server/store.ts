@@ -162,8 +162,8 @@ async function leasesTable(pool: pg.Pool) {
 }
 
 /**
- * The fenced write: first the lease rows of these keys still held by `holder` are locked (FOR SHARE, in key order, the
- * order pgLeases takes them in), so no other server can take one over until this transaction ends; then only those rows
+ * The fenced write: first the lease rows of these keys still held by `holder` are locked (FOR SHARE, in byte order,
+ * COLLATE "C", the order pgLeases takes them in: JavaScript's sort), so no other server can take one over until this transaction ends; then only those rows
  * are updated. The lease's end is checked against the clock (clock_timestamp), not the transaction's start.
  */
 async function fencedUpdate<A>(pool: pg.Pool, changed: Record<string, A>, table: string, holder: string, prefix: string): Promise<string[]> {
@@ -176,7 +176,7 @@ async function fencedUpdate<A>(pool: pg.Pool, changed: Record<string, A>, table:
     for (let i = 0; i < keys.length; i += 500) {
       const ks = keys.slice(i, i + 500);
       const held = await c.query<{ key: string }>(
-        `SELECT key FROM leases WHERE key = ANY($1::text[]) AND holder = $2 AND until > clock_timestamp() ORDER BY key FOR SHARE`,
+        `SELECT key FROM leases WHERE key = ANY($1::text[]) AND holder = $2 AND until > clock_timestamp() ORDER BY key COLLATE "C" FOR SHARE`,
         [ks.map((k) => prefix + k), holder],
       );
       const ok = new Set(held.rows.map((r) => r.key.slice(prefix.length)));
@@ -219,7 +219,7 @@ export async function pgLeases(pool: pg.Pool): Promise<LeaseBackend> {
   return {
     async acquire(keys, holder, ttlMs) {
       if (!keys.length) return [];
-      keys = [...keys].sort(); // (key order, as the accounts' write fence locks them: no deadlock between the two)
+      keys = [...keys].sort(); // (byte order, as the accounts' write fence locks them, COLLATE "C": no deadlock between the two)
       const r = await pool.query<{ key: string }>(
         `INSERT INTO leases (key, holder, until)
          SELECT k, $2, now() + $3 * interval '1 millisecond' FROM unnest($1::text[]) AS t(k)
@@ -231,7 +231,8 @@ export async function pgLeases(pool: pg.Pool): Promise<LeaseBackend> {
       return r.rows.map((x) => x.key);
     },
     async release(keys, holder) {
-      if (keys.length) await pool.query("DELETE FROM leases WHERE key = ANY($1::text[]) AND holder = $2", [keys, holder]);
+      // (rows locked in the same byte order as acquire and the write fence before they go)
+      if (keys.length) await pool.query(`DELETE FROM leases WHERE key IN (SELECT key FROM leases WHERE key = ANY($1::text[]) AND holder = $2 ORDER BY key COLLATE "C" FOR UPDATE) AND holder = $2`, [keys, holder]);
     },
   };
 }

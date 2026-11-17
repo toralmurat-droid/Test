@@ -8,7 +8,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { jsonStore, openLeases, postgresStore, readJsonFile, Store } from "./store";
 import { AccountGuard, accountLeasesOn, ACCT, type Claim } from "./accountGuard";
-import { holderId, type LeaseBackend } from "./lease";
+import type { LeaseBackend } from "./lease";
 import { sendMail, mailReady } from "./mailer";
 import { FailDelay, isLocalIp, KeyedLimiter, LOGIN_BURST, LOGIN_PER_SEC, SIGNUP_BURST, SIGNUP_PER_SEC } from "./ratelimit";
 
@@ -158,7 +158,11 @@ const guardHooks = {
   async reload(k: string) { const row = await store.loadOne!(k); if (row) accounts[k] = row; },
   settle: (k: string) => settle(k),
   unsaved: (k: string) => dirty.has(k),
+  lost: (k: string) => { for (const f of lostListeners) f(k); },
 };
+const lostListeners: ((k: string) => void)[] = [];
+/** Another server took this account (key: lower-case name) while it was in use here: server/TownRoom.ts sends its players away. */
+export function onAccountLost(f: (k: string) => void) { lostListeners.push(f); }
 
 /**
  * Shared mode: a hero joins (`play`) or leaves. "playing": already in a room on this server; "elsewhere": another
@@ -171,6 +175,8 @@ export async function claimAccount(name: string, play = true): Promise<Claim> {
 export function leaveAccount(name: string, play = true): Promise<void> {
   return guard ? guard.leave(key(name), play) : Promise.resolve();
 }
+/** Renews the account leases now (tests; the guard's own timer does it every 15 s). */
+export const renewAccounts = () => (guard ? guard.renewAll() : Promise.resolve());
 /** Shutting down, after flushFinal: gives back every account lease (not those of accounts left unsaved). */
 export function releaseAccounts(): Promise<void> {
   return guard ? guard.releaseAll() : Promise.resolve();
@@ -465,10 +471,16 @@ export function flush(): Promise<void> {
   // (the JSON store turns everything into text before its first await, which is the same snapshot)
   const changed: Record<string, Account> = {};
   if (store.kind === "postgres") for (const k of keys) if (accounts[k]) changed[k] = structuredClone(accounts[k]);
-  // Shared (server/accountGuard.ts): only accounts this server holds are written; a refused one is dropped, not retried
-  const save = guard
-    ? store.saveFenced!(changed, guard.holder, ACCT).then((refused) => {
-      if (refused.length) console.error(`Accounts: not saved, another server has them now (or the row is missing): ${refused.join(", ")}`);
+  // Shared (server/accountGuard.ts): only accounts this server holds are written. A refused one whose lease only lapsed
+  // (no renewal showed another holder) is kept for the next write, and its lease with it (settle stays false); one
+  // another server took is given up
+  const g = guard;
+  const save = g
+    ? store.saveFenced!(changed, g.holder, ACCT).then((refused) => {
+      const kept = refused.filter((k) => g.retryWrite(k)), lost = refused.filter((k) => !g.retryWrite(k));
+      for (const k of kept) dirty.add(k);
+      if (kept.length) console.error(`Accounts: not saved yet, the lease ran out (tried again after it is renewed): ${kept.join(", ")}`);
+      if (lost.length) console.error(`Accounts: not saved, another server has them now (or the row is missing): ${lost.join(", ")}`);
     })
     : store.save(changed, accounts);
   writing = save
@@ -502,6 +514,7 @@ async function settle(k: string): Promise<boolean> {
     if (writing) { await writing; continue; }
     if (!dirty.has(k)) return true;
     await flush();
+    if (dirty.has(k)) return false; // (the write failed or was refused for now: keep the lease, try again at the renewal)
   }
   return !writing && !dirty.has(k);
 }
@@ -514,5 +527,3 @@ export async function backupAccounts(): Promise<Record<string, Account>> {
   return all;
 }
 
-/** This server's lease holder id in shared mode (tests, logs). */
-export const accountHolder = () => guard?.holder ?? holderId();

@@ -170,11 +170,14 @@ test("accounts (shared): saves only under the lease; an account taken over is no
   acc.saveHero("Hero", "wizard", hero);
   await acc.flush();
   assert.equal(db.rows.get("hero").heroes.wizard.level, 2);
-  // The lease is lost (this server stalled) and another server took it: nothing is written, nothing retried
+  // The lease is lost (this server stalled) and another server took it: the renewal sees it (the room is told, to send
+  // the hero away), and nothing is written or retried
+  const lost: string[] = []; acc.onAccountLost((k) => lost.push(k));
   leases.rows.set("acct:hero", { holder: "A", until: Date.now() + 60_000 });
   acc.saveHero("Hero", "wizard", { ...hero, level: 50 });
   const err = console.error; let said = ""; console.error = (...a: unknown[]) => { said += a.join(" "); };
-  try { await acc.flush(); } finally { console.error = err; }
+  try { await acc.renewAccounts(); await acc.flush(); } finally { console.error = err; }
+  assert.deepEqual(lost, ["hero"]);
   assert.match(said, /not saved, another server has them/);
   assert.equal(db.rows.get("hero").heroes.wizard.level, 2);
   const n = db.writes; await acc.flush(); assert.equal(db.writes, n, "dropped, not retried");
@@ -216,4 +219,32 @@ test("account guard: claims at the same moment reload once; a lease re-taken und
   assert.equal(a.mem.ada.gold, 50);
   await a.guard.leave("ada"); await a.guard.leave("ada", true);
   assert.equal(w.leases.rows.has("acct:ada"), false);
+});
+
+test("accounts (shared): a lease that only lapsed (database outage, nobody took it) keeps the save and the lease until renewed", async () => {
+  const acc = await import("../server/accounts");
+  const leases = memLeases(), db = memDb<any>(leases);
+  await acc.initAccounts({ store: db.store, leases, holder: "B", retryMs: 1 });
+  await acc.login("Lapse", "lapsepass1", IP);
+  assert.equal(await acc.claimAccount("Lapse"), "fresh");
+  acc.saveHero("Lapse", "wizard", { level: 2 } as any);
+  await acc.flush();
+  assert.equal(db.rows.get("lapse").heroes.wizard.level, 2);
+  leases.rows.get("acct:lapse")!.until = Date.now() - 1; // ran out while the database could not be reached
+  acc.saveHero("Lapse", "wizard", { level: 9 } as any);
+  const err = console.error; console.error = () => {};
+  try {
+    await acc.flush(); // refused by the fence, kept
+    await acc.leaveAccount("Lapse"); // the hero leaves: not saved yet, so the lease is not given back
+    assert.equal(db.rows.get("lapse").heroes.wizard.level, 2);
+    assert.equal(leases.rows.get("acct:lapse")?.holder, "B", "kept");
+    await acc.renewAccounts(); // taken again (nobody else had it), then saved and released
+    for (let i = 0; i < 20 && leases.rows.has("acct:lapse"); i++) await new Promise((r) => setTimeout(r, 5));
+  } finally { console.error = err; }
+  assert.equal(db.rows.get("lapse").heroes.wizard.level, 9, "the last save reached the row");
+  assert.equal(leases.rows.has("acct:lapse"), false, "released after it");
+  // A login now reads the newest row
+  assert.equal(await acc.claimAccount("Lapse"), "fresh");
+  assert.equal(acc.loadHero("Lapse", "wizard")!.level, 9);
+  await acc.leaveAccount("Lapse");
 });

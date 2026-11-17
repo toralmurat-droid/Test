@@ -41,3 +41,40 @@ test("account leases (room): refused while another server holds the account; tak
     assert.ok(await until(() => !leases.rows.has("acct:leasey")));
   } finally { await srv.stop(); }
 });
+
+test("account leases (room): a seat left before onJoin gives the account back; a hero whose account another server took is sent away", async () => {
+  const acc = await import("../server/accounts");
+  const { ACCOUNT_LEASE } = await import("../server/accountGuard");
+  const leases = memLeases(), db = memDb<any>(leases);
+  await acc.initAccounts({ store: db.store, leases, holder: "here", retryMs: 5 });
+  const srv = await startRoom(), orphanMs = ACCOUNT_LEASE.orphanMs;
+  try {
+    const c = await srv.join({ cls: "wizard" });
+    await wait(100);
+    const room = srv.room, ctx = { ip: "127.0.0.1", headers: {} };
+    // onAuth went through but the client never joined (Colyseus skips onLeave then)
+    ACCOUNT_LEASE.orphanMs = 50;
+    await acc.login("Orphan", "testpass1", "127.0.0.1");
+    await room.onAuth({ sessionId: "o1", send: () => {} }, { name: "Orphan", password: "testpass1", cls: "wizard" }, ctx);
+    assert.equal(leases.rows.get("acct:orphan")?.holder, "here");
+    assert.ok(await until(() => !leases.rows.has("acct:orphan"), 3000), "given back");
+    assert.equal(await acc.claimAccount("Orphan"), "fresh", "and no longer counted as playing");
+    await acc.leaveAccount("Orphan");
+
+    // The real client plays account "Kicky" (test rooms skip onAuth: claimed and mapped by hand, as onAuth does)
+    await acc.login("Kicky", "testpass1", "127.0.0.1");
+    assert.equal(await acc.claimAccount("Kicky"), "fresh");
+    room.accts.set(c.sessionId, "Kicky");
+    let code = 0, said = "";
+    c.onLeave((n: number) => { code = n; });
+    c.onMessage("chat", (m: { text: string }) => { said += m.text; });
+    leases.rows.set("acct:kicky", { holder: "there", until: Date.now() + 60_000 });
+    const err = console.error; console.error = () => {};
+    try {
+      await acc.renewAccounts();
+      assert.ok(await until(() => code === 4409), "sent away");
+    } finally { console.error = err; }
+    assert.match(said, /opened on another server/);
+    assert.equal(leases.rows.get("acct:kicky")?.holder, "there", "the other server's lease untouched");
+  } finally { ACCOUNT_LEASE.orphanMs = orphanMs; await srv.stop(); }
+});
