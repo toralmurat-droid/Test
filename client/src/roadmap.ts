@@ -80,7 +80,7 @@ export const MILESTONES: Milestone[] = [
       { name: "The Red Badlands (Redfang homeland, west)", owner: "World + Art + Narrative", status: "done", note: "Open: the land, the Red Pass, Rustwater Post (shops, portal), eight Redfang-country monsters and a quest chain to Old Rourke. At war: 10 Redfang territories, the Redfang seat at Fangrock, the Red Pass to Oakvale", pr: 446 },
       { name: "The Grey Barrow Moors (Ossuary Host homeland, north-east)", owner: "World + Art + Narrative", status: "done", note: "Open: the Moorgate, Cairnwatch (outpost, portal stone, bounty board), seven new monsters, the Barrow-King and a quest chain. At war: 11 territories, the Host's seat at the Muster, the Wardens' Grey Ring, the Barrowgate to Oakvale", pr: 442 },
       { name: "The Mawdeep Sinkholes (Hide-Kin homeland, south)", owner: "World + Art + Narrative", status: "done", note: "Open: the Sinkway at level 30 (a cave on the beach south of Sunken Lake), Ropewell (shops, portal), eight Hide-Kin monsters and a quest chain to the Maw-Father. At war: 10 Hide-Kin territories, the Hide-Kin seat at Hidehall, the Sinkway to Oakvale", pr: 449 },
-      { name: "The Crown of the Marches (neutral prize in the middle)", owner: "World + Gameplay", status: "doing", note: "Built: the land (Lv 40-50), the five Crownways from every homeland, Tollcross, the Crown Keep, the Riven Court's monsters, The Riven Throne quest chain, the Riven King in the Throne Hall and the war for the Crown (ten territories; the Keep held by the clan with the least land). Coming: the Reckoning" },
+      { name: "The Crown of the Marches (neutral prize in the middle)", owner: "World + Gameplay", status: "done", note: "Built: the land (Lv 40-50), the five Crownways from every homeland, Tollcross, the Crown Keep, the Riven Court's monsters, The Riven Throne quest chain, the Riven King in the Throne Hall and the war for the Crown (ten territories; the Keep held by the clan with the least land). The Reckoning (#482): once a month the clans settle who holds the Keep" },
     ],
   },
   {
@@ -88,10 +88,10 @@ export const MILESTONES: Milestone[] = [
     goal: "An AI leads each clan, first in shadow mode, then for real.",
     exit: "Councils lead for two weeks with no rule broken; Murat gets the daily digest by email.",
     items: [
-      { name: "Orders API and validator", owner: "AI Engineer", status: "later" },
-      { name: "Councils in shadow mode, compared with scripted doctrine", owner: "AI Engineer", status: "later" },
-      { name: "Herald proclamations and the war chronicle page on the wiki", owner: "Narrative + Client", status: "later" },
-      { name: "Email flags and daily digest; kill switch and undo", owner: "Server & Live Ops", status: "later" },
+      { name: "Orders API and validator", owner: "AI Engineer", status: "done", note: "Once a war day each clan's council names up to 3 targets, a stance and a proclamation; anything illegal is rejected and the doctrine leads. Councils can be scheduled Claude routines (remote orders behind a token)" },
+      { name: "Councils in shadow mode, compared with scripted doctrine", owner: "AI Engineer", status: "doing", note: "Shadow and lead modes, kill switch and fallback built and off by default; the scripted council runs in the war sim. Next: a Claude routine in shadow on the live server" },
+      { name: "Herald proclamations and the war chronicle page on the wiki", owner: "Narrative + Client", status: "doing", note: "A leading council's proclamation is read out by the Herald; the chronicle page is still to come" },
+      { name: "Email flags and daily digest; kill switch and undo", owner: "Server & Live Ops", status: "later", note: "Daily digest and kill switch built (admin route); email needs Murat's approval first" },
     ],
   },
   {
