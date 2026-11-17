@@ -272,9 +272,52 @@ or on Postgres, keeps `data/handoff.json` and the idea file exactly as before.
   and change, and the follower's Tide; a sack and a claim once, across restart and change, a second sack that tick
   dropped), `tests/store.test.ts` (Postgres: take, del).
 
+### Part 7 review fixes (branch `claude/ages-shared-fixes`)
+- **Rewards of a follower's sack or claim wait for the owner.** Design chosen: *grant only when accepted*. Each act a
+  follower queues carries an id and (a sack) its clan-side reward (`ActMeta`: `valor`, Reckoning `credits` = the hero
+  keys of the sharers); the owner, in `applyAct`, adds that valor and crown credit only when it applies the act, and
+  notes every act's fate in the war save (`fates`, optional, last 500: 1 applied, 0 dropped). The follower's rooms
+  (`server/warHolds.ts`, `server/warTowns.ts`) put the banner up at once (sfx, guards home, the Hold marked sacked
+  here) but keep the hero-side part (the war chest, renown) in a per-room `waiting` list; once a later war read shows
+  the act's fate as applied they pay the sharers still in the room, and a dropped act (or none answered within
+  `ACT_FATE_MS`, 3 min: e.g. an older owner) pays nothing and the sacker is told. Why not the local grant: with N
+  servers each could sack the same Hold in the same tick before the owner's log reaches them, so "one per server" still
+  lets N heroes take the chest and renown for one counted sack. The cost: a 15-45 s wait for the pay, and a sharer who
+  logs out meanwhile gets no renown. Single server (owner) unchanged: everything at once, as before.
+  `townClaim`/`strikeHold` keep their follower branches (queue without reward) for other callers; the rooms use
+  `sackAct`/`claimAct` + `warActFate`.
+- **Tide march with no room on the owner:** each world beat the owner runs `bookIdleMarch` (`server/tide.ts`) when no
+  Tide room is open in its process: a full meter with no march booked gets the next dusk, and a booked march is
+  counted as run once its time is up (`marchAt + TIDE.limitMs`: meter 0, no march booked, `marches + 1`, the row
+  written), since the followers marched it for their heroes. With a room open its Tide does all this (as before).
+  A Tide (any room of a process) remembers the `marchAt` it set out for and never marches it again, so a follower whose
+  world the owner's row replaces after its march (same `marchAt`, meter still full) does not march and pay twice.
+- **Queues:** two first pushes at once share one read of the queue row (no batch lost, no number used twice). A
+  corrupt `fates` in the war row is dropped on load.
+- **Queues never lose a beat's items:** `AgeQueue.push` no longer throws; it returns false when the queue row cannot be
+  read (the caller puts the items back with `requeue`, capped by the module's pending maximum), and a failed row
+  write is retried at the next beat. The war pushes the valor and the act queue independently.
+- **Idea row writes one at a time** (`writeRow` chained, the row built when the write runs).
+- **Handoff:** `fetchLive` (onAuth) only reads the row; `takeLive` (onJoin) deletes it, so a join that fails after the
+  password check keeps the spot. Writes and deletes of one hero's row run in order. `onLeave` gives the account lease
+  back after the hero's spot write is done (`handoffWritten`, capped at 3 s); while it waits, the same hero logging in
+  again on this server gets "already playing" (only when the database is slow).
+- **World lease lost:** the next beat follows (the owner's row replaces this server's world); meter changes not yet
+  written are lost (comment in `server/worldStore.ts` fixed; nothing can be flushed without the lease).
+- Tests: `tests/agesSharedFixes.test.ts` (fates and valor in the act; holds and towns pay only on "ok", nothing on a
+  drop or a timeout; idle march booked and moved; queue read and write failures; idea write order; handoff read/delete
+  and the capped wait), `tests/agesShared.test.ts` (handoff: deleted at the join, not at login).
+
 ### Open (part 7)
-- A follower's hero gets the sack's gold, renown and the claim's renown at once; if the owner refuses the act (a sack
-  from an older tick, a town claimed meanwhile on the owner) the war does not change, the rewards stay.
+- Known: a follower's sack/claim pays its heroes 15-45 s later (when the owner's war shows it applied); a hero who
+  left the room meanwhile gets no renown. If no fate arrives within `ACT_FATE_MS` (3 min) the rewards are withheld:
+  an older owner (which drops `ActMeta` and notes no fates) or an owner that is slow to drain (a database outage, a
+  long lease change) means those heroes get no war chest or renown, and with an older owner the clan valor of
+  follower sacks is not counted either. The war itself still applies the sack or claim if the owner accepts it.
+- An owner with no room open counts a booked march as run when its time is up, whether or not any follower had heroes
+  there to march it (no server may have marched it: the meter still empties, as a missed march no longer waits for
+  another dusk in that case).
+- `bookIdleMarch` reads the plain day clock (`shared/daynight.ts`), not TownRoom's `DAY_TIME` override.
 - A follower's own idea under its temporary number until the owner's row has it (up to ~30 s); its submitter gets no
   idea number in chat. Ideas win only while a room is open on the owner (as before, per process).
 - A hero who logs in on another server within the instant their old server writes the spot may miss it (it then

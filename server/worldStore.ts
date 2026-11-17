@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { dayFrac } from "../shared/daynight";
 import { TIDE } from "../shared/tide";
 import { AgeQueue, sameDrained, type Drained } from "./ageQueue";
+import { bookIdleMarch } from "./tide";
 import { LEASE, Leases } from "./lease";
 import { openKv, postgresStore, type Kv, type Store } from "./store";
 
@@ -123,8 +125,11 @@ export async function initWorld() {
 
 /**
  * Renews the world's lease. On taking it (back): when another server wrote the row since this one last wrote or loaded
- * it, reloads it in place (callers keep `world()`) and drops what was not saved here; when nobody did (this server lost
- * the lease to a database outage, say), keeps its own world, unsaved progress and all.
+ * it, or this server followed meanwhile, reloads it in place (callers keep `world()`) and drops what was not saved
+ * here (its blob kills not queued yet are counted again at once); when nobody did and it never followed (it lost the
+ * lease to a database outage, say, and got it back at the next beat), keeps its own world, unsaved progress and all.
+ * Losing the lease: the next beat follows (followWorld replaces the world with the owner's row), so meter changes this
+ * server made and had not written yet are lost; blob kills made from then on are queued for the owner.
  */
 async function claimWorld() {
   if (!lease) return;
@@ -154,13 +159,19 @@ function replace(got: WorldState) {
   delete state.marchAt; delete state.wrote; delete state.drained;
   Object.assign(state, got);
 }
-/** The owner, every beat: the followers' blob kills into the meter, once (their marks written with it). */
-async function drainKills() {
+/**
+ * The owner, every beat: the followers' blob kills into the meter, once (their marks written with it). With no room
+ * open here (server/tide.ts bookIdleMarch) a full meter gets its march booked, and a missed one moved, all the same.
+ */
+async function drainKills(now = Date.now()) {
   if (!kv) return;
   const before = state.drained;
   const d = await TIDE_Q.drain(kv, before, (b) => addKills(b.kills));
-  if (!d || !mine || sameDrained(d, before)) return;
-  if (Object.keys(d).length) state.drained = d; else delete state.drained;
+  if (!mine) return;
+  let moved = false;
+  if (d && !sameDrained(d, before)) { if (Object.keys(d).length) state.drained = d; else delete state.drained; moved = true; }
+  if (bookIdleMarch(state, now, dayFrac)) moved = true;
+  if (!moved) return;
   dirty = true;
   await flushWorld();
 }
@@ -176,7 +187,7 @@ async function followWorld() {
     if (raw !== undefined) { replace(cleanWorld(raw)); followed = true; }
     const n = pendingKills; pendingKills = 0;
     const seen = state.drained?.[lease.holder] ?? 0;
-    await TIDE_Q.push(kv, lease.holder, seen, n ? { kills: n } : undefined);
+    if (!(await TIDE_Q.push(kv, lease.holder, seen, n ? { kills: n } : undefined))) pendingKills = Math.min(TIDE.goal, pendingKills + n); // (kept for the next beat)
     const ahead = TIDE_Q.unseen(seen).reduce((a, b) => a + b.kills, 0);
     if (ahead && state.marchAt === undefined && state.tide < TIDE.goal) state.tide = Math.min(TIDE.goal, state.tide + ahead);
   } catch (e: any) { console.error("World: could not follow the world:", e?.message ?? e); }
@@ -224,7 +235,7 @@ export async function flushWorldFinal() {
   await flushWorld();
   if (!mine && kv && lease?.shared && pendingKills) { // (a follower: its last kills to its queue)
     const n = pendingKills; pendingKills = 0;
-    await TIDE_Q.push(kv, lease.holder, state.drained?.[lease.holder] ?? 0, { kills: n }).catch(() => {});
+    await TIDE_Q.push(kv, lease.holder, state.drained?.[lease.holder] ?? 0, { kills: n });
   }
   await lease?.release(); // (the next server takes the world over at once, reloading what was just written)
   mine = false;

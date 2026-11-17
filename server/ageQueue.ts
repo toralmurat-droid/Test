@@ -49,25 +49,54 @@ export class AgeQueue<B extends object> {
   /**
    * A follower's beat: drops the batches the owner counted (up to `seen`, from the owner's row), appends `add` as a new
    * batch, and writes the queue when it changed (through `write`, e.g. a module's one-write-at-a-time chain). The row is
-   * read once (a restart goes on numbering where it stopped).
+   * read once (a restart goes on numbering where it stopped). Never throws. False when `add` was not taken (the row
+   * could not be read): the caller keeps it for the next beat. A failed write keeps the batch in memory and is
+   * written again at the next beat.
    */
-  async push(kv: Kv, holder: string, seen: number, add?: B, write: (f: () => Promise<void>) => Promise<unknown> = (f) => f()): Promise<void> {
+  async push(kv: Kv, holder: string, seen: number, add?: B, write: (f: () => Promise<void>) => Promise<unknown> = (f) => f()): Promise<boolean> {
     const key = this.prefix + holder;
     if (!this.row || this.row.holder !== holder) {
-      this.row = this.clean(await kv.get(key)) ?? { holder, seq: 0, batches: [] };
-      this.row.holder = holder;
+      // (one read for every push waiting on it: two first pushes at once must not each start a row and lose a batch)
+      if (this.reading?.key !== key) {
+        const p = this.read(kv, key, holder);
+        this.reading = { key, p };
+        void p.finally(() => { if (this.reading?.p === p) this.reading = undefined; });
+      }
+      const got = await this.reading.p;
+      if (!got) return false;
+      if (!this.row || this.row.holder !== holder) this.row = got;
     }
     const q = this.row, n = q.batches.length;
     q.batches = q.batches.filter((b) => b.seq > seen);
     q.seq = Math.max(q.seq, seen);
-    let dirty = q.batches.length !== n;
+    let dirty = q.batches.length !== n || this.unwritten;
     if (add) { q.batches.push({ ...add, seq: ++q.seq }); dirty = true; }
     if (q.batches.length > this.maxBatches) q.batches.splice(0, q.batches.length - this.maxBatches);
-    if (dirty) await write(async () => { await kv.set(key, q).catch((e) => console.error(`Ages: could not write queue ${key}:`, e?.message ?? e)); });
+    if (dirty) {
+      this.unwritten = true;
+      try {
+        await write(async () => {
+          try { await kv.set(key, q); this.unwritten = false; }
+          catch (e: any) { console.error(`Ages: could not write queue ${key} (written again at the next beat):`, e?.message ?? e); }
+        });
+      } catch (e: any) { console.error(`Ages: could not write queue ${key} (written again at the next beat):`, e?.message ?? e); }
+    }
+    return true;
+  }
+  /** The row in memory has batches the store may not have (the last write failed). */
+  private unwritten = false;
+  /** The row read under way (shared by the pushes that wait on it). */
+  private reading?: { key: string; p: Promise<QueueRow<B> | undefined> };
+  private async read(kv: Kv, key: string, holder: string): Promise<QueueRow<B> | undefined> {
+    try {
+      const row = this.clean(await kv.get(key)) ?? { holder, seq: 0, batches: [] };
+      row.holder = holder;
+      return row;
+    } catch (e: any) { console.error(`Ages: could not read queue ${key} (kept for the next beat):`, e?.message ?? e); return undefined; }
   }
 
   /** Forget the row read (tests, a module reset). */
-  reset() { this.row = undefined; }
+  reset() { this.row = undefined; this.unwritten = false; this.reading = undefined; }
 
   /**
    * The owner: hands every queue's batches not counted yet (by `drained`) to `apply`, oldest first per holder. Returns
@@ -94,6 +123,12 @@ export class AgeQueue<B extends object> {
     return out;
   }
 }
+
+/**
+ * Items a failed push did not take, put back in front of those queued since (the oldest first), at most `max` in all
+ * (the newest beyond it are dropped, as a full queue refuses them).
+ */
+export const requeue = <T>(back: readonly T[], since: readonly T[], max: number): T[] => [...back, ...since].slice(0, max);
 
 /** Two drained maps are the same (a row needs writing only when its marks moved). */
 export const sameDrained = (a: Drained | undefined, b: Drained | undefined) => {

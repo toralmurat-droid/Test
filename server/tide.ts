@@ -59,6 +59,34 @@ const rint = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1
 const rooms = new Set<Tide>();
 let owner: Tide | undefined;
 
+/**
+ * Ages: the world's owner keeps the meter going when none of its rooms runs a Tide (all closed, or none opened yet), so
+ * a meter the followers filled through the queue does not sit full forever: a full meter with no march booked gets the
+ * next dusk; a booked march is counted as run (by the followers, for their heroes) once its time is up
+ * (marchAt + TIDE.limitMs): the meter empties as at a march's end. With a room open its Tide does all this (and may be
+ * marching: a full meter with no march booked is then the march under way). True when `w` changed (the caller writes
+ * it). `frac`: time of day 0..1.
+ */
+export function bookIdleMarch(w: WorldState, now: number, frac: (now: number) => number): boolean {
+  if (rooms.size) return false;
+  if (w.marchAt !== undefined) {
+    if (now <= w.marchAt + TIDE.limitMs) return false;
+    w.tide = 0; w.marchAt = undefined; w.marches++;
+    return true;
+  }
+  if (w.tide < TIDE.goal) return false;
+  w.tide = TIDE.goal;
+  w.marchAt = marchTime(now, frac(now));
+  return true;
+}
+/**
+ * The booked march time this process last set out for (any room): a follower's world is replaced by the owner's row
+ * after its march (the same marchAt, the meter still full until the owner empties it), and must not march it again.
+ */
+let marched: number | undefined;
+/** Tests: forget the last march set out for. */
+export function _resetTideMarched() { marched = undefined; }
+
 export class Tide {
   private m?: March;
   private checkAt = 0;
@@ -113,9 +141,11 @@ export class Tide {
     const w = this.h.world();
     if (this.lead() !== this) { /* another room runs the event: this one only sends the news */ }
     else if (this.m) { if (now >= this.checkAt) { this.checkAt = now + TIDE.checkMs; this.tickMarch(now); } }
-    else if (w.marchAt !== undefined && now >= w.marchAt) {
+    else if (w.marchAt !== undefined && now >= w.marchAt && w.marchAt !== marched) {
       if (now - w.marchAt <= TIDE.lateMs) this.start(now);
       else if (!this.h.follows?.()) { w.marchAt = marchTime(now, this.h.dayFrac(now)); this.h.changed(); } // missed (server down at dusk)
+    } else if (w.marchAt !== undefined && w.marchAt === marched && !this.h.follows?.() && now > w.marchAt + TIDE.limitMs) {
+      w.tide = 0; w.marchAt = undefined; w.marches++; this.h.changed(); // marched here as a follower, then took the world over: that march is over
     } else if (w.marchAt === undefined && w.tide >= TIDE.goal && !this.h.follows?.()) this.full(now, false); // full with no march called (a restart mid-march)
     if (now >= this.sendAt) { this.sendAt = now + TIDE.sendMs; this.sendAll(); }
   }
@@ -135,6 +165,7 @@ export class Tide {
     if (o !== this) return o.start(now, worst);
     if (this.m) return;
     const w = this.h.world();
+    marched = w.marchAt ?? marched;
     w.marchAt = undefined;
     this.h.changed();
     this.m = { start: now, wave: worst ? TIDE.waves.length - 1 : 0, sent: 0, ids: [], nextPack: now, dmg: new Map() };

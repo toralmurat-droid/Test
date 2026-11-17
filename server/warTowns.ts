@@ -10,6 +10,8 @@
  * (server/war.ts townClaim), and the clan's sworn heroes in the reach earn renown. One raise per town for every room of
  * the process. Each second a gate still held (a guard alive and an active defender at it) is reported to the war
  * (townHeld: a tick of grace). TownRoom calls in through the narrow TownHost below.
+ * Ages: on a follower the claim is queued for the war's owner (server/war.ts claimAct), which flips the town and adds
+ * the valor if it is still contested by that clan; the renown here waits until it did (warActFate "ok").
  */
 import { TILE } from "../shared/constants";
 import { underground } from "../shared/dungeon";
@@ -23,7 +25,7 @@ import { rallyRenown } from "../shared/war/rules";
 import { STANDARD } from "../shared/war/standards";
 import { gatePosts, gatePx, inGateReach, onTownGround, TOWN, TOWNS, townById, townPatron, type Town } from "../shared/war/towns";
 import { troopLevel, troopStats, troopStance, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
-import { townClaim, townHeld, townsNow, townsVersion, warNow, warState, warTowns } from "./war";
+import { ACT_FATE_MS, claimAct, townClaim, townHeld, townsNow, townsVersion, warActFate, warNow, warRole, warState, warTowns } from "./war";
 import { boonRenown } from "./warCrown";
 import type { SiegeHero, Soldiers } from "./warSieges";
 import { newFighter, type FightGround, type Fighter, type TroopMob } from "./warTroops";
@@ -53,6 +55,8 @@ const raisingIn = new Map<string, WarTowns>();
 export function _resetTowns() { raisingIn.clear(); }
 
 interface Raise extends SackRaise { hero: string; id: string; lastStep: number; hurtAt: number }
+/** A follower's claim waiting for the war's owner (Ages): the claimer and the heroes who share its renown. */
+interface Waiting { act: string; pid: string; town: string; k: ClanKey; heroes: string[]; at: number }
 /** A gate guard: its town, its post (0 the captain), the contest it stands for. */
 interface Guard extends Fighter { town: Town; post: number; key: string; g: FightGround }
 /** A gate awake in this room: its contest key ("<town>:<holder>:<by>"), the guards' slots, the last time a hero was near. */
@@ -71,6 +75,8 @@ export class WarTowns {
   /** The gate guards' monsters (canHurt asks by the monster). */
   private mobs = new WeakSet<object>();
   private told = ""; private toldAt = 0;
+  /** Ages: this room's claims queued for the war's owner, their renown given when it applies them (settle). */
+  private waiting: Waiting[] = [];
 
   constructor(private h: TownHost, private soldiers: Soldiers) {}
 
@@ -205,7 +211,33 @@ export class WarTowns {
       if (this.guardsAlive(t) > 0 && this.defenders(t, gt.k, now) > 0) townHeld(t.id);
     }
     this.raise(now);
+    this.settle(now);
     this.tell(now);
+  }
+
+  /** Ages: the claims this room queued that the war's owner applied earn their renown; dropped ones are told. */
+  private settle(now: number) {
+    if (!this.waiting.length) return;
+    this.waiting = this.waiting.filter((w) => {
+      const fate = warActFate(w.act);
+      if (fate === undefined && now - w.at < ACT_FATE_MS) return true;
+      const name = townById(w.town)?.name ?? w.town;
+      if (fate !== "ok") { this.h.send(w.pid, "chat", { id: "", name: "Herald", text: `The war did not count your banner over ${name} (the contest was over): no renown.` }); return false; }
+      this.renown(w.heroes.flatMap((hid) => { const o = this.h.hero(hid); return o && !o.dead && o.clan === w.k ? [[hid, o] as [string, TownHero]] : []; }), w.k);
+      this.h.send(w.pid, "chat", { id: "", name: "Herald", text: `The war counted your banner over ${name}: +${TOWN.claimValor} valor for your clan, +${TOWN.claimRenown} renown.` });
+      return false;
+    });
+  }
+
+  /** Renown for a claim to clan `k`'s heroes `heroes`. */
+  private renown(heroes: Iterable<[string, TownHero]>, k: ClanKey) {
+    const st = warState();
+    for (const [hid, o] of heroes) {
+      const was = rankOf(o.renown);
+      o.renown += TOWN.claimRenown * rallyRenown(st, k) * boonRenown(k);
+      const rank = rankOf(o.renown);
+      if (rank > was) this.h.ranked?.(hid, RENOWN_RANKS[rank].name);
+    }
   }
 
   /** A gate's guard: the posts not fallen this war tick, by the room's budget (the captain first). */
@@ -258,19 +290,18 @@ export class WarTowns {
   private done(pid: string, p: TownHero, r: Raise, k: ClanKey, now: number) {
     this.release(pid);
     const t = townById(r.id)!;
-    if (!townClaim(r.id, k, p.name, now)) { this.h.send(pid, "townclaim", { id: r.id, state: "stop", err: `${cap(t.name)} is not yours to claim now.` } satisfies TownClaimMsg); return; }
-    const st = warState();
-    for (const [hid, o] of this.h.heroes()) {
-      if (o.dead || o.clan !== k || o.level < STANDARD.minLevel || (hid !== pid && !inGateReach(t, o.x, o.y))) continue;
-      const was = rankOf(o.renown);
-      o.renown += TOWN.claimRenown * rallyRenown(st, k) * boonRenown(k);
-      const rank = rankOf(o.renown);
-      if (rank > was) this.h.ranked?.(hid, RENOWN_RANKS[rank].name);
-    }
+    const follower = warRole() === "follower", act = follower ? claimAct(r.id, k, p.name) : undefined; // (Ages: the owner decides; renown in settle)
+    if (follower ? !act : !townClaim(r.id, k, p.name, now)) { this.h.send(pid, "townclaim", { id: r.id, state: "stop", err: `${cap(t.name)} is not yours to claim now.` } satisfies TownClaimMsg); return; }
+    const heroes: [string, TownHero][] = [];
+    for (const [hid, o] of this.h.heroes()) if (!o.dead && o.clan === k && o.level >= STANDARD.minLevel && (hid === pid || inGateReach(t, o.x, o.y))) heroes.push([hid, o]);
+    if (act) this.waiting.push({ act, pid, town: r.id, k, heroes: heroes.map(([hid]) => hid), at: now });
+    else this.renown(heroes, k);
     const g = gatePx(t);
     this.h.broadcast("sfx", { ev: "banner_raise", id: t.id, x: Math.round(g.x), y: Math.round(g.y), by: k });
     this.h.send(pid, "townclaim", { id: r.id, progress: 1, state: "done" } satisfies TownClaimMsg);
-    this.h.send(pid, "chat", { id: "", name: "Herald", text: `You raised the banner of ${CLANS[k].name} over ${t.name}: +${TOWN.claimValor} valor for your clan, +${TOWN.claimRenown} renown.` });
+    this.h.send(pid, "chat", { id: "", name: "Herald", text: act
+      ? `You raised the banner of ${CLANS[k].name} over ${t.name}. The heralds carry the news to the war: the valor and renown come when it counts.`
+      : `You raised the banner of ${CLANS[k].name} over ${t.name}: +${TOWN.claimValor} valor for your clan, +${TOWN.claimRenown} renown.` });
     this.tell(now, true);
   }
 

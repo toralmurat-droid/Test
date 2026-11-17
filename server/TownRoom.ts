@@ -84,7 +84,7 @@ const hitDir = (push: [number, number]) => {
 const lvlName = (id: string, cls: string) => parseRune(id) ? runeIdName(id) : `${gearName(id, cls)}${itemLevel(id) > 1 ? ` Lv ${itemLevel(id)}` : ""}`;
 import { Asker, boardFor } from "../shared/ideas";
 import { hashAddr, ideaLog, ideaNews, ideaRoundNow, saveIdeas, submitIdea, voteIdea } from "./ideaStore";
-import { dropLive, fetchLive, LiveState, rememberLive, takeLive } from "./handoff";
+import { dropLive, fetchLive, handoffWritten, LiveState, rememberLive, takeLive } from "./handoff";
 import { MobView } from "./mobView";
 import { copyPatches } from "./patchCopy";
 import { act1Home, actAt, actOpen, actSpawn, cityGateOf, gateColdNote, gateOpen, WAYGATE_RANGE, waygateArrival, waygateById, WAYGATES } from "../shared/act2";
@@ -1402,9 +1402,14 @@ export class TownRoom extends Room<TownState> {
     this.chatBuckets.delete(client.sessionId);
     this.askBuckets.delete(client.sessionId);
     this.craftBuckets.delete(client.sessionId);
-    // (last, after every save above) the account is written, then its lease given back (server/accountGuard.ts)
+    // (last, after every save above) the account is written, then its lease given back (server/accountGuard.ts), once
+    // the hero's handoff spot is in the shared store too (capped: server/handoff.ts handoffWritten), for the next server
     const acct = this.accts.get(client.sessionId);
-    if (acct !== undefined) { this.accts.delete(client.sessionId); void leaveAccount(acct); }
+    if (acct !== undefined) {
+      this.accts.delete(client.sessionId);
+      const spot = p && handoffWritten(p.name, p.cls);
+      if (spot) void spot.then(() => leaveAccount(acct)); else void leaveAccount(acct);
+    }
   }
 
   onDispose() {
