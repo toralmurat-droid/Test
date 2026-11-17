@@ -43,9 +43,11 @@ export class Leases {
     readonly backend: LeaseBackend | undefined,
     readonly holder = holderId(),
     readonly primary = ageRole() === "primary",
-    private now: () => number = Date.now,
+    private now: () => number = () => performance.now(), // (monotonic: a wall-clock jump must not stretch the trust window)
     readonly ttlMs = LEASE.ttlMs,
-  ) {}
+  ) {
+    if (!(ttlMs > LEASE.skewMs)) throw new Error(`Lease ttlMs (${ttlMs}) must be longer than skewMs (${LEASE.skewMs})`);
+  }
   /** A shared store decides (false: always granted to a primary, never to the others). */
   get shared() { return !!this.backend; }
   want(key: string) { this.wanted.add(key); return this; }

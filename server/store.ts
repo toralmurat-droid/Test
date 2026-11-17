@@ -151,16 +151,23 @@ export async function pgLeases(pool: pg.Pool): Promise<LeaseBackend> {
   };
 }
 
+/**
+ * Timeouts for the small pools (kv, leases): a half-open connection fails a call within seconds instead of stalling the
+ * war's tick for minutes. Their rows are small (the war save is a few hundred kB). The accounts' pool keeps no query
+ * timeout: a big flush (every changed account in one transaction) must never be cut off half way.
+ */
+const SMALL_POOL = { connectionTimeoutMillis: 10_000, query_timeout: 10_000 };
+
 /** A lease backend of its own (one small pool) for a module without a kv pool (server/worldStore.ts). */
 export async function openLeases(url: string): Promise<LeaseBackend> {
-  const pool = new pg.Pool({ connectionString: url, max: 1 });
+  const pool = new pg.Pool({ connectionString: url, max: 1, ...SMALL_POOL });
   pool.on("error", (e) => console.error("Postgres pool error:", e));
   return pgLeases(pool);
 }
 
 export async function openKv(url = process.env.DATABASE_URL): Promise<Kv> {
   if (url) {
-    const pool = new pg.Pool({ connectionString: url, max: 2 });
+    const pool = new pg.Pool({ connectionString: url, max: 2, ...SMALL_POOL });
     pool.on("error", (e) => console.error("Postgres pool error:", e));
     await pool.query("CREATE TABLE IF NOT EXISTS kv (key text PRIMARY KEY, data jsonb NOT NULL, updated_at timestamptz NOT NULL DEFAULT now())");
     const leases = await pgLeases(pool);

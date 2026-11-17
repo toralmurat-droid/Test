@@ -38,6 +38,11 @@ Also makes today's single server safer: a deploy's overlap no longer has two ser
     build to `war-pre-<build>` (shared store only), then go on as the owner. Shutdown with a shared store: one last
     write, then the lease is released so the next server takes over within 15 s.
 - `server/worldStore.ts`: lease `lease:world`; only the holder writes the world row, and on taking over it reloads it.
+- Review fixes: the kv and lease pools time out (10 s connect, 10 s query; the accounts' pool unchanged, its big
+  flushes must not be cut); `flushWar` stops a beat under way (`stopping`: no takeover, tick or save after it) and
+  returns its promise, which `server/index.ts` waits for (at most 5 s); the war and world rows carry a write stamp
+  (`wrote`), so a server regaining its own lease after a database outage keeps its unsaved progress unless another
+  server wrote meanwhile; the lease trust window runs on `performance.now()`.
 - `server/tide.ts`: no change (no timer of its own; its march owner is per process, among the rooms).
 - Tests: `tests/ages.test.ts` (leases, api, newer / corrupt saves, follower ticks and events, follower valor, takeover
   and snapshot, losing the lease, shutdown), `tests/store.test.ts` (Postgres: leases, insertIfAbsent, list, loadOne).

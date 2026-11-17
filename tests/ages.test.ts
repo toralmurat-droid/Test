@@ -328,3 +328,122 @@ test("war owner: losing the lease stops every write, the server follows instead;
     assert.notEqual(warRole(), "owner");
   } finally { stopWar(); _resetWar(); }
 });
+
+// ---- Shutdown during a beat; the lease back after an outage ---------------------------------------------------------------
+
+/** A lease backend that can be cut off (a database outage). */
+function flaky(be: LeaseBackend) {
+  const f = { down: false, be: { acquire: (k, h, t) => (f.down ? Promise.reject(new Error("down")) : be.acquire(k, h, t)), release: (k, h) => be.release(k, h) } as LeaseBackend };
+  return f;
+}
+/** A promise and its resolver (to hold a store call half way). */
+const gate = () => { let open!: () => void; const p = new Promise<void>((r) => { open = r; }); return { p, open }; };
+
+test("war shutdown: a tick under way when flushWar runs neither ticks nor saves; the last write and the release are awaited", async () => {
+  const t0 = 16_000_000_000_000, c = clock(t0), be = memLeases(c.now), { kv, m, writes } = memKv(be);
+  m.set("war", JSON.stringify(saved(t0)));
+  try {
+    _resetWar(undefined); stopWar();
+    await startWar(kv, new Leases(be, "main:me", true, c.now)); stopWar();
+    assert.equal(warRole(), "owner");
+    const g = gate(), list = kv.list!;
+    kv.list = async (p) => { await g.p; return list(p); }; // (the tick waits on the valor queues)
+    const beat = _pulse(t0 + 1);
+    await new Promise((r) => setTimeout(r, 5));
+    const n = writes.get("war") ?? 0;
+    const done = flushWar();
+    assert.ok(done instanceof Promise);
+    g.open();
+    await beat; await done;
+    assert.equal(warNow()!.tick, 0, "the tick under way stopped");
+    assert.equal(JSON.parse(m.get("war")!).state.tick, 0);
+    assert.equal(writes.get("war"), n + 1, "only the shutdown's own write");
+    assert.equal(be.rows.has("lease:war"), false, "released once the write landed");
+    await _pulse(t0 + 2);
+    assert.equal(warNow()!.tick, 0, "no beat after the shutdown");
+  } finally { stopWar(); _resetWar(); }
+});
+
+test("war shutdown: a takeover under way when flushWar runs never makes this server the owner", async () => {
+  const t0 = 17_000_000_000_000, c = clock(t0), be = memLeases(c.now), { kv, m, writes } = memKv(be);
+  be.rows.set("lease:war", { holder: "main:owner", until: t0 + LEASE.ttlMs });
+  m.set("war", JSON.stringify(saved(t0 + WAR.tickMs)));
+  try {
+    _resetWar(undefined); stopWar();
+    await startWar(kv, new Leases(be, "main:me", true, c.now)); stopWar();
+    assert.equal(warRole(), "follower");
+    addValor(0, "redfang", 5);
+    c.t = t0 + LEASE.ttlMs + 1; // the owner is gone: the next beat takes over...
+    const g = gate(), get = kv.get;
+    kv.get = (async (k: string) => { if (k === "war") await g.p; return get(k); }) as Kv["get"];
+    const beat = _pulse(c.t);
+    await new Promise((r) => setTimeout(r, 5));
+    const done = flushWar(); // ...but the server shuts down meanwhile
+    g.open();
+    await beat; await done;
+    assert.notEqual(warRole(), "owner");
+    assert.equal(writes.get("war"), undefined, "never wrote the war");
+    assert.ok(![...m.keys()].some((k) => k.startsWith("war-pre-")), "no snapshot either");
+    assert.equal(be.rows.has("lease:war"), false, "the lease it had just taken is given back");
+    assert.equal(JSON.parse(m.get("war-valor:main:me")!).batches[0].adds.length, 1, "its last valor written for the next owner");
+  } finally { stopWar(); _resetWar(); }
+});
+
+test("war: losing the lease to a database outage and getting it back keeps unsaved progress; another writer's war is reloaded", async () => {
+  const t0 = 18_000_000_000_000, c = clock(t0), f = flaky(memLeases(c.now)), { kv, m } = memKv(f.be);
+  m.set("war", JSON.stringify(saved(t0)));
+  try {
+    _resetWar(undefined); stopWar();
+    await startWar(kv, new Leases(f.be, "main:me", true, c.now)); stopWar();
+    c.t = t0 + 1; await _pulse(c.t);
+    assert.equal(warNow()!.tick, 1);
+    warState()!.army.redfang = 12345; // progress not written yet
+    f.down = true; c.t += LEASE.ttlMs; await _pulse(c.t);
+    assert.equal(warRole(), "follower", "lost while the database was out");
+    assert.equal(warState()!.army.redfang, 12345, "following its own last write keeps its own war");
+    f.down = false; await _pulse(c.t);
+    assert.equal(warRole(), "owner");
+    assert.equal(warState()!.army.redfang, 12345, "nobody wrote meanwhile: unsaved progress kept");
+    // now another server writes while this one is out: its war is taken on regaining the lease
+    f.down = true; c.t += LEASE.ttlMs; await _pulse(c.t);
+    const theirs = JSON.parse(m.get("war")!) as SavedWar;
+    theirs.state.army.redfang = 777; theirs.wrote = "someone-else";
+    m.set("war", JSON.stringify(theirs));
+    f.down = false; await _pulse(c.t);
+    assert.equal(warRole(), "owner");
+    assert.equal(warState()!.army.redfang, 777, "another writer's war reloaded");
+  } finally { stopWar(); _resetWar(); }
+});
+
+test("world: regaining the lease after an outage keeps unsaved progress; after another server wrote, its world is reloaded", async () => {
+  const { _setupWorld, _claimWorld, flushWorld, world, worldChanged } = await import("../server/worldStore");
+  const rows = new Map<string, any>();
+  const store = { kind: "postgres" as const, load: async () => Object.fromEntries(rows), loadOne: async (k: string) => rows.get(k), save: async (ch: Record<string, any>) => { for (const [k, v] of Object.entries(ch)) rows.set(k, structuredClone(v)); } };
+  const c = clock(), f = flaky(memLeases(c.now)), l = new Leases(f.be, "main:me", true, c.now);
+  await l.want("lease:world").renew();
+  _setupWorld(store, l, { v: 1, tide: 5, marches: 0 });
+  worldChanged(); await flushWorld();
+  assert.equal(rows.get("world").tide, 5);
+  assert.equal(typeof rows.get("world").wrote, "string", "each write is stamped");
+  world().tide = 9; worldChanged(); // not written yet
+  f.down = true; c.t += LEASE.ttlMs; await _claimWorld();
+  await flushWorld();
+  assert.equal(rows.get("world").tide, 5, "no writes without the lease");
+  f.down = false; await _claimWorld();
+  assert.equal(world().tide, 9, "nobody wrote meanwhile: unsaved progress kept");
+  await flushWorld();
+  assert.equal(rows.get("world").tide, 9, "and written once the lease is back");
+  f.down = true; c.t += LEASE.ttlMs; await _claimWorld();
+  rows.set("world", { v: 1, tide: 40, marches: 2, wrote: "someone-else" });
+  world().tide = 11; worldChanged();
+  f.down = false; await _claimWorld();
+  assert.equal(world().tide, 40, "another server wrote: its world is reloaded");
+  assert.equal(world().marches, 2);
+  await flushWorld();
+  assert.equal(rows.get("world").tide, 40, "the dropped progress is not written over it");
+});
+
+test("leases: a ttl not longer than the skew is refused (it could never be trusted)", () => {
+  assert.throws(() => new Leases(undefined, "x", true, Date.now, LEASE.skewMs), /longer than skewMs/);
+  assert.doesNotThrow(() => new Leases(undefined, "x", true, Date.now, LEASE.skewMs + 1));
+});
