@@ -239,6 +239,7 @@ test("forge (room): spawns in the owner's land with its stats, multiplied damage
       let pa: any;
       for (let i = 0; i < 200 && !(pa && pa.level === ma.level && pa.weapon === ma.weapon); i++) { room.zoneSpawn(SITE.kind, SITE.zi, `fz6_${i}`); pa = room.state.mobs.get(`fz6_${i}`); }
       assert.equal(pa.level, ma.level, "a plain one of the same level");
+      pa.champion = 0; for (const x of [ma, pa]) { x.rallyUntil = 0; x.alertUntil = 0; } // (the plain one may roll champion; no war cry or horn)
       assert.equal(host.dmg(ma, 10), host.dmg(pa, 10), "no champion damage multiplier");
       assert.ok(Math.abs(ma.maxHp / pa.maxHp - 1) < 0.05, "no champion HP");
       assert.ok(mobPower(va) > 1);

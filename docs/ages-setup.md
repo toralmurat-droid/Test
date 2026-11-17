@@ -13,10 +13,8 @@ players --> play.example.com --> [gateway]  --(private network)-->  [blue]  game
 ## Before you start (read this)
 - **Shared mode needs Postgres.** Both game services must use the same `DATABASE_URL`. JSON save files
   (`data/saves.json`) are per service: two servers on files would be two separate games that lose each other's saves.
-- **One account, one server:** set `ACCOUNT_LEASES=1` on both game services. It takes effect once the Ages PR "one
-  account, one server" (`server/accountGuard.ts`) has landed; **until it has, do not send players to two Ages at
-  once** (keep `AGE_SPLIT` at 100 for one slot and do not hand out `/age/<slot>` links), or one hero can be written
-  by both servers.
+- **One account, one server:** set `ACCOUNT_LEASES=1` on both game services (`server/accountGuard.ts`): a hero's
+  account is open on one server at a time, and a server that does not hold it never writes it.
 - **No new save fields on a second Age** until "account save versioning" lands: an older build that
   saves an account drops fields it does not know. Until then, both Ages must run builds with the same save format.
 - **Volumes and the restart handoff are per service.** `data/handoff.json` (where heroes stood during a restart) and

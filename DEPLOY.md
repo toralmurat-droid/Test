@@ -68,6 +68,15 @@ Railway backs up its Postgres databases.
 To go back to the file, remove `DATABASE_URL` (accounts changed meanwhile are then only in Postgres:
 download them first with `/admin/backup`).
 
+### Several game servers on one Postgres (`ACCOUNT_LEASES`)
+
+With `DATABASE_URL` and either `AGE_SLOT` (an Age slot, docs/ages-progress.md) or `ACCOUNT_LEASES=1`, each account is
+open on one server at a time: a server takes lease `acct:<name>` (table `leases`) when a hero logs in, reads the
+account fresh from Postgres, writes it only while it holds the lease, and gives it back after the hero's last save
+is committed. A login while another server has the account waits up to ~3 s, then says "This hero is playing on
+another server". Turn it on for every server that shares the database (one without it would write accounts
+unfenced). Leave it off for a single server: then nothing changes. `AGE_SLOT` without `DATABASE_URL` refuses to start.
+
 ## Anti-abuse limits
 
 `server/ratelimit.ts` holds every limit (one place to tune them):

@@ -93,3 +93,36 @@ test("postgres leases: one holder at a time, renewal in one call, takeover only 
     assert.deepEqual(await l.acquire(["lease:b"], "y", 60_000), ["lease:b"], "released: free at once");
   } finally { await pool.end(); }
 });
+
+test("postgres accounts (Ages part 3): insertNew only for a new key, the write fence follows the lease, findBy reads one field", { skip: !url }, async () => {
+  const admin = new pg.Client({ connectionString: url });
+  await admin.connect();
+  await admin.query("DROP TABLE IF EXISTS world");
+  await admin.query("DELETE FROM leases WHERE key LIKE 'acct:%'").catch(() => {});
+  await admin.end();
+  type Acc = { name: string; gold: number; email?: string };
+  const s = await postgresStore<Acc>(url!, undefined, "world"); // (a table of the accounts' shape; also makes the lease table)
+  const pool = new pg.Pool({ connectionString: url, max: 2 });
+  try {
+    const l = await pgLeases(pool);
+    assert.equal(await s.insertNew!("amy", { name: "Amy", gold: 1, email: "a@x.io" }), true);
+    assert.equal(await s.insertNew!("amy", { name: "AMY", gold: 99 }), false, "an existing account is never replaced");
+    assert.deepEqual(await s.loadOne!("amy"), { name: "Amy", gold: 1, email: "a@x.io" });
+    // no lease: refused; this holder's lease: written; another holder's: refused; ran out: refused; missing row: not made
+    assert.deepEqual(await s.saveFenced!({ amy: { name: "Amy", gold: 2 } }, "A", "acct:"), ["amy"]);
+    assert.equal((await s.loadOne!("amy"))!.gold, 1);
+    await l.acquire(["acct:amy", "acct:ghost"], "A", 60_000);
+    assert.deepEqual(await s.saveFenced!({ amy: { name: "Amy", gold: 3, email: "a@x.io" }, ghost: { name: "Ghost", gold: 1 } }, "A", "acct:"), ["ghost"]);
+    assert.equal((await s.loadOne!("amy"))!.gold, 3);
+    assert.equal(await s.loadOne!("ghost"), undefined, "the fence never creates a row");
+    assert.deepEqual(await s.saveFenced!({ amy: { name: "Amy", gold: 4 } }, "B", "acct:"), ["amy"], "B does not hold it");
+    await pool.query("UPDATE leases SET until = now() - interval '1 second' WHERE key = 'acct:amy'");
+    assert.deepEqual(await s.saveFenced!({ amy: { name: "Amy", gold: 5 } }, "A", "acct:"), ["amy"], "ran out");
+    assert.equal((await s.loadOne!("amy"))!.gold, 3);
+    // findBy: the reset by email without loading every account
+    await s.insertNew!("bea", { name: "Bea", gold: 0, email: "b@x.io" });
+    assert.deepEqual(await s.findBy!("email", "a@x.io"), { amy: { name: "Amy", gold: 3, email: "a@x.io" } });
+    assert.deepEqual(await s.findBy!("email", "nobody@x.io"), {});
+    await l.release(["acct:amy", "acct:ghost"], "A");
+  } finally { await pool.end(); await s.close!(); }
+});
