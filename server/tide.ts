@@ -59,6 +59,23 @@ const rint = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1
 const rooms = new Set<Tide>();
 let owner: Tide | undefined;
 
+/**
+ * Ages: the world's owner books the march itself when none of its rooms runs a Tide (all closed, or none opened yet),
+ * so a meter the followers filled through the queue does not sit full forever: a full meter with no march booked gets
+ * the next dusk, a march missed by more than TIDE.lateMs moves to the next dusk (as a room's Tide does in tick). With a
+ * room open its Tide does this (and may be marching: a full meter with no march booked is then the march under way).
+ * True when `w` changed (the caller writes it). `frac`: time of day 0..1.
+ */
+export function bookIdleMarch(w: WorldState, now: number, frac: (now: number) => number): boolean {
+  if (rooms.size) return false;
+  if (w.marchAt === undefined) {
+    if (w.tide < TIDE.goal) return false;
+    w.tide = TIDE.goal;
+  } else if (now - w.marchAt <= TIDE.lateMs) return false;
+  w.marchAt = marchTime(now, frac(now));
+  return true;
+}
+
 export class Tide {
   private m?: March;
   private checkAt = 0;

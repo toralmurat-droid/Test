@@ -7,7 +7,10 @@
  * sacker's clan earns valor where the war lets it fight, its sworn heroes in the reach renown, a war chest drops, the
  * Hold's guards stay down until the next war tick and the sacker's banner flies on it (cosmetic, "holds" message).
  * One sack per land per war tick for every room of the process (memory, like the caravans' outcomes), and across servers
- * through the war's log (server/war.ts warSacked: a follower's sack is queued for the war's owner, Ages).
+ * through the war's log (server/war.ts warSacked: a follower's sack is queued for the war's owner, Ages). On a follower
+ * the banner goes up and the guards go home at once, but the rewards wait for the owner (server/war.ts sackAct): the
+ * clan's valor and Reckoning credit travel with the act, the war chest and the renown are given here once the owner
+ * applied it (warActFate "ok"); a sack the owner drops (a war tick passed, another server's sack came first) pays nothing.
  * TownRoom calls in through the narrow HoldSackHost below.
  */
 import { TILE } from "../shared/constants";
@@ -22,7 +25,7 @@ import { atWar } from "../shared/war/feuds";
 import { STANDARD } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
 import { parseTroop, troopLevel, troopStance } from "../shared/war/troops";
-import { addValor, strikeHold, warNow, warSacked, warState } from "./war";
+import { ACT_FATE_MS, addValor, sackAct, strikeHold, warActFate, warNow, warRole, warSacked, warState } from "./war";
 import { boonRenown, crownCredit, keyOf } from "./warCrown";
 import type { SiegeHero } from "./warSieges";
 import type { TroopMob } from "./warTroops";
@@ -54,6 +57,8 @@ const sacks = new Map<number, { tick: number; by: number }>();
 export function _resetHolds() { sacks.clear(); }
 
 interface Raise extends SackRaise { hero: string; t: number; lastStep: number; hurtAt: number }
+/** A follower's sack waiting for the war's owner (Ages): who gets what once it counts. */
+interface Waiting { act: string; id: string; t: number; clan?: ClanKey; holder: ClanKey; valor: number; heroes: string[]; gold: number; at: number }
 
 const the = (name: string) => name.replace(/^The /, "the ");
 
@@ -63,6 +68,8 @@ export class WarHolds {
   /** Lands whose guards this room already sent home for a sack (key "tick:t"). */
   private off = new Set<string>();
   private told = ""; private toldAt = 0;
+  /** Ages: this room's sacks queued for the war's owner, paid when it applies them (settle). */
+  private waiting: Waiting[] = [];
 
   constructor(private h: HoldSackHost) {}
 
@@ -165,7 +172,53 @@ export class WarHolds {
       else if (step !== "raise" || r.paused !== was) this.h.send(id, "sack", { t: r.t, progress: r.progress, state: r.paused ? "paused" : "raise" } satisfies SackMsg);
       else this.h.send(id, "sack", { t: r.t, progress: Math.round(r.progress * 100) / 100, state: "raise" } satisfies SackMsg);
     }
+    this.settle(now);
     this.tell(now);
+  }
+
+  /** Ages: the sacks this room queued that the war's owner applied are paid (the war chest, renown); dropped ones are told. */
+  private settle(now: number) {
+    if (!this.waiting.length) return;
+    this.waiting = this.waiting.filter((w) => {
+      const fate = warActFate(w.act);
+      if (fate === undefined && now - w.at < ACT_FATE_MS) return true;
+      const land = TERRITORIES[w.t].name;
+      if (fate !== "ok") {
+        this.h.send(w.id, "chat", { id: "", name: "Herald", text: `The war did not count your sack of the Hold of ${land} (a war tick passed, or another hero sacked it first): no war chest, no renown.` });
+        return false;
+      }
+      if (w.valor && w.clan) this.renown(w.heroes.flatMap((hid) => { const o = this.h.hero(hid); return o && !o.dead && o.clan === w.clan ? [[hid, o] as [string, HoldHero]] : []; }), w.t, w.clan, false);
+      const at = bannerSpot(w.t)!;
+      this.h.dropGold(at.x, at.y + 12, w.gold);
+      this.h.send(w.id, "chat", { id: "", name: "Herald", text: this.paidLine(land, w.clan, w.holder, w.valor, w.gold, "") });
+      return false;
+    });
+  }
+
+  /** Renown for the sacker's clan heroes `heroes` at land t (and, `credit`, their Reckoning part: on a follower the owner gives it). */
+  private renown(heroes: Iterable<[string, HoldHero]>, t: number, clan: ClanKey, credit: boolean) {
+    const st = warState();
+    for (const [hid, o] of heroes) {
+      const was = rankOf(o.renown);
+      o.renown += HOLD_SACK.sackRenown * rallyRenown(st, clan) * boonRenown(clan);
+      if (credit) { const by = keyOf(o); if (by) crownCredit(t, by, clan, HOLD_SACK.sackValor); } // (a Reckoning: every sacker in the reach took part)
+      const rank = rankOf(o.renown);
+      if (rank > was) this.h.ranked?.(hid, RENOWN_RANKS[rank].name);
+    }
+  }
+
+  /** The sacker's clan heroes who share the sack: the sacker, and those sworn to it of oath level in the reach. */
+  private sharers(id: string, t: number, clan: ClanKey): [string, HoldHero][] {
+    const out: [string, HoldHero][] = [];
+    for (const [hid, o] of this.h.heroes()) if (!o.dead && o.clan === clan && o.level >= STANDARD.minLevel && (hid === id || inSackReach(t, o.x, o.y))) out.push([hid, o]);
+    return out;
+  }
+
+  /** The Herald's word to the sacker on their pay. */
+  private paidLine(land: string, clan: ClanKey | undefined, holder: ClanKey, valor: number, gold: number, siege: string): string {
+    return valor
+      ? `You sacked the Hold of ${land}: +${valor} valor for ${the(CLANS[clan!].name)}, a war chest of ${gold} gold.${siege}`
+      : `You sacked the Hold of ${land} and took its war chest (${gold} gold).${clan ? (atWar(clan, holder) ? ` ${CLANS[clan].name} cannot push into ${land} yet: no valor, half the harm.` : ` ${CLANS[clan].name} are not at war with ${CLANS[holder].name}: no valor, half the harm.`) : " Unsworn, you fight for nobody: no valor, half the harm."}${siege}`;
   }
 
   /**
@@ -178,30 +231,36 @@ export class WarHolds {
     if (sacks.get(r.t)?.tick === tick || warSacked(r.t)) { this.stop(id, "This Hold was sacked already."); return; } // (warSacked: on another server, Ages)
     // a sacker whose clan is not at war with the holder (a grudge, Wanted only) robs it: no valor, no siege, half the harm
     const st = warState(), clan = p.clan, legal = !!st && !!clan && atWar(clan, holder) && targetsOf(st, clan).includes(r.t), at = bannerSpot(r.t)!;
+    const gold = sackGold(troopLevel(r.t)), land = TERRITORIES[r.t].name;
+    const follower = warRole() === "follower";
+    if (follower) { // (Ages: the war's owner decides whether it counts; paid in settle once it does)
+      const heroes = legal && clan ? this.sharers(id, r.t, clan) : [], valor = heroes.length ? HOLD_SACK.sackValor : 0;
+      const credits = heroes.flatMap(([, o]) => { const by = keyOf(o); return by ? [by] : []; });
+      const act = sackAct(r.t, clan, !legal, p.name, valor ? { valor, credits } : {});
+      if (!act) { this.h.send(id, "sack", { t: r.t, state: "stop", err: "The war cannot hear of it now: try again in a moment." } satisfies SackMsg); return; }
+      this.waiting.push({ act, id, t: r.t, clan, holder, valor, heroes: heroes.map(([hid]) => hid), gold, at: now });
+    }
     sacks.set(r.t, { tick, by: clan ? CLAN_KEYS.indexOf(clan) : -1 });
     this.off.add(`${tick}:${r.t}`);
     this.h.guardsOff(r.t, tick + 1);
+    if (follower) {
+      this.h.broadcast("sfx", { ev: "hold_sacked", t: r.t, x: Math.round(at.x), y: Math.round(at.y), by: clan ?? "", from: holder });
+      this.h.send(id, "sack", { t: r.t, progress: 1, state: "done" } satisfies SackMsg);
+      this.h.send(id, "chat", { id: "", name: "Herald", text: `Your banner flies over the Hold of ${land}. The heralds carry the news to the war: its war chest${legal && clan ? " and renown" : ""} come when it counts.` });
+      this.tell(now, true);
+      return;
+    }
     const hit = strikeHold(r.t, clan, !legal, p.name, now); // (the Herald, the holder's leader and every room's snapshot)
     let valor = 0;
     if (legal && clan && addValor(r.t, clan, HOLD_SACK.sackValor)) {
       valor = HOLD_SACK.sackValor;
-      for (const [hid, o] of this.h.heroes()) {
-        if (o.dead || o.clan !== clan || o.level < STANDARD.minLevel || (hid !== id && !inSackReach(r.t, o.x, o.y))) continue;
-        const was = rankOf(o.renown);
-        o.renown += HOLD_SACK.sackRenown * rallyRenown(st, clan) * boonRenown(clan);
-        { const by = keyOf(o); if (by) crownCredit(r.t, by, clan, HOLD_SACK.sackValor); } // (a Reckoning: every sacker in the reach took part)
-        const rank = rankOf(o.renown);
-        if (rank > was) this.h.ranked?.(hid, RENOWN_RANKS[rank].name);
-      }
+      this.renown(this.sharers(id, r.t, clan), r.t, clan, true);
     }
-    const gold = sackGold(troopLevel(r.t));
     this.h.dropGold(at.x, at.y + 12, gold);
     this.h.broadcast("sfx", { ev: "hold_sacked", t: r.t, x: Math.round(at.x), y: Math.round(at.y), by: clan ?? "", from: holder });
     this.h.send(id, "sack", { t: r.t, progress: 1, state: "done" } satisfies SackMsg);
-    const land = TERRITORIES[r.t].name, siege = hit?.siege ? ` Control fell to ${hit.control}: ${CLANS[clan!].name} lay siege.` : hit ? ` Control ${hit.control}.` : "";
-    this.h.send(id, "chat", { id: "", name: "Herald", text: valor
-      ? `You sacked the Hold of ${land}: +${valor} valor for ${the(CLANS[clan!].name)}, a war chest of ${gold} gold.${siege}`
-      : `You sacked the Hold of ${land} and took its war chest (${gold} gold).${clan ? (atWar(clan, holder) ? ` ${CLANS[clan].name} cannot push into ${land} yet: no valor, half the harm.` : ` ${CLANS[clan].name} are not at war with ${CLANS[holder].name}: no valor, half the harm.`) : " Unsworn, you fight for nobody: no valor, half the harm."}${siege}` });
+    const siege = hit?.siege ? ` Control fell to ${hit.control}: ${CLANS[clan!].name} lay siege.` : hit ? ` Control ${hit.control}.` : "";
+    this.h.send(id, "chat", { id: "", name: "Herald", text: this.paidLine(land, clan, holder, valor, gold, siege) });
     this.tell(now, true);
   }
 

@@ -84,7 +84,7 @@ test("ideas without a shared store (one server): the file, as before", async () 
 
 // ---- Handoff spots ------------------------------------------------------------------------------------------------------
 
-test("handoff (shared store): a spot written on leave is taken on any server's login, once; expired spots are ignored and pruned", async () => {
+test("handoff (shared store): a spot written on leave is read on any server's login, deleted once joined; expired spots are ignored and pruned", async () => {
   const h = await import("../server/handoff");
   const { kv, m } = memKv();
   await h.useHandoffKv(kv);
@@ -94,12 +94,14 @@ test("handoff (shared store): a spot written on leave is taken on any server's l
     const row = json(m, "handoff:ann:wizard");
     assert.equal(row.x, 100); assert.deepEqual(row.group, ["Bob"]);
     assert.equal(fs.existsSync(path.join(dir, "handoff.json")), false, "no file with a shared store");
-    // server B: knows nothing locally, takes the spot at login
+    // server B: knows nothing locally, reads the spot at login (onAuth) and deletes it once the hero joined (onJoin)
     assert.ok(h.takeLive("Ann", "wizard"), "(server A's own memory, dropped: B starts empty)");
     await h.fetchLive("Ann", "wizard");
-    assert.equal(m.has("handoff:ann:wizard"), false, "taken: deleted at once");
+    assert.equal(m.has("handoff:ann:wizard"), true, "read, kept until the join");
     const s = h.takeLive("Ann", "wizard");
     assert.ok(s); assert.equal(s!.x, 100); assert.equal(s!.dir, "left"); assert.deepEqual(s!.group, ["Bob"]);
+    await h.writeHandoff();
+    assert.equal(m.has("handoff:ann:wizard"), false, "joined: deleted");
     await h.fetchLive("Ann", "wizard");
     assert.equal(h.takeLive("Ann", "wizard"), undefined, "used once");
     // an expired spot is ignored (and deleted); prune drops expired rows and junk, keeps fresh ones

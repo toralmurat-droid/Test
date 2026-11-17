@@ -4,8 +4,10 @@
 // they leave (or when the server shuts down for an update), keeps it for a few minutes, and writes it next to
 // the saves on shutdown so the new server picks it up. A dropped connection uses the same memory.
 // Ages (shared store, useHandoffKv): each spot is also kv row `handoff:<account>:<class>`, written when the hero leaves
-// and taken (read and deleted at once) when they log in on any server, so a hero moving between servers, or across a
-// deploy, comes back where they stood. Rows older than HANDOFF_MS are ignored and pruned. JSON mode: the file, as before.
+// (their account lease is given back only once it is written, or HANDOFF_WAIT_MS passed: TownRoom onLeave), read when
+// they log in on any server (onAuth: fetchLive) and deleted once the hero has joined (onJoin: takeLive), so a login
+// that fails after the password check keeps it. A hero moving between servers, or across a deploy, comes back where
+// they stood. Rows older than HANDOFF_MS are ignored and pruned. JSON mode: the file, as before.
 import fs from "node:fs";
 import path from "node:path";
 import type { Kv } from "./store";
@@ -37,18 +39,43 @@ try {
 }
 
 export function rememberLive(name: string, cls: string, s: Omit<LiveState, "at">) {
-  const v = { ...s, at: Date.now() };
-  live.set(key(name, cls), v);
-  if (kv) track(kv.set(KV + key(name, cls), v));
+  const v = { ...s, at: Date.now() }, k = key(name, cls);
+  live.set(k, v);
+  if (kv) { const store = kv; keyed(k, () => store.set(KV + k, v)); }
+}
+
+/** How long a leaving hero's account lease waits for their spot's write (a database that hangs never holds a leave up longer). */
+export const HANDOFF_WAIT_MS = 3_000;
+/**
+ * Resolves once the hero's last spot write (shared store) is done, or after `ms`; undefined when none is under way (the
+ * caller goes on at once: always so without a shared store). TownRoom gives the account lease back after it, so the
+ * next server that takes the account reads the spot.
+ */
+export function handoffWritten(name: string, cls: string, ms = HANDOFF_WAIT_MS): Promise<void> | undefined {
+  const w = byKey.get(key(name, cls));
+  if (!w) return undefined;
+  let t: NodeJS.Timeout | undefined;
+  return Promise.race([w, new Promise<void>((res) => { t = setTimeout(res, ms); })]).then(() => { if (t) clearTimeout(t); });
 }
 
 let kv: Kv | undefined;
 const KV = "handoff:";
 /** kv writes under way (shutdown waits for them). */
 const writes = new Set<Promise<unknown>>();
-function track(p: Promise<unknown>) {
-  const w = p.catch((e) => console.error("Could not write a handoff spot:", e?.message ?? e)).finally(() => writes.delete(w));
+/** The last spot write under way per hero key (handoffWritten). */
+const byKey = new Map<string, Promise<void>>();
+/** Spots read from the shared store at a login and not yet used: their row is deleted when the hero joins (takeLive). */
+const fetched = new Set<string>();
+function track(p: Promise<unknown>): Promise<void> {
+  const w: Promise<void> = p.then(() => {}, (e) => console.error("Could not write a handoff spot:", e?.message ?? e)).finally(() => writes.delete(w));
   writes.add(w);
+  return w;
+}
+/** A write or delete of one hero's row, after the ones before it on that row (never a delete landing after a newer write). */
+function keyed(k: string, f: () => Promise<unknown>) {
+  const w = track((byKey.get(k) ?? Promise.resolve()).then(f));
+  byKey.set(k, w);
+  void w.then(() => { if (byKey.get(k) === w) byKey.delete(k); });
 }
 const num = (x: unknown) => typeof x === "number" && Number.isFinite(x);
 /** A spot read from the shared store (another server's: never trusted), or undefined. */
@@ -77,29 +104,37 @@ export async function pruneHandoff(now = Date.now()) {
 }
 
 /**
- * Before a hero joins (TownRoom onAuth, after the account is this server's): takes their spot from the shared store, if
- * any, so takeLive finds it. The newer of it and this server's own memory wins. Never throws (a login does not wait on it).
+ * Before a hero joins (TownRoom onAuth, after the account is this server's): reads their spot from the shared store, if
+ * any, so takeLive finds it. The newer of it and this server's own memory wins. The row stays until the hero has joined
+ * (takeLive deletes it; an expired or unreadable one goes at once). Never throws (a login does not wait on it).
  */
 export async function fetchLive(name: string, cls: string): Promise<void> {
   if (!kv?.take) return;
   try {
-    const k = key(name, cls), got = cleanLive(await kv.take(KV + k)), mine = live.get(k);
-    if (got && Date.now() - got.at < HANDOFF_MS && (!mine || got.at > mine.at)) live.set(k, got);
+    const k = key(name, cls), raw = await kv.get(KV + k);
+    if (raw === undefined) return;
+    const got = cleanLive(raw), mine = live.get(k);
+    if (!got || Date.now() - got.at >= HANDOFF_MS) { const store = kv; if (store.del) keyed(k, () => store.del!([KV + k])); return; }
+    fetched.add(k);
+    if (!mine || got.at > mine.at) live.set(k, got);
   } catch (e: any) { console.error("Could not read a handoff spot:", e?.message ?? e); }
 }
 
-/** The spot this hero left from, if it is recent (used once). */
+/** The spot this hero left from, if it is recent (used once: TownRoom onJoin; its shared row, if read, is deleted now). */
 export function takeLive(name: string, cls: string): LiveState | undefined {
   const k = key(name, cls);
   const s = live.get(k);
   live.delete(k);
+  const store = kv;
+  if (fetched.delete(k) && store?.del) keyed(k, () => store.del!([KV + k]));
   return s && Date.now() - s.at < HANDOFF_MS ? s : undefined;
 }
 
 /** Forget a hero's spot (New game). */
 export function dropLive(name: string, cls: string) {
-  live.delete(key(name, cls));
-  if (kv?.del) track(kv.del([KV + key(name, cls)]));
+  const k = key(name, cls), store = kv;
+  live.delete(k); fetched.delete(k);
+  if (store?.del) keyed(k, () => store.del!([KV + k]));
 }
 
 /**

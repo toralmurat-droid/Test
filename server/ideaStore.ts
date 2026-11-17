@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { emptyLog, IdeaLog, score, submit, tick, vote, voters, type Asker, type Idea, type Result } from "../shared/ideas";
-import { AgeQueue, sameDrained, type Drained } from "./ageQueue";
+import { AgeQueue, requeue, sameDrained, type Drained } from "./ageQueue";
 import { LEASE, Leases } from "./lease";
 import type { Kv } from "./store";
 
@@ -145,10 +145,15 @@ function adopt(row: Row, announce = true) {
   if (wins.length > 20) wins.splice(0, wins.length - 20);
 }
 
-async function writeRow() {
-  if (!kv || !mine || !lease?.held(LEASE_KEY)) return;
-  const row: Row = { ...ideaLog, ideas: ideaLog.ideas.filter((i) => i.id > 0), ...(drained && Object.keys(drained).length ? { drained } : {}) };
-  await kv.set(ROW, row).catch((e) => console.error("Could not save the idea log:", e?.message ?? e));
+/** Row writes run one after another, each taking the log as it stands when it runs: never an older snapshot landing last. */
+let writing: Promise<void> = Promise.resolve();
+function writeRow(): Promise<void> {
+  const write = async () => {
+    if (!kv || !mine || !lease?.held(LEASE_KEY)) return;
+    const row: Row = { ...ideaLog, ideas: ideaLog.ideas.filter((i) => i.id > 0), ...(drained && Object.keys(drained).length ? { drained } : {}) };
+    await kv.set(ROW, row).catch((e) => console.error("Could not save the idea log:", e?.message ?? e));
+  };
+  return (writing = writing.then(write, write));
 }
 
 /**
@@ -197,7 +202,8 @@ export async function ideasBeat(now = Date.now()) {
         for (const a of pending) localApply(a, now);
       }
       const acts = pending; pending = [];
-      await IDEAS_Q.push(kv, lease.holder, drained?.[lease.holder] ?? 0, acts.length ? { acts } : undefined);
+      if (!(await IDEAS_Q.push(kv, lease.holder, drained?.[lease.holder] ?? 0, acts.length ? { acts } : undefined)) && acts.length)
+        pending = requeue(acts, pending, PENDING_MAX); // (the queue could not be read: kept for the next beat)
     }
   } catch (e: any) { console.error("Ideas: beat failed:", e?.message ?? e); }
   finally { busy = false; }
@@ -215,7 +221,7 @@ export async function flushIdeas() {
   beat = undefined;
   if (timer) { clearTimeout(timer); timer = undefined; }
   if (mine) await writeRow();
-  else if (pending.length) { const acts = pending; pending = []; await IDEAS_Q.push(kv, lease.holder, drained?.[lease.holder] ?? 0, { acts }).catch(() => {}); }
+  else if (pending.length) { const acts = pending; pending = []; await IDEAS_Q.push(kv, lease.holder, drained?.[lease.holder] ?? 0, { acts }); }
   mine = false;
   await lease.release();
 }
@@ -223,7 +229,7 @@ export async function flushIdeas() {
 /** Tests: back to the file mode with an empty log. */
 export function _resetIdeas() {
   if (beat) clearInterval(beat);
-  kv = undefined; lease = undefined; beat = undefined; mine = false; drained = undefined; seenRow = ""; pending = []; busy = false;
+  kv = undefined; lease = undefined; beat = undefined; mine = false; drained = undefined; seenRow = ""; pending = []; busy = false; writing = Promise.resolve();
   wins.length = 0; ver = 0; IDEAS_Q.reset();
   Object.assign(ideaLog, emptyLog());
 }
