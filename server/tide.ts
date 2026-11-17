@@ -38,6 +38,13 @@ export interface TideHost {
   /** The saved world state (server/worldStore.ts) and its "write me" call. */
   world(): WorldState;
   changed(): void;
+  /**
+   * Ages (server/worldStore.ts): true when another server owns the world's meter. Then a blob kill here is queued for
+   * that owner (`queueKill`) and shown on this server's meter, and only the owner fills it, calls the march and moves a
+   * missed one; this server still marches at the saved dusk for its own heroes. Absent: this server owns (as before).
+   */
+  follows?(): boolean;
+  queueKill?(): void;
 }
 
 /** A march under way. Transient: a restart (or the room closing) drops it, and the full meter calls the next one. */
@@ -88,6 +95,7 @@ export class Tide {
     const w = this.h.world(), o = this.lead();
     if (o.m || w.marchAt !== undefined || w.tide >= TIDE.goal) return; // full: it waits for the march
     w.tide++;
+    if (this.h.follows?.()) { this.h.queueKill?.(); return; } // (Ages: the world's owner counts it and calls the march)
     this.h.changed();
     if (w.tide >= TIDE.goal) o.full(now, true); // the owner books it, whichever room filled it
   }
@@ -106,9 +114,9 @@ export class Tide {
     if (this.lead() !== this) { /* another room runs the event: this one only sends the news */ }
     else if (this.m) { if (now >= this.checkAt) { this.checkAt = now + TIDE.checkMs; this.tickMarch(now); } }
     else if (w.marchAt !== undefined && now >= w.marchAt) {
-      if (now - w.marchAt > TIDE.lateMs) { w.marchAt = marchTime(now, this.h.dayFrac(now)); this.h.changed(); } // missed (server down at dusk)
-      else this.start(now);
-    } else if (w.marchAt === undefined && w.tide >= TIDE.goal) this.full(now, false); // full with no march called (a restart mid-march)
+      if (now - w.marchAt <= TIDE.lateMs) this.start(now);
+      else if (!this.h.follows?.()) { w.marchAt = marchTime(now, this.h.dayFrac(now)); this.h.changed(); } // missed (server down at dusk)
+    } else if (w.marchAt === undefined && w.tide >= TIDE.goal && !this.h.follows?.()) this.full(now, false); // full with no march called (a restart mid-march)
     if (now >= this.sendAt) { this.sendAt = now + TIDE.sendMs; this.sendAll(); }
   }
 

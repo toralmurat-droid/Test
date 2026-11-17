@@ -203,12 +203,15 @@ async function fencedUpdate<A>(pool: pg.Pool, changed: Record<string, A>, table:
  * Small named documents that are not accounts (the clan war's state): a row of table `kv` with DATABASE_URL, else
  * a JSON file per key next to the saves file (SAVE_FILE's folder, default data/).
  * `insertIfAbsent` writes only a key that does not exist yet (true when it wrote); `list` reads every key starting with
- * `prefix`; `leases` is the shared lease table (server/lease.ts), only with Postgres. All three optional (test stores).
+ * `prefix`; `leases` is the shared lease table (server/lease.ts), only with Postgres. `take` reads and deletes one key at
+ * once (only one caller gets it: the handoff spots, server/handoff.ts), `del` deletes keys. All optional (test stores).
  */
 export interface Kv {
   get<T>(key: string): Promise<T | undefined>; set(key: string, value: unknown): Promise<void>; setSync?(key: string, value: unknown): void;
   insertIfAbsent?(key: string, value: unknown): Promise<boolean>;
   list?<T>(prefix: string): Promise<Record<string, T>>;
+  take?<T>(key: string): Promise<T | undefined>;
+  del?(keys: readonly string[]): Promise<void>;
   leases?: LeaseBackend;
   close?(): Promise<void>;
 }
@@ -275,6 +278,11 @@ export async function openKv(url = process.env.DATABASE_URL): Promise<Kv> {
         for (const row of r.rows) out[row.key] = row.data;
         return out;
       },
+      async take<T>(key: string) {
+        const r = await pool.query<{ data: T }>("DELETE FROM kv WHERE key = $1 RETURNING data", [key]);
+        return r.rows[0]?.data;
+      },
+      async del(keys) { if (keys.length) await pool.query("DELETE FROM kv WHERE key = ANY($1::text[])", [[...keys]]); },
       leases,
       close: () => pool.end(),
     };

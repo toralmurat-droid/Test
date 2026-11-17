@@ -118,12 +118,14 @@ only; the services are set up by the owner (`docs/ages-setup.md`).
 - The gateway: "one account, one server" (ACCOUNT_LEASES) and account save versioning must land before two Ages take players
   at once (`docs/ages-setup.md`). No per-slot health memory beyond the log (each request tries its own Age first). A
   gateway redeploy drops every connection.
-- On a follower only valor reaches the owner. Sacks, town claims, battle deaths and banners, column losses and remote
-  council submissions stay local (sacks and claims are refused there) until they get queues of their own.
+- On a follower, valor, sacks and town claims reach the owner (part 7). Battle deaths and banners, column losses and
+  remote council submissions stay local until they get queues of their own (`server/ageQueue.ts`).
 - A follower's rooms get no battle news (announce / start / end); they show the battles as saved.
 - Council proclamations are not saved, so a follower's Herald does not repeat them.
-- A follower Age's Gloam Tide meter is its own (memory only); merging kill counts is for a later PR.
-- `war-pre-<build>` and `war-valor:<holder>` rows stay one per build; prune them once the Ages run for real.
+- ~~A follower Age's Gloam Tide meter is its own~~: done in part 7 (below). Each Age still runs the march for its own
+  heroes at the shared dusk; only the owner fills the meter, books and moves the march, and resets it.
+- `war-pre-<build>` and the queue rows (`war-valor:`, `war-acts:`, `world-tide:`, `ideas-q:<holder>`) stay one per
+  build; prune them once the Ages run for real.
 - ~~Accounts are not versioned yet~~: done in part 5 (below).
 - The Forge on a server where it is hidden (a newer FORGE_API that allows no older reader) knows no forgings: its heroes'
   forged items show as their base until the newer build is gone. Its log lines of refused commissions on followers go
@@ -210,3 +212,54 @@ An older build (a draining Age) must never damage a hero a newer build saved.
   ignored on load).
 - An account on a draining Age's memory that a newer build bumps while the old one does not hold its lease (shared mode)
   is refused at the next fresh read; in single-server mode (no leases) a stale memory copy is the part 3 issue.
+
+## Built: part 7, shared state (branch `claude/ages-shared-state`)
+With two servers on one Postgres, what a player does on the server that does not own a shared row is neither lost nor
+applied twice. JSON mode (one server, no `DATABASE_URL`) is unchanged.
+- `server/ageQueue.ts` (`AgeQueue`): the valor queue's machinery made generic. A follower writes its own kv row
+  `<prefix><holder>` (numbered batches); the owner lists the prefix, applies each batch above its mark and keeps the
+  marks (`drained`) in its own row, written with the change. Batches the owner counted are dropped by the follower.
+  The war's valor queue now runs on it (same row format: old queue rows still read).
+- **Handoff spots** (`server/handoff.ts`): with Postgres each spot is also kv `handoff:<account>:<class>` (written when the
+  hero leaves; shutdown waits for those writes), taken (read and deleted in one statement, `Kv.take`) in `onAuth` after
+  the account is this server's (`fetchLive`); the newer of it and local memory wins. Spots older than 5 min are ignored,
+  and pruned at start (`Kv.del`). `data/handoff.json` is still read once at start (a deploy from an older build).
+- **Idea log** (`server/ideaStore.ts`): with Postgres the log is kv row `ideas` (copied once from `data/ideas.json` when
+  the row does not exist), written only by the holder of `lease:ideas`. Followers reload it every 15 s and queue their
+  heroes' ideas and votes (`ideas-q:<holder>`): checked against the log they show, shown at once (a new idea under a
+  temporary negative number, never sent as a vote target), numbered by the owner. The rooms' hourly round runs on the
+  owner only; a follower's rooms announce winners they see in the reloaded log and refresh boards on any change.
+  `/ideas.json` and `/admin/backup` show the shared log. Shutdown: the owner writes and releases, a follower writes its queue.
+- **Gloam Tide kills** (`server/worldStore.ts`, `server/tide.ts`): a follower queues its blob kills (`world-tide:<holder>`)
+  and shows the owner's meter plus its kills not counted yet (reloaded every 15 s). The owner adds them each beat
+  under the owner's rules (not while full or a march is called), marks in the world row (`drained`, optional). On a
+  follower the Tide never fills the meter, books or moves a march (TideHost `follows` / `queueKill`, optional: absent
+  means owner, as before). The world's kv pool now also carries its leases (no separate lease pool).
+- **Sacks and town claims** (`server/war.ts`): on a follower `strikeHold` queues the sack and `townClaim` the claim
+  (`war-acts:<holder>`, its marks in the war save's optional `drainedActs`); the owner applies them every beat (not
+  only at its tick) as if made there (Herald, every room, valor of the claim) and saves once. A sack counts only in the
+  war tick it was made in and once per land per tick (`warSacked`, read from the war's log, also checked by
+  `server/warHolds.ts` so no server sacks a land already sacked elsewhere); a claim only while the town is still
+  contested by that clan. A follower refuses a second claim of a town it queued until the owner's war shows it.
+- `Kv.take` / `Kv.del` (Postgres; optional, JSON kv has neither: the handoff stays on the file).
+- No save field renamed or dropped; new optional fields only (`drainedActs` in the war save, `drained` in the world
+  row). No schema change.
+- Tests: `tests/agesShared.test.ts` (the queue; handoff taken once on another server, expired ignored and pruned, JSON
+  mode on the file; ideas from both servers, once, across an owner restart and change; Tide kills once, across restart
+  and change, and the follower's Tide; a sack and a claim once, across restart and change, a second sack that tick
+  dropped), `tests/store.test.ts` (Postgres: take, del).
+
+### Open (part 7)
+- A follower's hero gets the sack's gold, renown and the claim's renown at once; if the owner refuses the act (a sack
+  from an older tick, a town claimed meanwhile on the owner) the war does not change, the rewards stay.
+- A follower's own idea under its temporary number until the owner's row has it (up to ~30 s); its submitter gets no
+  idea number in chat. Ideas win only while a room is open on the owner (as before, per process).
+- A hero who logs in on another server within the instant their old server writes the spot may miss it (it then
+  waits in kv until it runs out).
+- Mixed builds: an older owner ignores the new queues (`war-acts:`, `world-tide:`, `ideas-q:`) and an older world
+  owner drops `drained` (a newer owner after it may count a follower's Tide kills again: low stakes).
+- A restart no longer forgets the sacks of the current tick (`warSacked` reads the log): one sack per land per tick now
+  also holds across a restart, in every mode (the only change a single server sees, besides the next point).
+- "Shared store" means `DATABASE_URL`: today's single server on Postgres also keeps its handoff spots and idea log in kv
+  from this build on (the idea file is copied into the `ideas` row once; `data/handoff.json` from the previous build is
+  still read once).

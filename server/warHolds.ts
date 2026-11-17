@@ -6,7 +6,8 @@
  * Done, the war hears of it (server/war.ts strikeHold: Control, maybe a siege, the Herald and the holder's leader), the
  * sacker's clan earns valor where the war lets it fight, its sworn heroes in the reach renown, a war chest drops, the
  * Hold's guards stay down until the next war tick and the sacker's banner flies on it (cosmetic, "holds" message).
- * One sack per land per war tick for every room of the process (memory, like the caravans' outcomes).
+ * One sack per land per war tick for every room of the process (memory, like the caravans' outcomes), and across servers
+ * through the war's log (server/war.ts warSacked: a follower's sack is queued for the war's owner, Ages).
  * TownRoom calls in through the narrow HoldSackHost below.
  */
 import { TILE } from "../shared/constants";
@@ -21,7 +22,7 @@ import { atWar } from "../shared/war/feuds";
 import { STANDARD } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
 import { parseTroop, troopLevel, troopStance } from "../shared/war/troops";
-import { addValor, strikeHold, warNow, warState } from "./war";
+import { addValor, strikeHold, warNow, warSacked, warState } from "./war";
 import { boonRenown, crownCredit, keyOf } from "./warCrown";
 import type { SiegeHero } from "./warSieges";
 import type { TroopMob } from "./warTroops";
@@ -90,7 +91,7 @@ export class WarHolds {
     if (st === "ally") return "This is your own clan's Hold.";
     if (st !== "enemy") return `${CLANS[holder].name} are not your enemies: provoke them first (Ctrl+click), or swear to a clan at war with them.`;
     if (v.sieges.some((s) => s[0] === t)) return "A siege is announced here: fight for it at the fronts.";
-    if (sacks.get(t)?.tick === v.tick) return "This Hold was sacked already: its new banner flies until the next war tick.";
+    if (sacks.get(t)?.tick === v.tick || warSacked(t)) return "This Hold was sacked already: its new banner flies until the next war tick.";
     for (const [oid, r] of this.raises) if (r.t === t && oid !== id) return "Another hero is raising a banner here.";
     if (this.h.guardsAlive(t, (x, y) => inSackReach(t, x, y)) > 0 || this.h.guardsDue(t) > 0) return "Its guards still stand: cut them down first.";
     if (this.defenders(t, holder, now, false) > 0) return `A hero sworn to ${CLANS[holder].name} stands watch here.`;
@@ -154,7 +155,7 @@ export class WarHolds {
       if (!v || !holder || !at || underground(p.y) || Math.hypot(p.x - at.x, p.y - at.y) > HOLD_SACK.useTiles * TILE * 1.5) { this.stop(id, "You left the banner."); continue; }
       if (troopStance(holder, p, now) !== "enemy") { this.stop(id, `${CLANS[holder].name} are not your enemies any more.`); continue; }
       if (v.sieges.some((s) => s[0] === r.t)) { this.stop(id, "A siege is announced here: fight for it at the fronts."); continue; }
-      if (sacks.get(r.t)?.tick === tick) { this.stop(id, "This Hold was sacked already."); continue; }
+      if (sacks.get(r.t)?.tick === tick || warSacked(r.t)) { this.stop(id, "This Hold was sacked already."); continue; }
       const hurt = p.lastHurt > r.hurtAt;
       r.hurtAt = p.lastHurt;
       const dt = now - r.lastStep, was = r.paused;
@@ -174,7 +175,7 @@ export class WarHolds {
    */
   private done(id: string, p: HoldHero, r: Raise, holder: ClanKey, tick: number, now: number) {
     this.raises.delete(id);
-    if (sacks.get(r.t)?.tick === tick) { this.stop(id, "This Hold was sacked already."); return; }
+    if (sacks.get(r.t)?.tick === tick || warSacked(r.t)) { this.stop(id, "This Hold was sacked already."); return; } // (warSacked: on another server, Ages)
     // a sacker whose clan is not at war with the holder (a grudge, Wanted only) robs it: no valor, no siege, half the harm
     const st = warState(), clan = p.clan, legal = !!st && !!clan && atWar(clan, holder) && targetsOf(st, clan).includes(r.t), at = bannerSpot(r.t)!;
     sacks.set(r.t, { tick, by: clan ? CLAN_KEYS.indexOf(clan) : -1 });
