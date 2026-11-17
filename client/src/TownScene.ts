@@ -150,7 +150,7 @@ import { PortalLayer } from "./portal";
 import { BOON_NAMES, WIND_BLESSING } from "../../shared/shrine";
 import { BuffBar } from "./buffbar";
 import { GrimoirePanel } from "./grimoire";
-import { addWorldProps } from "./worldProps";
+import { addWorldProps, preloadBakedProps } from "./worldProps";
 import { addSiegeWorks } from "./siegeArt";
 import { SiegeWork } from "./siegeWork";
 import { PERCH_LIFT } from "../../shared/bandits";
@@ -492,6 +492,7 @@ export class TownScene extends Phaser.Scene {
     preloadArt(this, this.opts.cls);
     preloadGear(this);
     preloadPaintedMobs(this);
+    preloadBakedProps(this);
   }
 
   async create() {

@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-17",
+  "patch": 309,
+  "pr": 511,
+  "title": "Village and camp props rebuilt in 3D",
+  "changes": [
+    "Lantern poles, training dummies, skull pikes, war pennants, net racks and weapon racks are now built as 3D models and baked to pixel art: soft self-shadows, light in the joints, glinting iron and a glowing lantern.",
+    "Same size on screen and no cost to performance."
+  ]
+}

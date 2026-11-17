@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-17",
+  "patch": 313,
+  "title": "Mawdeep quest objects rebuilt in 3D",
+  "changes": [
+    "The silk cocoons and the Hide Rite totems in the Mawdeep Warrens, whole, cut down or burnt, are now 3D models baked to pixel art."
+  ]
+}

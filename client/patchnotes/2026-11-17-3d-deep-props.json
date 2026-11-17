@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-17",
+  "patch": 311,
+  "title": "Deep dungeon props rebuilt in 3D",
+  "changes": [
+    "The candle clusters, the pyramids of skulls and the painted urns in the deep dungeons are now 3D models baked to pixel art.",
+    "Same size on screen and no cost to performance."
+  ]
+}

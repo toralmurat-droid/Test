@@ -755,7 +755,7 @@ function totem(p: Pen, burnt: boolean) {
 
 /** Every dungeon texture (once). */
 export function dungeonTextures(scene: Phaser.Scene) {
-  if (scene.textures.exists("dg_brazier")) return;
+  if (scene.textures.exists("dg_beam")) return; // made last (dg_brazier etc. may come baked: worldProps.BAKED_PROPS)
   sheet(scene, "dg_brazier", BRAZIER.w, BRAZIER.h, BRAZIER.frames, brazier, 0.6);
   if (!scene.anims.exists("dg_brazier_burn")) scene.anims.create({ key: "dg_brazier_burn", frames: scene.anims.generateFrameNumbers("dg_brazier", { start: 0, end: BRAZIER.frames - 1 }), frameRate: 9, repeat: -1 });
   sheet(scene, "dg_rope", ROPE_ART.w, ROPE_ART.h, ROPE_ART.frames, rope, 0);
