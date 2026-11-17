@@ -16,14 +16,23 @@
  * - WAR_COUNCIL_PROVIDER: `scripted` (default) or `remote`, same format.
  * - WAR_COUNCIL_KILL=1: the kill switch (also killCouncils()): every clan reverts to the doctrine at once.
  * - WAR_COUNCIL_TOKEN: the bearer token of the remote routes (unset or shorter than 16 characters: routes off).
+ *
+ * The Forge (M4 PR4): an order set may carry one `forge` recipe. It is checked apart from the targets
+ * (validateForgeOrder): a bad recipe is logged as a forge rejection and never stops the targets from leading, and bad
+ * targets never stop a legal recipe. At the session a `lead` council commissions it (server/forge.ts commission: paid,
+ * gated, live a research day later), a `shadow` council only logs it; one forge order per clan per war day (`forged`).
+ * The scripted council never forges (tests can give it a recipe: _setScriptedForge).
  */
 import crypto from "node:crypto";
 import express, { type Express, type Request, type Response } from "express";
 import { CLANS, CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import {
-  agrees, buildBriefing, COUNCIL, COUNCIL_MODES, COUNCIL_STANCES, councilOrders, dailyDigest, intentOf, ORDER_SCHEMA, scriptedCouncil, validateCouncil, warDay,
-  type BriefingCtx, type CouncilBriefing, type CouncilIntent, type CouncilLogEntry, type CouncilMode, type CouncilOrders,
+  agrees, buildBriefing, COUNCIL, COUNCIL_MODES, COUNCIL_STANCES, councilOrders, dailyDigest, FORGE_NOTE_STATUSES, intentOf, ORDER_SCHEMA, scriptedCouncil,
+  validateCouncil, validateForgeOrder, warDay,
+  type BriefingCtx, type CouncilBriefing, type CouncilIntent, type CouncilLogEntry, type CouncilMode, type CouncilOrders, type ForgeNote,
 } from "../shared/war/council";
+import { validateRecipe } from "../shared/forge";
+import { commission, forgeBrief, forgeClock, forgeDayLines, forgeKilled, forgeTicking } from "./forge";
 import type { Mind } from "../shared/war/doctrine";
 import { warPairs } from "../shared/war/feuds";
 import { reckoningAt } from "../shared/war/crown";
@@ -49,6 +58,8 @@ export interface CouncilSave {
   log: CouncilLogEntry[];
   digests: { day: number; at: number; text: string }[];
   digested?: number; since?: number;
+  /** The last war day each clan's council handed in a forge order the forge took (commissioned or shadow-logged). */
+  forged?: Partial<Record<ClanKey, number>>;
 }
 
 // ---- Save ------------------------------------------------------------------------------------------------------------
@@ -67,7 +78,24 @@ function cleanOrdersSave(v: unknown): CouncilOrders | undefined {
   const p = str(r.proclamation, COUNCIL.proclamationMax), why = str(r.rationale, COUNCIL.rationaleMax);
   if (p) o.proclamation = p;
   if (why) o.rationale = why;
+  const f = r.forge !== undefined ? validateRecipe(r.forge) : undefined; // (a recipe no longer legal is dropped: the session would refuse it)
+  if (f?.ok && (!isClan(r.clan) || f.recipe.clan === r.clan)) o.forge = f.recipe;
   return o;
+}
+const FORGE_KINDS = ["weapon", "monster"];
+function cleanForgeNote(v: unknown): ForgeNote | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const r = v as Record<string, unknown>;
+  if (!FORGE_NOTE_STATUSES.includes(r.status as ForgeNote["status"])) return undefined;
+  const n: ForgeNote = { status: r.status as ForgeNote["status"] };
+  if (FORGE_KINDS.includes(r.kind as string)) n.kind = r.kind as ForgeNote["kind"];
+  const name = str(r.name, 40), base = str(r.base, 40);
+  if (name) n.name = name;
+  if (base) n.base = base;
+  if (isDay(r.seq)) n.seq = r.seq;
+  if (isDay(r.liveDay)) n.liveDay = r.liveDay;
+  if (Array.isArray(r.errors)) n.errors = r.errors.filter((m) => typeof m === "string").slice(0, 12).map((m) => (m as string).slice(0, 200));
+  return n;
 }
 
 /** The war save's `council` field, cleaned: malformed parts are dropped, so an old save (none) reads as no council yet. Pure. */
@@ -87,7 +115,7 @@ export function cleanCouncil(raw: unknown): CouncilSave {
     const p = rec(rec(r.pending)[k]), po = cleanOrdersSave(p.orders);
     if (isDay(p.day) && isNum(p.at) && po) out.pending[k] = { day: p.day, at: p.at, orders: po };
   }
-  const STATUS = ["led", "shadow", "fallback", "rejected"];
+  const STATUS = ["led", "shadow", "fallback", "rejected", "forge_rejected"];
   for (const e of Array.isArray(r.log) ? r.log.slice(-COUNCIL.logMax) : []) {
     const x = rec(e);
     if (!isNum(x.at) || !isDay(x.day) || !isClan(x.k) || !COUNCIL_MODES.includes(x.mode as CouncilMode) || !STATUS.includes(x.status as string)) continue;
@@ -97,6 +125,8 @@ export function cleanCouncil(raw: unknown): CouncilSave {
     if (Array.isArray(x.errors)) y.errors = x.errors.filter((m) => typeof m === "string").slice(0, 12).map((m) => (m as string).slice(0, 200));
     if (typeof x.reason === "string") y.reason = x.reason.slice(0, 200);
     if (Array.isArray(x.agree) && x.agree.length === 2 && x.agree.every(isDay)) y.agree = [x.agree[0], x.agree[1]];
+    const fn = cleanForgeNote(x.forge);
+    if (fn) y.forge = fn;
     out.log.push(y);
   }
   for (const d of Array.isArray(r.digests) ? r.digests.slice(-COUNCIL.digestKeep) : []) {
@@ -105,6 +135,10 @@ export function cleanCouncil(raw: unknown): CouncilSave {
   }
   if (isDay(r.digested)) out.digested = r.digested;
   if (isNum(r.since)) out.since = r.since;
+  for (const k of CLAN_KEYS) {
+    const f = rec(r.forged)[k];
+    if (isDay(f)) (out.forged ??= {})[k] = f;
+  }
   return out;
 }
 
@@ -147,7 +181,13 @@ export const councilsKilled = () => killed;
 const providers = new Map<string, CouncilProvider>();
 /** Adds a provider (a future in-process council would register here; none needs an API today). */
 export function registerProvider(p: CouncilProvider) { providers.set(p.name, p); }
-registerProvider({ name: "scripted", decide: async (b) => scriptedCouncil(b) });
+/** Tests only: a forge order the scripted council adds (raw, never checked here). Unset: the scripted council never forges. */
+let scriptedForge: ((b: CouncilBriefing) => unknown) | undefined;
+export function _setScriptedForge(f?: (b: CouncilBriefing) => unknown) { scriptedForge = f; }
+registerProvider({
+  name: "scripted",
+  decide: async (b) => { const o = scriptedCouncil(b); return scriptedForge ? { ...o, forge: scriptedForge(b) } : o; },
+});
 registerProvider({
   name: "remote",
   decide: async (b) => {
@@ -197,11 +237,17 @@ export const proclaimLine = (clan: ClanKey, text: string) => `The war council of
 // ---- Sessions --------------------------------------------------------------------------------------------------------
 
 let busy: Promise<void> | undefined;
+const cap = (m: string[]) => m.slice(0, 12).map((x) => x.slice(0, 200)); // as on load: client text never grows the save
 function logCouncil(cs: CouncilSave, e: CouncilLogEntry) {
+  if (e.errors) e.errors = cap(e.errors);
+  if (e.forge?.errors) e.forge = { ...e.forge, errors: cap(e.forge.errors) };
   cs.log.push(e);
   if (cs.log.length > COUNCIL.logMax) cs.log.splice(0, cs.log.length - COUNCIL.logMax);
   if (!process.env.NODE_TEST_CONTEXT) console.log(`War council: ${e.k} day ${e.day} ${e.status}${e.reason ? ` (${e.reason})` : ""}${e.errors?.length ? `: ${e.errors.join("; ")}` : ""}`);
 }
+
+/** Clan k's briefing for war day `day`: the shared context plus its side of the Forge. */
+const briefFor = (s: NonNullable<ReturnType<typeof warState>>, k: ClanKey, ctx: BriefingCtx, day: number) => buildBriefing(s, k, { ...ctx, forge: forgeBrief(k, day) }, day);
 
 /** What the server adds to a briefing: the clans at war, the last day's events, the Reckoning. */
 function briefCtx(now: number): BriefingCtx {
@@ -222,7 +268,7 @@ async function session(cs: CouncilSave, k: ClanKey, day: number, now: number) {
   let raw: unknown;
   try {
     if (!prov) throw new Error(`no provider "${pname}"`);
-    raw = await withTimeout(prov.decide(buildBriefing(s, k, briefCtx(now), day)), COUNCIL.timeoutMs);
+    raw = await withTimeout(prov.decide(briefFor(s, k, briefCtx(now), day)), COUNCIL.timeoutMs);
   } catch (e) {
     logCouncil(cs, { ...base, status: "fallback", reason: `provider failed: ${String((e as Error)?.message ?? e).slice(0, 160)}` });
     return;
@@ -230,11 +276,34 @@ async function session(cs: CouncilSave, k: ClanKey, day: number, now: number) {
     if (pname === "remote") delete cs.pending[k];
   }
   const v = validateCouncil(raw, warState() ?? s, k, day), now2 = councilMode(k);
-  if (!v.ok) { logCouncil(cs, { ...base, status: "fallback", reason: "invalid orders", orders: v.orders, errors: v.errors }); return; }
-  if (now2 === "off") { logCouncil(cs, { ...base, status: "fallback", reason: "council switched off (kill switch) during the session", orders: v.orders }); return; }
+  // the forge order on its own: whatever comes of it, the targets below are judged as if it were not there
+  const f = sessionForge(cs, k, day, raw, now2, now), orders = f?.recipe ? { ...v.orders, forge: f.recipe } : v.orders, fx = f ? { forge: f.note } : {};
+  if (!v.ok) { logCouncil(cs, { ...base, status: "fallback", reason: "invalid orders", orders, errors: v.errors, ...fx }); return; }
+  if (now2 === "off") { logCouncil(cs, { ...base, status: "fallback", reason: "council switched off (kill switch) during the session", orders, ...fx }); return; }
   cs.intents[k] = { ...intentOf(v.orders, day), mode: now2, ...(now2 === "shadow" ? { agree: [0, 0] as [number, number] } : {}) };
-  logCouncil(cs, { ...base, mode: now2, status: now2 === "lead" ? "led" : "shadow", orders: v.orders });
+  logCouncil(cs, { ...base, mode: now2, status: now2 === "lead" ? "led" : "shadow", orders, ...fx });
   if (now2 === "lead" && v.orders.proclamation) proclaims.push({ clan: k, text: v.orders.proclamation });
+}
+
+/** The raw orders' `forge` field (undefined when there is none). */
+const forgeField = (raw: unknown): unknown => (raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>).forge ?? undefined : undefined);
+/**
+ * Clan k's forge order at its session for war day `day`: checked (validateForgeOrder), then commissioned (`lead`) or
+ * logged (`shadow`) by server/forge.ts, at most once a clan a war day. Undefined when the orders carry none.
+ */
+function sessionForge(cs: CouncilSave, k: ClanKey, day: number, raw: unknown, mode: CouncilMode, now: number): { note: ForgeNote; recipe?: CouncilOrders["forge"] } | undefined {
+  const rawF = forgeField(raw);
+  if (rawF === undefined) return undefined;
+  const c = validateForgeOrder(rawF, k);
+  if (!c.ok || !c.recipe) return { note: { status: "rejected", errors: c.errors.slice(0, 12) } };
+  const r = c.recipe, what = { kind: r.kind, name: r.name, base: r.base }, refused = (msg: string) => ({ note: { status: "refused" as const, ...what, errors: [msg] }, recipe: r });
+  if (mode === "off") return refused("council switched off (kill switch) during the session");
+  if ((cs.forged?.[k] ?? -1) >= day) return refused(`one forge order a war day: ${k} has forged on war day ${day} already`);
+  const res = commission(k, r, day, mode, now);
+  if (!res.ok) return refused(`${res.code}: ${res.msg}`);
+  (cs.forged ??= {})[k] = day;
+  if (mode === "lead") warCouncilChanged(now, true); // the forge saved its project at once: so must the war, or a crash forges twice
+  return { note: mode === "lead" ? { status: "commissioned", ...what, ...(res.seq ? { seq: res.seq } : {}), ...(res.liveDay !== undefined ? { liveDay: res.liveDay } : {}) } : { status: "shadow", ...what }, recipe: r };
 }
 
 /** Closes war day `day`: the shadow councils' agreement goes into their log entries, then the day's digest is kept. */
@@ -252,6 +321,7 @@ function closeDay(cs: CouncilSave, day: number, now: number) {
     battles: warBattles().filter((b) => b.result && (b.done ?? 0) > since && (b.done ?? 0) <= now).map((b) => ({ kind: b.kind, t: b.t, a: b.a, b: b.b, result: b.result })),
     ...(last && last.at > since && last.at <= now ? { reckoning: { winner: last.winner, kept: last.kept } } : {}),
     ...(s ? { owner: s.owner } : {}),
+    forge: forgeDayLines(day),
   });
   cs.digests.push({ day, at: now, text });
   if (cs.digests.length > COUNCIL.digestKeep) cs.digests.splice(0, cs.digests.length - COUNCIL.digestKeep);
@@ -268,6 +338,7 @@ export async function councilClock(now = Date.now()) {
   if (busy) return;
   const s = warState(), cs = warCouncilSave();
   if (!s || !cs) return;
+  if (!forgeTicking()) try { forgeClock(); } catch (e) { console.error("War councils: the forge clock failed:", e); } // (no forge timer: tests, tools)
   const day = warDay(s.tick + 1);
   if (day > 0 && (cs.digested ?? -1) < day - 1) { closeDay(cs, day - 1, now); warCouncilChanged(now); }
   const due = CLAN_KEYS.filter((k) => councilMode(k) !== "off" && (cs.held[k] ?? -1) < day);
@@ -298,7 +369,7 @@ export function councilBriefings(clan?: string, now = Date.now()): { status: num
       clan: k, mode: councilMode(k), provider: providerOf[k], day,
       sessionAt: next + Math.max(0, day * WAR.ticksPerDay - 1 - s.tick) * WAR.tickMs,
       ...(p ? { submitted: { day: p.day, at: p.at } } : {}),
-      briefing: buildBriefing(s, k, ctx, day),
+      briefing: briefFor(s, k, ctx, day),
     };
   });
   return { status: 200, body: { now, warDay: warDay(s.tick), tick: s.tick, killed, schema: ORDER_SCHEMA, clans } };
@@ -321,16 +392,23 @@ export function submitCouncilOrders(body: unknown, now = Date.now()): { status: 
   const day = b.day as number;
   if (day < open) return { status: 409, body: { ok: false, errors: [`day: war day ${day} is past; orders are open for war day ${open}`], day: open } };
   if (day > open) return { status: 409, body: { ok: false, errors: [`day: war day ${day} is not open yet; orders are open for war day ${open}`], day: open } };
-  const v = validateCouncil(b.orders, s, k, day);
+  const v = validateCouncil(b.orders, s, k, day), rawF = forgeField(b.orders);
+  // the forge order is judged on its own (answer's `forge`): a bad recipe never costs the targets their place
+  const f = rawF === undefined ? undefined : validateForgeOrder(rawF, k);
+  const fErr = f && (!f.ok ? f.errors : forgeKilled() ? ["forge.killed: the forge is off; no forge order is taken now"] : []);
+  const forge = f ? { forge: { accepted: !fErr!.length, errors: fErr!, ...(f.recipe ? { recipe: f.recipe } : {}) } } : {};
+  const note: ForgeNote | undefined = f && !f.ok ? { status: "rejected", errors: f.errors.slice(0, 12) } : undefined;
   if (!v.ok) {
-    logCouncil(cs, { at: now, day, k, mode: councilMode(k), provider: "remote", status: "rejected", orders: v.orders, errors: v.errors });
+    logCouncil(cs, { at: now, day, k, mode: councilMode(k), provider: "remote", status: "rejected", orders: v.orders, errors: v.errors, ...(note ? { forge: note } : {}) });
     warCouncilChanged(now);
-    return { status: 422, body: { ok: false, accepted: false, day, errors: v.errors, orders: v.orders } };
+    return { status: 422, body: { ok: false, accepted: false, day, errors: v.errors, orders: v.orders, ...forge } };
   }
+  if (note) logCouncil(cs, { at: now, day, k, mode: councilMode(k), provider: "remote", status: "forge_rejected", errors: note.errors, forge: note });
+  const orders: CouncilOrders = f?.ok && !fErr!.length ? { ...v.orders, forge: f.recipe } : v.orders;
   const replaced = cs.pending[k]?.day === day;
-  cs.pending[k] = { day, at: now, orders: v.orders };
+  cs.pending[k] = { day, at: now, orders };
   warCouncilChanged(now, true);
-  return { status: 200, body: { ok: true, accepted: true, replaced, day, errors: [], orders: v.orders } };
+  return { status: 200, body: { ok: true, accepted: true, replaced, day, errors: [], orders, ...forge } };
 }
 
 /** Is `header` "Bearer <token>" for this token? Constant time (both sides hashed to one length). False when no token is set. */
@@ -379,4 +457,4 @@ export function councilAdmin(n = 60) {
 }
 
 /** Tests: forget sessions in flight and proclamations (the save is reset with the war). */
-export function _resetCouncils() { busy = undefined; proclaims.length = 0; configureCouncils({ NODE_TEST_CONTEXT: "1" }); }
+export function _resetCouncils() { busy = undefined; proclaims.length = 0; scriptedForge = undefined; configureCouncils({ NODE_TEST_CONTEXT: "1" }); }
