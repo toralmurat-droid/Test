@@ -67,15 +67,19 @@ Then **move the public domain** (e.g. `play.fmtpa.ch`) from today's game service
   Secure over https). Every request of that browser (the page, `/account`, `/matchmake`, the game's WebSocket) then
   goes to that Age. Changing `AGE_SPLIT` only affects new visitors (and cookies that name a slot no longer in
   `GATEWAY_TARGETS`, which are drawn again).
-- `/age/<slot>` (e.g. `https://play.fmtpa.ch/age/green`) puts this browser in that Age and opens the game: use it to
-  invite testers, or to move yourself. Works for any configured slot, also one with weight 0.
+- `/age/<slot>` (e.g. `https://play.fmtpa.ch/age/green`) puts this browser in that Age and opens the game. For an Age
+  that takes new visitors (weight above 0 in `AGE_SPLIT`) anyone may use it. An Age with weight 0 (not open yet) needs
+  the admin key: `/age/green?key=<ADMIN_KEY>`; give that link only to people you trust (it carries the key), or open
+  the Age a little (`green=1`) and hand out the plain link. Without the key the page answers "no such age".
+- A browser without a cookie (blocked cookies, or several first requests at once) gets the same Age every time: the
+  draw is fixed by the player's address, by the same weights.
 - If an Age's server does not answer, page files and `/account` calls are served by the other Age meanwhile (logged
   as `backend <slot> down`). `/health`, `/matchmake` and the game's WebSocket are not: they wait for the player's own
   Age, so the reconnect notice just keeps waiting through a restart, as today.
 
 ## 4. Shifting players to a new Age
 1. Deploy the new build to the idle service (say green, `AGE_ROLE=vanguard`).
-2. Try it yourself: open `/age/green`. Check `/gateway/status?key=...` (each Age's `/health` and build, and the split).
+2. Try it yourself: open `/age/green?key=<ADMIN_KEY>` (green still has weight 0). Check `/gateway/status?key=...` (each Age's `/health` and build, and the split).
 3. Open it to some new visitors: `AGE_SPLIT=blue=90,green=10` on the gateway (a redeploy of the gateway: players
    reconnect).
 4. When green is the Age to keep: set `AGE_ROLE=primary` on green and `draining` on blue (blue hands the war's,

@@ -15,12 +15,16 @@ export interface GatewayConfig {
   /** Weight per slot for new visitors (missing = 0). */
   split: Record<string, number>;
   adminKey?: string;
+  /** Cut an HTTP exchange silent this long once connected (default 60 s). */
+  idleMs?: number;
   log?: (msg: string) => void;
 }
 
 export const COOKIE = "ptb_age";
 const COOKIE_AGE = 30 * 24 * 3600; // s
 const CONNECT_MS = 5_000;
+const IDLE_MS = 60_000; // an HTTP exchange silent this long (once connected) is cut
+const HEAD_MAX = 16_384;
 const SLOT_RE = /^[a-z0-9][a-z0-9_-]{0,23}$/;
 
 /** `GATEWAY_TARGETS="blue=http://host:port,green=http://host:port"`; throws on a bad entry so a typo fails at boot. */
@@ -56,6 +60,13 @@ export function configFromEnv(env = process.env): GatewayConfig {
   const slots = targets.map((b) => b.slot);
   const primary = env.GATEWAY_PRIMARY && slots.includes(env.GATEWAY_PRIMARY) ? env.GATEWAY_PRIMARY : slots[0];
   return { targets, primary, split: parseSplit(env.AGE_SPLIT, slots, primary), adminKey: env.ADMIN_KEY };
+}
+
+/** A cookie-less visitor's draw in [0, 1), fixed by their address (first X-Forwarded-For hop, else the socket), so
+ *  parallel first requests and browsers without cookies stay on one Age. */
+export function addressDraw(req: http.IncomingMessage): number {
+  const ip = String(req.headers["x-forwarded-for"] ?? "").split(",")[0].trim() || req.socket.remoteAddress || "";
+  return crypto.createHash("sha256").update(ip).digest().readUInt32BE(0) / 2 ** 32;
 }
 
 /** A new visitor's Age, drawn by the split's weights. */
@@ -107,7 +118,7 @@ export function createGateway(cfg: GatewayConfig): http.Server {
   const cohort = (req: http.IncomingMessage) => {
     const c = cookieOf(req);
     if (c && bySlot.has(c)) return { slot: c, fresh: false };
-    return { slot: pickSlot(cfg.split, cfg.primary), fresh: true };
+    return { slot: pickSlot(cfg.split, cfg.primary, () => addressDraw(req)), fresh: true };
   };
   const port = (b: Backend) => Number(b.url.port || 80);
 
@@ -115,11 +126,18 @@ export function createGateway(cfg: GatewayConfig): http.Server {
   function forward(req: http.IncomingMessage, res: http.ServerResponse, order: Backend[], cookie?: string) {
     const b = order[0];
     const headers = forwarded(req, strip(req.headers));
+    // A chunked body keeps its framing: Node adds none of its own for GET / DELETE / OPTIONS, and raw bytes there would
+    // let a client smuggle a second request to the backend
+    if (req.headers["transfer-encoding"]) { headers["transfer-encoding"] = "chunked"; delete headers["content-length"]; }
     const preq = http.request({ host: b.url.hostname, port: port(b), method: req.method, path: req.url, headers, agent: false });
-    let connected = false;
+    let connected = false, gone = false;
     const timer = setTimeout(() => { if (!connected) preq.destroy(new Error("connect timeout")); }, CONNECT_MS);
     preq.on("socket", (s) => {
-      const go = () => { connected = true; clearTimeout(timer); mark(b.slot, false); req.pipe(preq); };
+      const go = () => {
+        connected = true; clearTimeout(timer); mark(b.slot, false);
+        preq.setTimeout(cfg.idleMs ?? IDLE_MS, () => preq.destroy(new Error("backend timeout")));
+        req.pipe(preq);
+      };
       if ((s as net.Socket).connecting) s.once("connect", go); else go();
     });
     preq.on("response", (pres) => {
@@ -131,6 +149,7 @@ export function createGateway(cfg: GatewayConfig): http.Server {
     });
     preq.on("error", (e) => {
       clearTimeout(timer);
+      if (gone) return; // the player left: not the backend's fault, nothing to answer
       if (!connected) {
         mark(b.slot, true, (e as NodeJS.ErrnoException).code ?? e.message);
         if (order.length > 1) { log(`${req.method} ${req.url}: ${b.slot} down, trying ${order[1].slot}`); return forward(req, res, order.slice(1), cookie); }
@@ -138,7 +157,7 @@ export function createGateway(cfg: GatewayConfig): http.Server {
       if (!res.headersSent) { res.writeHead(502, { "content-type": "text/plain", "cache-control": "no-store" }); res.end("bad gateway"); }
       else res.destroy();
     });
-    res.on("close", () => { if (!res.writableFinished) preq.destroy(); });
+    res.on("close", () => { if (!res.writableFinished) { gone = true; clearTimeout(timer); preq.destroy(); } });
   }
 
   const adminOk = (u: URL) => {
@@ -169,7 +188,8 @@ export function createGateway(cfg: GatewayConfig): http.Server {
     }
     const age = /^\/age\/([^/]+)\/?$/.exec(u.pathname);
     if (age) {
-      if (!bySlot.has(age[1])) { res.writeHead(404, { "content-type": "text/plain" }); res.end("no such age"); return; }
+      // An Age open to no new visitors (weight 0) is for invited players only: it needs the admin key
+      if (!bySlot.has(age[1]) || (!(cfg.split[age[1]] > 0) && !adminOk(u))) { res.writeHead(404, { "content-type": "text/plain" }); res.end("no such age"); return; }
       res.writeHead(302, { location: "/", "set-cookie": setCookie(req, age[1]), "cache-control": "no-store" });
       res.end();
       return;
@@ -182,27 +202,42 @@ export function createGateway(cfg: GatewayConfig): http.Server {
     forward(req, res, [bySlot.get(slot)!, ...others], fresh ? setCookie(req, slot) : undefined);
   });
 
-  // WebSocket (the game's room connection): replay the request to the cookie's Age and pipe both ways. No fallback:
-  // a seat lives on one server.
+  // WebSocket (the game's room connection): replay the request to the cookie's Age; once it answers 101, pipe both
+  // ways. No fallback (a seat lives on one server); any other answer goes back to the client and the socket closes.
   server.on("upgrade", (req: http.IncomingMessage, sock: net.Socket, head: Buffer) => {
+    if (String(req.headers.upgrade ?? "").toLowerCase() !== "websocket") { sock.end("HTTP/1.1 400 Bad Request\r\nconnection: close\r\n\r\n"); return; }
     const b = bySlot.get(cohort(req).slot)!;
     const up = net.connect(port(b), b.url.hostname);
-    let connected = false;
-    const close = () => { clearTimeout(timer); up.destroy(); sock.destroy(); };
-    const timer = setTimeout(() => { if (!connected) { mark(b.slot, true, "connect timeout"); close(); } }, CONNECT_MS);
+    let connected = false, refused = false;
+    const close = () => { clearTimeout(timer); up.destroy(); if (!refused) sock.destroy(); };
+    // Until the 101 arrives: CONNECT_MS to connect, then as long again for the answer
+    const timer = setTimeout(() => { if (!connected) mark(b.slot, true, "connect timeout"); close(); }, CONNECT_MS * 2);
     up.on("error", (e) => { if (!connected) mark(b.slot, true, (e as NodeJS.ErrnoException).code ?? e.message); close(); });
     sock.on("error", close);
     up.on("close", close); sock.on("close", close);
     up.once("connect", () => {
       connected = true;
-      clearTimeout(timer);
       mark(b.slot, false);
       const h = forwarded(req, { ...req.headers });
       let raw = `${req.method} ${req.url} HTTP/1.1\r\n`;
       for (const [k, v] of Object.entries(h)) for (const one of ([] as unknown[]).concat(v ?? [])) raw += `${k}: ${String(one).replace(/[\r\n]/g, "")}\r\n`;
       up.write(raw + "\r\n");
-      if (head.length) up.write(head);
-      up.pipe(sock); sock.pipe(up);
+      let got = Buffer.alloc(0);
+      const onHead = (d: Buffer) => {
+        got = Buffer.concat([got, d]);
+        const end = got.indexOf("\r\n\r\n");
+        if (end < 0) { if (got.length > HEAD_MAX) close(); return; }
+        up.off("data", onHead);
+        up.pause();
+        clearTimeout(timer);
+        if (/^HTTP\/1\.1 101 /.test(got.toString("latin1", 0, 16))) {
+          sock.write(got);
+          if (head.length) up.write(head);
+          up.pipe(sock); sock.pipe(up);
+          up.resume();
+        } else { refused = true; sock.end(got); up.destroy(); } // the backend's refusal (as far as it came), then close
+      };
+      up.on("data", onHead);
     });
     sock.setNoDelay(true); up.setNoDelay(true);
   });

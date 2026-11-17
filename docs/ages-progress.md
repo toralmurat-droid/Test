@@ -102,6 +102,13 @@ only; the services are set up by the owner (`docs/ages-setup.md`).
   `GATEWAY_TARGETS` is set, else `require("./index.cjs")`, the game exactly as before in the same process (its SIGTERM
   handling unchanged). `npm run build:server` bundles `gateway.cjs` and `start.cjs`. `npm start` and the smoke test
   still run `index.cjs` directly. The gateway on SIGTERM stops listening and exits (open sockets cut after 3 s).
+- Review fixes: a chunked request body keeps chunked framing to the backend (Node adds none for GET / DELETE /
+  OPTIONS: raw bytes smuggled a second request); `/age/<slot>` for a weight-0 Age needs `?key=ADMIN_KEY`; a cookie-less
+  visitor's Age is drawn from a hash of their address (first X-Forwarded-For hop, else the socket), not per request; a
+  player leaving while the gateway connects no longer marks the backend down or retries; an HTTP exchange silent 60 s
+  (once connected) is cut with 502; upgrades other than `websocket` get 400, and the pipe opens only after the
+  backend's 101 (any other answer goes back to the client and closes). `server/start.ts`, `server/gateway.ts` and
+  `railway.gateway.json` are in `area:deploy` (`tools/ci/critical-areas.mjs`).
 - `railway.gateway.json`: the gateway service's config file (health check `/gateway/health`).
 - Tests: `tests/gateway.test.ts` (config, cookie by weights, `/age/<slot>`, re-pick, body and headers, hop-by-hop,
   WebSocket pipe, fallback with body, pinned paths, status key), `tests/gateway-room.test.ts` (a hero joins the real
