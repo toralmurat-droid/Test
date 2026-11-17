@@ -9,6 +9,11 @@ import { bakeSheet, renderProp } from "./paint/prop3d";
 import { PROPS3D } from "./paint/props3d";
 import { SIEGE_WORKS } from "./paint/siegeWorks3d";
 import { DUNGEON3D } from "./paint/dungeon3d";
+import { WRECK3D } from "./paint/wreck3d";
+import { ELEMENTS3D } from "./paint/elements3d";
+import { TENT3D } from "./paint/tent3d";
+import * as el from "../../client/src/elementArt";
+import { standingStone, throne } from "../../client/src/throneArt";
 import { DEEP3D } from "./paint/deep3d";
 import * as painted from "../../client/src/isoProps";
 import { BLACKR, REDR } from "../../client/src/isoProps";
@@ -28,6 +33,9 @@ const PAINTED: Record<string, (p: any, f: number) => void> = {
   wp_lantern_pole: painted.lanternPole, wp_dummy: painted.dummy, wp_skull_pike: painted.skullPike, wp_net_rack: painted.netRack,
   wp_pennant_red: painted.warPennant(REDR, false), wp_pennant_black: painted.warPennant(BLACKR, true),
   wp_spear_rack: painted.spearRack(true), wp_watchtower: painted.watchtower, wp_cow0: cow(false), wp_cow1: cow(true), wp_millwheel: millWheel, wp_weapon_rack: painted.spearRack(false),
+  wp_venom_caps: el.venomCaps, wp_ice_spikes: el.iceSpikes, wp_ember_vent: el.emberVent, wp_storm_stone: el.stormStone,
+  wp_crownstone0: (p, f) => standingStone(p, f, 0, 0), wp_crownstone1: (p, f) => standingStone(p, f, 0, 1), wp_crownstone2: (p, f) => standingStone(p, f, 0, 2),
+  wp_hollow_throne: throne, qobj_ward: (p, f) => standingStone(p, f, 1), qobj_ward_broken: (p, f) => standingStone(p, f, 2),
 };
 function paintedFrame(key: string, w: number, h: number, f: number) {
   const buf = new Uint32Array(w * h);
@@ -37,21 +45,23 @@ function paintedFrame(key: string, w: number, h: number, f: number) {
     if (a >= 1) { buf[i] = (0xff000000 | c) >>> 0; return; }
     if (!(buf[i] >>> 24)) buf[i] = ((Math.round(a * 255) << 24) | c) >>> 0;
   };
-  PAINTED[key]({ px }, f);
+  const rect = (x: number, y: number, rw: number, rh: number, c: number) => { for (let j = 0; j < rh; j++) for (let i = 0; i < rw; i++) px(x + i, y + j, c); };
+  const line = (x0: number, y0: number, x1: number, y1: number, c: number) => { const n = Math.ceil(Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0))) || 1; for (let i = 0; i <= n; i++) px(x0 + (x1 - x0) * i / n, y0 + (y1 - y0) * i / n, c); };
+  PAINTED[key]({ px, rect, line }, f);
   return buf;
 }
 
 mkdirSync(OUT, { recursive: true });
 const PREVIEW = process.env.PREVIEW;
 if (PREVIEW) mkdirSync(PREVIEW, { recursive: true });
-for (const P of [...PROPS3D, ...SIEGE_WORKS, ...DUNGEON3D, ...DEEP3D]) {
+for (const P of [...PROPS3D, ...SIEGE_WORKS, ...DUNGEON3D, ...DEEP3D, ...WRECK3D, ...ELEMENTS3D, ...TENT3D]) {
   if (only.length && !only.includes(P.key)) continue;
   const t0 = Date.now();
-  const sheet = bakeSheet(P.w, P.h, P.frames, (f) => renderProp(P.model(f), P.w, P.h, P.ox, P.oy));
+  const sheet = bakeSheet(P.w, P.h, P.frames, (f) => renderProp(P.model(f), P.w, P.h, P.ox, P.oy), (P as { shadow?: number }).shadow ?? 0);
   writeFileSync(`${OUT}/${P.key}.png`, png(sheet, P.w * P.frames, P.h).toBuffer("image/png"));
   console.log(P.key, `${Date.now() - t0} ms`);
   if (PREVIEW && PAINTED[P.key]) {
-    const before = bakeSheet(P.w, P.h, P.frames, (f) => paintedFrame(P.key, P.w, P.h, f));
+    const before = bakeSheet(P.w, P.h, P.frames, (f) => paintedFrame(P.key, P.w, P.h, f), (P as { shadow?: number }).shadow ?? 0);
     const S = 4, W = P.w * P.frames, cv = createCanvas(W * S, P.h * 2 * S + 8), c = cv.getContext("2d");
     c.fillStyle = "#4a5a3a"; c.fillRect(0, 0, cv.width, cv.height);
     c.imageSmoothingEnabled = false;
