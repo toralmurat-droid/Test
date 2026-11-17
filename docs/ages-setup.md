@@ -139,3 +139,23 @@ have the same `ADMIN_KEY` (the gateway asks each Age with its own key).
   - `uptimeS`, `at`.
   A rising `lost` or `fencedRefused`, or `lagMs` above a minute, needs a look at the logs.
 - `https://<domain>/health` → the build of *your* Age (header `X-Build`).
+
+## Drill (run before switching production to two Ages)
+`npm run ages:drill` (after `npm run build`; `node tools/ages-drill.mjs`) rehearses this whole setup on one machine, on
+the built bundle (`server-dist/start.cjs`), and prints one PASS / FAIL line per step (exit 1 on any failure):
+1. blue (`primary`, `ACCOUNT_LEASES=1`) and green (`vanguard`) on one Postgres, each with its own data dir and port, the
+   same `ADMIN_KEY`, `GATEWAY_URL` set; the gateway in front (`AGE_SPLIT=blue=50,green=50`, `GATEWAY_PRIMARY=blue`);
+2. `/gateway/health`; 3. `/gateway/status?key=`: both up, blue owns the war, world and Forge leases, green follows;
+4. `/gateway/ages` lists both, no addresses (and a wrong key gets 404);
+5. through the gateway with cookie `ptb_age=blue`: a hero joins, moves, sends `cross {slot:"green"}`: the `cross` message
+   and close code 4410; 6. cookie `ptb_age=green`: the same hero lands on green at the same spot;
+7. crossing back inside the cooldown is refused with an "Ages" chat line; 8. while the hero is on green, opening it on blue
+   is refused ("playing on another server");
+9. role handover: blue restarted as `draining`, green as `primary`: green shows all three leases in `/admin/ages.json`
+   within ~20 s.
+
+`DATABASE_URL` is used when set. Without it the drill starts a throwaway Postgres (initdb in a temp dir, a free port, unix
+socket; through `runuser -u postgres` when run as root; binaries from `PG_BIN`, default `/usr/lib/postgresql/16/bin`) and
+removes it on exit; with neither it skips with a message (exit 0). Children are killed on exit or Ctrl-C.
+`DRILL_VERBOSE=1` prints the servers' logs. With your own `DATABASE_URL` the drill creates/logs in a hero `DrillHero`
+(step 5 starts it as a new game): use a scratch database, not production.
