@@ -82,9 +82,9 @@ const hitDir = (push: [number, number]) => {
   return l > 0 ? { kx: Math.round((push[0] / l) * 10) / 10, ky: Math.round((push[1] / l) * 10) / 10 } : {};
 };
 const lvlName = (id: string, cls: string) => parseRune(id) ? runeIdName(id) : `${gearName(id, cls)}${itemLevel(id) > 1 ? ` Lv ${itemLevel(id)}` : ""}`;
-import { Asker, boardFor, submit, tick as ideaTick, vote as ideaVote } from "../shared/ideas";
-import { hashAddr, ideaLog, saveIdeas } from "./ideaStore";
-import { dropLive, LiveState, rememberLive, takeLive } from "./handoff";
+import { Asker, boardFor } from "../shared/ideas";
+import { hashAddr, ideaLog, ideaNews, ideaRoundNow, saveIdeas, submitIdea, voteIdea } from "./ideaStore";
+import { dropLive, fetchLive, LiveState, rememberLive, takeLive } from "./handoff";
 import { MobView } from "./mobView";
 import { copyPatches } from "./patchCopy";
 import { act1Home, actAt, actOpen, actSpawn, cityGateOf, gateColdNote, gateOpen, WAYGATE_RANGE, waygateArrival, waygateById, WAYGATES } from "../shared/act2";
@@ -103,7 +103,7 @@ import { award, titleMsg } from "./titles";
 import { cleanOwned } from "../shared/cosmetics";
 import { cleanRumour, rumourDay, RUMOURS, type RumourState } from "../shared/rumours";
 import { TIDE } from "../shared/tide";
-import { world, worldChanged } from "./worldStore";
+import { queueTideKill, world, worldChanged, worldFollows } from "./worldStore";
 import { META, metaOf, nextStage, withChoice } from "../shared/questSteps";
 import { traitTakenMult } from "../shared/talents";
 import { AFFIX_FX, CHAMPION } from "../shared/champions";
@@ -909,7 +909,7 @@ export class TownRoom extends Room<TownState> {
       spawn: (kind, level, at, home) => { const id = `t${++this.mobSeq}`; this.spawnMob(kind, -1, id, { ...at, level }); const m = this.state.mobs.get(id)!; m.tide = true; m.title = TIDE.title; m.homeX = home.x; m.homeY = home.y; return id; },
       removeMob: (id) => { const m = this.state.mobs.get(id); if (!m || m.dead) return; m.dead = true; m.hp = 0; this.clock.setTimeout(() => this.state.mobs.delete(id), 500); },
       send: (pid, type, msg) => this.clients.find((cl) => cl.sessionId === pid)?.send(type, msg),
-      act1: (p) => actAt(p.y, p.x) === 1, dayFrac: (now) => worldDayFrac(now), world, changed: worldChanged,
+      act1: (p) => actAt(p.y, p.x) === 1, dayFrac: (now) => worldDayFrac(now), world, changed: worldChanged, follows: worldFollows, queueKill: queueTideKill,
       pay: (pid, gold, rune) => this.payHero(pid, gold, rune),
     });
     this.rumours = new Rumours({
@@ -1238,6 +1238,7 @@ export class TownRoom extends Room<TownState> {
         this.accts.delete(sid); void leaveAccount(name);
       }, ACCOUNT_LEASE.orphanMs).unref();
     }
+    await fetchLive(name, options!.cls!); // (Ages: the spot this hero left on any server, server/handoff.ts; no-op without a shared store)
     // Local addresses are skipped so several tabs on one computer can still test ideas and votes
     this.addrs.set(client.sessionId, isLocalIp(ip) ? undefined : hashAddr(ip));
     return { name };
@@ -1249,6 +1250,8 @@ export class TownRoom extends Room<TownState> {
     return p && { name: p.name, level: process.env.IDEAS_ANY_LEVEL ? 99 : p.level, addr: this.addrs.get(client.sessionId) };
   }
 
+  /** The idea log's version this room last showed (server/ideaStore.ts ideaNews). */
+  private ideaVer = 0;
   private ideaNote(client: Client, text: string, ok = false) { client.send("ideanote", { text, ok }); }
 
   private sendBoard(client: Client) {
@@ -1264,9 +1267,14 @@ export class TownRoom extends Room<TownState> {
   private submitIdea(client: Client, text: unknown) {
     const a = this.asker(client);
     if (!a) return;
-    const r = submit(ideaLog, a, text, Date.now());
+    const r = submitIdea(a, text, Date.now());
     if (!r.ok) return this.ideaNote(client, r.error);
     const i = r.idea!;
+    if (r.queued) { // (Ages: another server keeps the log; the idea gets its number there)
+      this.ideaNote(client, "Idea received! It will be on the board for votes in a moment.", true);
+      this.broadcast("chat", { id: "", name: "Ideas", text: `${i.author} suggested an idea: "${i.text.slice(0, 80)}"` });
+      return this.ideasChanged();
+    }
     console.log(`Idea #${i.id} by ${i.author}: ${i.text}`);
     this.ideaNote(client, `Idea #${i.id} received! Players can vote on it now.`, true);
     this.broadcast("chat", { id: "", name: "Ideas", text: `${i.author} suggested idea #${i.id}: "${i.text.slice(0, 80)}" (/up ${i.id} or /down ${i.id})` });
@@ -1276,14 +1284,20 @@ export class TownRoom extends Room<TownState> {
   private voteIdea(client: Client, id: number, v: number) {
     const a = this.asker(client);
     if (!a || !Number.isInteger(id)) return;
-    const r = ideaVote(ideaLog, a, id, v, Date.now());
+    const r = voteIdea(a, id, v, Date.now());
     if (!r.ok) return this.ideaNote(client, r.error);
     if (r.idea!.status === "votedDown") this.broadcast("chat", { id: "", name: "Ideas", text: `Idea #${id} was voted down.` });
     this.ideasChanged();
   }
 
   private ideaRound() {
-    const { winners, expired } = ideaTick(ideaLog, Date.now());
+    const news = ideaNews(this.ideaVer); // (Ages: ideas and votes from other servers, winners decided elsewhere)
+    if (news.ver !== this.ideaVer) {
+      this.ideaVer = news.ver;
+      for (const w of news.won) this.broadcast("ideawin", { id: w.id, text: w.text, author: w.author });
+      for (const c of this.clients) this.sendBoard(c);
+    }
+    const { winners, expired } = ideaRoundNow(Date.now());
     for (const w of winners) {
       console.log(`Idea #${w.id} won this hour's vote: ${w.text}`);
       this.broadcast("ideawin", { id: w.id, text: w.text, author: w.author });

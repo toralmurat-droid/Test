@@ -34,6 +34,7 @@ import { TOWN, TOWNS, townById, townCounts, townPatron, townStep, townsView, typ
 import { openKv, type Kv } from "./store";
 import { randomUUID } from "node:crypto";
 import { buildId, LEASE, Leases } from "./lease";
+import { AgeQueue, sameDrained } from "./ageQueue";
 import { readable, WAR_API, warAccess } from "../shared/war/api";
 import { cleanCrown, crownClock, crownTick, crownValor, crownView, type CrownSave } from "./warCrown";
 import { takeForgeNews } from "./forge";
@@ -77,6 +78,8 @@ interface Saved {
   council?: CouncilSave;
   /** Ages (M5): per following server (holder id), the last batch of its valor queue the owner counted. Optional. */
   drained?: Record<string, number>;
+  /** Ages (M5): the same for each following server's queue of sacks and town claims (`war-acts:<holder>`). Optional. */
+  drainedActs?: Record<string, number>;
   /** Ages (M5): a stamp of the write (unique per write): a server that sees its own last stamp knows nobody wrote since. Optional. */
   wrote?: string;
 }
@@ -260,6 +263,7 @@ async function takeOver(now: number) {
     console.log("War: the war's lease is back and nobody wrote the war meanwhile: going on with this server's war (unsaved changes kept)");
     const mine = pendingValor; pendingValor = [];
     for (const [t, k, a, by] of mine) addValor(t, k, a, by);
+    applyPendingActs(now);
     return;
   }
   if (got !== undefined && lease?.shared) {
@@ -293,6 +297,13 @@ async function takeOver(now: number) {
   try { lookAhead(saved.next - WAR.tickMs); } catch (e) { console.error("War: the orders ahead could not be given:", e); } // (the next tick tries again)
   const mine = pendingValor; pendingValor = []; // (valor heroes earned here while following: counted at once)
   for (const [t, k, a, by] of mine) addValor(t, k, a, by);
+  applyPendingActs(now);
+}
+/** Taking over: the sacks and claims made here while following and not written to the queue yet, applied at once. */
+function applyPendingActs(now: number) {
+  const acts = pendingActs; pendingActs = []; claimedHere.clear();
+  for (const a of acts) applyAct(a, now);
+  if (acts.length) void save(now);
 }
 
 export function stopWar() { if (timer) clearInterval(timer); timer = undefined; }
@@ -305,6 +316,8 @@ export async function step(now: number) {
   try { crownClock(now); } catch (e) { console.error("War: the Reckoning failed:", e); } // (Crown PR4: its warning, start, standings and close)
   // War Councils (M3): the sessions for the war day of the next orders, before the ticks that give them
   if (now >= saved.next) try { await councilClock(now); } catch (e) { console.error("War: the councils failed (the doctrine leads):", e); }
+  if (!saved || stopping) return;
+  await drainActs(now); // (Ages: other servers' sacks and town claims, applied once)
   if (!saved || stopping) return;
   if (now < saved.next) { if (dirtyAt && now - lastSave >= COLUMN.saveMs) await save(now); return; }
   await drainValor(); // (Ages: the valor other servers' heroes earned, into this tick)
@@ -414,7 +427,19 @@ export function addValor(t: number, k: ClanKey, amount: number, by?: string): bo
  * snapshot, and the war is saved. `hero`: the sacker's name for the log. Undefined when nothing changed.
  */
 export function strikeHold(t: number, k: ClanKey | undefined, half: boolean, hero = "A hero", now = Date.now()): { control: number; siege: boolean } | undefined {
-  if (!saved || role !== "owner") return undefined; // (Ages: only the owner changes the war between ticks)
+  if (!saved || !(t >= 0 && t < saved.state.owner.length)) return undefined;
+  if (role === "follower") { // (Ages: another server ticks: queued for it, applied there once; this server hears it from the saved war)
+    if (saved.state.owner[t] && pendingActs.length < ACTS_PENDING_MAX) pendingActs.push(["sack", t, k ?? "", half ? 1 : 0, hero.slice(0, 64), saved.state.tick]);
+    return undefined;
+  }
+  if (role !== "owner") return undefined; // (a newer war: never changed here)
+  const r = strikeCore(t, k, half, hero, now);
+  if (r && canWrite()) kv?.set(KEY, stamped(saved)).catch((e) => console.error("War: could not save:", e));
+  return r;
+}
+/** The owner's sack (strikeHold, or a follower's queued one): the war changed and every listener told; not written. */
+function strikeCore(t: number, k: ClanKey | undefined, half: boolean, hero: string, now: number): { control: number; siege: boolean } | undefined {
+  if (!saved) return undefined;
   const s = saved.state, from = s.owner[t], r = from && sackHold(s, t, k, half);
   if (!r) return undefined;
   const land = TERRITORIES[t].name, name = (c: ClanKey) => CLANS[c].name;
@@ -425,7 +450,6 @@ export function strikeHold(t: number, k: ClanKey | undefined, half: boolean, her
   if (!process.env.NODE_TEST_CONTEXT) for (const e of events) console.log(`War: ${e.text}`);
   const view = viewOf(saved);
   listeners.forEach((f) => { try { f(view, events, {}); } catch (e) { console.error("War listener:", e); } });
-  if (canWrite()) kv?.set(KEY, stamped(saved)).catch((e) => console.error("War: could not save:", e));
   return { control: r.control, siege: !!r.siege };
 }
 
@@ -869,7 +893,7 @@ export function flushWar(): Promise<void> {
 /** Tests: start from a given state without a store or a clock. */
 export function _resetWar(s?: Saved, store?: Kv) {
   stopWar(); saved = s ?? fresh(Date.now()); saved.names ??= namesNow(); kv = store;
-  role = "owner"; lease = undefined; seenRow = ""; pendingValor = []; queue = undefined; pulsing = false; stopping = false; ours.clear(); valor = TERRITORIES.map(() => ({})); lastOrders = undefined; lastStrikes = []; lastPlans = {}; lastRaided = []; relate(saved.rel ?? []);
+  role = "owner"; lease = undefined; seenRow = ""; pendingValor = []; pendingActs = []; claimedHere.clear(); VALOR_Q.reset(); ACTS_Q.reset(); pulsing = false; stopping = false; ours.clear(); valor = TERRITORIES.map(() => ({})); lastOrders = undefined; lastStrikes = []; lastPlans = {}; lastRaided = []; relate(saved.rel ?? []);
   marches = []; paths.clear(); meets = undefined; seenLive.clear(); halting.clear(); joined.clear(); dirtyAt = 0; colVersion++;
   pendingLive.clear(); fielded.clear(); captainRoom.clear(); bannerReports.clear(); scoredWin.clear(); heroCaps.clear(); clanCaps.clear(); battleNews.length = 0; cleanBattles(); battleVer++;
   heldGate.clear(); cleanTowns(); townVer++; // (W6)
@@ -1015,8 +1039,21 @@ export const _townsHeld = () => [...heldGate];
  * Herald, sfx and "towns"), the war is saved. False when the town is not contested by `k`.
  */
 export function townClaim(id: string, k: ClanKey, hero = "A hero", now = Date.now()): boolean {
+  if (role === "follower") { // (Ages: queued for the war's owner, which applies it once if the town is still contested by k)
+    const st = saved?.towns?.[id];
+    if (!saved || !TOWN.live || !st?.c || st.c.by !== k || townPatron(id) < 0 || claimedHere.has(id) || pendingActs.length >= ACTS_PENDING_MAX) return false;
+    pendingActs.push(["claim", id, k, hero.slice(0, 64)]);
+    claimedHere.add(id); heldGate.delete(id);
+    return true;
+  }
+  if (!saved || role !== "owner" || !townCore(id, k, hero, now)) return false; // (Ages: the owner only)
+  if (canWrite()) kv?.set(KEY, stamped(saved)).catch((err) => console.error("War: could not save:", err));
+  return true;
+}
+/** The owner's claim (townClaim, or a follower's queued one): the town flips, valor, every listener told; not written. */
+function townCore(id: string, k: ClanKey, hero: string, now: number): boolean {
   const st = saved?.towns?.[id], p = townPatron(id);
-  if (!saved || role !== "owner" || !TOWN.live || !st?.c || st.c.by !== k || p < 0) return false; // (Ages: the owner only)
+  if (!saved || !TOWN.live || !st?.c || st.c.by !== k || p < 0) return false;
   const from = st.k;
   saved.towns![id] = { k };
   heldGate.delete(id);
@@ -1028,7 +1065,6 @@ export function townClaim(id: string, k: ClanKey, hero = "A hero", now = Date.no
   townVer++;
   const view = viewOf(saved);
   listeners.forEach((f) => { try { f(view, [e], {}); } catch (err) { console.error("War listener:", err); } });
-  if (canWrite()) kv?.set(KEY, stamped(saved)).catch((err) => console.error("War: could not save:", err));
   return true;
 }
 /** Tests: set a town's state as it is (no checks). */
@@ -1163,6 +1199,7 @@ async function follow(now: number) {
     if (prev && ticked && prev.ahead) { lastOrders = prev.ahead; lastStrikes = tunnelStrikes(prev.state, prev.ahead); } // (the orders ahead were the tick's)
     if (ticked) try { lookAhead(saved.next - WAR.tickMs); } catch (e) { console.error("War: the orders ahead could not be read:", e); }
     battleVer++; townVer++; colVersion++;
+    for (const id of claimedHere) if (!saved.towns?.[id]?.c) claimedHere.delete(id); // (the owner applied it, or the contest ended)
     if (prev) told(prev, ticked);
   }
   await pushValor(now);
@@ -1190,67 +1227,76 @@ function told(prev: Saved, ticked: boolean) {
 
 /** A hero's valor on a server that does not tick: [territory, clan, amount, hero]. */
 type ValorAdd = [number, ClanKey, number, string?];
-/** A server's valor queue (kv key `war-valor:<holder>`): written by that server only, counted by the owner by `seq`. */
-interface ValorQueue { holder: string; seq: number; batches: { seq: number; adds: ValorAdd[] }[] }
-const VALOR_KEY = "war-valor:";
-/** Most valor adds a follower keeps unwritten, and most batches its queue keeps while the owner does not count them. */
-const VALOR_PENDING_MAX = 20_000, VALOR_BATCHES_MAX = 240;
-let pendingValor: ValorAdd[] = [];
-let queue: ValorQueue | undefined;
-
-const int0 = (x: unknown) => (typeof x === "number" && Number.isInteger(x) && x >= 0 ? x : undefined);
-/** A raw valor queue cleaned (any server's: never trusted), or undefined when it is not one. */
-function cleanQueue(raw: unknown): ValorQueue | undefined {
-  const r = raw && typeof raw === "object" ? (raw as Partial<ValorQueue>) : undefined;
-  if (!r || typeof r.holder !== "string" || !r.holder || r.holder.length > 200 || int0(r.seq) === undefined || !Array.isArray(r.batches)) return undefined;
-  const batches = r.batches.flatMap((b) => {
-    const seq = int0(b?.seq);
-    if (seq === undefined || !Array.isArray(b.adds)) return [];
-    const adds = b.adds.flatMap((a): ValorAdd[] => (Array.isArray(a) && typeof a[0] === "number" && typeof a[1] === "string" && typeof a[2] === "number"
-      ? [typeof a[3] === "string" ? [a[0], a[1] as ClanKey, a[2], a[3].slice(0, 64)] : [a[0], a[1] as ClanKey, a[2]]] : []));
-    return [{ seq, adds }];
-  });
-  return { holder: r.holder, seq: r.seq!, batches };
+/**
+ * What a follower's heroes did to the war between ticks, for the owner to apply (server/ageQueue.ts):
+ * a sack ["sack", land, clan ("" unsworn), half 0|1, hero, war tick] and a town claim ["claim", town id, clan, hero].
+ */
+type WarAct = ["sack", number, ClanKey | "", 0 | 1, string, number] | ["claim", string, ClanKey, string];
+/** A server's valor queue (kv `war-valor:<holder>`, counted at the owner's tick) and its act queue (`war-acts:<holder>`, every beat). */
+const VALOR_Q = new AgeQueue<{ adds: ValorAdd[] }>("war-valor:", (b) => Array.isArray(b.adds) ? {
+  adds: b.adds.flatMap((a): ValorAdd[] => (Array.isArray(a) && typeof a[0] === "number" && typeof a[1] === "string" && typeof a[2] === "number"
+    ? [typeof a[3] === "string" ? [a[0], a[1] as ClanKey, a[2], a[3].slice(0, 64)] : [a[0], a[1] as ClanKey, a[2]]] : [])),
+} : undefined);
+const ACTS_Q = new AgeQueue<{ acts: WarAct[] }>("war-acts:", (b) => Array.isArray(b.acts) ? { acts: b.acts.flatMap((a): WarAct[] => cleanAct(a)) } : undefined);
+function cleanAct(a: unknown): WarAct[] {
+  if (!Array.isArray(a)) return [];
+  const hero = typeof a[a[0] === "sack" ? 4 : 3] === "string" ? String(a[a[0] === "sack" ? 4 : 3]).slice(0, 64) : "A hero";
+  if (a[0] === "sack" && Number.isInteger(a[1]) && a[1] >= 0 && a[1] < TERRITORIES.length && (a[2] === "" || !!CLANS[a[2] as ClanKey]) && Number.isInteger(a[5]))
+    return [["sack", a[1], a[2] as ClanKey | "", a[3] ? 1 : 0, hero, a[5]]];
+  if (a[0] === "claim" && typeof a[1] === "string" && a[1].length <= 64 && !!CLANS[a[2] as ClanKey]) return [["claim", a[1], a[2] as ClanKey, hero]];
+  return [];
 }
+/** Most valor adds (and acts) a follower keeps unwritten. */
+const VALOR_PENDING_MAX = 20_000, ACTS_PENDING_MAX = 2_000;
+let pendingValor: ValorAdd[] = [];
+let pendingActs: WarAct[] = [];
+/** Towns claimed here (a follower) and not yet seen in the owner's war: never claimed twice from this server meanwhile. */
+const claimedHere = new Set<string>();
 
-/** A follower writes its valor since the last beat as a new batch, dropping the batches the owner has counted. */
+/** A follower writes its valor and acts since the last beat as new batches, dropping the batches the owner has counted. */
 async function pushValor(_now: number) {
   if (!kv || !lease || role === "owner") return;
-  const key = VALOR_KEY + lease.holder, seen = saved?.drained?.[lease.holder] ?? 0;
-  if (!queue) {
-    const raw = await kv.get<ValorQueue>(key);
-    queue = cleanQueue(raw) ?? { holder: lease.holder, seq: 0, batches: [] };
-    queue.holder = lease.holder;
-  }
-  const q = queue, n = q.batches.length;
-  q.batches = q.batches.filter((b) => b.seq > seen);
-  q.seq = Math.max(q.seq, seen);
-  let dirtyQ = q.batches.length !== n;
-  if (pendingValor.length) { q.batches.push({ seq: ++q.seq, adds: pendingValor }); pendingValor = []; dirtyQ = true; }
-  if (q.batches.length > VALOR_BATCHES_MAX) q.batches.splice(0, q.batches.length - VALOR_BATCHES_MAX);
-  if (dirtyQ) await chain(async () => { await kv!.set(key, q).catch((e) => console.error("War: could not write the valor queue:", e)); });
+  const adds = pendingValor, acts = pendingActs;
+  pendingValor = []; pendingActs = [];
+  await VALOR_Q.push(kv, lease.holder, saved?.drained?.[lease.holder] ?? 0, adds.length ? { adds } : undefined, chain);
+  await ACTS_Q.push(kv, lease.holder, saved?.drainedActs?.[lease.holder] ?? 0, acts.length ? { acts } : undefined, chain);
 }
 
-/** The owner, before a tick: counts every queue's batches it has not counted yet (into this tick's valor). */
+/** The owner, before a tick: counts every queue's valor batches it has not counted yet (into this tick's valor). */
 async function drainValor() {
-  if (!kv?.list || !saved) return;
-  let qs: Record<string, unknown>;
-  try { qs = await kv.list(VALOR_KEY); } catch (e) { console.error("War: could not read the valor queues:", e); return; }
-  const live = new Set<string>();
-  for (const raw of Object.values(qs)) {
-    const q = cleanQueue(raw);
-    if (!q) continue;
-    live.add(q.holder);
-    const seen = saved.drained?.[q.holder] ?? 0;
-    let top = seen;
-    for (const b of q.batches) {
-      if (b.seq <= seen) continue;
-      for (const [t, k, a, by] of b.adds) addValor(t, k, a, by);
-      top = Math.max(top, b.seq);
-    }
-    if (top > seen) (saved.drained ??= {})[q.holder] = top;
-  }
-  if (saved.drained) for (const h of Object.keys(saved.drained)) if (!live.has(h)) delete saved.drained[h]; // (a queue gone: nothing left to count)
+  if (!saved) return;
+  const d = await VALOR_Q.drain(kv, saved.drained, (b) => { for (const [t, k, a, by] of b.adds) addValor(t, k, a, by); });
+  if (d && saved) { if (Object.keys(d).length || saved.drained) saved.drained = d; }
+}
+
+/**
+ * The owner, every beat (a shared store only): applies the sacks and town claims other servers' heroes made, as if made
+ * here (the Herald, every room, the save). A sack counts only in the war tick it was made in and once per land per
+ * tick; a claim only while the town is still contested by that clan. Written at once, with the marks, when any moved.
+ */
+async function drainActs(now: number) {
+  if (!saved || !lease?.shared) return;
+  const before = saved.drainedActs;
+  const d = await ACTS_Q.drain(kv, before, (b, holder) => { for (const a of b.acts) applyAct(a, now, holder); });
+  if (!d || !saved || sameDrained(d, before)) return;
+  saved.drainedActs = d;
+  await save(now);
+}
+function applyAct(a: WarAct, now: number, from = "this server") {
+  if (!saved) return;
+  if (a[0] === "sack") {
+    const [, t, k, half, hero, tick] = a;
+    if (tick !== saved.state.tick || warSacked(t)) { console.log(`War: a sack of ${TERRITORIES[t].name} from ${from} came too late (tick ${tick}, now ${saved.state.tick}) or the Hold was sacked already: dropped`); return; }
+    strikeCore(t, k || undefined, !!half, hero, now);
+  } else if (!townCore(a[1], a[2], a[3], now)) console.log(`War: a claim of ${a[1]} from ${from} is no longer valid: dropped`);
+}
+
+/** Whether land t's Hold was sacked in the current war tick (on any server: the war's log). */
+export function warSacked(t: number): boolean {
+  if (!saved) return false;
+  const tick = saved.state.tick;
+  for (let i = saved.log.length - 1; i >= 0; i--) { const e = saved.log[i]; if (e.tick !== tick) break; if (e.kind === "sack" && e.t === t) return true; }
+  return false;
 }
 
 // ---- The Forge (M4: server/forge.ts) ------------------------------------------------------------------------------------

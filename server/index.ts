@@ -8,9 +8,10 @@ import { Server } from "colyseus";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { TownRoom, announceUpgrade, onlineNow } from "./TownRoom";
 import { mountAgesStatus } from "./agesStatus";
-import { ideaLog, publicLog } from "./ideaStore";
+import { flushIdeas, ideaLog, initIdeas, publicLog } from "./ideaStore";
 import { backupAccounts, flushFinal, initAccounts, peek, releaseAccounts, requestReset, resetPassword, setEmail } from "./accounts";
-import { writeHandoff } from "./handoff";
+import { useHandoffKv, writeHandoff } from "./handoff";
+import { sharedStateOn } from "./ageQueue";
 import { flushWorldFinal, initWorld } from "./worldStore";
 import { clientIp } from "./ratelimit";
 import { flushWar, startWar, warLog, warNow } from "./war";
@@ -170,10 +171,10 @@ gameServer.onBeforeShutdown(async () => { announceUpgrade(); await wait(400); })
 // flushForge) run alongside, given at most 5 s together.
 // With account leases on (server/accountGuard.ts), the accounts' leases go back after their last write (at most 5 s).
 gameServer.onShutdown(async () => {
-  writeHandoff();
+  const handoff = writeHandoff(), ideas = flushIdeas().catch((e) => console.error("Ideas: last write failed:", e));
   const war = flushWar(), forge = flushForge();
   await flushFinal(); await Promise.race([releaseAccounts(), wait(5_000)]); await flushWorldFinal();
-  await Promise.all([wait(800), Promise.race([Promise.all([war, forge]), wait(5_000)])]);
+  await Promise.all([wait(800), Promise.race([Promise.all([war, forge, handoff, ideas]), wait(5_000)])]);
 });
 
 // Accounts first (Postgres when DATABASE_URL is set): players must never join before their saves are loaded.
@@ -181,7 +182,12 @@ gameServer.onShutdown(async () => {
 // own kv table / data/war.json) starts after both, before the server listens. The Forge's registry (server/forge.ts, its
 // own key in the same store) loads after the war and before the server listens: forged items in saves need it.
 Promise.all([initAccounts(), initWorld()])
-  .then(async () => { const kv = await openKv(); await startWar(kv); await initForge(kv); })
+  .then(async () => {
+    const kv = await openKv(); await startWar(kv); await initForge(kv);
+    // Ages: with several servers on one Postgres (AGE_SLOT or ACCOUNT_LEASES=1) the handoff spots and the idea log live in
+    // kv (server/handoff.ts, server/ideaStore.ts); a single server keeps its files
+    if (sharedStateOn()) { await useHandoffKv(kv); await initIdeas(kv); }
+  })
   .then(() => gameServer.listen(PORT))
   .then(() => console.log(`Game server on http://localhost:${PORT}`))
   .catch((e) => { console.error("Could not start:", e); process.exit(1); });

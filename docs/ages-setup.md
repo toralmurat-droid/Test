@@ -18,9 +18,13 @@ players --> play.example.com --> [gateway]  --(private network)-->  [blue]  game
 - **Save versions:** a newer build that changes the save in a way older code would damage bumps `ACCOUNT_API`
   (`shared/accountApi.ts`, rule in CLAUDE.md). The older Age then refuses those heroes ("This hero lives in the new
   Age") and never writes them. Only new top-level optional fields are safe without a bump.
-- **Volumes and the restart handoff are per service.** `data/handoff.json` (where heroes stood during a restart) and
-  the idea log live on each service's own volume; a player who moves to the other Age does not come back where they
-  stood. Give each game service its own volume at `/app/data`.
+- **Shared state:** with Postgres and `AGE_SLOT` (or `ACCOUNT_LEASES=1`) set, where heroes stood when they left (the restart handoff) and the idea log are kept in
+  the database too, so a hero moving to the other Age (or across a deploy) comes back where they stood, and ideas and
+  votes from either Age land in one log. A follower Age's Gloam Tide kills, Hold sacks and town claims are queued for
+  the Age that owns the world and the war, and applied there once. Still give each game service its own volume at
+  `/app/data` (older builds keep files there). A single server without those variables keeps `data/handoff.json` and
+  the idea file on its volume, as before; the first start in multi-server mode copies that service's idea file into
+  the database once.
 - A **gateway redeploy drops every player's connection** (their page reconnects by itself within seconds). Redeploy it
   only when its code changed.
 

@@ -70,6 +70,10 @@ test("postgres store: loadOne reads one row; kv insertIfAbsent writes only a new
   assert.deepEqual(await kv.get("agetest-pre"), { n: 1 });
   await kv.set("agetest-q:a", { x: 1 }); await kv.set("agetest-q:b", { x: 2 }); await kv.set("agetest-r", { x: 3 });
   assert.deepEqual(await kv.list!("agetest-q:"), { "agetest-q:a": { x: 1 }, "agetest-q:b": { x: 2 } });
+  assert.deepEqual(await kv.take!("agetest-q:a"), { x: 1 }, "take reads and deletes");
+  assert.equal(await kv.take!("agetest-q:a"), undefined, "only once");
+  await kv.del!(["agetest-q:b", "agetest-r"]);
+  assert.deepEqual(await kv.list!("agetest"), { "agetest-pre": { n: 1 } });
   assert.ok(kv.leases, "Postgres brings the shared lease table");
   await kv.close!();
 });
