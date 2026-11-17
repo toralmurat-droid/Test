@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Clan War</title>
+<meta name="description" content="How the clan war works: how clans attack, how to join a battle, scores and rewards.">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya+Sans:ital,wght@0,400;0,500;0,700;1,400&display=swap">
+<style>
+@font-face { font-family: "Oakvale Title"; src: url(data:font/woff2;base64,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) format("woff2"); font-display: block; }
+@font-face { font-family: "Oakvale Text"; src: url(data:font/woff2;base64,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) format("woff2"); font-display: block; }
+/* Same look as the Riven Marches design page; one dark look by choice (the game's own world) */
+:root {
+  color-scheme: dark;
+  --bg: #14100c; --panel: #1d1712; --panel2: #241c15; --line: #3a2a1c; --frame: #8a6a3a;
+  --ink: #e8dcc0; --muted: #a39680; --gold: #f0b44a; --ember: #d9822b; --blood: #c0442a; --moss: #8fae5a;
+  --f-display: "Oakvale Title", "Courier New", monospace;
+  --f-pixel: "Oakvale Text", "Courier New", monospace;
+  --f-body: "Alegreya Sans", "Gill Sans", "Trebuchet MS", sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 17px/1.6 var(--f-body); }
+.wrap { max-width: 900px; margin: 0 auto; padding: 28px 16px 80px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 400; color: var(--gold); letter-spacing: .02em; line-height: 1.15; margin: 0; text-wrap: balance; }
+h1 { font-size: clamp(32px, 6vw, 52px); }
+h2 { font-size: clamp(23px, 3.4vw, 30px); }
+h3 { font-size: 19px; color: var(--ink); }
+p { margin: 0; }
+a { color: var(--gold); }
+section { display: flex; flex-direction: column; gap: 14px; padding-top: 36px; border-top: 1px solid var(--line); margin-top: 32px; }
+.eyebrow { font-family: var(--f-pixel); font-size: 14px; letter-spacing: .12em; text-transform: uppercase; color: var(--ember); }
+.lede { font-size: 20px; }
+.muted { color: var(--muted); }
+kbd { font-family: var(--f-pixel); font-size: 14px; color: var(--gold); background: var(--panel2); border: 1px solid var(--frame); padding: 0 6px; }
+ul, ol { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 6px; }
+figure { margin: 0; display: flex; flex-direction: column; gap: 8px; }
+figure img { image-rendering: pixelated; display: block; width: 100%; height: auto; border: 2px solid var(--frame); outline: 3px solid #0b0806; }
+figcaption { font-size: 14px; color: var(--muted); }
+.box { background: var(--panel); border: 1px solid var(--line); padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+.box.gold { border-color: var(--frame); }
+.steps { list-style: none; padding: 0; counter-reset: s; gap: 10px; }
+.steps li { counter-increment: s; display: grid; grid-template-columns: 34px 1fr; gap: 12px; background: var(--panel); border: 1px solid var(--line); padding: 12px 14px; }
+.steps li::before { content: counter(s); font-family: var(--f-display); color: var(--gold); font-size: 22px; line-height: 1.2; }
+.tbl { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 15px; min-width: 560px; }
+th { text-align: left; font-family: var(--f-pixel); font-weight: 400; color: var(--ember); font-size: 14px; padding: 8px 10px; border-bottom: 2px solid var(--frame); }
+td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.toc { display: flex; flex-wrap: wrap; gap: 6px 18px; font-family: var(--f-pixel); font-size: 14px; }
+.chip { display: inline-block; width: 12px; height: 12px; margin-right: 6px; border: 1px solid #0b0806; vertical-align: -1px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<p class="muted" style="font-family: var(--f-pixel); font-size: 14px"><a href="/wiki">Wiki</a> · Guide</p>
+<h1 style="margin-top:10px">The Clan War</h1>
+<p class="lede" style="margin-top:14px">Five clans fight over the whole world, day and night, whether you play or not. This page explains, in plain words, how they attack each other, how you join a fight, and what you get for it.</p>
+<nav class="toc" style="margin-top:18px">
+  <a href="#short">In one minute</a><a href="#clans">The five clans</a><a href="#attack">How clans attack</a><a href="#join">Join a battle</a><a href="#help">Ways to help</a><a href="#scores">Scores</a><a href="#rewards">Rewards</a><a href="#reckoning">The Reckoning</a><a href="#ages">Ages</a><a href="#faq">Questions</a>
+</nav>
+
+<section id="short">
+  <div class="eyebrow">Start here</div>
+  <h2>The war in one minute</h2>
+  <div class="box gold">
+    <ul>
+      <li>The world is cut into <b>territories</b> (about 70). Each one is held by one of five clans. Its fort is called a <b>Hold</b>.</li>
+      <li>Every <b>10 minutes</b> the war takes a step (a <b>war tick</b>). Each clan sends its army at the lands next to its own. Where the attacker is stronger, the holder loses <b>Control</b> of that land.</li>
+      <li>When Control drops to 25 or less, a <b>siege</b> is announced. You get <b>one hour</b> of warning. When the hour is up, the land changes hands if the attacker is still stronger.</li>
+      <li>You join by <b>swearing an oath</b> to a clan at a <b>standard</b> (a clan flag pole, one or two in every territory). You need <b>level 5</b>.</li>
+      <li>After that, everything you do against your clan's enemies earns <b>valor</b> for your clan (it becomes extra soldiers at the next war tick) and <b>renown</b> for you (ranks, titles, gold).</li>
+      <li>Press <kbd>M</kbd> for the map. The <b>Calls to arms</b> box tells you where your clan needs you right now.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="clans">
+  <div class="eyebrow">Who fights</div>
+  <h2>The five clans</h2>
+  <p>Each clan has a homeland (one of the five big lands of the continent), a capital city that can never fall, and its own way of fighting. You may swear to any of them, monster clans included.</p>
+  <div class="tbl"><table>
+    <tr><th>Clan</th><th>Homeland</th><th>Capital city</th><th>How it fights</th></tr>
+    <tr><td><span class="chip" style="background:#3b4a2c"></span>The Hearthbound Wardens <span class="muted">(humans)</span></td><td>The Oakvale Lands</td><td>Hearthhold</td><td>Palisades and strong forts. Hard to dislodge.</td></tr>
+    <tr><td><span class="chip" style="background:#7e1d16"></span>The Redfang Compact <span class="muted">(bandits)</span></td><td>The Red Badlands</td><td>Scarwall</td><td>Raids. Hits fast and hard, often where you don't expect it.</td></tr>
+    <tr><td><span class="chip" style="background:#1f2422"></span>The Ossuary Host <span class="muted">(undead)</span></td><td>The Grey Barrow Moors</td><td>Marrowkeep</td><td>Sieges, strongest at night. Brings a bone battering ram to the gate.</td></tr>
+    <tr><td><span class="chip" style="background:#8a5f2a"></span>The Hide-Kin of Mawdeep <span class="muted">(beast-folk)</span></td><td>The Mawdeep Sinkholes</td><td>Deepden</td><td>Tunnels. Can strike two lands deep and pop out of the ground behind the front.</td></tr>
+    <tr><td><span class="chip" style="background:#2a2a5a"></span>The Veiled Circle <span class="muted">(mages)</span></td><td>The Sunscar (the desert)</td><td>Duskveil</td><td>Rituals at noon: magic circles that strengthen their grip on a land.</td></tr>
+  </table></div>
+  <p class="muted">Each clan is strong against one other (Wardens beat Redfang, Redfang beat the Veiled, the Veiled beat the Host, the Host beat the Hide-Kin, the Hide-Kin beat the Wardens), so no clan can win everything. In the middle lies the <b>Crown of the Marches</b>, neutral ground everyone fights over (see <a href="#reckoning">the Reckoning</a>).</p>
+</section>
+
+<section id="attack">
+  <div class="eyebrow">The war without you</div>
+  <h2>How the clans attack each other</h2>
+  <figure>
+    <img src="img/war-table.png" alt="The war table: the continent split into territories, each coloured by the clan that holds it" loading="lazy" width="1366" height="768">
+    <figcaption>The war table (<kbd>M</kbd>, then the War table button). Each coloured cell is a territory, coloured by its clan. Orange lines are front lines; a red square is a land under siege.</figcaption>
+  </figure>
+  <h3>1. Every 10 minutes: the war tick</h3>
+  <p>Each clan earns soldiers from the land it holds. Lands close to its capital give more; lands far away give less (long supply lines). The clan's leader then decides which neighbouring lands to attack and how much army to send to each.</p>
+  <h3>2. Attack against defence: Control</h3>
+  <p>Every territory has a <b>Control</b> number from 0 to 100: how firmly its clan holds it. If the attack on a land is stronger than its defence, Control goes down. A quiet land slowly wins Control back.</p>
+  <h3>3. The siege: one hour of warning</h3>
+  <p>When Control falls to <b>25 or less</b>, the attacker <b>lays siege</b>. A horn sounds, the Herald announces it in chat, and a countdown of one hour starts. When the hour is up, if the attacker is still stronger than the defence (defenders get a bonus at their walls), the land changes hands. If not, the siege fails. That hour is there so players can come and tip the balance.</p>
+  <h3>4. Marching columns and big battles</h3>
+  <ul>
+    <li><b>Columns:</b> armies don't teleport. Soldiers march in columns along the roads from Hold to Hold. When two enemy columns meet on a road, they fight.</li>
+    <li><b>Pitched battles:</b> three times a day, at <b>13:00, 19:00 and 21:30</b> (Swiss time), two clans meet in the open at the hottest front: up to 140 soldiers on the field and three banners to hold. You get a notice 30 minutes before.</li>
+    <li><b>Stormings:</b> when a siege is very close to a draw, it is settled by a battle at the gate.</li>
+  </ul>
+  <h3>5. Clan tricks</h3>
+  <ul>
+    <li>The <b>Ossuary Host</b> rolls a bone ram to the gate of a besieged Hold. It stops while a defender stands near it.</li>
+    <li>The <b>Hide-Kin</b> open a tunnel mouth in the land they attack; soldiers come out of it in waves until someone collapses it.</li>
+    <li>The <b>Veiled Circle</b> channel a magic circle at noon. Kill the three acolytes to break it.</li>
+    <li>Every clan sends <b>supply carts</b> with escorts along its roads. Escort yours, or raid the enemy's.</li>
+  </ul>
+  <h3>6. Brakes so no one wins forever</h3>
+  <ul>
+    <li><b>Capitals never fall.</b> A clan can be pushed back, never wiped out.</li>
+    <li><b>Night Raiders</b> hunt the clan that holds the most land, striking its weakest borders at night.</li>
+    <li><b>Rally:</b> the smallest clan gets a bonus: its heroes' valor counts 1.3 times, and renown and writ pay are higher.</li>
+  </ul>
+  <h3>Who gives the orders?</h3>
+  <p>Each clan has a leader (Captain Hale for the Wardens, the Redfang Chief, the Pale Marshal of the Host, the Hide-Mother, the Veiled Oracle). Today they follow each clan's set battle plan. AI-run <b>war councils</b> are being prepared to take over the planning; none leads yet. When one does, it plays by exactly the same rules.</p>
+</section>
+
+<section id="join">
+  <div class="eyebrow">Step by step</div>
+  <h2>How you join a battle</h2>
+  <ol class="steps">
+    <li><div><b>Reach level 5.</b> Below level 5 you are left out of the war entirely: soldiers ignore you and you can't hurt them.</div></li>
+    <li><div><b>Find a standard.</b> A standard is a tall pole with a clan flag and a ring on the ground. Every territory has one or two, usually near its Hold. Walk into the ring and press <kbd>E</kbd>.</div></li>
+    <li><div><b>Swear your oath.</b> Pick one of the five clans. You can change clans once a day. Your name now shows your clan's little flag, so other players can see your side.</div></li>
+    <li><div><b>Open the map with <kbd>M</kbd>.</b> The <b>Calls to arms</b> box lists where your clan needs you: sieges with their countdown, lands to defend, your writ, marching columns and fronts. Press <b>War table</b> to see the whole continent; it shows the route to any territory you click.</div></li>
+    <li><div><b>Travel there.</b> Use the portal stones to get close, then walk. In the world, soldiers' names are coloured: <span style="color:var(--moss)">green = your side</span>, grey = neutral, <span style="color:var(--blood)">red = enemy</span>. Only red soldiers can be attacked.</div></li>
+    <li><div><b>Fight.</b> Kill enemy soldiers, stand in the rings of a siege or battle, wreck rams, collapse tunnels, raid carts, raise your banner over an enemy Hold. Everything you do counts at the <b>next war tick</b> (within 10 minutes).</div></li>
+    <li><div><b>Pick up war writs</b> (optional) at a bounty board: up to 3 a day, small jobs like "kill 6 soldiers in this land" that pay gold and renown.</div></li>
+  </ol>
+  <figure>
+    <img src="img/calls-to-arms.png" alt="The zone map with the Calls to arms box in the corner and a siege ring with a countdown" loading="lazy" width="1366" height="768">
+    <figcaption>The map (<kbd>M</kbd>). Top left: Calls to arms. The ring with "Siege 34:04" is a siege that comes due in 34 minutes. Hover a Hold to see who holds it, its Control and its guards.</figcaption>
+  </figure>
+  <div class="box">
+    <h3>Who attacks whom?</h3>
+    <ul>
+      <li><b>Your own clan:</b> allies. You can't hurt each other.</li>
+      <li><b>Clans at war with yours</b> (clans whose lands touch yours): enemies. Their soldiers attack you on sight, and you can attack them and their sworn heroes.</li>
+      <li><b>Every other clan:</b> neutral. They leave you alone. If you want a fight anyway, <kbd>Ctrl</kbd>+click one of their soldiers (or their Hold) to <b>provoke</b> them: a grudge for 10 minutes.</li>
+      <li>Not sworn yet? No clan's soldiers attack you, and you can't hurt them.</li>
+      <li>Towns, villages and the safe squares stay safe: no war inside them.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="help">
+  <div class="eyebrow">What you can do</div>
+  <h2>Ways to help your clan</h2>
+  <figure>
+    <img src="img/siege.png" alt="Soldiers of two clans fighting round a clan standard during a siege" loading="lazy" width="1400" height="800">
+    <figcaption>A siege: two clans fight for the ring round each standard and for the Hold's gate. The side that clearly outnumbers the other in a ring for 20 seconds takes it (a hero counts as two soldiers).</figcaption>
+  </figure>
+  <div class="tbl"><table>
+    <tr><th>Action</th><th>How</th><th>What it does</th></tr>
+    <tr><td>Kill enemy soldiers</td><td>Anywhere in a land your clan holds or may attack.</td><td>Valor for your clan, renown for you.</td></tr>
+    <tr><td>Fight in a siege</td><td>Go to the besieged land before the countdown ends. Stand in the rings (each standard and the Hold gate) and win them.</td><td>Each ring your side holds earns valor every minute; valor counts 1.5 times in a siege.</td></tr>
+    <tr><td>Join a big battle</td><td>Be there at 13:00, 19:00 or 21:30. Hold the three banners, kill the two enemy captains.</td><td>The winner takes Control of the land; winners get gold, valor and renown.</td></tr>
+    <tr><td>Sack an enemy Hold</td><td>Kill its guards, walk to the banner in the middle of the fort and press <kbd>E</kbd>. Hold it for 12 seconds with no defender near.</td><td>The holder loses Control (can start a siege), you get gold, valor and renown.</td></tr>
+    <tr><td>March with a column</td><td>Walk along with your clan's marching column.</td><td>Valor where it arrives, renown for you.</td></tr>
+    <tr><td>Escort or raid carts</td><td>Stay near your clan's supply cart for its trip, or destroy an enemy cart.</td><td>Valor and renown; raided carts drop gold.</td></tr>
+    <tr><td>Clan specials</td><td>Wreck a Host ram, collapse a Hide-Kin tunnel, break a Veiled ritual (or protect your own).</td><td>Valor and renown.</td></tr>
+    <tr><td>Claim a town</td><td>When your clan takes the land round Saltmere, the Rustwater Post, Ropewell or Millbrook Mill, kill the old town guard and raise your banner at the town gate.</td><td>The town's steward changes; you get 10% off in its shops while your clan holds it.</td></tr>
+  </table></div>
+</section>
+
+<section id="scores">
+  <div class="eyebrow">The numbers</div>
+  <h2>Scores, in plain words</h2>
+  <div class="tbl"><table>
+    <tr><th>Score</th><th>Belongs to</th><th>Meaning</th></tr>
+    <tr><td><b>Control</b> (0-100)</td><td>a territory</td><td>How firmly its clan holds it. At 25 or less a siege starts. Shown on the plaque when you enter a land and on the map.</td></tr>
+    <tr><td><b>Valor</b></td><td>your clan</td><td>What players add to the war. At each war tick, valor in a land turns into extra soldiers for your clan there (up to a cap, so a crowd can't decide alone).</td></tr>
+    <tr><td><b>Renown</b></td><td>you</td><td>Your personal war fame. You keep it if you change clans. It gives you ranks.</td></tr>
+    <tr><td><b>Wanted</b></td><td>you, per clan</td><td>Kill too many of one clan's people and they want you: Wanted, then Hunted (a squad comes after you), then Marked. It fades with time; dying to that clan clears it.</td></tr>
+  </table></div>
+  <h3>Renown ranks</h3>
+  <div class="tbl"><table>
+    <tr><th>Rank</th><th>Renown</th><th>Gold from your leader</th></tr>
+    <tr><td>Sworn</td><td>0</td><td>-</td></tr>
+    <tr><td>Shieldbearer</td><td>30</td><td>150</td></tr>
+    <tr><td>Standard-bearer</td><td>120</td><td>400</td></tr>
+    <tr><td>Banneret</td><td>360</td><td>1,000</td></tr>
+    <tr><td>Warlord</td><td>900</td><td>2,500</td></tr>
+    <tr><td>Hero of the Marches</td><td>2,000</td><td>6,000</td></tr>
+  </table></div>
+  <p class="muted">Your rank title shows under your name. Collect the gold by talking to your clan's leader in its capital city.</p>
+</section>
+
+<section id="rewards">
+  <div class="eyebrow">What's in it for you</div>
+  <h2>Rewards</h2>
+  <ul>
+    <li><b>Gold:</b> from writs, sacked Holds, raided carts, won battles, and your rank rewards.</li>
+    <li><b>Renown and titles:</b> from almost everything above.</li>
+    <li><b>Your clan's capital city:</b> walk through the city gate in your clan's homeland (level 5+). Inside: the leader (rank gold), a quartermaster, a trainer, the oath altar and a war table. Heroes of clans at war with it, or Wanted by it, stay outside.</li>
+    <li><b>Shop discount:</b> 10% off in towns your clan holds.</li>
+    <li><b>The Crown boon:</b> if your clan wins the Reckoning, +10% gold and renown for all its heroes while it holds the Crown Keep.</li>
+  </ul>
+  <p class="muted">War soldiers give no XP or loot: the war pays in gold, valor and renown.</p>
+</section>
+
+<section id="reckoning">
+  <div class="eyebrow">Once a month</div>
+  <h2>The Reckoning</h2>
+  <p>On the <b>first Saturday of each month, 18:00 to 21:00 UTC</b> (19:00 to 22:00 Swiss time in winter), the clans fight for the <b>Crown Keep</b> in the middle of the continent. During those three hours, every war tick scores points for each Crown territory a clan holds, plus every point of valor its heroes earn in the Crown. The top score takes the Keep.</p>
+  <ul>
+    <li>Heroes decide it: one busy hero earns more points than the whole Crown's land.</li>
+    <li>Everyone who helped (at least 1 valor in the Crown) gets <b>500 gold and 30 renown</b>; the winning clan's heroes get the same again.</li>
+    <li>The winner wears a gold crown on its banners and gets the Crown boon until the next Reckoning.</li>
+  </ul>
+</section>
+
+<section id="ages">
+  <div class="eyebrow">Coming</div>
+  <h2>Ages: crossing between worlds</h2>
+  <p>The war is built to grow: new versions of the game can open as a new <b>Age</b>, running next to the current one. Your account, your heroes and the war are shared, so you can cross from one Age to the other from the Esc menu (out of combat for 10 seconds, at most once every 5 minutes). This is built but <b>not switched on yet</b>: for now there is one world.</p>
+</section>
+
+<section id="faq">
+  <div class="eyebrow">Questions</div>
+  <h2>Common questions</h2>
+  <div class="box"><h3>Do I have to join?</h3><p>No. Unsworn heroes are left alone by every clan. But the war goes on around you, and lands near you may change colours.</p></div>
+  <div class="box"><h3>Can my village be taken?</h3><p>Oakvale, Kel Ashar, the capitals, dungeons and quest-boss lairs never change hands. Four smaller towns (Saltmere, the Rustwater Post, Ropewell, Millbrook Mill) follow the land round them; their shops and quests stay the same.</p></div>
+  <div class="box"><h3>What if I play alone?</h3><p>Small things still count: a few enemy soldiers, a raided cart, a writ. Fortresses and big battles are meant for groups.</p></div>
+  <div class="box"><h3>What happens when I'm offline?</h3><p>The war keeps going. The clans fight without players too; players tip the balance.</p></div>
+</section>
+
+<p class="muted" style="margin-top:40px">More: <a href="/design/riven-marches/">the Riven Marches design notes</a> · <a href="/roadmap">the roadmap</a> · <a href="/wiki">back to the wiki</a></p>
+</div>
+</body>
+</html>
