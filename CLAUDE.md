@@ -99,7 +99,7 @@ Several sessions work at once. These areas break the game, or players' saves, wh
 
 | Label | Area | Files |
 |---|---|---|
-| `area:saves` | saves and accounts | `server/accounts.ts`, `server/store.ts`, `server/handoff.ts`, changed save lines in `TownRoom.ts` (`snapshot`, `loadHero`, `saveHero`, `xpv`) |
+| `area:saves` | saves and accounts | `server/accounts.ts`, `server/accountGuard.ts`, `server/store.ts`, `server/handoff.ts`, changed save lines in `TownRoom.ts` (`snapshot`, `loadHero`, `saveHero`, `xpv`) |
 | `area:schema` | synced Player / Mob schema | `server/player.ts`, `shared/mobView.ts`, `@type` fields in `TownRoom.ts` |
 | `area:skill-engine` | shared skill engine | `shared/skillEngine.ts` |
 | `area:map` | deterministic world map | `shared/map.ts`, `shared/desert.ts`, `shared/moors.ts`, `shared/badlands.ts`, `shared/sinkholes.ts`, `shared/saltmere.ts`, `shared/crown.ts` |

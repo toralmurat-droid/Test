@@ -2,7 +2,7 @@
 // touches the same area, so parallel sessions see each other before they collide. Warns only: it never blocks or
 // changes another PR. Run by .github/workflows/critical-areas.yml. The areas are listed in CLAUDE.md too.
 const AREAS = {
-  saves: { about: "saves and accounts", files: [/^server\/(accounts|store|handoff)\.ts$/],
+  saves: { about: "saves and accounts", files: [/^server\/(accounts|accountGuard|store|handoff)\.ts$/],
     // changed lines in the room that build, load or version a save
     lines: { file: /^server\/TownRoom\.ts$/, line: /^[+-](?![+-]).*\b(snapshot|loadHero|saveHero|HeroSave|xpv|XP_CURVE_VERSION)\b/ } },
   schema: { about: "synced Player / Mob schema", files: [/^server\/player\.ts$/, /^shared\/mobView\.ts$/],
