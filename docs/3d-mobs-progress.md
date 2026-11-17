@@ -27,10 +27,10 @@ never smooth. Performance: everything is baked by `tools/art` at the old sheet s
 |---|---|---|---|
 | 1 | Blobs | slime, blobling, shooter/warrior/healer, venom/frost/fire/storm, motherblob 1-3 (`blobs3d.ts`) | done |
 | 2 | Skeletons | skeleton (+axe/spear/bow, champion), skeletonmage (+champion), necromancer (`body3d.ts` bones3D / skull3D / garb3D, cowl + horns) | done |
-| 2b | Other undead | crawler, wight, bride (need 3D hair/faces and dresses), bonehound, mistwraith | |
+| 2b | Other undead | crawler, wight, bride (need 3D hair/faces and dresses), mistwraith (bonehound done in 4) | |
 | 3 | Bandits and Redfang | bandit (+brute/archer, champions), banditchief, outrider, crossbowman, firebrand, redcaptain, rourke (`face3D` masks/beards, `extras3D` tabard/fur kilt/harness/bracers/quiver/scarf, hood/bandana/kettle/horned helm, helm crest, fur pelt) | done |
 | 3b | Night raiders | nightraider_* (own painter, raiders.ts) | |
-| 4 | Beasts | warhound, gildhound, vulture, crowncrow, rattler, scorpion, sinkworm | |
+| 4 | Beasts | warhound, gildhound, bonehound, vulture, crowncrow, rattler, scorpion, sinkworm | done (beasts3d.ts, wired with `beast3D` in mobs.ts) |
 | 5 | Beast-folk (Mawdeep) | gnawkin, tuskborn, silkwretch, duskwing, crowseer, gnasher, weaver, packlord, hornbrute, hidemother, folk variants | |
 | 6 | Desert | nomad, sanddead, veiled, camelfolk, sphinx, sunwright | |
 | 7 | Moors / Badlands / Sinkholes / Crown | boghag, legionary, cairnlord, barrowking, delver, cackler, stagkin, quillback, stitcher, hidechief, mawfather, oathbreaker, crownguard, hollowherald, courtmagus, pretender, thronewarden, rivenking | |
