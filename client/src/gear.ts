@@ -21,6 +21,8 @@ import { runeCanvas, runeCss, runeStone } from "./runeArt";
 import { own } from "./own";
 import { compareItem, compareTakeOff } from "./gearCompare";
 import { compareHtml, hideCard, showCard } from "./gearCard";
+import { artId, drawForgedIcon, forgedGearSheet } from "./forgeArt";
+import { forgedLine, noteForged } from "./forgePack";
 
 /** Faint pixel icon of an empty paper-doll slot (pixelicons.ts). */
 const EMPTY_SLOT_ICON: Record<string, string> = { weapon: "sword", shield: "shield", armour: "robe", ranged: "bow", shoes: "boots", hat: "hat" };
@@ -89,9 +91,14 @@ export function preloadGear(scene: Phaser.Scene) {
 
 const pending = new Set<string>();
 /** Starts loading a painted overlay sheet if it is not there yet; returns true when it can be used. */
-function ensureGear(scene: Phaser.Scene, hero: string, id: string, done?: () => void) {
+function ensureGear(scene: Phaser.Scene, hero: string, id: string, done?: () => void): boolean {
   const key = gearKey(hero, id);
   if (scene.textures.exists(key)) return true;
+  const art = artId(id);
+  if (art !== baseId(id)) { // a forged weapon: its base's sheet, recoloured (forgeArt.ts)
+    noteForged(id);
+    return ensureGear(scene, hero, art, done) && forgedGearSheet(scene, gearKey(hero, art), key, id);
+  }
   if (!HD_CHARS || pending.has(key) || !GEAR_HEROES.includes(hero.split("-")[0])) return false; // "archer-melee": a stance sheet
   pending.add(key);
   scene.load.spritesheet(key, `assets/hd/gear/${hero}_${baseId(id)}.webp`, { frameWidth: CHAR_FRAME, frameHeight: CHAR_FRAME });
@@ -103,6 +110,13 @@ function ensureGear(scene: Phaser.Scene, hero: string, id: string, done?: () => 
   scene.load.once("loaderror", () => pending.delete(key));
   if (!scene.load.isLoading()) scene.load.start();
   return false;
+}
+
+/** The overlay to draw now: the item's own sheet once ready; a forged weapon whose recolour is pending (or unknown) wears its base sheet meanwhile. "" when nothing is loaded. */
+function overlayKey(scene: Phaser.Scene, hero: string, id: string, done?: () => void): string {
+  if (ensureGear(scene, hero, id, done)) return gearKey(hero, id);
+  const art = artId(id);
+  return art !== baseId(id) && scene.textures.exists(gearKey(hero, art)) ? gearKey(hero, art) : "";
 }
 
 /** Overlay texture of an item on a hero (every item level of an item looks the same; gearfx.ts adds the effects). */
@@ -170,9 +184,9 @@ export class GearLayer {
     const sheet = base.texture.key === `${this.hero}-moves` ? base.texture.key : this.hero;
     LAYER_ORDER.forEach((slot, i) => {
       const id: string = state[slot] ?? "";
-      const key = id ? gearKey(sheet, id) : "";
+      const key = id ? overlayKey(this.scene, sheet, id) : "";
       let s = this.sprites[slot];
-      if (!key || !ensureGear(this.scene, sheet, id)) {
+      if (!key) {
         if (s) { s.destroy(); delete this.sprites[slot]; delete this.ids[slot]; }
         return;
       }
@@ -226,9 +240,9 @@ export function iconCanvas(scene: Phaser.Scene, id: string, size = 32): HTMLCanv
   c.width = c.height = size;
   const ctx = c.getContext("2d")!;
   ctx.imageSmoothingEnabled = false;
-  const inAtlas = scene.textures.exists("gear_icons") && scene.textures.get("gear_icons").has(baseId(id));
-  if (inAtlas) drawFrame(scene, ctx, "gear_icons", baseId(id), 0, 0, size / (16 * ART_K));
-  else drawSongGearIcon(ctx, baseId(id), size); // fallback for a Songweaver id the atlas lacks (songGearIcons.ts)
+  const art = artId(id), inAtlas = scene.textures.exists("gear_icons") && scene.textures.get("gear_icons").has(art);
+  if (inAtlas) { if (art === baseId(id) || !drawForgedIcon(scene, ctx, id, size, size / (16 * ART_K))) drawFrame(scene, ctx, "gear_icons", art, 0, 0, size / (16 * ART_K)); } // a forged weapon: the base icon in its palette
+  else drawSongGearIcon(ctx, art, size); // fallback for a Songweaver id the atlas lacks (songGearIcons.ts)
   return c;
 }
 
@@ -239,6 +253,8 @@ export function iconCanvas(scene: Phaser.Scene, id: string, size = 32): HTMLCanv
 export function showItemCard(state: any, id: string, anchor: HTMLElement, tip = "", slot?: GearSlot) {
   const d = gearDef(id);
   if (!d) return;
+  noteForged(id);
+  const forged = forgedLine(id); // "Forged by <Clan>", with (retired) / (revoked) when it applies
   const cls = state.cls as string, hero = reqInfoOf(state), sh = sheetHero(state), worn = wornOf(state);
   const why = wearProblem(cls, id) || reqProblem(id, hero); // the server decides too
   const aff = affixHtml(id), song = songItemHtml(id, cls), runes = runeHtml(id), nm = gearName(id, cls);
@@ -246,6 +262,7 @@ export function showItemCard(state: any, id: string, anchor: HTMLElement, tip = 
   if (slot) { const lines = compareTakeOff(sh, worn, slot); cmp = lines.length ? compareHtml({ current: id, slot, lines }, cls, "If you take it off:") : ""; }
   else if (canWear(cls, id)) { const c = compareItem(sh, worn, id); if (c && worn[c.slot] !== id) cmp = compareHtml(c, cls); }
   showCard(`<b class="ic-name" style="color:${itemColor(id)}">${nm}</b><div class="ic-type">${TIER_NAMES[d.tier]} ${slotName(d.slot, cls, id)} · level ${itemLevel(id)} · ${RARITY_NAMES[itemRarity(id)]}</div>` +
+    (forged ? `<div class="ic-type" style="color:#d9a85a">${forged}</div>` : "") +
     `<div>${itemText(id) || "No bonus"}</div>${song ? `<div>${song}</div>` : ""}${aff ? `<div>${aff}</div>` : ""}${runes ? `<div>${runes}</div>` : ""}<div class="${why ? "gbad" : "gok"}">${why || reqText(id, cls, hero)}</div>` +
     cmp + (tip ? `<div class="ic-foot">${tip}</div>` : ""), anchor);
 }
@@ -326,7 +343,10 @@ export class GearMenu {
     ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, pv.width, pv.height);
     drawFrame(this.scene, ctx, cls, 0, 0, 0, pv.width / CHAR_FRAME);
-    for (const slot of LAYER_ORDER) if (state[slot] && ensureGear(this.scene, cls, state[slot], () => { this.sig = ""; this.refresh(state); })) drawFrame(this.scene, ctx, gearKey(cls, state[slot]), 0, 0, 0, pv.width / CHAR_FRAME);
+    for (const slot of LAYER_ORDER) {
+      const k = state[slot] ? overlayKey(this.scene, cls, state[slot], () => { this.sig = ""; this.refresh(state); }) : "";
+      if (k) drawFrame(this.scene, ctx, k, 0, 0, 0, pv.width / CHAR_FRAME);
+    }
 
     // Slots
     const slots = document.getElementById("gearslots")!;
@@ -476,3 +496,6 @@ export class GearMenu {
     document.getElementById("gearempty")!.hidden = bagItems.length + stacks.length > 0 || GEAR_SLOTS.some((s) => state[s]);
   }
 }
+
+// QA hook (only with ?forgetest in the address): lets a browser check call the item card and icons without a real forging
+if (typeof window !== "undefined" && (window as any).__forgeTest) Object.assign((window as any).__forgeTest, { card: showItemCard, icon: iconCanvas, sheet: forgedGearSheet });

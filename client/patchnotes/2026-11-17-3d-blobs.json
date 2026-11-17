@@ -1,5 +1,6 @@
 {
   "date": "2026-11-17",
+  "patch": 293,
   "title": "Blobs rebuilt in 3D",
   "changes": [
     "Every blob, from the little slimes to the Mother Blobs, is now built as a 3D model and drawn as pixel art from the game's camera: real volume, wet glints, and see-through jelly with bones and half-dissolved young floating inside.",
