@@ -2,15 +2,16 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { GOLEM_H, GOLEM_W, paintGolemFrame, type GolemDir, type GolemElement } from "./golems";
 import { createCanvas } from "@napi-rs/canvas";
 import { addChampPose, MOB_POSES, posed, setPainted, type Dir } from "../characters";
-import { C2, P, blobPath, css, ellipseP, fillShape, glow, limb, line, mix, sh, vol } from "./brush";
+import { C2, P, blobPath, css, ellipseP, fillShape, glow, limb, line, sh, vol } from "./brush";
 import { lastMob3D, lastRig, MOB3D, pixelAlpha, pixelize, setMob3D, shrink } from "./body";
 import { paintRaider, RAIDER_H, RAIDER_W } from "./raiders";
-import { HOUND_H, HOUND_W, WRAITH_H, WRAITH_W, paintHound, paintWraith } from "./moors";
-import { RATTLER_H, RATTLER_W, VULTURE_H, VULTURE_W, WARHOUND_H, WARHOUND_W, paintRattler, paintVulture, paintWarhound } from "./badlands";
+import { HOUND_H, HOUND_W, WRAITH_H, WRAITH_W, paintWraith } from "./moors";
+import { RATTLER_H, RATTLER_W, VULTURE_H, VULTURE_PAL, VULTURE_W, WARHOUND_H, WARHOUND_PAL, WARHOUND_W } from "./badlands";
 import { CROWNCROW_PAL, GILDHOUND_PAL } from "./crown";
-import { SINKWORM_H, SINKWORM_W, paintSinkworm } from "./sinkholes";
+import { bird, boneHound, hound, rattler, scorpion, sinkworm, type Pose } from "./beasts3d";
+import { SINKWORM_H, SINKWORM_W } from "./sinkholes";
 import { paintWisp, WISP_H, WISP_W, type WispElement } from "./wisps";
-import { renderMob, SIN, YAW, type MobFrame } from "./mob3d";
+import { renderMob, SIN, YAW, type MobFrame, type Model } from "./mob3d";
 import { blobModel, blobRadius, type BlobOpts, type BlobPal } from "./blobs3d";
 import { RAIDERS } from "../../../shared/raiders";
 import { AFFIX_KEYS, AFFIXES, type AffixKey } from "../../../shared/champions";
@@ -35,6 +36,11 @@ const FRAMES = 12;
 /** Soldiers (warLooks.ts) get two more frames after the 12: 12 staggers, 13 lies fallen (side view, facing right). */
 const FALL_FRAMES = 2;
 /** Facing and pose of sheet frame f. */
+/** A beast built in 3D (beasts3d.ts): `oy` is the client origin row, where its feet stand. */
+function beast3D(key: string, w: number, h: number, oy: number, model: (pose: Pose, f: number) => Model): Sheet {
+  return { key, w, h, draw: () => {}, pix: (f) => { const { dir, pose } = frameOf(f); return renderMob(model(pose, f), YAW[dir as "down" | "up" | "right"], w, h, oy, TX); } };
+}
+
 function frameOf(f: number): { dir: Dir; pose: "stand" | "step" | "wind" | "strike" } {
   if (f < 6) return { dir: DIRS[f], pose: f % 2 ? "step" : "stand" };
   const k = f - 6;
@@ -76,7 +82,7 @@ function humanoid(key: string, kind: string, w: number, h: number, oy: number, s
   const base = kind.replace(/_(axe|spear|bow|champ|folk)$/, "").replace(/_champ$/, "");
   const pix = MOB3D.has(base) && !rip && !fall ? (f: number): MobFrame => {
     const up = lift ? lift + Math.sin(f * 1.7) * 1.2 : 0;
-    setMob3D({ tw: Math.round(w * TX), th: Math.round(h * TX), k: scale * TX, x0: 16 - w / 2 / scale, y0: 29 - (oy * h - up) / scale });
+    setMob3D({ tw: Math.round(w * TX), th: Math.round(h * TX), k: scale * TX, x0: 16 - w / 2 / scale, y0: 29 - (oy * h - up) / scale, lift: up / scale });
     humanoidFrame(kind, f, fall);
     const body = lastMob3D!;
     setMob3D(null);
@@ -203,111 +209,6 @@ function crawlerFrame(c: C2, w: number, h: number, f: number) {
 }
 
 // ---------------------------------------------------------------- the Sunscar's dune scorpion (Act 2)
-/**
- * A giant desert scorpion, about as long as a man is tall: amber-brown plates, two heavy pincers, eight legs, and the
- * segmented tail curled over its back with a black sting and a drop of green venom. Wind-up: claws open, tail cocked
- * back; strike: the sting stabs forward over its head. Drawn in world px on a w x h frame, feet on the line g.
- */
-function scorpionFrame(c: C2, w: number, h: number, f: number) {
-  const { dir, pose } = frameOf(f);
-  const SHELL = 0x8a4220, DARK = 0x3a2412, PALE = 0xe0a070, STING = 0x24160c, VENOM = 0x9dff6a, EYE = 0xffb030;
-  const step = pose === "step", wind = pose === "wind", strike = pose === "strike";
-  const g = h - 3, sc = SH ?? c;
-  const shadow = (x: number, y: number, rx: number, ry: number) => { sc.save(); sc.translate(x, y); sc.scale(1, ry / rx); sc.fillStyle = "rgba(0,0,0,0.42)"; sc.beginPath(); sc.arc(0, 0, rx, 0, Math.PI * 2); sc.fill(); sc.restore(); };
-  /** One chitin plate: dark rim, lit body, a pale glint along the top. */
-  const plate = (x: number, y: number, rx: number, ry: number, col = SHELL, rot = 0) => {
-    fillShape(c, ellipseP(x, y, rx + 0.35, ry + 0.35, rot), css(sh(col, 0.32)));
-    vol(c, ellipseP(x, y, rx, ry, rot), col, [x - rx, y - ry, rx * 2, ry * 2], { ao: 0.3, spec: 0.35 });
-    line(c, [[x - rx * 0.5, y - ry * 0.55], [x + rx * 0.3, y - ry * 0.7]], PALE, 0.22, 0.55);
-  };
-  /** A jointed leg from the body to the sand: up to a knee, down to a pointed foot. */
-  const leg = (bx: number, by: number, kx: number, ky: number, fx: number, fy: number, far: boolean) => {
-    const col = far ? sh(SHELL, 0.6) : SHELL;
-    limb(c, [bx, by], [kx, ky], 0.75, 0.6, col);
-    limb(c, [kx, ky], [fx, fy], 0.6, 0.25, col);
-    fillShape(c, ellipseP(kx, ky, 0.38, 0.38), css(sh(col, 0.5)));
-  };
-  /** A pincer: arm to the wrist, then a fat claw with two fingers (open on the wind-up). */
-  const pincer = (sx: number, sy: number, ex: number, ey: number, cx: number, cy: number, ang: number, far: boolean) => {
-    const col = far ? sh(SHELL, 0.7) : SHELL, open = wind ? 0.75 : strike ? 0.1 : 0.3;
-    limb(c, [sx, sy], [ex, ey], 1.1, 0.9, col);
-    limb(c, [ex, ey], [cx, cy], 0.9, 1.2, col);
-    const ux = Math.cos(ang), uy = Math.sin(ang);
-    plate(cx + ux * 1.2, cy + uy * 1.2, 1.9, 1.25, col, ang);
-    for (const k of [-1, 1]) {
-      const a = ang + k * open, tx = cx + ux * 2.6 + Math.cos(a) * 2.4, ty = cy + uy * 2.6 + Math.sin(a) * 2.4;
-      limb(c, [cx + ux * 2.4 + -uy * k * 0.5, cy + uy * 2.4 + ux * k * 0.5], [tx, ty], 0.75, 0.2, k < 0 ? sh(col, 1.1) : sh(col, 0.85));
-    }
-  };
-  /** The tail: a chain of shrinking segments along a curve, then the bulb and the hooked sting. */
-  const tail = (pts: P[], sx: number, sy: number, ang: number) => {
-    const L = Math.hypot(pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]) + Math.hypot(pts[2][0] - pts[1][0], pts[2][1] - pts[1][1]);
-    const n = Math.max(6, Math.ceil(L / 1.7));
-    for (let i = 0; i < n; i++) {
-      const t = i / (n - 1), u = 1 - t;
-      const x = u * u * pts[0][0] + 2 * u * t * pts[1][0] + t * t * pts[2][0], y = u * u * pts[0][1] + 2 * u * t * pts[1][1] + t * t * pts[2][1];
-      plate(x, y, 1.35 - t * 0.35, 1.15 - t * 0.3);
-    }
-    plate(sx, sy, 1.3, 1.1, sh(SHELL, 1.1)); // the venom bulb
-    const tx = sx + Math.cos(ang) * 2.4, ty = sy + Math.sin(ang) * 2.4;
-    limb(c, [sx, sy], [tx, ty], 0.8, 0.15, STING);
-    glow(c, tx, ty, 1.4, VENOM, strike ? 0.9 : 0.5);
-    fillShape(c, ellipseP(tx, ty + 0.4, 0.28, 0.38), css(VENOM, 0.9));
-  };
-  const eyes = (pts: P[]) => { for (const [x, y] of pts) { glow(c, x, y, 1.1, EYE, 0.6); fillShape(c, ellipseP(x, y, 0.28, 0.28), css(mix(EYE, 0xffffff, 0.3))); } };
-  const sw = step ? 1 : -1; // legs alternate on the step frame
-
-  if (dir === "right") {
-    const bx = w * 0.56 + (strike ? 0.8 : 0), by = g - 4.2;
-    shadow(bx - 2, g + 0.2, 13, 2.4);
-    // far legs, then the far pincer
-    for (let i = 0; i < 4; i++) { const x = bx - 3.6 + i * 2.2, o = (i % 2 ? 1 : -1) * sw * 0.7; leg(x, by - 0.4, x + 1.4 + o * 0.3, by - 2.4, x + 3.0 + o, g - 1.0, true); }
-    pincer(bx + 4.2, by - 0.6, bx + 7.4, by - 1.6, bx + 9.6 + (strike ? 1.4 : 0), by - 0.9, -0.1, true);
-    // abdomen plates back from the head, then the tail up over the back
-    for (let i = 0; i < 5; i++) plate(bx - 1.6 - i * 2.2, by - 0.2 + i * 0.15, 2.5 - i * 0.18, 2.1 - i * 0.12);
-    const rx = bx - 11.6, ry = by - 0.4;
-    if (strike) tail([[rx, ry], [rx - 3, by - 16], [bx + 4, by - 12]], bx + 5.4, by - 10.6, 0.55);
-    else if (wind) tail([[rx, ry], [rx - 5, by - 14], [rx + 2, by - 17]], rx + 3.6, by - 16.4, 0.9);
-    else tail([[rx, ry], [rx - 4, by - 13], [rx + 4, by - 16]], rx + 5.6 + (step ? 0.3 : 0), by - 15.2, 1.2);
-    // head plate, eyes, near legs and the near pincer in front
-    plate(bx + 2.4, by - 0.6, 3.6, 2.6);
-    eyes([[bx + 3.6, by - 2.6], [bx + 4.6, by - 2.2]]);
-    for (let i = 0; i < 4; i++) { const x = bx - 4.4 + i * 2.2, o = (i % 2 ? -1 : 1) * sw * 0.7; leg(x, by + 0.6, x + 1.0 + o * 0.3, by - 1.0, x + 2.0 + o, g + 0.4, false); }
-    pincer(bx + 3.8, by + 0.6, bx + 6.6, by + 1.4, bx + 9.0 + (strike ? 1.6 : 0), by + 0.6, 0.05, false);
-  } else if (dir === "down") {
-    const cx = w / 2, hy = g - 4.6 + (strike ? 0.6 : 0); // head nearest us
-    shadow(cx, g - 4, 11, 4);
-    // legs splay out on both sides
-    for (const sd of [-1, 1]) for (let i = 0; i < 4; i++) {
-      const y = hy - 2.6 - i * 1.6, o = (i % 2 ? 1 : -1) * sw * sd * 0.6;
-      leg(cx + sd * 2.4, y, cx + sd * (5.2 + i * 0.4), y - 1.6, cx + sd * (7.4 + i * 0.6), y + 2.2 + o, true);
-    }
-    // abdomen up the screen, then the tail rising behind it and curling forward over the head
-    for (let i = 3; i >= 0; i--) plate(cx, hy - 3.6 - i * 2.0, 2.7 - i * 0.2, 1.8 - i * 0.1);
-    const ty0 = hy - 10.6;
-    if (strike) tail([[cx, ty0], [cx, ty0 - 8], [cx + 0.3, ty0 - 2]], cx + 0.4, hy - 6.4, Math.PI / 2);
-    else if (wind) tail([[cx, ty0], [cx + 0.4, ty0 - 7], [cx + 0.4, ty0 - 10.5]], cx + 0.4, ty0 - 11.6, -Math.PI / 2 + 0.6);
-    else tail([[cx, ty0], [cx + 0.3, ty0 - 8], [cx + 0.3, ty0 - 9]], cx + 0.3, ty0 - 7.6 + (step ? 0.4 : 0), Math.PI / 2);
-    plate(cx, hy, 3.4, 2.4);
-    eyes([[cx - 1.0, hy - 0.7], [cx + 1.0, hy - 0.7]]);
-    for (const sd of [-1, 1]) pincer(cx + sd * 2.6, hy + 0.4, cx + sd * 5.4, hy + 1.2, cx + sd * 5.0, hy + 3.4 + (strike ? 0.8 : 0), Math.PI / 2 - sd * 0.25, false);
-  } else { // up: walking away, the tail nearest us
-    const cx = w / 2, hy = g - 12.2;
-    shadow(cx, g - 5, 11, 4);
-    for (const sd of [-1, 1]) pincer(cx + sd * 2.4, hy - 0.4, cx + sd * 5.2, hy - 1.4, cx + sd * 4.8, hy - 3.6 - (strike ? 0.8 : 0), -Math.PI / 2 + sd * 0.25, true);
-    for (const sd of [-1, 1]) for (let i = 0; i < 4; i++) {
-      const y = hy + 1.6 + i * 1.6, o = (i % 2 ? 1 : -1) * sw * sd * 0.6;
-      leg(cx + sd * 2.4, y, cx + sd * (5.2 + i * 0.4), y - 1.6, cx + sd * (7.4 + i * 0.6), y + 2.2 + o, false);
-    }
-    plate(cx, hy, 3.4, 2.4);
-    for (let i = 0; i < 4; i++) plate(cx, hy + 2.6 + i * 2.0, 2.7 - i * 0.2, 1.8 - i * 0.1);
-    const ty0 = hy + 10.8;
-    if (strike) tail([[cx, ty0], [cx, ty0 - 14], [cx, hy - 6]], cx, hy - 7.0, -Math.PI / 2);
-    else if (wind) tail([[cx, ty0], [cx + 0.3, ty0 - 8], [cx + 0.3, ty0 - 14]], cx + 0.3, ty0 - 15.5, -Math.PI / 2 - 0.4);
-    else tail([[cx, ty0], [cx + 0.3, ty0 - 9], [cx + 0.3, ty0 - 15]], cx + 0.3, ty0 - 16.0 + (step ? 0.4 : 0), -Math.PI / 2 + 0.5);
-  }
-}
-
 function blobSheet(key: string, w: number, h: number, pal: BlobPal, o: BlobOpts): Sheet {
   // 3D-built (blobs3d.ts, Murat 2026-11-17); the footprint centre sits half its depth above the old painted base line
   const oy = h - 1.3 - blobRadius(w) * SIN;
@@ -409,7 +310,7 @@ export function buildMobs(out: string, ONLY?: string[]) {
     humanoid("mob_packlord", "packlord", 30, 36, 34 / 36, 1.08),
     humanoid("mob_hornbrute", "hornbrute", 40, 40, 37.5 / 40, 1.2),
     humanoid("mob_hidemother", "hidemother", 44, 48, 44 / 48, 1.32),
-    // Act 2, the Sunscar (look.ts nomad..camelfolk) and its giant scorpion (scorpionFrame)
+    // Act 2, the Sunscar (look.ts nomad..camelfolk) and its giant scorpion (beasts3d.ts)
     humanoid("mob_nomad", "nomad", 22, 30, 27.5 / 30, 0.86),
     humanoid("mob_nomad_folk", "nomad_folk", 22, 30, 27.5 / 30, 0.86),
     humanoid("mob_sanddead", "sanddead", 22, 30, 27.5 / 30, 0.88),
@@ -419,7 +320,7 @@ export function buildMobs(out: string, ONLY?: string[]) {
     humanoid("mob_sunwright", "sunwright", 44, 48, 42 / 48, 1.25), // Act 2's final boss, drawn big like the Hollow King
     // Act 3, the Grey Barrow Moors (look.ts wight..barrowking)
     humanoid("mob_wight", "wight", 24, 30, 27.5 / 30, 0.9),
-    { key: "mob_bonehound", w: HOUND_W, h: HOUND_H, draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintHound(c, SH, dir as "down" | "up" | "right", pose, f); } },
+    beast3D("mob_bonehound", HOUND_W, HOUND_H, 19, (pose, f) => boneHound(pose, f)),
     { key: "mob_mistwraith", w: WRAITH_W, h: WRAITH_H, draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintWraith(c, SH, dir as "down" | "up" | "right", pose, f); } },
     humanoid("mob_boghag", "boghag", 26, 32, 31.2 / 32, 0.93),
     humanoid("mob_legionary", "legionary", 32, 32, 29.5 / 32, 0.95),
@@ -431,9 +332,9 @@ export function buildMobs(out: string, ONLY?: string[]) {
     humanoid("mob_firebrand", "firebrand", 24, 32, 31.2 / 32, 0.93),
     humanoid("mob_redcaptain", "redcaptain", 30, 34, 32 / 34, 1.0),
     humanoid("mob_rourke", "rourke", 40, 44, 40 / 44, 1.2),
-    { key: "mob_warhound", w: WARHOUND_W, h: WARHOUND_H, draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintWarhound(c, SH, dir as "down" | "up" | "right", pose, f); } },
-    { key: "mob_vulture", w: VULTURE_W, h: VULTURE_H, draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintVulture(c, SH, dir as "down" | "up" | "right", pose, f); } },
-    { key: "mob_rattler", w: RATTLER_W, h: RATTLER_H, draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintRattler(c, SH, dir as "down" | "up" | "right", pose, f); } },
+    beast3D("mob_warhound", WARHOUND_W, WARHOUND_H, 21, (pose, f) => hound(WARHOUND_PAL, pose, f)),
+    beast3D("mob_vulture", VULTURE_W, VULTURE_H, 31, (pose, f) => bird(VULTURE_PAL, pose, f, { bald: true })),
+    beast3D("mob_rattler", RATTLER_W, RATTLER_H, 19, (pose, f) => rattler(pose, f)),
     // Act 5, the Mawdeep Sinkholes: the Hide-Kin (look.ts delver..mawfather) and the Gullet Worm (sinkholes.ts)
     humanoid("mob_delver", "delver", 24, 30, 27.5 / 30, 0.88),
     humanoid("mob_cackler", "cackler", 22, 30, 27.5 / 30, 0.86),
@@ -442,7 +343,7 @@ export function buildMobs(out: string, ONLY?: string[]) {
     humanoid("mob_stitcher", "stitcher", 24, 34, 31.5 / 34, 0.92),
     humanoid("mob_hidechief", "hidechief", 34, 38, 35 / 38, 1.12),
     humanoid("mob_mawfather", "mawfather", 46, 50, 46 / 50, 1.34),
-    { key: "mob_sinkworm", w: SINKWORM_W, h: SINKWORM_H, draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintSinkworm(c, SH, dir as "down" | "up" | "right", pose, f); } },
+    beast3D("mob_sinkworm", SINKWORM_W, SINKWORM_H, 25, (pose, f) => sinkworm(pose, f)),
     // Act 6, the Crown of the Marches: the court (look.ts oathbreaker..rivenking); the Gildhound and the Crown Crow are the
     // badlands' hound and vulture in the Crown's colours (crown.ts palettes)
     humanoid("mob_oathbreaker", "oathbreaker", 28, 32, 30 / 32, 0.95),
@@ -452,8 +353,8 @@ export function buildMobs(out: string, ONLY?: string[]) {
     humanoid("mob_pretender", "pretender", 24, 32, 30 / 32, 0.9),
     humanoid("mob_thronewarden", "thronewarden", 36, 40, 37.5 / 40, 1.15),
     humanoid("mob_rivenking", "rivenking", 46, 50, 46 / 50, 1.3),
-    { key: "mob_gildhound", w: WARHOUND_W, h: WARHOUND_H, draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintWarhound(c, SH, dir as "down" | "up" | "right", pose, f, GILDHOUND_PAL); } },
-    { key: "mob_crowncrow", w: VULTURE_W, h: VULTURE_H, draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintVulture(c, SH, dir as "down" | "up" | "right", pose, f, CROWNCROW_PAL); } },
+    beast3D("mob_gildhound", WARHOUND_W, WARHOUND_H, 21, (pose, f) => hound(GILDHOUND_PAL, pose, f, { lean: true })),
+    beast3D("mob_crowncrow", VULTURE_W, VULTURE_H, 31, (pose, f) => bird(CROWNCROW_PAL, pose, f)),
     // the clan war's soldiers (warLooks.ts): 36 px wide so the fallen body fits; officers are taller
     ...WAR_SOLDIERS.map((k) => k.endsWith("_cap") || k.endsWith("_chief") || k.endsWith("_adept") ? humanoid(`mob_${k}`, k, 36, 34, 32 / 34, 0.95, false, 0, true) : humanoid(`mob_${k}`, k, 36, 32, 30 / 32, 0.9, false, 0, true)),
     // the clan war's supply carts (warCarts.ts): 14 frames, 12 = staggering, 13 = wrecked
@@ -462,7 +363,7 @@ export function buildMobs(out: string, ONLY?: string[]) {
     ...WAR_RAMS.map((k) => ({ key: `mob_${k}`, w: CART_W, h: CART_H, frames: CART_FRAMES, draw: (c: C2, f: number) => paintRam(c, SH, k, f) })),
     // the Hide-Kin tunnel mouth (warTunnel.ts): 80x44 frames, the same 14-frame layout
     ...WAR_TUNNELS.map((k) => ({ key: `mob_${k}`, w: TUNNEL_W, h: TUNNEL_H, frames: TUNNEL_FRAMES, draw: (c: C2, f: number) => paintTunnel(c, SH, k, f) })),
-    { key: "mob_scorpion", w: 36, h: 30, draw: (c: C2, f: number) => scorpionFrame(c, 36, 30, f) },
+    beast3D("mob_scorpion", 36, 30, 27, (pose, f) => scorpion(pose, f)),
     // the Night Raiders (raiders.ts): one sheet for each of the Seven
     ...RAIDERS.map((R) => ({ key: `mob_nightraider_${R.key}`, w: RAIDER_W, h: RAIDER_H, draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintRaider(c, SH, R, dir as "down" | "up" | "right", pose, f); } })),
     // champion details (shared/champions.ts): one small painted sheet per affix, laid over the monster by the client
