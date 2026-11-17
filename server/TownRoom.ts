@@ -118,7 +118,8 @@ import { byPart, hitBy } from "./hitBy";
 import { addValor, attachWar, onWar, rallyTell, relate, warNow, warState, warTowns } from "./war";
 import { boonGold, boonGoldMult, WarCrown } from "./warCrown";
 import { HoldWalls } from "./holdWalls";
-import { fortGroundAt, isWildMob, wildSpawnPoint } from "../shared/war/fortGround";
+import { holdWallPx, liveHoldWall } from "../shared/war/holdWalls";
+import { fortGroundAt, isWildMob, nearestOffFort, wildSpawnPoint } from "../shared/war/fortGround";
 import { routeFrame } from "../shared/war/holdRoutes";
 import { clanView, cleanOath, Presence, swear } from "./warHeroes";
 import { WarTroops } from "./warTroops";
@@ -1613,8 +1614,12 @@ export class TownRoom extends Room<TownState> {
 
   /** A zone monster (re)spawns: in a land a clan holds, maybe as its forged monster (server/forgeMobs.ts), else maybe a champion. */
   private zoneSpawn(kind: MobKind, zi: number, id: string, at?: ReturnType<typeof spawnPoint>) {
-    // off fort ground (shared/war/fortGround.ts); a zone whose every roll lands in a fort goes one short (camps take posts)
-    if (!at && campOfZone(SPAWN_ZONES[zi].name) < 0) { at = wildSpawnPoint(SPAWN_ZONES[zi], kind) ?? undefined; if (!at) return; }
+    // off fort ground (shared/war/fortGround.ts); when every roll lands in a fort, the nearest open ground outside the last one
+    // (so the zone never goes a monster short); camps take posts
+    if (!at && campOfZone(SPAWN_ZONES[zi].name) < 0) {
+      at = wildSpawnPoint(SPAWN_ZONES[zi], kind) ?? undefined;
+      if (!at) { const p = spawnPoint(SPAWN_ZONES[zi], kind), o = nearestOffFort(p.x, p.y); at = o ? { ...o, level: p.level } : p; }
+    }
     const fv = zoneVariant(zi, kind);
     this.spawnMob(kind, zi, id, at, fv);
     if (!fv) this.champs.roll(this.state.mobs.get(id)!, id); // about one in twenty comes as a champion (shared/champions.ts)
@@ -4159,16 +4164,18 @@ export class TownRoom extends Room<TownState> {
     return this.go(m, x, y, now);
   }
 
-  /** Walk toward (x,y): camp bandits (and Gloam Tide marchers) find their way round walls, others go straight. */
+  /** Walk toward (x,y): camp bandits, Gloam Tide marchers and a wild monster finding its way out of a fort (it followed a
+   *  target in through the gate) go round walls; others go straight. */
   private go(m: Mob, x: number, y: number, now: number): InputState {
-    if (!(m.camp || m.tide) || clearWalk(m.x, m.y, x, y)) { m.path = []; m.pathFail = false; return toward(m.x, m.y, x, y); }
+    const findWay = m.camp || m.tide || (fortGroundAt(m.x, m.y) && this.wildMob(m));
+    if (!findWay || clearWalk(m.x, m.y, x, y, holdWallPx)) { m.path = []; m.pathFail = false; return toward(m.x, m.y, x, y); }
     const moved = Math.hypot(x - m.pathTX, y - m.pathTY) > TILE;
     // (no way found last time: the BFS would only fail again until the goal moves or the usual re-path time comes)
     if ((!m.path.length && !m.pathFail) || moved || now > m.pathAt + 1500) {
-      m.path = findPath(m.x, m.y, x, y); m.pathAt = now; m.pathTX = x; m.pathTY = y; m.pathFail = !m.path.length;
+      m.path = findPath(m.x, m.y, x, y, 10, liveHoldWall); m.pathAt = now; m.pathTX = x; m.pathTY = y; m.pathFail = !m.path.length;
     }
     // skip the points already reached, and any we can see past
-    while (m.path.length > 1 && (Math.hypot(m.path[0][0] - m.x, m.path[0][1] - m.y) < 8 || clearWalk(m.x, m.y, m.path[1][0], m.path[1][1]))) m.path.shift();
+    while (m.path.length > 1 && (Math.hypot(m.path[0][0] - m.x, m.path[0][1] - m.y) < 8 || clearWalk(m.x, m.y, m.path[1][0], m.path[1][1], holdWallPx))) m.path.shift();
     const p = m.path[0];
     return p ? toward(m.x, m.y, p[0], p[1]) : toward(m.x, m.y, x, y);
   }

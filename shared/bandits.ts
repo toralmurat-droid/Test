@@ -200,16 +200,17 @@ export const postPos = (p: BanditPost) => ({ x: (p.at[0] + 0.5) * TILE, y: (p.at
 /**
  * Bandits know their way around the camp: when a wall stands between a bandit and where it wants to go,
  * it takes the way through the gates. Tile BFS (8-way, no corner cutting) in a box around both points.
- * Returns the tile centres to walk through (px), or [] when there's no way (or it's out of reach).
+ * Returns the tile centres to walk through (px), or [] when there's no way (or it's out of reach). `wall` adds walls the map
+ * doesn't have (the live Hold walls, by tile).
  */
-export function findPath(x0: number, y0: number, x1: number, y1: number, margin = 10): [number, number][] {
+export function findPath(x0: number, y0: number, x1: number, y1: number, margin = 10, wall?: (tx: number, ty: number) => boolean): [number, number][] {
   const sx = Math.floor(x0 / TILE), sy = Math.floor(y0 / TILE), ex = Math.floor(x1 / TILE), ey = Math.floor(y1 / TILE);
   const bx = Math.min(sx, ex) - margin, by = Math.min(sy, ey) - margin;
   const bw = Math.abs(ex - sx) + margin * 2 + 1, bh = Math.abs(ey - sy) + margin * 2 + 1;
   if (bw * bh > 90 * 90) return [];
   const idx = (x: number, y: number) => (y - by) * bw + (x - bx);
   const prev = new Int32Array(bw * bh).fill(-1);
-  const open = (x: number, y: number) => x >= bx && y >= by && x < bx + bw && y < by + bh && !isSolidTile(x, y);
+  const open = (x: number, y: number) => x >= bx && y >= by && x < bx + bw && y < by + bh && !isSolidTile(x, y) && !wall?.(x, y);
   const q: number[] = [idx(sx, sy)];
   prev[q[0]] = q[0];
   const goal = idx(ex, ey);
@@ -230,12 +231,13 @@ export function findPath(x0: number, y0: number, x1: number, y1: number, margin 
 }
 const DIRS8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
-/** True if a body can walk the straight line between the two points (px). */
-export function clearWalk(x0: number, y0: number, x1: number, y1: number): boolean {
+/** True if a body can walk the straight line between the two points (px); `wall` adds walls the map doesn't have (the live Hold walls, by px). */
+export function clearWalk(x0: number, y0: number, x1: number, y1: number, wall?: (px: number, py: number) => boolean): boolean {
+  const solid = (x: number, y: number) => isSolidAt(x, y) || !!wall?.(x, y);
   const n = Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 8);
   for (let i = 1; i <= n; i++) {
     const x = x0 + (x1 - x0) * i / n, y = y0 + (y1 - y0) * i / n;
-    if (isSolidAt(x - 5, y - 5) || isSolidAt(x + 5, y + 5) || isSolidAt(x - 5, y + 5) || isSolidAt(x + 5, y - 5)) return false;
+    if (solid(x - 5, y - 5) || solid(x + 5, y + 5) || solid(x - 5, y + 5) || solid(x + 5, y - 5)) return false;
   }
   return true;
 }
