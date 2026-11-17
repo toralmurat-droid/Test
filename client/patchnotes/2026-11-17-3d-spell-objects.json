@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-17",
+  "title": "Spell objects rebuilt in 3D",
+  "changes": [
+    "Crimson Tide's blood spikes, earth and ice spikes and trap spikes are now 3D models that burst out of the ground, in three shapes so a field of them never repeats.",
+    "The Summoner's orbiting void blades are 3D, drawn from 16 angles as they circle.",
+    "Native Soil spills a 3D patch of grave earth with clods and bone chips.",
+    "The falling Judgement sword, Avalanche boulders and rain arrows are 3D models too."
+  ]
+}
