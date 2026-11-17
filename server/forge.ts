@@ -57,7 +57,7 @@ export interface GateVerdict { ok: boolean; reasons: string[] }
 export type GateRunner = (def: Forged) => Promise<GateVerdict>;
 
 const KEY = "forge";
-const LOST_MAX = 100;
+const LOST_MAX = 1000; // never expected near: a forging only lands here when a later build cannot read it
 const STATUSES: readonly ForgeStatus[] = ["active", "retired", "revoked"];
 /** A forging's id as a client may ask for it ("forgeQ"): a weapon's base id or a monster's. */
 export const FORGE_ID_RE = /^(?:fg[1-9]\d{0,8}_[a-z0-9_]{1,40}|fm[1-9]\d{0,8})$/;
@@ -107,9 +107,10 @@ export function cleanForge(raw: unknown): ForgeSave {
   try {
     const r = (raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
     const s = fresh();
-    const lost: unknown[] = Array.isArray(r.lost) ? r.lost.slice(-LOST_MAX) : [];
+    const lost: unknown[] = [];
     const seen = new Set<number>();
-    for (const x of Array.isArray(r.defs) ? r.defs : []) {
+    // forgings set aside by an earlier build are tried again: a later fix brings them back
+    for (const x of [...(Array.isArray(r.defs) ? r.defs : []), ...(Array.isArray(r.lost) ? r.lost : [])]) {
       const d = cleanDef(x);
       if (d && !seen.has(d.seq)) { seen.add(d.seq); s.defs.push(d); } else lost.push(x);
     }
@@ -119,7 +120,7 @@ export function cleanForge(raw: unknown): ForgeSave {
       for (const x of list) {
         const p = x as ForgeProject | null;
         const rec = p && typeof p === "object" ? validateRecipe(p.recipe) : undefined;
-        if (!p || !rec?.ok || rec.recipe.clan !== k || !Number.isInteger(p.seq) || p.seq < 1 || seen.has(p.seq) || !isDay(p.day) || !isDay(p.liveDay)) continue;
+        if (!p || !rec?.ok || rec.recipe.clan !== k || !Number.isInteger(p.seq) || p.seq < 1 || seen.has(p.seq) || !isDay(p.day) || !isDay(p.liveDay)) { if (x) lost.push({ project: k, raw: x }); continue; }
         seen.add(p.seq);
         (s.projects[k] ??= []).push({ seq: p.seq, recipe: rec.recipe, day: p.day, liveDay: p.liveDay, at: isNum(p.at) ? p.at : 0, gate: p.gate === "pass" ? "pass" : "pending" });
       }
