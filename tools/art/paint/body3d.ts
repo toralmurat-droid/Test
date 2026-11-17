@@ -403,6 +403,7 @@ function face3D(L: Look, P: Prim[], f: P, s: P, head: V3) {
 /** Monster-only gear over a living body (heroes never wear these, so the vampire stays as it was). */
 function extras3D(L: Look, w: Dress3D, r: Rig3, P: Prim[], f: P, s: P, J: Joints) {
   const b = r.b, { chest, pelvis } = J;
+  if (w.legs === "robe") robe3D(w, r, P, f, s, J);
   const off = (p: V3, a: number, si: number, z = 0): V3 => [p[0] + f[0] * a + s[0] * si, p[1] + f[1] * a + s[1] * si, p[2] + z];
   if (L.tabard) { // a long cloth panel front and back over the armour, the clan's sign on the chest
     const tm = mat(L.tabard.col, { lo: 0.36, hi: 1.38, grain: 0.1 }), trm = mat(L.tabard.trim, { lo: 0.4, hi: 1.3, n: 5 });
@@ -517,15 +518,34 @@ function bones3D(L: Look, w: Dress3D, r: Rig3, P: Prim[], f: P, s: P, J: Joints)
 function garb3D(L: Look, w: Dress3D, r: Rig3, P: Prim[], f: P, s: P, J: Joints) {
   const robe = w.torso === "robe" || w.legs === "robe";
   if (!robe && w.torso === "bare") return;
-  const tm = mat(w.torsoCol, { grain: 0.1, lo: 0.36, hi: 1.38 }), lm = mat(w.legCol, { grain: 0.1, lo: 0.36, hi: 1.38 });
-  const trimM = w.trim !== undefined ? mat(w.trim, { spec: 0.5, lo: 0.45, hi: 1.45, n: 5 }) : null;
+  const tm = mat(w.torsoCol, { grain: 0.1, lo: 0.36, hi: 1.38 });
   const b = r.b, { chest, waist, pelvis } = J;
   if (w.torso !== "bare") {
     P.push(ell(chest, f, [1.95 * b, 2.9 * b, 2.9], tm, 1.2));
     P.push(ell(waist, f, [1.6 * b, 2.3 * b, 2.5], tm, 1.2));
     P.push(ell([chest[0] - f[0] * 0.2, chest[1] - f[1] * 0.2, chest[2] + 3.0], f, [1.5, 1.85, 0.9], tm, 0.5)); // collar
   }
-  if (robe) {
+  if (robe) robe3D(w, r, P, f, s, J);
+  // sash or belt round the waist
+  const beltCol = L.sash ?? w.belt;
+  if (beltCol !== undefined) P.push(ell([pelvis[0], pelvis[1], pelvis[2] + 1.6], f, [2.05 * b, 2.85 * b, 0.6], mat(beltCol, { lo: 0.4, hi: 1.4, n: 5 }), 0.2));
+  // sleeves over the arm bones, wide at the wrist
+  if (w.arms === "cloth" || w.arms === "plate" || w.arms === "wrap") {
+    const sm = w.arms === "plate" ? mat(w.sleeve, { spec: 0.7, lo: 0.3, hi: 1.4 }) : mat(w.sleeve, { grain: 0.1, lo: 0.36, hi: 1.38 });
+    for (const [S, E, H] of [[J.nearS, J.nearE, J.nearH], [J.farS, J.farE, J.farH]] as [V3, V3, V3][]) {
+      P.push(sphere(S, 1.4 * b, sm, 0.8));
+      P.push(cap(S, E, 1.05, 0.95, sm, 0.6));
+      const cuff = lerp3(E, H, 0.72);
+      P.push(cap(E, cuff, 0.95, w.arms === "cloth" ? 1.3 : 0.9, sm, 0.5));
+    }
+  }
+}
+
+/** A long robe hanging from the hips to the ground (the dead's grave-robes, living adepts' and priests' robes). */
+function robe3D(w: Dress3D, r: Rig3, P: Prim[], f: P, s: P, J: Joints) {
+  const b = r.b, { pelvis } = J, lm = mat(w.legCol, { grain: 0.1, lo: 0.36, hi: 1.38 });
+  const trimM = w.trim !== undefined ? mat(w.trim, { spec: 0.5, lo: 0.45, hi: 1.45, n: 5 }) : null;
+  {
     // a long robe hanging from the hips to the ground, swinging with the stride, its hem frayed and dragged in the dirt
     const top = pelvis[2] + 1.8, len = top - 0.25, sw = r.moving * Math.sin(r.wave) * 0.5;
     const skirt = (x: number, y: number, z: number, grow: number) => {
@@ -540,19 +560,6 @@ function garb3D(L: Look, w: Dress3D, r: Rig3, P: Prim[], f: P, s: P, J: Joints) 
     const box: [V3, V3] = [[pelvis[0] - 8, pelvis[1] - 8, -1], [pelvis[0] + 8, pelvis[1] + 8, top + 1]];
     P.push(custom(box[0], box[1], (x, y, z) => skirt(x, y, z, 0), lm, 0.6));
     if (trimM) P.push(custom(box[0], box[1], (x, y, z) => Math.max(skirt(x, y, z, 0.12), z - 1.15), trimM, 0.1)); // a band at the hem
-  }
-  // sash or belt round the waist
-  const beltCol = L.sash ?? w.belt;
-  if (beltCol !== undefined) P.push(ell([pelvis[0], pelvis[1], pelvis[2] + 1.6], f, [2.05 * b, 2.85 * b, 0.6], mat(beltCol, { lo: 0.4, hi: 1.4, n: 5 }), 0.2));
-  // sleeves over the arm bones, wide at the wrist
-  if (w.arms === "cloth" || w.arms === "plate" || w.arms === "wrap") {
-    const sm = w.arms === "plate" ? mat(w.sleeve, { spec: 0.7, lo: 0.3, hi: 1.4 }) : mat(w.sleeve, { grain: 0.1, lo: 0.36, hi: 1.38 });
-    for (const [S, E, H] of [[J.nearS, J.nearE, J.nearH], [J.farS, J.farE, J.farH]] as [V3, V3, V3][]) {
-      P.push(sphere(S, 1.4 * b, sm, 0.8));
-      P.push(cap(S, E, 1.05, 0.95, sm, 0.6));
-      const cuff = lerp3(E, H, 0.72);
-      P.push(cap(E, cuff, 0.95, w.arms === "cloth" ? 1.3 : 0.9, sm, 0.5));
-    }
   }
 }
 
@@ -674,6 +681,14 @@ function beastHead3D(L: Look, r: Rig3, P: Prim[], f: P, s: P, head: V3, chest: V
       for (const [p, d] of [[lerp3(a0, a1, 0.5), [0.9, 0, 1.4]], [a1, [0.8, 0.3 * sg, 1.6]], [lerp3(a1, a2, 0.6), [0.6, 0.5 * sg, 1.2]]] as [V3, number[]][])
         P.push(cap(p, [p[0] + (f[0] * d[0] + s[0] * d[1]) * K, p[1] + (f[1] * d[0] + s[1] * d[1]) * K, p[2] + d[2] * K], 0.22 * K, 0.07 * K, hornM, 0.08));
     }
+  }
+  if (kind === "lion" && !hood) { // the sphinx's royal headcloth: gold and lapis stripes over the crown, lappets to the chest
+    const gold = mat(0xe0b040, { spec: 0.4, lo: 0.4, hi: 1.35, grain: 0.05 }), lapis = mat(0x2a4a9a, { lo: 0.4, hi: 1.4, grain: 0.05 });
+    const striped = (base: Prim) => { P.push(base); P.push(custom(base.lo, base.hi, (x, y, z) => Math.max(base.d(x, y, z) - 0.07, (Math.abs((((z / (1.1 * K)) % 1) + 1) % 1 - 0.5) - 0.24) * K), lapis, 0.02)); };
+    striped(ell(at(-0.45, 0, 0.75), f, sc([2.55, 2.75, 2.15]), gold, 0.5));
+    for (const sg of [-1, 1]) striped(ell(at(0.35, sg * 2.45, -2.4), f, sc([0.55, 1.25, 2.6]), gold, 0.4));
+    P.push(ell(at(0.25, 0, 0.55), f, sc([2.35, 2.62, 0.3]), mat(0xf0c850, { spec: 0.9, lo: 0.4, hi: 1.4 }), 0.05)); // brow band
+    P.push(cap(at(2.35, 0, 0.6), at(2.6, 0, 1.6), 0.28 * K, 0.38 * K, mat(0xf0c850, { spec: 0.9, lo: 0.4, hi: 1.4 }), 0.05)); // the rearing cobra
   }
   if (kind === "lion" && !hood) P.push(custom(at(-6, -6, -6), at(6, 6, 6), (x, y, z) => { // a heavy mane round the face
     const qx = x - c[0], qy = y - c[1], qz = z - (c[2] - 0.3 * K), a = (qx * f[0] + qy * f[1]) / K, si = (qx * s[0] + qy * s[1]) / K, h = qz / K;

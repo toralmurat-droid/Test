@@ -2364,7 +2364,7 @@ let mob3D: Frame3 | null = null;
 export let lastMob3D: Uint8ClampedArray | null = null;
 export function setMob3D(fr: Frame3 | null) { mob3D = fr; lastMob3D = null; setMonster3D(!!fr); }
 /** Monster bodies modelled in 3D (base kind before any _variant / _champ). */
-export const MOB3D = new Set<string>(["skeleton", "skeletonmage", "necromancer", "bandit", "bandit_brute", "bandit_archer", "banditchief", "outrider", "crossbowman", "firebrand", "redcaptain", "rourke", "gnawkin", "tuskborn", "silkwretch", "duskwing", "crowseer", "gnasher", "weaver", "packlord", "hornbrute", "hidemother"]);
+export const MOB3D = new Set<string>(["skeleton", "skeletonmage", "necromancer", "bandit", "bandit_brute", "bandit_archer", "banditchief", "outrider", "crossbowman", "firebrand", "redcaptain", "rourke", "gnawkin", "tuskborn", "silkwretch", "duskwing", "crowseer", "gnasher", "weaver", "packlord", "hornbrute", "hidemother", "nomad", "sanddead", "veiled", "camelfolk", "sphinx", "sunwright"]);
 const is3D = (name: string) => MOB3D.has(name) || MOB3D.has(name.replace(/_(axe|spear|bow|champ|folk)$/, "")) || MOB3D.has(name.replace(/_champ$/, ""));
 
 /** The 3D body plus its painted weapons, effects and shadow, finished pixels in frame `F` (rig units -> texels). */
