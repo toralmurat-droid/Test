@@ -100,9 +100,9 @@ export const MILESTONES: Milestone[] = [
     exit: "A forged item goes from council order to live in under a war day, passing sims, with art.",
     items: [
       { name: "Codex recipes, power budgets and the sim gate", owner: "Lead Designer + Balance", status: "done", pr: 493 },
-      { name: "Art from recipe parameters (palette recolours in the client)", owner: "Art Director", status: "doing", pr: 495 },
-      { name: "Content packs hot-loaded by the running server", owner: "Server & Live Ops", status: "doing", pr: 494 },
-      { name: "Councils order forgings (one a war day, Herald news)", owner: "AI Engineer", status: "doing" },
+      { name: "Art from recipe parameters (palette recolours in the client)", owner: "Art Director", status: "done", pr: 495 },
+      { name: "Content packs hot-loaded by the running server", owner: "Server & Live Ops", status: "done", pr: 494 },
+      { name: "Councils order forgings (one a war day, Herald news)", owner: "AI Engineer", status: "done", pr: 497 },
     ],
   },
   {
@@ -110,8 +110,11 @@ export const MILESTONES: Milestone[] = [
     goal: "Two versions of the game side by side; players cross to the new one when they choose.",
     exit: "A real update ships as an Age with no player kicked mid-fight, and rolls back cleanly in a drill.",
     items: [
-      { name: "War state as its own service with a versioned API", owner: "Server & Live Ops", status: "later" },
-      { name: "Gateway, Vanguard canary, crossing offer, safe-moment move", owner: "Server + Client", status: "later" },
+      { name: "War state as its own service with a versioned API", owner: "Server & Live Ops", status: "done", note: "War, world and Forge leases on one Postgres: one Age owns them, the others follow and queue their changes; versioned war, Forge and save APIs", pr: 510 },
+      { name: "One hero on one server at a time (account leases, save versions)", owner: "Server & Live Ops", status: "done", pr: 508 },
+      { name: "Gateway, Vanguard canary, crossing offer, safe-moment move", owner: "Server + Client", status: "done", note: "Gateway with an Age split and cookie (#507), status page (#509), crossing from the Esc menu or /age, out of combat, hero and spot kept", pr: 520 },
+      { name: "Drill: two Ages and the gateway on one Postgres, crossing and role handover", owner: "Server & Live Ops", status: "doing", pr: 522 },
+      { name: "Switch production to the gateway and two game servers on Railway", owner: "Game Director", status: "next", note: "Murat's call: three always-on services instead of one (docs/ages-setup.md)" },
       { name: "Automatic rollback on error spikes", owner: "Server & Live Ops", status: "later" },
     ],
   },
