@@ -37,3 +37,20 @@ never smooth. Performance: everything is baked by `tools/art` at the old sheet s
 | 8 | Demons and bosses | demon 1-4 (bone harvest frames), hollowking | done: demon 1-4 (rip frames in 3D, boneArmour in beastParts3D), hollowking in 2b |
 | 9 | Golems and wisps | golem/colossus x4 elements, wisps x4 | done (golems3d.ts) |
 | 10 | War troops | war_* soldiers (fall frames), carts, rams, tunnels | done: soldiers (fall frames rotated in 3D); carts, ram, tunnel in siege3d.ts (down/up views drawn at 0.8 and pulled in to fit 44 px) |
+
+## Decor (baked 3D props)
+Props are modelled in `tools/art/paint/props3d.ts` with the SDF prims of mob3d.ts, ray-cast by `prop3d.ts` in the
+runtime prop painter's projection (`client/src/isoPaint.ts`: u, v, z texels; x = ox + u - v, y = oy + (u + v)/2 - z),
+and baked by `npx tsx tools/art/bake-props.ts [key...]` (PREVIEW=dir writes painted-vs-baked images) to
+`client/public/assets/hd/props/<key>.png`. The client loads them under the painted keys (`worldProps.preloadBakedProps`,
+`BAKED_PROPS`), so `sheet()` skips painting; the painted version stays as the fallback.
+
+| # | Set | Props | Status |
+|---|---|---|---|
+| D1 | Village and camp | lantern pole, dummy, skull pike, pennants red/black, net rack, spear/weapon rack | done |
+| D2 | Watchtower, spears on the ground, mill wheel, cows | | done (shipwreck stays painted for now: a 300x200 2D painting) |
+| D3 | Siege works (siegeWorks3d.ts): catapult, ram, siege tower, lumber, sawhorse | | done |
+| D4 | Dungeon props (dungeon3d.ts): brazier, torch stake (painted flames over 3D), hide rack, skull pole, rock spike | | done |
+| D5 | Deep dungeon props (deep3d.ts): candles, skull pyramid, urns (sarcophagus, pillar already iso) | | done |
+| D6 | Mawdeep quest objects (dungeon3d.ts): silk cocoon whole/cut, Hide Rite totem whole/burnt | | done |
+| D7 | Shipwreck, smithy, witch camp, Saltmere harbour, element props, throne/crown stones, lanterns | | next |
