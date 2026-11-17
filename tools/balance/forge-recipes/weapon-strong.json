@@ -1,0 +1,1 @@
+{ "kind": "weapon", "clan": "veiled", "name": "Star of the Circle", "base": "ww_star", "implicit": [{ "key": "atk", "value": 1 }, { "key": "mag", "value": 1 }], "palette": "gilt" }
