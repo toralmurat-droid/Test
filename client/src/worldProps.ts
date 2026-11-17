@@ -62,9 +62,22 @@ export function pen(buf: Uint32Array, W: number, H: number): Pen {
   return { px, line, rect, shaft };
 }
 
+/**
+ * Props rebuilt as 3D models and baked to sheets (tools/art/bake-props.ts, Murat 2026-11-17): loaded under the painted
+ * props' keys, so sheet() finds them and skips painting. A sheet that fails to load falls back to the painted one.
+ */
+export const BAKED_PROPS: Record<string, [number, number]> = {
+  wp_lantern_pole: [32, 90], wp_dummy: [34, 58], wp_skull_pike: [26, 72], wp_pennant_red: [44, 100], wp_pennant_black: [44, 100],
+  wp_net_rack: [54, 50], wp_spear_rack: [56, 80], wp_weapon_rack: [56, 80], wp_watchtower: [60, 126], wp_spears_ground: [40, 54],
+  wp_cow0: [COW_W, COW_H], wp_cow1: [COW_W, COW_H], wp_millwheel: [MILL_W, MILL_H],
+};
+export function preloadBakedProps(scene: Phaser.Scene) {
+  for (const [k, [w, h]] of Object.entries(BAKED_PROPS)) if (!scene.textures.exists(k)) scene.load.spritesheet(k, `assets/hd/props/${k}.png`, { frameWidth: w, frameHeight: h });
+}
+
 /** Paints `frames` frames side by side, outlines each silhouette, and registers the spritesheet texture. */
 export function sheet(scene: Phaser.Scene, key: string, w: number, h: number, frames: number, draw: (p: Pen, f: number) => void, shadow = 0.5) {
-  if (scene.textures.exists(key)) return;
+  if (scene.textures.exists(key)) { scene.textures.get(key).setFilter(Phaser.Textures.FilterMode.NEAREST); return; }
   const tex = scene.textures.createCanvas(key, w * frames, h)!;
   const ctx = tex.getContext();
   const img = ctx.createImageData(w * frames, h);

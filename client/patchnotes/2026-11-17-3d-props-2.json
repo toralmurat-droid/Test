@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-17",
+  "pr": 512,
+  "title": "Watchtowers, mill wheel and cows rebuilt in 3D",
+  "changes": [
+    "The Redfang watchtowers, Millbrook's water wheel and mill, the Goldenreach cows and the broken spears on old battlefields are now 3D models baked to pixel art, with soft shadows and depth.",
+    "Same size on screen and no cost to performance."
+  ]
+}

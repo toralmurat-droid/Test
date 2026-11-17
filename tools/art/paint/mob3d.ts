@@ -21,6 +21,7 @@ export interface Mat {
   /** Lit from inside: never darker than this (0..1). */ emit: number;
   /** 0..1: how much of what floats inside shows through. */ jelly: number;
   /** Specular sharpness. */ shine: number;
+  /** Optional surface pattern (props): light offset at a model point, e.g. wood grain, planks, stripes. */ tex?: (x: number, y: number, z: number) => number;
 }
 const rampCache = new Map<string, number[]>();
 /** A ramp from one colour with the house hue shift (cool shadows, warm lights), like body3d.ts. */
@@ -44,7 +45,7 @@ export function ramp(col: number, n = 7, lo = 0.34, hi = 1.32): number[] {
 export type MatOpts = Partial<Omit<Mat, "ramp">> & { lo?: number; hi?: number; n?: number; ramp?: number[] };
 export const mat = (col: number, o: MatOpts = {}): Mat => ({
   ramp: o.ramp ?? ramp(col, o.n ?? 7, o.lo ?? 0.34, o.hi ?? 1.32),
-  spec: o.spec ?? 0, grain: o.grain ?? 0, emit: o.emit ?? 0, jelly: o.jelly ?? 0, shine: o.shine ?? 18,
+  spec: o.spec ?? 0, grain: o.grain ?? 0, emit: o.emit ?? 0, jelly: o.jelly ?? 0, shine: o.shine ?? 18, tex: o.tex,
 });
 
 // ---- signed distance primitives (model space) -------------------------------------------------------------------
@@ -146,7 +147,7 @@ const BAYER = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
 /** Facings of the mob sheets (left = flipped right): yaw of the model's forward axis in the world. */
 export const YAW = { down: -Math.PI / 2, up: Math.PI / 2, right: 0 } as const;
 
-function scene(ps: Prim[], x: number, y: number, z: number, want: { m: Mat | null } | null): number {
+export function scene(ps: Prim[], x: number, y: number, z: number, want: { m: Mat | null } | null): number {
   let d = Infinity, best = Infinity;
   for (let i = 0; i < ps.length; i++) {
     const p = ps[i];
