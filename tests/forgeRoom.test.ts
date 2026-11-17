@@ -216,6 +216,8 @@ test("forge (room): spawns in the owner's land with its stats, multiplied damage
     assert.equal(m.forge, v.id); assert.equal(plain.forge, "");
     assert.equal(m.champion, 0, "no affixes: no champion bits");
     plain.level = m.level; plain.weapon = m.weapon;
+    plain.champion = 0; // (a plain spawn may roll champion, which hits harder)
+    for (const x of [m, plain]) { x.rallyUntil = 0; x.alertUntil = 0; } // (nor a war cry or horn on one of them)
     const host = room.champs.host;
     assert.ok(host.dmg(m, 10) > host.dmg(plain, 10), "a forging's damage"); // (x10: at x1 a low-level mob rounds both to the same number)
     assert.ok(Math.abs(host.dmg(m, 10) / host.dmg(plain, 10) - 1.2) < 0.05);
