@@ -746,9 +746,10 @@ export function golemPower(o: F) {
   return rankPower(Math.max(1, Math.min(3, o.t[s.id] ?? 0))) * levelPower(s) * scalePower(s, o.s, STATS[o.cls].base);
 }
 
-export function make(id: string, cls: ClassKind, level: number, build: Build) {
+/** A bot hero with the build's points, talents and gear; `over` replaces some of the gear (forgeGate: a forged weapon). */
+export function make(id: string, cls: ClassKind, level: number, build: Build, over?: Equipped) {
   const pts = pointsFor(cls, level, build);
-  const f = new F(id, cls, level, talentsFor(cls, level, build), gearFor(cls, level, pts, build), pts);
+  const f = new F(id, cls, level, talentsFor(cls, level, build), { ...gearFor(cls, level, pts, build), ...over }, pts);
   // the Songweaver's mode is saved (swMode): she comes to a fight in the one she plays (Phrygian, else Minor)
   if (cls === "songweaver") { const k = knownModesOf(f); f.sk.mode = k.includes("phrygian") ? "phrygian" : k.includes("minor") ? "minor" : "major"; }
   return f;
