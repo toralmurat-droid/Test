@@ -56,4 +56,5 @@ and baked by `npx tsx tools/art/bake-props.ts [key...]` (PREVIEW=dir writes pain
 | D7 | Shipwreck (wreck3d.ts): shell hull in its own pitched/rolled frame, breach + ribs + ooze hold, torn sail | | done |
 | D8 | Throne, crown/ward stones, element props (elements3d.ts; fw()/fbox() face-the-viewer frame) | | done |
 | D9 | Morwen's tent (tent3d.ts; the alchemy rig is already isoPaint 3D) | | done |
-| D10 | Saltmere harbour, lanterns | | next |
+| D10 | Heart Shards x4 whole/broken, spirit lanterns dark/lit (shards3d.ts). Saltmere harbour, smithy, rig, houses already isoPaint 3D: skipped | | done |
+| A | Animations | | next |
