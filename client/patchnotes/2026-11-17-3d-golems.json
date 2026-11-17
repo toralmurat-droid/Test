@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-17",
+  "patch": 304,
+  "title": "Golems and wisps rebuilt in 3D",
+  "changes": [
+    "The Summoner's golems, the Colossus they fuse into and the elemental wisps are now built as 3D models and drawn as pixel art: rock hulks with their element's core glowing through the seams, flames on the fire golem, ice shards on the cold one, ooze on the poison one, bolts and floating shards on the storm one, and wisps of see-through light.",
+    "Same size on screen and no cost to performance."
+  ]
+}

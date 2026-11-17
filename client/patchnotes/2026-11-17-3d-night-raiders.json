@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-17",
+  "patch": 305,
+  "title": "Night Raiders rebuilt in 3D",
+  "changes": [
+    "The Unburied Seven now ride as 3D models drawn as pixel art: a real horse at the gallop and rearing, a torn caparison, a great cloak streaming back over the rump, burning eyes in the hood, and each rider's own massive weapon.",
+    "Same size on screen and no cost to performance."
+  ]
+}
