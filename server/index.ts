@@ -13,6 +13,7 @@ import { writeHandoff } from "./handoff";
 import { flushWorldFinal, initWorld } from "./worldStore";
 import { clientIp } from "./ratelimit";
 import { flushWar, startWar, warLog, warNow } from "./war";
+import { councilAdmin, killCouncils, mountCouncilRoutes } from "./warCouncil";
 
 const PORT = Number(process.env.PORT ?? 2567);
 const app = express();
@@ -89,16 +90,33 @@ app.get("/ideas.json", (_req, res) => { res.json(publicLog()); });
 
 // Backup download of every account and the idea log: /admin/backup?key=ADMIN_KEY
 // Off unless the ADMIN_KEY environment variable is set (Railway: service -> Variables).
-app.get("/admin/backup", (req, res) => {
+const adminOk = (req: express.Request) => {
   const want = Buffer.from(process.env.ADMIN_KEY ?? "");
   const got = Buffer.from(String(req.query.key ?? ""));
-  const ok = want.length >= 12 && got.length === want.length && crypto.timingSafeEqual(got, want);
-  if (!ok) { res.sendStatus(404); return; }
+  return want.length >= 12 && got.length === want.length && crypto.timingSafeEqual(got, want);
+};
+app.get("/admin/backup", (req, res) => {
+  if (!adminOk(req)) { res.sendStatus(404); return; }
   const day = new Date().toISOString().slice(0, 10);
   res.setHeader("Content-Disposition", `attachment; filename="game-backup-${day}.json"`);
   res.setHeader("Cache-Control", "no-store");
   res.json({ at: new Date().toISOString(), saves: allAccounts(), ideas: ideaLog });
 });
+
+// War Councils (M3, server/warCouncil.ts): the daily digests and the council log; the kill switch (?kill=1 / ?kill=0)
+app.get("/admin/war-digest", (req, res) => {
+  if (!adminOk(req)) { res.sendStatus(404); return; }
+  res.setHeader("Cache-Control", "no-store");
+  res.json(councilAdmin());
+});
+app.post("/admin/war-council", (req, res) => {
+  if (!adminOk(req)) { res.sendStatus(404); return; }
+  if (req.query.kill === "1" || req.query.kill === "0") killCouncils(req.query.kill === "1");
+  res.setHeader("Cache-Control", "no-store");
+  res.json(councilAdmin(0));
+});
+// The remote councils (scheduled Claude routines): briefings and orders, behind WAR_COUNCIL_TOKEN (off when unset)
+mountCouncilRoutes(app);
 
 // Login screen: which saved heroes does this account have? (lets the player pick Continue or New game)
 app.use("/account", (req, res, next) => {
