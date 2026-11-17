@@ -210,3 +210,24 @@ An older build (a draining Age) must never damage a hero a newer build saved.
   ignored on load).
 - An account on a draining Age's memory that a newer build bumps while the old one does not hold its lease (shared mode)
   is refused at the next fresh read; in single-server mode (no leases) a stale memory copy is the part 3 issue.
+
+## Built: part 6, status for both Ages (branch `claude/ages-metrics`)
+- `server/agesStatus.ts`: `GET /admin/ages.json?key=ADMIN_KEY` (the admin check of `server/index.ts`, 404 without;
+  mounted there with one line): slot, `AGE_ROLE`, build, `WAR_API` / `FORGE_API` (no account API version exists yet),
+  lease holder ids, the roles of war / world / forge, the leases held, heroes and accounts online (counts), the account
+  guard's counters, fenced refusals, flush lag and failures, uptime.
+- Counters live in their modules, behind small getters: `AccountGuard.stats` / `held()` / `inUseCount()`
+  (`server/accountGuard.ts`), `accountStats()` (`server/accounts.ts`: per-account time of the oldest unsaved change, kept
+  across a failed or refused write; failures; refused rows), `warLease()`, `forgeLease()`, `worldLease()` (role "off"
+  before `initWorld`), `onlineNow()` (`server/TownRoom.ts`, over `liveRooms`).
+- `server/gateway.ts`: `/gateway/status` also asks each backend's `/admin/ages.json` with its own key (2 s, in parallel
+  with the `/health` probe) and adds it per slot as `ages`, or `agesError` when it fails.
+- `docs/ages-setup.md`: a "Checks" section reading both endpoints.
+- No gameplay, save or schema change.
+- Tests: `tests/agesStatus.test.ts` (key required; leases off: owner of all three; memLeases: follower, account counters,
+  flush lag and failures, a lost account's refused write), `tests/gateway.test.ts` (the combined status, a backend timing out).
+
+### Open (part 6)
+- Flush lag and failures cover account saves only; the war's, world's and Forge's writes log their failures but have no
+  counter yet.
+- Nothing alerts on the numbers: someone has to look (or a later uptime check can read `/gateway/status`).

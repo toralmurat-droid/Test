@@ -48,8 +48,23 @@ export interface GuardHooks {
   lost?(k: string): void;
 }
 
+/** Counters since boot (server/agesStatus.ts, /admin/ages.json): how often logins were let in, refused or retried. */
+export interface GuardStats {
+  /** Claims that went through ("mine" or "fresh"). */
+  ok: number;
+  /** Refused: another server holds the account. */
+  elsewhere: number;
+  /** Refused: a hero of the account is already in a room here. */
+  playing: number;
+  /** Waits for a lease held elsewhere (each try after the first). */
+  retries: number;
+  /** Accounts a renewal showed another server took (their players here sent away when in use). */
+  lost: number;
+}
+
 export class AccountGuard {
   readonly leases: Leases;
+  readonly stats: GuardStats = { ok: 0, elsewhere: 0, playing: 0, retries: 0, lost: 0 };
   private uses = new Map<string, number>(); // sessions and HTTP edits per account, across every room of this process
   private plays = new Map<string, number>(); // of those, heroes in a room
   private open = new Map<string, number>(); // of those, the ones whose claim went through (their player sees this memory)
@@ -89,8 +104,8 @@ export class AccountGuard {
    * answer but "elsewhere" / "playing" (and a throw) must be matched by one `leave(k, play)`.
    */
   async claim(k: string, play = false): Promise<Claim> {
-    if (play && this.playing(k) > 0) return "playing";
-    if (this.taken.has(k) && this.count(k) > 0) return "elsewhere"; // (its stale session here is being sent away)
+    if (play && this.playing(k) > 0) { this.stats.playing++; return "playing"; }
+    if (this.taken.has(k) && this.count(k) > 0) { this.stats.elsewhere++; return "elsewhere"; } // (its stale session here is being sent away)
     this.add(k, play, 1);
     try {
       const r = await this.locked(k, async (): Promise<Claim> => {
@@ -103,10 +118,12 @@ export class AccountGuard {
             return was ? "mine" : "fresh";
           }
           if (i + 1 >= tries) return "elsewhere";
+          this.stats.retries++;
           await (this.opts.sleep ?? wait)(this.opts.retryMs ?? ACCOUNT_LEASE.retryMs);
         }
       });
-      if (r === "elsewhere") { this.add(k, play, -1); await this.releaseIdle(k); }
+      if (r === "elsewhere") { this.stats.elsewhere++; this.add(k, play, -1); await this.releaseIdle(k); }
+      else this.stats.ok++;
       return r;
     } catch (e) {
       this.add(k, play, -1); await this.releaseIdle(k);
@@ -128,7 +145,7 @@ export class AccountGuard {
     for (const lk of others ?? []) {
       const k = lk.slice(ACCT.length);
       if (this.taken.has(k)) continue;
-      this.taken.add(k);
+      this.taken.add(k); this.stats.lost++;
       console.error(`Accounts: another server took the lease of ${k}: its changes here are not saved${this.count(k) > 0 ? ", its players here are sent away" : ""}`);
       if (this.count(k) > 0) this.hooks.lost?.(k);
     }
@@ -137,6 +154,10 @@ export class AccountGuard {
       if (this.count(k) === 0) void this.releaseIdle(k);
     }
   }
+
+  /** Account leases held now (trusted), and how many accounts are in use here (sessions or edits). */
+  held() { return this.leases.keys().filter((lk) => this.leases.held(lk)).length; }
+  inUseCount() { return this.uses.size; }
 
   /** Starts renewing (server/accounts.ts initAccounts). */
   start() {

@@ -117,6 +117,14 @@ async function claimWorld() {
   } else if (!now && mine) console.log("World: lost the world's lease (another server holds it, or the database cannot be reached): not writing");
   mine = now;
 }
+/**
+ * This server's part in the world (server/agesStatus.ts): "owner" writes it (the lease's holder, or no shared store),
+ * "follower" keeps its world in memory only; "off" before initWorld (tests, the bench). Plus the lease's holder id.
+ */
+export function worldLease(): { role: "owner" | "follower" | "off"; holder?: string; held: boolean } {
+  const held = !!lease?.held(LEASE_KEY);
+  return { role: !live ? "off" : mine && held ? "owner" : "follower", holder: lease?.holder, held };
+}
 /** Tests: a world store and lease of their own (no Postgres), as initWorld would set them up. */
 export function _setupWorld(store: Store<WorldState>, l: Leases, s: WorldState) {
   pg = store; lease = l.want(LEASE_KEY); state = s; dirty = false; live = true; writing = undefined;
