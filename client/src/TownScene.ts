@@ -108,7 +108,9 @@ type ClickSide = "left" | "right";
 const costWords = (s: { cost?: number; mana?: number; blood?: number }) => [s.mana ? `${s.mana} mana` : "", s.cost ? `${s.cost} heat` : "", s.blood ? `${s.blood}% HP` : ""].filter(Boolean).join(" · ") || "free";
 import { GearFx } from "./gearfx";
 import { Element, ELEMENT_COLORS } from "../../shared/elements";
-import { takeForged } from "./forgePack";
+import { forgeVersion, setForgeSender, takeForged } from "./forgePack";
+import { forgedIconTexture, forgedMobTexture } from "./forgeArt";
+import { artId } from "./forgeArt";
 import { baseId, canWear, GEAR_SLOTS, gearName, gearDef, reqProblem, gearReachMult, gearSpeedMult, gearStats, itemRarity, WEAPON_TYPE_NAMES } from "../../shared/gear";
 import { attackProfile, ATTACK_WORDS, isWeaponType, poseSheet, profileOf, weaponAttackMult, weaponOk } from "../../shared/weapons";
 import { talentMult, talentPoints, spentPoints } from "../../shared/talents";
@@ -862,7 +864,9 @@ export class TownScene extends Phaser.Scene {
       const text = FERRY_NO[String(why)];
       if (e && text) this.floatText(e.sprite.x, e.sprite.y - 22, text, "#ffa22e", PIXEL_FONT);
     });
-    this.room.onMessage("forge", (m: { defs?: unknown }) => takeForged(m?.defs)); // forged weapons and monsters (client/src/forgePack.ts)
+    setForgeSender((ids) => this.room?.send("forgeQ", { ids }));
+    this.room.onMessage("forge", (m: { defs?: unknown }) => takeForged(m?.defs, true));
+    this.room.onMessage("forgeQ", (m: { defs?: unknown }) => takeForged(m?.defs)); // forged weapons and monsters (client/src/forgePack.ts)
     this.room.onMessage("forgeQ", (m: { defs?: unknown }) => takeForged(m?.defs));
     this.room.onMessage("travelno", () => {
       const e = this.entities.get(this.me);
@@ -922,7 +926,8 @@ export class TownScene extends Phaser.Scene {
         e.tx = m.x; e.ty = m.y;
         pushSnap(e, m.x, m.y);
         // A respawned Mother Blob can come back at another level, a skeleton with another weapon
-        if (m.kind === "motherblob" || m.kind === "skeleton" || m.kind === "bandit" || m.kind === "demon" || m.kind === "trooper" || m.champion) { // a Hide-Stitched champion changes skin
+        if (m.forge) { /* a forged monster: syncForged (every frame) picks its recoloured sheet */ }
+        else if (e.sprite.texture.key.includes("__fm") || m.kind === "motherblob" || m.kind === "skeleton" || m.kind === "bandit" || m.kind === "demon" || m.kind === "trooper" || m.champion) { // a Hide-Stitched champion changes skin
           const key = mobTexture(this, m.kind, m.level, m.weapon, m.bones, !!m.champion);
           if (e.sprite.texture.key !== key) { e.sprite.setTexture(key, 0); this.perch(e, m); }
         }
@@ -968,7 +973,7 @@ export class TownScene extends Phaser.Scene {
         : rune
         ? this.add.image(it.x, it.y, runeTexture(this, rune)).setScale(0.6).setDepth(it.y - 8)
         : gear
-        ? this.add.image(it.x, it.y, "gear_icons", baseId(it.gear)).setScale(0.6 / ART_K).setDepth(it.y - 8)
+        ? (forgedIconTexture(this, it.gear) ? this.add.image(it.x, it.y, forgedIconTexture(this, it.gear)!).setScale(0.6 / ART_K) : this.add.image(it.x, it.y, "gear_icons", artId(it.gear)).setScale(0.6 / ART_K)).setDepth(it.y - 8)
         : this.add.image(it.x, it.y, itemTexture(this, it.kind === "quest" ? `q_${it.gear}` : it.kind === "potion" || it.kind === "mpotion" ? potionTex(it.kind, Number(it.gear) || 0) : it.kind)).setDepth(it.y - 8);
       if (rune) {
         // runes glow faintly in their own colour
@@ -2112,6 +2117,16 @@ export class TownScene extends Phaser.Scene {
     else e.sprite.setScale(base * grow);
   }
 
+  /** A monster's sheet: its base art, and for a forged monster (Mob.forge) the base art recoloured by its palette. */
+  private mobTex(p: any): string {
+    const key = mobTexture(this, p.kind, p.level, p.weapon, p.bones, !p.forge && !!p.champion);
+    return p.forge ? forgedMobTexture(this, key, p.forge) : key;
+  }
+  private syncForged(e: Entity, p: any) {
+    const key = this.mobTex(p);
+    if (e.sprite.texture.key !== key) { const f = e.sprite.frame.name; e.sprite.setTexture(key, f); }
+  }
+
   /** Redfang lookouts stand up on their watchtower's platform: drawn lifted, label and HP bar above them. */
   private perch(e: Entity, p: any) {
     const look = mobLook(p.kind, p.weapon), base = look?.oy ?? 0.85, top = look?.top ?? 14;
@@ -2123,7 +2138,7 @@ export class TownScene extends Phaser.Scene {
   private addEntity(id: string, p: any, mob = false) {
     if (mob) {
       const look = mobLook(p.kind, p.weapon);
-      const sprite = this.add.sprite(p.x, p.y, mobTexture(this, p.kind, p.level, p.weapon, p.bones, !!p.champion), 0).setOrigin(0.5, look?.oy ?? 0.85)
+      const sprite = this.add.sprite(p.x, p.y, this.mobTex(p), 0).setOrigin(0.5, look?.oy ?? 0.85)
         .setScale(look?.scale ?? 1);
       if (p.kind === "crawler" && sprite.texture.key.startsWith("mob_skeleton")) sprite.setCrop(0, 0, sprite.frame.width, sprite.frame.height * CRAWL_CROP); // legs gone
       // The level tag is made when the monster comes on screen (see update): thousands of text canvases would cost a lot
@@ -2915,7 +2930,7 @@ export class TownScene extends Phaser.Scene {
   private weaponIcon(mine: any, cls = "") {
     const w = activeOf(mine).weapon;
     if (!w) return `<span class="${cls} fist">Fists</span>`;
-    const key = baseId(w);
+    const key = `${baseId(w)}:${forgeVersion()}`; // (a forged weapon's icon is remade when the pack changes)
     let url = this.weaponIcons.get(key);
     if (!url) { url = iconCanvas(this, w, 32).toDataURL(); this.weaponIcons.set(key, url); }
     return `<img class="${cls}" src="${url}" alt="">`;
@@ -3573,7 +3588,8 @@ export class TownScene extends Phaser.Scene {
       setBaseDepth(e.bar.clear(), e.sprite.y + 1);
       if (!e.mob) this.tabards?.sync(id, e, !p.dead && !p.hidden);
       if (!e.mob) this.feud?.sync(id, e, !p.dead && !p.hidden); // "Wanted by ..." over the name
-      if (e.mob) this.champFx?.sync(id, e, p, x, y, now);
+      if (e.mob && p.forge) this.syncForged(e, p);
+      else if (e.mob) this.champFx?.sync(id, e, p, x, y, now); // (a forged monster's affixes are not a champion's look: forgeArt.ts)
       this.fx.status(e, e.bar, dtMs / 1000);
       // (Stacks built by basic hits are shown by the skill keys, see chargeCell: no pips under the hero, Murat 2026-11-04)
       const maxHp = p.maxHp;

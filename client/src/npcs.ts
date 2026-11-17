@@ -30,7 +30,8 @@ import { ferryOpen } from "../../shared/ferry";
 import { actAt, waygateById, WAYGATES } from "../../shared/act2";
 import type { MapMarker } from "./minimap";
 import { QuestLog } from "./questlog";
-import { MASTER_LEVELS, SHOPS, sellPrice, shopBuys, shopFuses } from "../../shared/shops";
+import { MASTER_LEVELS, sellPrice, shopBuys, shopFuses } from "../../shared/shops";
+import { forgeVersion, shopOf } from "./forgePack";
 import { GEAR_SLOTS, GearSlot, keepsBoundOf, gearDef, gearName, itemLevel, itemRarity, itemText, reqProblem, TIER_NAMES, wearProblem } from "../../shared/gear";
 import { CHAR_GROW, CHAR_SCALE, CHAR_ORIGIN, CharacterName, ensureCharSheet, playCharAnim, SHEET_RANGE } from "./artAssets";
 import { iconCanvas, itemColor, rarityLabel, reqInfoOf } from "./gear";
@@ -560,13 +561,13 @@ export class NpcLayer {
 
   /** Shop page: stock to buy, and (for traders who buy) the player's matching bag items to sell. */
   private renderShop(n: Npc, q: QuestState) {
-    const shop = SHOPS[n.shop!];
+    const shop = shopOf(n.shop)!;
     const o = own(q), { gold, potions } = o, cls = q?.cls, pots = unpackPotions(potions);
     const bag = [...o.bag];
     // masterwork: one level shown at a time (picked with the buttons), by default the best one the hero can wear
     const master = this.masterLv ?? [...MASTER_LEVELS].reverse().find((l) => l <= (q?.level ?? 1)) ?? MASTER_LEVELS[0];
     const tw = this.towns, town = townAt(n.x, n.y), capital = cityNpcRole(n.id)?.city, cut = (p: number) => (capital ? cityPrice(p, capital, this.heroClan?.() || undefined) : tw ? tw.price(p, town) : p); // the holder's sworn heroes pay less (the server charges the same)
-    const key = JSON.stringify([n.id, master, cut(1000), gold, potions, bag, q?.level, o.ptSta, o.ptStr, o.ptMag, o.ptDex, ...GEAR_SLOTS.map((s) => q?.[s]), this.shopMsg, questSig(q)]);
+    const key = JSON.stringify([n.id, forgeVersion(), master, cut(1000), gold, potions, bag, q?.level, o.ptSta, o.ptStr, o.ptMag, o.ptDex, ...GEAR_SLOTS.map((s) => q?.[s]), this.shopMsg, questSig(q)]);
     if (key === this.stage) return;
     this.stage = key;
     const row = (icon: string, name: string, color: string, desc: string, btn: string, cls2: string, i: number, off: boolean) =>
@@ -663,9 +664,9 @@ export class NpcLayer {
     for (const b of this.dialog.querySelectorAll<HTMLButtonElement>(".lm-tab")) b.onclick = () => { this.lmTab = b.dataset.tab as LmTab; this.lmAsk = -1; this.stage = -1; };
   }
   private renderLute(n: Npc, q: QuestState) {
-    if (this.lmTab === "shop" && !(n.shop && SHOPS[n.shop])) this.lmTab = "traits";
+    if (this.lmTab === "shop" && !(n.shop && shopOf(n.shop))) this.lmTab = "traits";
     const bag = [...own(q).bag], sb = getSongbook();
-    const st: LmState = { tab: this.lmTab, gold: own(q).gold, level: q?.level ?? 1, cls: q?.cls, weapon: q?.weapon, shield: q?.shield, bag, mats: sb.mats, msg: this.shopMsg, breakAsk: this.lmAsk, hasShop: !!(n.shop && SHOPS[n.shop]) };
+    const st: LmState = { tab: this.lmTab, gold: own(q).gold, level: q?.level ?? 1, cls: q?.cls, weapon: q?.weapon, shield: q?.shield, bag, mats: sb.mats, msg: this.shopMsg, breakAsk: this.lmAsk, hasShop: !!(n.shop && shopOf(n.shop)) };
     const key = JSON.stringify([n.id, st]);
     if (key === this.stage) return;
     this.stage = key;
@@ -713,7 +714,7 @@ export class NpcLayer {
 
   private renderDialog(q: QuestState) {
     const n = this.talking!;
-    if (n.id === "lutemaker" && !(this.lmTab === "shop" && n.shop && SHOPS[n.shop])) return this.renderLute(n, q);
+    if (n.id === "lutemaker" && !(this.lmTab === "shop" && n.shop && shopOf(n.shop))) return this.renderLute(n, q);
     const cr = cityNpcRole(n.id);
     if (cr && cr.role !== "quartermaster" && this.city) return this.renderCity(n, cr.city, cr.role);
     const tid = stewardTown(n), st = tid ? this.towns?.steward(tid, this.talkSeq) : undefined;
