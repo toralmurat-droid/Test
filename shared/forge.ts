@@ -373,3 +373,7 @@ export function applyVariant(def: MobDef, v: ForgedMob): MobDef {
     xp: Math.round(def.xp * mobPower(v)),
   };
 }
+
+/** A clan's live (active) forged weapons in seq order: the order of its quartermaster's forged stock, on server and client alike. */
+export const liveWeapons = (defs: Iterable<Forged>, clan: string): ForgedWeapon[] =>
+  [...defs].filter((d): d is ForgedWeapon => d.kind === "weapon" && d.clan === clan && d.status === "active").sort((a, b) => a.seq - b.seq);

@@ -21,7 +21,7 @@ import path from "node:path";
 import { Worker } from "node:worker_threads";
 import type { Express, Request } from "express";
 import {
-  defFromRecipe, FORGE, FORGED_GEAR_RE, forgeLookup, forgedGearId, forgedMobId, parseForgedGearId, parseForgedMobId, validateRecipe,
+  defFromRecipe, FORGE, liveWeapons, FORGED_GEAR_RE, forgeLookup, forgedGearId, forgedMobId, parseForgedGearId, parseForgedMobId, validateRecipe,
   type Forged, type ForgedMob, type ForgedWeapon, type ForgeRecipe, type ForgeStatus, type MonsterRecipe, type WeaponRecipe,
 } from "../shared/forge";
 import { rollAffixes, setForgedGear, withLevel } from "../shared/gear";
@@ -50,7 +50,8 @@ export interface ForgeSave {
   lost?: unknown[];
 }
 /** What a client gets: the forgings it needs to name and draw items and monsters. `v` changes with every change. */
-export interface ForgePack { v: number; defs: Forged[] }
+/** `killed`: the kill switch is on (no forged stock is sold), which a client cannot tell from the live list alone. */
+export interface ForgePack { v: number; defs: Forged[]; killed?: boolean }
 export interface GateVerdict { ok: boolean; reasons: string[] }
 export type GateRunner = (def: Forged) => Promise<GateVerdict>;
 
@@ -402,7 +403,7 @@ export function liveMobsOf(k: ClanKey): ForgedMob[] {
   return out;
 }
 const liveWeaponsOf = (k: ClanKey): ForgedWeapon[] =>
-  forgeKilled() ? [] : save.defs.filter((d): d is ForgedWeapon => d.kind === "weapon" && d.clan === k && d.status === "active");
+  forgeKilled() ? [] : liveWeapons(save.defs, k);
 /** A forged monster's drop: one of its clan's live forged weapons (FORGE.dropChance), at the monster's level, rolled like any find. */
 export function forgedDrop(k: ClanKey, level: number, rnd: () => number = Math.random): string | undefined {
   const list = liveWeaponsOf(k);
@@ -415,7 +416,7 @@ export const forgedStock = (k: ClanKey | string): string[] => (isClan(k) ? liveW
 /** The pack for clients: every live forging, or (ids) those asked for, any status. */
 export function packFor(ids?: readonly string[]): ForgePack {
   const defs = ids ? save.defs.filter((d) => ids.includes(d.id)) : save.defs.filter((d) => d.status === "active");
-  return { v: ver, defs: structuredClone(defs) };
+  return { v: ver, defs: structuredClone(defs), ...(forgeKilled() ? { killed: true } : {}) };
 }
 /** Listen to every change of the registry (a room: re-send the pack, recompute stats). Returns the unsubscribe. */
 export function onForge(f: (p: ForgePack) => void) { listeners.add(f); return () => { listeners.delete(f); }; }
