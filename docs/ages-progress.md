@@ -381,3 +381,10 @@ is not special).
   for it like a restart (`/matchmake` is pinned to the cookie's Age).
 - A crossing hero's later death or damage while frozen is ignored (unhurt for at most 10 s); mobs keep chasing them.
 
+
+## Built: part 9, the drill (branch `claude/ages-drill`)
+- `tools/ages-drill.mjs` (`npm run ages:drill`): a local end-to-end rehearsal of the production setup. Boots blue, green
+  and the gateway from `server-dist/start.cjs` on one Postgres (`DATABASE_URL`, or a throwaway cluster it creates and
+  removes), then checks gateway health, status (lease ownership), `/gateway/ages`, a hero crossing blue -> green (4410,
+  same spot), the cooldown refusal, the account-lease refusal, and the role handover. See docs/ages-setup.md "Drill".
+- Note: `npm run build` must be fresh; a stale `server-dist/` from before part 8 has no `/age-info.json` or crossing.

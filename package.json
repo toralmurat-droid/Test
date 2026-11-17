@@ -12,6 +12,7 @@
     "bench": "node tools/perf/run.mjs",
     "bench:client": "node tools/perf/client.cjs",
     "start": "NODE_ENV=production node --enable-source-maps server-dist/index.cjs",
+    "ages:drill": "node tools/ages-drill.mjs",
     "test": "tsx --test tests/*.test.ts && tsx tools/ideas-check.ts",
     "art": "tsx tools/art/generate.ts"
   },
