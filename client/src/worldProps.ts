@@ -73,6 +73,8 @@ export const BAKED_PROPS: Record<string, [number, number]> = {
   siege_catapult: [152, 118], siege_ram: [144, 104], siege_tower: [116, 192], siege_lumber: [112, 62], siege_sawhorse: [60, 40],
   dg_brazier: [32, 50], dg_torch: [18, 58], dg_rack: [50, 54], dg_pole: [30, 58], dg_spike: [22, 44],
   dp_candles: [30, 30], dp_skulls: [40, 40], dp_jar: [24, 30],
+  wp_venom_caps: [34, 30], wp_ice_spikes: [34, 40], wp_ember_vent: [34, 34], wp_storm_stone: [30, 50], wp_hollow_throne: [108, 120],
+  wp_crownstone0: [30, 54], wp_crownstone1: [30, 54], wp_crownstone2: [30, 54], qobj_ward: [30, 54], qobj_ward_broken: [30, 54],
   qobj_silk: [30, 50], qobj_silk_cut: [30, 50], qobj_totem: [40, 76], qobj_totem_burnt: [40, 76],
 };
 export function preloadBakedProps(scene: Phaser.Scene) {
