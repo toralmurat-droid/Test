@@ -19,6 +19,7 @@ import { clientIp } from "./ratelimit";
 import { flushWar, startWar, warLog, warNow } from "./war";
 import { councilAdmin, killCouncils, mountCouncilRoutes } from "./warCouncil";
 import { flushForge, initForge, mountForgeAdmin } from "./forge";
+import { mountClanPluginAdmin } from "./clanPlugins";
 import { openKv } from "./store";
 
 const PORT = Number(process.env.PORT ?? 2567);
@@ -128,6 +129,8 @@ app.post("/admin/war-council", (req, res) => {
 });
 // The Forge (M4, server/forge.ts): GET /admin/forge (registry, research, log), POST ?kill=1|0&retire=<id>&revoke=<id>
 mountForgeAdmin(app, adminOk);
+// Clan plug-ins (M6, server/clanPlugins.ts): GET /admin/clan-plugins (pins, bundle hashes, failures, runs), POST ?kill=1|0&enable=<clan>|all
+mountClanPluginAdmin(app, adminOk);
 // Ages (M5, server/agesStatus.ts): this server's slot, roles, leases, account counters and flush lag
 mountAgesStatus(app, adminOk, BUILD, onlineNow);
 // The remote councils (scheduled Claude routines): briefings and orders, behind WAR_COUNCIL_TOKEN (off when unset)

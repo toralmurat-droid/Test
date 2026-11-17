@@ -49,6 +49,12 @@
  * `--council=shadow|lead` (War Councils M3, shared/war/council.ts): every clan's scripted council sits once a war day
  * (briefing, scriptedCouncil, validateCouncil). `shadow`: the doctrine still leads, the sim reports how often its main
  * target matched the council's; `lead`: the councils' intents lead (councilOrders). Judged on the no-player goal too.
+ *
+ * `--plugin=<clan>[,<clan>..]|all` (Living Code M6, shared/clans/): those clans' councils are their plug-ins, bundled as
+ * the build does (tools/clans/build.mjs) and run in the same sandbox as the server (server/clanPluginWorker.ts, in
+ * process, no pin needed in the sim); a failed call leaves the doctrine leading that clan's day, as live. Implies
+ * `--council=lead` unless --council is given. With the default plug-ins (the scripted council) every number equals
+ * --council=lead's.
  */
 import { CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
 import { newMinds, scriptedOrders } from "../../shared/war/doctrine";
@@ -66,6 +72,12 @@ import { regionByKey } from "../../shared/war/regions";
 import { keepOf, landPoints, RECKONING, reckonWinner, scoresOf, type ReckonTally } from "../../shared/war/crown";
 import { TOWNS, townCounts, townPatron, townStep, type TownState } from "../../shared/war/towns";
 import { agrees, buildBriefing, councilOrders, intentOf, scriptedCouncil, validateCouncil, type CouncilIntent } from "../../shared/war/council";
+import { pluginCouncilSync } from "../../server/clanPlugins";
+import { execFileSync } from "node:child_process";
+import crypto from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 const args = process.argv.slice(2);
 const num = (i: number, d: number) => (args[i] && !args[i].startsWith("--") ? Number(args[i]) : d);
@@ -108,7 +120,24 @@ const RV_V = Number(rvV || 10);
 /** The war ticks of the Reckoning's window in its day (war tick 0 at midnight UTC). */
 const RECKON_FROM = Math.round((RECKONING.hour * 3600_000) / WAR.tickMs), RECKON_TO = RECKON_FROM + Math.round((RECKONING.hours * 3600_000) / WAR.tickMs);
 const KEEP = keepOf(TERRITORIES);
-const COUNCIL_MODE = flag("council");
+const PLUGIN_ARG = flag("plugin");
+const PLUGIN_CLANS: ClanKey[] = PLUGIN_ARG === "all" ? [...CLAN_KEYS] : (PLUGIN_ARG ?? "").split(",").filter(Boolean) as ClanKey[];
+if (PLUGIN_ARG !== undefined && (!PLUGIN_CLANS.length || PLUGIN_CLANS.some((k) => !CLAN_KEYS.includes(k)))) { console.error(`--plugin must be all or clans from: ${CLAN_KEYS.join(", ")}`); process.exit(2); }
+/** --plugin: each clan's bundle, built as `npm run build:server` builds it (into a temporary folder, read back). */
+const PLUGINS: Partial<Record<ClanKey, { code: string; sha8: string }>> = {};
+if (PLUGIN_CLANS.length) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "clan-plugins-"));
+  try {
+    execFileSync(process.execPath, [path.join(__dirname, "../clans/build.mjs"), dir], { stdio: "inherit" });
+    for (const k of PLUGIN_CLANS) {
+      const f = path.join(dir, `${k}.js`);
+      if (!fs.existsSync(f)) { console.error(`--plugin: ${k} has no plug-in folder (shared/clans/${k}/)`); process.exit(2); }
+      const code = fs.readFileSync(f, "utf8");
+      PLUGINS[k] = { code, sha8: crypto.createHash("sha256").update(code).digest("hex").slice(0, 8) };
+    }
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+}
+const COUNCIL_MODE = flag("council") ?? (PLUGIN_CLANS.length ? "lead" : undefined);
 if (COUNCIL_MODE !== undefined && COUNCIL_MODE !== "shadow" && COUNCIL_MODE !== "lead") { console.error("--council must be shadow or lead"); process.exit(2); }
 
 function mulberry(a: number) {
@@ -137,6 +166,8 @@ interface Result {
   reckonings: number; reckonWins: Record<ClanKey, number>; reckonKept: number; reckonRepeat: number;
   /** --council: sessions held, order sets rejected, ticks the doctrine's main target matched the council's / ticks compared. */
   councils: number; councilRejected: number; agree: number; compared: number;
+  /** --plugin: plug-in calls, and those that failed (the doctrine led that clan's day). */
+  pluginCalls: number; pluginFails: number;
 }
 /** Territories of the neutral lands (the Crown of the Marches): reported apart, so a snowball there shows. */
 const NEUTRAL = TERRITORIES.filter((t) => regionByKey(t.region)?.wards).map((t) => t.id);
@@ -158,7 +189,7 @@ function play(clever?: ClanKey): Result {
   const crownAvg = Object.fromEntries(CLAN_KEYS.map((k) => [k, 0])) as Record<ClanKey, number>;
   let crownHalf = 0, crownFlips = 0, reckonings = 0, reckonKept = 0, reckonRepeat = 0;
   const reckonWins = Object.fromEntries(CLAN_KEYS.map((k) => [k, 0])) as Record<ClanKey, number>;
-  let councils = 0, councilRejected = 0, agree = 0, compared = 0;
+  let councils = 0, councilRejected = 0, agree = 0, compared = 0, pluginCalls = 0, pluginFails = 0;
   const slots = pitchedTicks();
   for (let r = 0; r < RUNS; r++) {
     const rnd = mulberry(SEED * 7919 + r), s = newWar(), minds = newMinds();
@@ -172,7 +203,15 @@ function play(clever?: ClanKey): Result {
       announced.clear();
       const intents: Partial<Record<ClanKey, CouncilIntent>> = {};
       if (COUNCIL_MODE) for (const k of CLAN_KEYS) { // the councils sit at the start of the war day
-        const v = validateCouncil(scriptedCouncil(buildBriefing(s, k, { seed: SEED * 7919 + r })), s, k, d);
+        const b = buildBriefing(s, k, { seed: SEED * 7919 + r }), plug = PLUGINS[k];
+        let raw: unknown;
+        if (plug) {
+          const a = pluginCouncilSync(plug.code, b, (x) => validateCouncil(x, s, k, d).errors);
+          pluginCalls++;
+          if ("error" in a) { pluginFails++; councils++; councilRejected++; if (VERBOSE) console.log(`plug-in ${k} day ${d}: ${a.error}`); continue; }
+          raw = a.raw;
+        } else raw = scriptedCouncil(b);
+        const v = validateCouncil(raw, s, k, d);
         councils++;
         if (v.ok) intents[k] = intentOf(v.orders, d); else councilRejected++;
       }
@@ -311,7 +350,7 @@ function play(clever?: ClanKey): Result {
     men: menSum / Math.max(1, 2 * (battles.pitched + battles.storm + battles.meet)), mins: minSum / Math.max(1, battles.pitched + battles.storm + battles.meet),
     townFlips: townFlips / Math.max(1, RUNS * (DAYS - SETTLE_DAYS)), townContests: townContests / Math.max(1, RUNS * (DAYS - SETTLE_DAYS)), townOff: townOff / Math.max(1, RUNS * (DAYS - SETTLE_DAYS)), townsHeld,
     crownAvg, crownHalf: crownHalf / Math.max(1, samples), crownFlips: crownFlips / (RUNS * DAYS),
-    reckonings, reckonWins, reckonKept, reckonRepeat, councils, councilRejected, agree, compared };
+    reckonings, reckonWins, reckonKept, reckonRepeat, councils, councilRejected, agree, compared, pluginCalls, pluginFails };
 }
 
 const t0 = Date.now();
@@ -336,6 +375,7 @@ if (RECKON && base.reckonings) {
 if (SACK.length) console.log(`Holds sacked: ${base.sacks.toFixed(2)} per war day, calling ${base.sackSieges.toFixed(2)} sieges`);
 if (COUNCIL_MODE) {
   console.log(`war councils (${COUNCIL_MODE}, scripted): ${base.councils} sessions, ${base.councilRejected} order sets rejected`);
+  if (PLUGIN_CLANS.length) console.log(`  clan plug-ins ${PLUGIN_CLANS.map((k) => `${k}#${PLUGINS[k]!.sha8}`).join(", ")}: ${base.pluginCalls} calls, ${base.pluginFails} failed (the doctrine led those days)`);
   if (COUNCIL_MODE === "shadow") console.log(`  the doctrine's main target matched the council's on ${pct(base.agree / Math.max(1, base.compared))} of ${base.compared} clan-ticks`);
 }
 console.log(`runs where one clan held > ${pct(WAR.leaderShare)} for over ${STREAK_DAYS} days in a row: ${pct(base.dominated)} (goal: under 5%)`);

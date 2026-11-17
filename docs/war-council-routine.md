@@ -153,3 +153,48 @@ war save (the last 300 entries), and each war day ends with a plain-text digest 
 decisions, rejections, fallbacks, forge orders and what came of them, flips, battles, the Reckoning, the land and the
 Forge's own lines of the day (commissions, gates, forgings gone live or retired). Read them at `/admin/war-digest`.
 No email is sent: that needs the owner's approval first.
+
+## Clan plug-ins (Living Code, M6 part 1)
+
+A clan's council can also be its own code: `shared/clans/<clan>/index.ts` exports a `plugin` (API v1: `council`,
+briefing in, orders out, once a war day; it may import only `shared/clans/api.ts`). The defaults return the scripted
+council's answer, so switching one on changes nothing until its code is rewritten. Murat's rule (2026-11-17): **no
+AI-written code goes live without his OK, and the OK is the hash pin.** Code: `server/clanPlugins.ts` (provider,
+pins, kill switch, admin), `server/clanPluginWorker.ts` (the sandbox), `tools/clans/` (build, static check, gate).
+
+Nothing runs unless all of these hold: the clan's council is on (`WAR_COUNCIL`), its provider is `plugin`
+(`WAR_COUNCIL_PROVIDER`), its bundle's hash is pinned (`CLAN_PLUGINS`), the bundle on the server matches the pin, the
+kill switch is off, and the plug-in has not switched itself off. Anything else, and any failure (a throw, a hang over
+200 ms, a crash or out-of-memory in the worker, a wrong clan or API, a reserved point, a forge order, an answer over
+4 kB or illegal orders), means the doctrine leads that clan for the day; the council log and the daily digest say why.
+
+| Variable | Value | Effect |
+|---|---|---|
+| `CLAN_PLUGINS` | `wardens:1a2b3c4d,host:5e6f7a8b` (example values) (8 to 64 hex characters of the bundle's sha256 per clan) | pins: only these bundles may run. Unset = off |
+| `WAR_COUNCIL_PROVIDER` | e.g. `wardens:plugin` | that clan's council asks its plug-in |
+| `WAR_COUNCIL` | e.g. `wardens:shadow`, later `wardens:lead` | as for any council: start with `shadow` |
+| `CLAN_PLUGINS_KILL` | `1` | kill switch: no plug-in runs, the doctrine leads |
+
+**Pinning a hash (Murat).** Each build writes the bundles to `server-dist/clans/<clan>.js` and their hashes to
+`server-dist/clans/manifest.json` (`sha256`, `sha8`, `version` per clan; locally: `npm run build:server`, or
+`CLAN_BUILD_VERBOSE=1 node tools/clans/build.mjs <folder>` prints `clan plug-in wardens@1 sha8 1a2b3c4d`). On the
+running server, `GET /admin/clan-plugins?key=ADMIN_KEY` shows for each clan the pin, the deployed bundle's `sha256` /
+`sha8`, `live` (pinned, matching, not killed, not switched off), failures in a row and the last runs. To let a
+reviewed version go live, set `CLAN_PLUGINS` in Railway to `<clan>:<sha8>` from there and redeploy (or restart). The
+hash covers the exact bytes the server runs, the kit included: any later change to the clan's folder, to
+`shared/clans/api.ts` or to what the kit bundles (the scripted council, the Heralds' lines) gives a new hash, and the
+old pin then refuses the new bundle (the doctrine leads, logged as `hash mismatch`) until the new hash is pinned.
+
+**Kill switch.** `POST /admin/clan-plugins?key=ADMIN_KEY&kill=1` stops every plug-in at once (`kill=0` lifts it); like
+the council's switch it is in memory only, so set `CLAN_PLUGINS_KILL=1` in Railway too to keep it after a restart, or
+remove the pin. The war councils' own kill switch (`WAR_COUNCIL_KILL`) stops every council, plug-ins included.
+
+**Auto switch-off.** After 3 failures in a row a clan's plug-in switches itself off (logged, in the digest); the
+doctrine leads until `POST /admin/clan-plugins?key=ADMIN_KEY&enable=<clan>` (or `enable=all`). In memory: a restart
+re-enables it, and it switches off again after 3 more failures.
+
+The council log names the code that decided: provider `plugin:<clan>@<version>#<sha8>`. `npx tsx tools/clans/check.ts
+<clan>` and `npx tsx tools/clans/gate.ts <clan>` are the checks CI runs on a PR that touches a clan folder; a branch
+named `claude/clan-<clan>-...` may change only `shared/clans/<clan>/`. The sandbox (a worker thread with no env and
+32 MB, a fresh `node:vm` context without `require`, `process`, `Date`, timers, `Intl` or string code generation,
+`Math.random` seeded from the briefing) is not a security boundary on its own: the static check, review and the pin are.

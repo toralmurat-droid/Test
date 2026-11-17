@@ -48,6 +48,14 @@ jobs:
           git fetch -q --depth=1 origin "$BASE_SHA" || true
           # a branch made before the script existed runs everything
           if [ -f tools/ci/test-affected.sh ]; then bash tools/ci/test-affected.sh "$BASE_SHA"; else npm test; fi
+      - name: Clan plug-ins (scope, static check and gate, only for the clan folders this PR touches)
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          git fetch -q --depth=1 origin "$BASE_SHA" || true
+          clans=$(node tools/ci/clan-scope.mjs "$HEAD_REF" "$BASE_SHA")
+          if [ -n "$clans" ]; then npx tsx tools/clans/check.ts $clans && npx tsx tools/clans/gate.ts $clans; fi
       - name: Typecheck and build (same as the Dockerfile)
         run: npm run build
       - name: Smoke test (the built server boots and a hero can log in)
