@@ -160,7 +160,7 @@ let guard: AccountGuard | undefined;
  */
 export async function initAccounts(shared?: { store: Store<Account>; leases: LeaseBackend; holder?: string; retryMs?: number }) {
   if (shared) {
-    store = shared.store; accounts = {}; dirty.clear();
+    store = shared.store; accounts = {}; dirty.clear(); since.clear();
     guard = new AccountGuard(shared.leases, guardHooks, shared.holder, { retryMs: shared.retryMs });
     return;
   }
@@ -507,7 +507,32 @@ function markDirty(k: string) {
   const acc = accounts[k];
   if (acc && !writable(acc)) { console.error(`Accounts: ${k} was saved by a newer build: not written here`); return; }
   if (acc) { acc.av = ACCOUNT_API; acc.minReader = ACCOUNT_MIN_READER; }
+  if (!dirty.has(k)) since.set(k, Date.now());
   dirty.add(k);
+}
+/** When each unsaved account first changed (flush lag, /admin/ages.json): waiting ones, and those in the write under way. */
+const since = new Map<string, number>(), flying = new Map<string, number>();
+/** A write did not go through: the account's oldest change is still unsaved. */
+function redirty(k: string) {
+  dirty.add(k);
+  const t = flying.get(k);
+  if (t !== undefined) since.set(k, Math.min(since.get(k) ?? t, t));
+}
+/** Since boot: failed account writes, and accounts a fenced write refused (server/agesStatus.ts). */
+const flushStats = { failures: 0, refused: 0 };
+
+/**
+ * Account saving at a glance (server/agesStatus.ts): unsaved accounts, the oldest unsaved change's age (ms, 0 when
+ * none), failures since boot, and with account leases on the guard's counters and the leases held.
+ */
+export function accountStats(now = Date.now()) {
+  let oldest = now;
+  for (const t of since.values()) oldest = Math.min(oldest, t);
+  for (const t of flying.values()) oldest = Math.min(oldest, t);
+  return {
+    shared: !!guard, dirty: dirty.size, lagMs: now - oldest, failures: flushStats.failures, refused: flushStats.refused,
+    holder: guard?.holder, leasesHeld: guard?.held() ?? 0, inUse: guard?.inUseCount(), claims: guard ? { ...guard.stats } : undefined,
+  };
 }
 
 let writing: Promise<void> | null = null;
@@ -522,6 +547,7 @@ export function flush(): Promise<void> {
   if (!dirty.size) return Promise.resolve();
   const keys = [...dirty];
   dirty.clear();
+  for (const k of keys) { flying.set(k, since.get(k) ?? Date.now()); since.delete(k); }
   // Postgres: copied now, so changes made while the write runs go into the next one
   // (the JSON store turns everything into text before its first await, which is the same snapshot)
   const changed: Record<string, Account> = {};
@@ -533,18 +559,21 @@ export function flush(): Promise<void> {
   const g = guard;
   const save = g
     ? store.saveFenced!(changed, g.holder, ACCT).then((refused) => {
+      flushStats.refused += refused.length;
       const kept = refused.filter((k) => g.retryWrite(k)), lost = refused.filter((k) => !g.retryWrite(k));
-      for (const k of kept) dirty.add(k);
+      for (const k of kept) redirty(k);
       if (kept.length) console.error(`Accounts: not saved yet, the lease ran out (tried again after it is renewed): ${kept.join(", ")}`);
       if (lost.length) console.error(`Accounts: not saved, another server has them now (or the row is missing): ${lost.join(", ")}`);
     })
     : store.save(changed, accounts);
   writing = save
     .catch((e) => {
-      for (const k of keys) dirty.add(k);
+      for (const k of keys) redirty(k);
+      flushStats.failures++;
       console.error("Could not write saves:", e);
     })
     .finally(() => {
+      flying.clear();
       writing = null;
       if (again) { again = false; void flush(); }
     });
@@ -554,7 +583,7 @@ export function flush(): Promise<void> {
 /** Last write while the server shuts down: JSON writes everything at once (blocking), Postgres waits for its writes. */
 export async function flushFinal() {
   if (store.saveSync) {
-    try { store.saveSync(accounts); dirty.clear(); } catch (e) { console.error("Could not write saves file:", e); }
+    try { store.saveSync(accounts); dirty.clear(); since.clear(); } catch (e) { flushStats.failures++; console.error("Could not write saves file:", e); }
     return;
   }
   while (writing || dirty.size) await (writing ?? flush());

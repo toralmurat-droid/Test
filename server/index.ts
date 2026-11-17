@@ -6,7 +6,8 @@ import zlib from "node:zlib";
 import express from "express";
 import { Server } from "colyseus";
 import { WebSocketTransport } from "@colyseus/ws-transport";
-import { TownRoom, announceUpgrade } from "./TownRoom";
+import { TownRoom, announceUpgrade, onlineNow } from "./TownRoom";
+import { mountAgesStatus } from "./agesStatus";
 import { flushIdeas, ideaLog, initIdeas, publicLog } from "./ideaStore";
 import { backupAccounts, flushFinal, initAccounts, peek, releaseAccounts, requestReset, resetPassword, setEmail } from "./accounts";
 import { useHandoffKv, writeHandoff } from "./handoff";
@@ -123,6 +124,8 @@ app.post("/admin/war-council", (req, res) => {
 });
 // The Forge (M4, server/forge.ts): GET /admin/forge (registry, research, log), POST ?kill=1|0&retire=<id>&revoke=<id>
 mountForgeAdmin(app, adminOk);
+// Ages (M5, server/agesStatus.ts): this server's slot, roles, leases, account counters and flush lag
+mountAgesStatus(app, adminOk, BUILD, onlineNow);
 // The remote councils (scheduled Claude routines): briefings and orders, behind WAR_COUNCIL_TOKEN (off when unset)
 mountCouncilRoutes(app);
 

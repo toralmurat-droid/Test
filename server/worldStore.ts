@@ -181,6 +181,14 @@ async function followWorld() {
     if (ahead && state.marchAt === undefined && state.tide < TIDE.goal) state.tide = Math.min(TIDE.goal, state.tide + ahead);
   } catch (e: any) { console.error("World: could not follow the world:", e?.message ?? e); }
 }
+/**
+ * This server's part in the world (server/agesStatus.ts): "owner" writes it (the lease's holder, or no shared store),
+ * "follower" keeps its world in memory only; "off" before initWorld (tests, the bench). Plus the lease's holder id.
+ */
+export function worldLease(): { role: "owner" | "follower" | "off"; holder?: string; held: boolean } {
+  const held = !!lease?.held(LEASE_KEY);
+  return { role: !live ? "off" : mine && held ? "owner" : "follower", holder: lease?.holder, held };
+}
 /** Tests: a world store and lease of their own (no Postgres), as initWorld would set them up. */
 export function _setupWorld(store: Store<WorldState>, l: Leases, s: WorldState, queues?: Kv) {
   pg = store; lease = l.want(LEASE_KEY); state = s; dirty = false; live = true; writing = undefined;

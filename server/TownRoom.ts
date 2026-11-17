@@ -623,6 +623,13 @@ let announced = false;
 /** The server is about to restart for an update: tell every player right away (TownScene shows the update notice). */
 // Another server took the account of a hero playing here (server/accountGuard.ts): saves are refused, so send them away
 onAccountLost((k) => liveRooms.forEach((r) => r.sendAway(k)));
+/** Heroes in every room of this process, and how many accounts they are (server/agesStatus.ts; counts, no names). */
+export function onlineNow(): { players: number; accounts: number } {
+  const names = new Set<string>();
+  let players = 0;
+  liveRooms.forEach((r) => r.state.players.forEach((p) => { players++; names.add(p.name.toLowerCase()); }));
+  return { players, accounts: names.size };
+}
 export function announceUpgrade() {
   if (announced) return;
   announced = true;
