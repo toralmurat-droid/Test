@@ -4,7 +4,7 @@ import {
   C2, P, blobPath, canvas, clipTo, css, curve, ellipseP, fillShape, glow, grain, hashStr, ik, limb, line, metal, mix, poly, rad, rng, sh, Shape, vol,
 } from "./brush";
 import { drawFormWeapon, formOf } from "./weaponArt";
-import { build3D, Dress3D, render3D, TAG_HAND, type Frame3 } from "./body3d";
+import { build3D, Dress3D, render3D, setMonster3D, TAG_HAND, type Frame3 } from "./body3d";
 import { BOOKS, paintBook } from "./books";
 import { HeadGear, HERO_BODIES, LINEN, Look, LOOKS, MOB_LOOKS, TorsoKind } from "./look";
 
@@ -2339,14 +2339,14 @@ function dress3D(r: Rig): Dress3D {
   return {
     torso: tk.kind, torsoCol: tk.col, trim: tk.trim,
     head: hg, headCol: hat ? hat.color : L.headCol ?? 0x888888, headTrim: hat ? hat.accent : L.headTrim ?? 0xd9a93a,
-    plume: hg === "cap" ? (hat ? hat.accent : L.plume ?? L.headTrim) : undefined,
+    plume: hg === "cap" ? (hat ? hat.accent : L.plume ?? L.headTrim) : hg === "helm" && mob3D ? L.plume : undefined,
     legs: L.legs, legCol: L.legCol,
     boots: shoes ? shoes.color : L.boots, bootStyle: shoes ? "leather" : L.bootStyle ?? "leather",
     wings: shoes?.style === "wings" ? shoes.accent : undefined,
     sleeve: L.sleeve, arms: L.arms, glove: L.glove,
     armour: gear?.slot === "armour" && gear.style === "trim" ? { col: gear.color, trim: gear.accent } : undefined,
     belt: L.belt, buckle: L.buckle,
-    cape: L.back === "cape" ? { col: L.capeCol ?? 0x2a2a2a, collar: L.collar, short: L.capeShort } : undefined,
+    cape: L.back === "cape" ? { col: L.capeCol ?? 0x2a2a2a, collar: L.collar, short: L.capeShort } : L.back === "pelt" && mob3D ? { col: L.capeCol ?? 0x3a2a1e, short: true, fur: true } : undefined,
   };
 }
 
@@ -2362,9 +2362,9 @@ function paint3D(r: Rig, p: PoseLike, K: number, S: number, flash: number, withS
  */
 let mob3D: Frame3 | null = null;
 export let lastMob3D: Uint8ClampedArray | null = null;
-export function setMob3D(fr: Frame3 | null) { mob3D = fr; lastMob3D = null; }
+export function setMob3D(fr: Frame3 | null) { mob3D = fr; lastMob3D = null; setMonster3D(!!fr); }
 /** Monster bodies modelled in 3D (base kind before any _variant / _champ). */
-export const MOB3D = new Set<string>(["skeleton", "skeletonmage", "necromancer"]);
+export const MOB3D = new Set<string>(["skeleton", "skeletonmage", "necromancer", "bandit", "bandit_brute", "bandit_archer", "banditchief", "outrider", "crossbowman", "firebrand", "redcaptain", "rourke"]);
 const is3D = (name: string) => MOB3D.has(name) || MOB3D.has(name.replace(/_(axe|spear|bow|champ)$/, "")) || MOB3D.has(name.replace(/_champ$/, ""));
 
 /** The 3D body plus its painted weapons, effects and shadow, finished pixels in frame `F` (rig units -> texels). */

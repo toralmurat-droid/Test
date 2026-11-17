@@ -16,7 +16,10 @@ never smooth. Performance: everything is baked by `tools/art` at the old sheet s
   stand+step, then wind-up/strike per facing).
 - Humanoid monsters: body.ts `MOB3D` names are ray-cast by `body3d.ts build3D` straight onto the sheet grid
   (`setMob3D(frame)` while `mobs.ts humanoid()` poses them; weapons stay painted, moved to the 3D hands). Look
-  features modelled so far: everything the vampire wears, plus `bones`, `skull`, `rags`, robes, cowl, horned cowl.
+  features modelled so far: everything the vampire wears, plus `bones`, `skull`, `rags`, robes, cowl, horned cowl,
+  masks, beards, tabards, fur kilts, harness, bracers, quivers, scarves, hood/bandana/kettle/horned helm, crests, pelts.
+  Monster-only parts are behind `setMonster3D` (also darker ramps), so the vampire hero is unchanged.
+  Not yet: palmFlame, wings, tails, beast heads, dresses, long hair from behind.
 - Rebuild a family only: `npx tsx tools/art/build-one-mob.ts mob_slime mob_blobling ...` (seconds, not minutes).
 
 ## Families
@@ -25,7 +28,8 @@ never smooth. Performance: everything is baked by `tools/art` at the old sheet s
 | 1 | Blobs | slime, blobling, shooter/warrior/healer, venom/frost/fire/storm, motherblob 1-3 (`blobs3d.ts`) | done |
 | 2 | Skeletons | skeleton (+axe/spear/bow, champion), skeletonmage (+champion), necromancer (`body3d.ts` bones3D / skull3D / garb3D, cowl + horns) | done |
 | 2b | Other undead | crawler, wight, bride (need 3D hair/faces and dresses), bonehound, mistwraith | |
-| 3 | Bandits and Redfang | bandit (+brute/archer/champ), banditchief, outrider, crossbowman, firebrand, redcaptain, rourke, nightraiders | |
+| 3 | Bandits and Redfang | bandit (+brute/archer, champions), banditchief, outrider, crossbowman, firebrand, redcaptain, rourke (`face3D` masks/beards, `extras3D` tabard/fur kilt/harness/bracers/quiver/scarf, hood/bandana/kettle/horned helm, helm crest, fur pelt) | done |
+| 3b | Night raiders | nightraider_* (own painter, raiders.ts) | |
 | 4 | Beasts | warhound, gildhound, vulture, crowncrow, rattler, scorpion, sinkworm | |
 | 5 | Beast-folk (Mawdeep) | gnawkin, tuskborn, silkwretch, duskwing, crowseer, gnasher, weaver, packlord, hornbrute, hidemother, folk variants | |
 | 6 | Desert | nomad, sanddead, veiled, camelfolk, sphinx, sunwright | |
