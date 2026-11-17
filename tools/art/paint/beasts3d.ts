@@ -7,7 +7,7 @@ import { cap, chain, cone, custom, ell, mat, noise3, rng, sphere, torus, type Mo
 import type { HoundPalette, BirdPalette } from "./badlands";
 
 /** The same model S times bigger (a distance field scales as S * d(p / S)). */
-function scaleModel(m: Model, S: number): Model {
+export function scaleModel(m: Model, S: number): Model {
   const sv = (p: V3): V3 => [p[0] * S, p[1] * S, p[2] * S];
   return {
     ...m, prims: m.prims.map((p) => ({ ...p, k: p.k * S, lo: sv(p.lo), hi: sv(p.hi), d: (x: number, y: number, z: number) => S * p.d(x / S, y / S, z / S) })),
