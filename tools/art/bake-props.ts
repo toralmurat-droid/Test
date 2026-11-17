@@ -12,6 +12,8 @@ import { DUNGEON3D } from "./paint/dungeon3d";
 import { WRECK3D } from "./paint/wreck3d";
 import { ELEMENTS3D } from "./paint/elements3d";
 import { TENT3D } from "./paint/tent3d";
+import { SHARDS3D } from "./paint/shards3d";
+import { spiritLantern } from "../../client/src/lanternArt";
 import * as el from "../../client/src/elementArt";
 import { standingStone, throne } from "../../client/src/throneArt";
 import { DEEP3D } from "./paint/deep3d";
@@ -35,6 +37,8 @@ const PAINTED: Record<string, (p: any, f: number) => void> = {
   wp_spear_rack: painted.spearRack(true), wp_watchtower: painted.watchtower, wp_cow0: cow(false), wp_cow1: cow(true), wp_millwheel: millWheel, wp_weapon_rack: painted.spearRack(false),
   wp_venom_caps: el.venomCaps, wp_ice_spikes: el.iceSpikes, wp_ember_vent: el.emberVent, wp_storm_stone: el.stormStone,
   wp_crownstone0: (p, f) => standingStone(p, f, 0, 0), wp_crownstone1: (p, f) => standingStone(p, f, 0, 1), wp_crownstone2: (p, f) => standingStone(p, f, 0, 2),
+  ...Object.fromEntries((["poison", "cold", "fire", "shock"] as const).flatMap((e) => [[`qobj_shard_${e}`, (p: any, f: number) => el.heartShard(p, f, e, false)], [`qobj_shard_${e}_broken`, (p: any, f: number) => el.heartShard(p, f, e, true)]])),
+  qobj_lantern_off: (p, f) => spiritLantern(p, f, false), qobj_lantern_lit: (p, f) => spiritLantern(p, f, true),
   wp_hollow_throne: throne, qobj_ward: (p, f) => standingStone(p, f, 1), qobj_ward_broken: (p, f) => standingStone(p, f, 2),
 };
 function paintedFrame(key: string, w: number, h: number, f: number) {
@@ -54,7 +58,7 @@ function paintedFrame(key: string, w: number, h: number, f: number) {
 mkdirSync(OUT, { recursive: true });
 const PREVIEW = process.env.PREVIEW;
 if (PREVIEW) mkdirSync(PREVIEW, { recursive: true });
-for (const P of [...PROPS3D, ...SIEGE_WORKS, ...DUNGEON3D, ...DEEP3D, ...WRECK3D, ...ELEMENTS3D, ...TENT3D]) {
+for (const P of [...PROPS3D, ...SIEGE_WORKS, ...DUNGEON3D, ...DEEP3D, ...WRECK3D, ...ELEMENTS3D, ...TENT3D, ...SHARDS3D]) {
   if (only.length && !only.includes(P.key)) continue;
   const t0 = Date.now();
   const sheet = bakeSheet(P.w, P.h, P.frames, (f) => renderProp(P.model(f), P.w, P.h, P.ox, P.oy), (P as { shadow?: number }).shadow ?? 0);
