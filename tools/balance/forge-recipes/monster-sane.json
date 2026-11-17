@@ -1,0 +1,1 @@
+{ "kind": "monster", "clan": "hidekin", "name": "Gore-Sewn Tusker", "base": "tuskborn", "affixes": ["stitched"], "hp": 1.2, "dmg": 1.1, "speed": 1, "palette": "hidekin" }
