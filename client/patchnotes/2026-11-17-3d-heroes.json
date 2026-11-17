@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-17",
+  "title": "Wizard, Summoner and Songweaver rebuilt in 3D",
+  "changes": [
+    "The Wizard, the Summoner and the Songweaver are now built as 3D models and drawn as pixel art, like the Vampire: real volume and light on robes, coats, hats, hair and beards, in every facing and every piece of gear.",
+    "Same size on screen and no cost to performance."
+  ]
+}

@@ -44,6 +44,9 @@ const rampCache = new Map<string, number[]>();
 let rampCap = 2.8, monster = false;
 /** Monster mode (paint/mobs.ts): darker ramps, and the monster-only gear (masks, beards, tabards...) is built. */
 export function setMonster3D(on: boolean) { monster = on; rampCap = on ? 1.7 : 2.8; }
+let heroFull = false;
+/** Heroes after the vampire (Murat 2026-11-17) also get the hats, hoods, beards, robes and faces built for monsters. */
+export function setHeroFull3D(on: boolean) { heroFull = on; if (!monster) rampCap = on ? 1.6 : 2.8; }
 function ramp(col: number, n = 7, lo = 0.34, hi = 1.32): number[] {
   // very dark cloth still needs a readable light side: stretch the top of the ramp
   const mx = Math.max((col >> 16) & 255, (col >> 8) & 255, col & 255) / 255;
@@ -146,7 +149,7 @@ export function build3D(L: Look, w: Dress3D, r: Rig3): Built {
   const torsoM = w.torso === "bare" ? skin
     : w.torso === "mail" ? mat(w.torsoCol, { spec: 0.55, grain: 0.2, lo: 0.3, hi: 1.35 })
       : w.torso === "plate" ? mat(w.torsoCol, { spec: 0.8, lo: 0.3, hi: 1.45 })
-        : mat(w.torsoCol, { grain: 0.05, lo: 0.36, hi: 1.38 });
+        : mat(w.torsoCol, { grain: heroFull ? 0.12 : 0.05, lo: 0.36, hi: heroFull ? 1.18 : 1.38 });
   const trimM = w.trim !== undefined ? mat(w.trim, { spec: 0.7, lo: 0.45, hi: 1.45, n: 5 }) : null;
   const armArm = w.armour;
   const sleeveM = armArm ? mat(armArm.col, { spec: 0.8, lo: 0.3, hi: 1.45 }) : w.arms === "bare" ? skin : mat(w.sleeve, { grain: 0.05 });
@@ -193,7 +196,7 @@ export function build3D(L: Look, w: Dress3D, r: Rig3): Built {
   }
   if (w.torso === "jerkin" || w.torso === "leather" || w.torso === "tailcoat") {
     // coat skirts: a flared cone round the hips, open at the front so the legs stride through
-    const top = pelvis[2] + 1.6, len = w.torso === "leather" ? 3.2 : 6.6, bot = top - len;
+    const top = pelvis[2] + 1.6, len = w.torso === "leather" || (heroFull && w.torso === "jerkin") ? 3.4 : 6.6, bot = top - len;
     const sw = r.moving * Math.sin(r.wave) * 0.6;
     P.push(custom([pelvis[0] - 8, pelvis[1] - 8, bot - 1], [pelvis[0] + 8, pelvis[1] + 8, top + 1], (x, y, z) => {
       const qx = x - pelvis[0], qy = y - pelvis[1];
@@ -225,6 +228,10 @@ export function build3D(L: Look, w: Dress3D, r: Rig3): Built {
     P.push(ell([pelvis[0], pelvis[1], pelvis[2] + 1.4], f, [2.0 * b, 2.75 * b, 0.55], beltM, 0.2));
     if (w.buckle !== undefined) P.push(ell([pelvis[0] + f[0] * 2.05 * b, pelvis[1] + f[1] * 2.05 * b, pelvis[2] + 1.4], f, [0.4, 0.75, 0.55], mat(w.buckle, { spec: 0.9, lo: 0.5, hi: 1.5, n: 5 }), 0.05));
   }
+  if (heroFull && L.vest !== undefined && w.torso !== "bare") { // the waistcoat showing in the coat's open front
+    const vm = mat(L.vest, { grain: 0.1, lo: 0.4, hi: clothHi(L.vest, 1.4) });
+    P.push(ell([chest[0] + f[0] * 1.8 * b, chest[1] + f[1] * 1.8 * b, chest[2] - 0.2], f, [0.7, 1.3 * b, 3.1], vm, 0.25));
+  }
   if (w.torso === "jerkin" && trimM) {
     for (const z of [2.1, 0.5, -1.1]) P.push(sphere([chest[0] + f[0] * 2.0 * b, chest[1] + f[1] * 2.0 * b, chest[2] + z], 0.36, trimM, 0.05));
   }
@@ -250,12 +257,16 @@ export function build3D(L: Look, w: Dress3D, r: Rig3): Built {
   P.push(ell(head, f, [2.2, 2.1, 2.5], skin, 0.7));
   P.push(ell([head[0] + f[0] * 0.55, head[1] + f[1] * 0.55, head[2] - 1.4], f, [1.65, 1.6, 1.35], skin, 0.8)); // jaw
   P.push(ell([head[0] + f[0] * 2.1, head[1] + f[1] * 2.1, head[2] - 0.2], f, [0.55, 0.38, 0.75], skin, 0.3)); // nose
-  const hairM = L.hair !== undefined ? mat(L.hair, { lo: 0.5, hi: 1.9, grain: 0.06 }) : null;
+  const hairLight = L.hair !== undefined && (((L.hair >> 16) & 255) * 0.3 + ((L.hair >> 8) & 255) * 0.59 + (L.hair & 255) * 0.11) / 255 > 0.62;
+  const hairM = L.hair !== undefined ? mat(L.hair, { lo: heroFull && hairLight ? 0.42 : 0.5, hi: heroFull && hairLight ? 1.12 : 1.9, grain: heroFull ? 0.14 : 0.06 }) : null;
   if (hairM && L.hairStyle !== "bald" && L.hairStyle !== "none" && hg !== "helm" && hg !== "greathelm") {
     // swept back: a cap over the crown and down the back of the head
     P.push(ell([head[0] - f[0] * 0.6, head[1] - f[1] * 0.6, head[2] + 0.85], f, [2.3, 2.25, 1.9], hairM, 0.5));
     P.push(ell([head[0] - f[0] * 1.15, head[1] - f[1] * 1.15, head[2] - 0.5], f, [1.4, 2.0, 2.0], hairM, 0.6));
-    if (L.hairStyle === "long") P.push(ell([head[0] - f[0] * 1.6, head[1] - f[1] * 1.6, head[2] - 3.2], f, [1.0, 2.3, 2.8], hairM, 0.8));
+    if (L.hairStyle === "long" && heroFull) { // falling to the shoulder blades in locks, narrowing
+      P.push(ell([head[0] - f[0] * 1.5, head[1] - f[1] * 1.5, head[2] - 2.6], f, [0.95, 2.15, 2.3], hairM, 0.8));
+      for (const sg of [-1, 0, 1]) P.push(cap([head[0] - f[0] * 1.6 + s[0] * sg * 1.1, head[1] - f[1] * 1.6 + s[1] * sg * 1.1, head[2] - 3.4], [head[0] - f[0] * (1.9 + r.moving * 0.4) + s[0] * sg * 1.0, head[1] - f[1] * (1.9 + r.moving * 0.4) + s[1] * sg * 1.0, head[2] - 6.0 - Math.abs(sg) * 0.4], 0.75, 0.35, hairM, 0.4));
+    } else if (L.hairStyle === "long") P.push(ell([head[0] - f[0] * 1.6, head[1] - f[1] * 1.6, head[2] - 3.2], f, [1.0, 2.3, 2.8], hairM, 0.8));
   }
   if (!r.blink) for (const sg of [-1, 1]) eyes.push([head[0] + f[0] * 2.05 + s[0] * sg * 0.95, head[1] + f[1] * 2.05 + s[1] * sg * 0.95, head[2] + 0.15]);
   }
@@ -280,12 +291,12 @@ export function build3D(L: Look, w: Dress3D, r: Rig3): Built {
     P.push(ell([head[0], head[1], head[2] + 0.75], f, [2.75, 2.75, 2.75], hm, 0.3));
     P.push(ell([head[0], head[1], head[2] - 0.25], f, [2.95, 2.95, 0.42], mat(w.headTrim, { spec: 0.8, lo: 0.35, hi: 1.4 }), 0.1));
     P.push(cap([head[0] + f[0] * 2.65, head[1] + f[1] * 2.65, head[2] + 0.2], [head[0] + f[0] * 2.75, head[1] + f[1] * 2.75, head[2] - 1.8], 0.38, 0.3, hm, 0.1));
-    if (monster && w.plume !== undefined) { // a horsehair crest from brow to nape
+    if ((monster || heroFull) && w.plume !== undefined) { // a horsehair crest from brow to nape
       const pm = mat(w.plume, { lo: 0.4, hi: 1.35, grain: 0.25 });
       const at = (a: number, z: number): V3 => [head[0] + f[0] * a, head[1] + f[1] * a, head[2] + z];
       P.push(cap(at(1.6, 3.3), at(-0.6, 4.1), 0.75, 0.85, pm, 0.4), cap(at(-0.6, 4.1), at(-2.9, 2.2 - r.moving * 0.4), 0.85, 0.45, pm, 0.4));
     }
-  } else if (monster && (hg === "wizardhat" || hg === "witch" || hg === "wide")) {
+  } else if ((monster || heroFull) && (hg === "wizardhat" || hg === "witch" || hg === "wide")) {
     // a tall pointed hat (a wide-brimmed one for "wide"), its tip bent back and drooping
     const hm = mat(w.headCol, { lo: 0.36, hi: 1.4, grain: 0.12 }), band = mat(w.headTrim, { spec: 0.5, lo: 0.4, hi: 1.4, n: 5 });
     const at = (a: number, z: number): V3 => [head[0] + f[0] * a, head[1] + f[1] * a, head[2] + z];
@@ -308,7 +319,7 @@ export function build3D(L: Look, w: Dress3D, r: Rig3): Built {
         for (let k = 1; k < pts.length; k++) P.push(cap(pts[k - 1], pts[k], 0.85 - k * 0.22, 0.85 - (k + 1) * 0.22 + 0.05, hm, 0.2));
       }
     }
-  } else if (hg === "hood" && monster) {
+  } else if (hg === "hood" && (monster || heroFull)) {
     // a hood: put in before the head so the face opening carves the hood, not the face
     const cm = mat(w.headCol, { lo: 0.32, hi: clothHi(w.headCol, 1.35), grain: 0.1 }), inside = mat(shade(w.headCol, 0.35), { lo: 0.7, hi: 1.2, n: 3 });
     const at = (a: number, si: number, z: number): V3 => [head[0] + f[0] * a + s[0] * si, head[1] + f[1] * a + s[1] * si, head[2] + z];
@@ -317,16 +328,16 @@ export function build3D(L: Look, w: Dress3D, r: Rig3): Built {
       cap(at(-1.6, 0, 2.1), at(-3.0, 0, 0.9), 1.1, 0.2, cm, 0.6),
       ell(at(-0.4, 0, -2.5), f, [2.3, 3.2, 1.25], cm, 0.9),
       { ...ell(at(2.0, 0, -0.45), f, [1.5, 1.75, 2.1], inside, 0.35), cut: true });
-  } else if (hg === "bandana" && monster) {
+  } else if (hg === "bandana" && (monster || heroFull)) {
     const cm = mat(w.headCol, { lo: 0.36, hi: 1.35, grain: 0.08 });
     const at = (a: number, si: number, z: number): V3 => [head[0] + f[0] * a + s[0] * si, head[1] + f[1] * a + s[1] * si, head[2] + z];
     P.push(ell(at(-0.25, 0, 0.75), f, [2.4, 2.3, 1.95], cm, 0.3));
     P.push(cap(at(-2.3, 0, 0.6), at(-3.4, 0.5, -1.4), 0.45, 0.25, cm, 0.2), cap(at(-2.3, 0, 0.6), at(-3.2, -0.6, -1.2), 0.42, 0.22, cm, 0.2)); // knot tails
-  } else if (hg === "kettle" && monster) {
+  } else if (hg === "kettle" && (monster || heroFull)) {
     const hm = mat(w.headCol, { spec: 0.6, lo: 0.3, hi: 1.25, grain: 0.15 });
     P.push(ell([head[0], head[1], head[2] + 1.0], f, [2.55, 2.55, 2.4], hm, 0.3));
     P.push(ell([head[0], head[1], head[2] + 0.55], f, [3.7, 3.7, 0.38], hm, 0.15)); // the wide brim
-  } else if (hg === "horned" && monster) {
+  } else if (hg === "horned" && (monster || heroFull)) {
     const hm = mat(w.headCol, { spec: 0.7, lo: 0.3, hi: 1.25, grain: 0.12 }), horn = mat(w.headTrim, { lo: 0.38, hi: 1.25, grain: 0.12, spec: 0.2 });
     const at = (a: number, si: number, z: number): V3 => [head[0] + f[0] * a + s[0] * si, head[1] + f[1] * a + s[1] * si, head[2] + z];
     P.push(ell(at(0, 0, 0.8), f, [2.6, 2.6, 2.55], hm, 0.3));
@@ -347,9 +358,9 @@ export function build3D(L: Look, w: Dress3D, r: Rig3): Built {
   }
 
   if (monster && L.beast && L.beastHood) beastHead3D(L, r, P, f, s, head, chest, eyes, true);
-  if (monster && !L.skull && !(L.beast && !L.beastHood)) face3D(L, P, f, s, head);
+  if ((monster || heroFull) && !L.skull && !(L.beast && !L.beastHood)) face3D(L, P, f, s, head);
   if (monster) beastParts3D(L, r, P, f, s, { nearS, farS, nearE, farE, nearH, farH, hips, knees, feet, chest, pelvis, waist, head });
-  if (monster && !L.bones) extras3D(L, w, r, P, f, s, { nearS, farS, nearE, farE, nearH, farH, hips, knees, feet, chest, pelvis, waist, head });
+  if ((monster || heroFull) && !L.bones) extras3D(L, w, r, P, f, s, { nearS, farS, nearE, farE, nearH, farH, hips, knees, feet, chest, pelvis, waist, head });
   // ---- cape and collar
   if (w.cape) {
     const cm = mat(w.cape.col, { lo: 0.4, hi: Math.min(2.6, rampCap - 0.2), n: 8, grain: w.cape.fur ? 0.35 : 0 });
@@ -399,9 +410,16 @@ export function build3D(L: Look, w: Dress3D, r: Rig3): Built {
 function face3D(L: Look, P: Prim[], f: P, s: P, head: V3) {
   const at = (a: number, si: number, z: number): V3 => [head[0] + f[0] * a + s[0] * si, head[1] + f[1] * a + s[1] * si, head[2] + z];
   if (L.beard !== undefined && L.beardStyle !== "stubble") {
+    if (heroFull) { // a hero's beard: shaded locks under a moustache, the face left free above it
+      const bm = mat(L.beard, { lo: 0.38, hi: 1.08, grain: 0.3 });
+      P.push(ell(at(1.25, 0, -2.15), f, [1.2, 1.6, 1.25], bm, 0.4));
+      for (const sg of [-1, 1]) P.push(cap(at(1.95, sg * 0.25, -1.15), at(1.75, sg * 1.25, -1.75), 0.36, 0.22, bm, 0.15));
+      if (L.beardStyle === "long") for (const sg of [-0.5, 0.5]) P.push(cap(at(1.5, sg, -2.6), at(1.9 + Math.abs(sg) * 0.1, sg * 0.6, -5.6 + Math.abs(sg)), 0.95, 0.3, bm, 0.5));
+    } else {
     const bm = mat(L.beard, { lo: 0.45, hi: 1.7, grain: 0.22 });
     P.push(ell(at(1.15, 0, -1.75), f, [1.35, 1.85, 1.5], bm, 0.5));
     if (L.beardStyle === "long") P.push(cap(at(1.4, 0, -2.4), at(1.9, 0, -5.4), 1.3, 0.45, bm, 0.6));
+    }
   }
   if (L.mask !== undefined) { // a cloth tied over nose and mouth
     const mm = mat(L.mask, { lo: 0.4, hi: 1.35, grain: 0.1 });
