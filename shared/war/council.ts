@@ -99,8 +99,8 @@ export function validateCouncil(raw: unknown, s: Pick<WarState, "owner">, k: Cla
   if (day !== undefined) orders.day = day;
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { ok: false, orders, errors: ["orders: must be an object"] };
   const r = raw as Record<string, unknown>;
-  if (r.clan !== undefined && r.clan !== k) errors.push(`clan: these orders are for ${k}, not ${String(r.clan).slice(0, 20)}`);
-  if (r.day !== undefined && day !== undefined && r.day !== day) errors.push(`day: these orders are for war day ${day}, not ${String(r.day).slice(0, 20)}`);
+  if (r.clan !== undefined && r.clan !== k) errors.push(`clan: these orders are for ${k}, not ${typeof r.clan === "string" ? r.clan.slice(0, 20) : typeof r.clan}`);
+  if (r.day !== undefined && day !== undefined && r.day !== day) errors.push(`day: these orders are for war day ${day}, not ${typeof r.day === "number" ? r.day : typeof r.day}`);
   if (r.stance !== undefined) {
     if (COUNCIL_STANCES.includes(r.stance as CouncilStance)) orders.stance = r.stance as CouncilStance;
     else errors.push(`stance: must be one of ${COUNCIL_STANCES.join(", ")}`);

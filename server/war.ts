@@ -962,7 +962,7 @@ export const warCrownSave = (): CrownSave | undefined => (saved ? (saved.crown ?
 /** The Reckoning changed the save: written with the next step's save, or at once when `now` is set (a result, a payout). */
 export function warCrownChanged(now: number, atOnce = false) {
   if (!saved) return;
-  if (atOnce) { kv?.set(KEY, saved).catch((e) => console.error("War: could not save:", e)); return; }
+  if (atOnce) { void save(now); return; } // through the save chain: never two war writes in flight
   dirtyAt ||= now;
 }
 /**
@@ -990,7 +990,7 @@ export const warCouncilSave = (): CouncilSave | undefined => (saved ? (saved.cou
 /** The councils changed the save: written with the next step's save, or at once (`atOnce`: a remote submission). */
 export function warCouncilChanged(now: number, atOnce = false) {
   if (!saved) return;
-  if (atOnce) { kv?.set(KEY, saved).catch((e) => console.error("War: could not save:", e)); return; }
+  if (atOnce) { void save(now); return; } // through the save chain: never two war writes in flight
   dirtyAt ||= now;
 }
 /** When the next war tick is due (ms), or undefined before the war is loaded. */

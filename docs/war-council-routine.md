@@ -17,7 +17,7 @@ clan's war day begins, uses them or falls back to the scripted doctrine. Code: `
 Start with `WAR_COUNCIL=shadow` and `WAR_COUNCIL_PROVIDER=remote`: the routine's orders are validated, logged and
 compared with what the doctrine did, but the doctrine still leads and no proclamation is read out. Switch a clan to
 `lead` only after its shadow log looks sane. At runtime, `POST /admin/war-council?key=ADMIN_KEY&kill=1` (or `kill=0`)
-flips the kill switch; `GET /admin/war-digest?key=ADMIN_KEY` shows the modes, the daily digests and the council log.
+flips the kill switch (in memory only: a restart or deploy reads `WAR_COUNCIL_KILL` again, so set the env var too to keep it off; the orders already given for the next tick, about 10 minutes, still play out); `GET /admin/war-digest?key=ADMIN_KEY` shows the modes, the daily digests and the council log.
 
 ## The two routes
 
