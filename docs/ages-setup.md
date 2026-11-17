@@ -155,7 +155,7 @@ the built bundle (`server-dist/start.cjs`), and prints one PASS / FAIL line per 
    within ~20 s.
 
 The drill never reads `DATABASE_URL` (it may be production's). `AGES_DRILL_DATABASE_URL` is used when set, and only on a
-local host (`localhost`, `127.0.0.1`, `::1` or a unix socket) unless `--allow-remote-db` is passed. Without it the drill starts a throwaway Postgres (initdb in a temp dir, a free port, unix
+local host (`localhost`, `127.0.0.1`, `::1`, or a unix socket as `postgres://user@localhost/db?host=/socket/dir`) unless `--allow-remote-db` is passed. Without it the drill starts a throwaway Postgres (initdb in a temp dir, a free port, unix
 socket; through `runuser -u postgres` when run as root; binaries from `PG_BIN`, default `/usr/lib/postgresql/16/bin`) and
 removes it on exit; with neither it skips with a message (exit 0). Children are killed on exit or Ctrl-C.
 `DRILL_VERBOSE=1` prints the servers' logs. With your own `AGES_DRILL_DATABASE_URL` the drill creates/logs in a hero `DrillHero`

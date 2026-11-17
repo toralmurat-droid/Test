@@ -55,9 +55,11 @@ async function databaseUrl() {
   // variable, and a local host unless --allow-remote-db.
   const own = process.env.AGES_DRILL_DATABASE_URL;
   if (own) {
-    let host = "";
-    try { host = new URL(own).hostname; } catch { die("AGES_DRILL_DATABASE_URL is not a URL"); }
-    const local = host === "" || host === "localhost" || host === "127.0.0.1" || host === "[::1]" || host === "::1";
+    let host = "", qhost = "";
+    try { const u = new URL(own); host = u.hostname; qhost = u.searchParams.get("host") ?? ""; } catch { die("AGES_DRILL_DATABASE_URL is not a URL (for a unix socket use postgres://user@localhost/db?host=/socket/dir)"); }
+    const near = (h) => h === "" || h === "localhost" || h === "127.0.0.1" || h === "[::1]" || h === "::1";
+    const local = near(host) && (near(qhost) || qhost.startsWith("/")); // ?host= overrides the URL's host in pg
+    if (qhost && !qhost.startsWith("/")) host = qhost;
     if (!local && !process.argv.includes("--allow-remote-db")) die(`refusing database host ${host}: the drill writes leases, war and world rows. Use a local scratch database, or pass --allow-remote-db for a scratch one elsewhere (never production).`);
     console.log(`Postgres: AGES_DRILL_DATABASE_URL on host ${host || "(unix socket)"}`);
     return own;
