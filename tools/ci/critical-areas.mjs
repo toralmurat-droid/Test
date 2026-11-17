@@ -9,8 +9,8 @@ const AREAS = {
     lines: { file: /^server\/TownRoom\.ts$/, line: /^[+-](?![+-]).*@type\(/ } },
   "skill-engine": { about: "the shared skill engine", files: [/^shared\/skillEngine\.ts$/] },
   map: { about: "the deterministic world map", files: [/^shared\/(map|desert|moors|badlands|sinkholes|saltmere|crown)\.ts$/] },
-  deploy: { about: "CI, build and deploy", files: [/^\.github\//, /^Dockerfile$/, /^railway\.json$/, /^package(-lock)?\.json$/,
-    /^server\/index\.ts$/, /^tsconfig\.json$/, /^vite\.config\.mts$/] },
+  deploy: { about: "CI, build and deploy", files: [/^\.github\//, /^Dockerfile$/, /^railway(\.gateway)?\.json$/, /^package(-lock)?\.json$/,
+    /^server\/(index|start|gateway)\.ts$/, /^tsconfig\.json$/, /^vite\.config\.mts$/] },
 };
 const MARK = "<!-- critical-areas -->";
 const { GITHUB_TOKEN, GITHUB_REPOSITORY: REPO, PR, BASE } = process.env;
