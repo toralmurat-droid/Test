@@ -47,7 +47,9 @@ build or test for it.
 - **Saves must load forever.** `data/saves.json` holds live player progress. Add new save fields as optional with a
   default; when a change invalidates old data (XP curve, skill tree), bump a version field and migrate on load
   (examples: `xpv` / `XP_CURVE_VERSION`, `SUMMONER_TREE`: fields in `server/accounts.ts`, migration on load in `server/TownRoom.ts`). Never drop or rename a save field
-  without a migration.
+  without a migration. Bump `ACCOUNT_API` (`shared/accountApi.ts`) when old builds must not write new saves: with any save-version bump
+  (`xpv`, `SUMMONER_TREE`, song tree, a quest `*Ver`), new item/gear/rune/skill ids, a level-cap raise, or new sub-fields
+  inside existing save objects. Only new top-level optional fields are free (older builds keep fields they don't know).
 - **Active classes:** only `ACTIVE_CLASSES` in `shared/classes.ts` (currently wizard, vampire, summoner, songweaver) can be played.
   Archived classes keep their code, art and saves; don't delete them. Balance sims cover active classes only.
 
