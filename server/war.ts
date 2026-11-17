@@ -28,13 +28,15 @@ import { frontStep } from "../shared/war/siege";
 import { TOWN, TOWNS, townById, townCounts, townPatron, townStep, townsView, type TownChange, type TownState, type TownsMsg } from "../shared/war/towns";
 import { openKv, type Kv } from "./store";
 import { cleanCrown, crownClock, crownTick, crownValor, crownView, type CrownSave } from "./warCrown";
+import { takeForgeNews } from "./forge";
 import { cleanCouncil, councilClock, councilOnNewMap, leaderOrders, noteOrders, proclaimLine, takeProclamations, type CouncilSave } from "./warCouncil";
 
 /**
  * What else a tick brought, for the room to announce (not logged, not saved): the Night Raiders' strike on the hunted
  * clan, and the Rally when the clan it is for changed (`rally` undefined: nobody is rallied any more).
  */
-export interface WarNews { raid?: { clan: ClanKey; ts: number[] }; rally?: { clan?: ClanKey; was?: ClanKey }; /** War Councils in lead mode: their proclamations (server/warCouncil.ts). */ proclaim?: { clan: ClanKey; text: string }[] }
+export interface WarNews { raid?: { clan: ClanKey; ts: number[] }; rally?: { clan?: ClanKey; was?: ClanKey }; /** War Councils in lead mode: their proclamations (server/warCouncil.ts). */ proclaim?: { clan: ClanKey; text: string }[];
+  /** The Forge's Herald lines (server/forge.ts takeForgeNews): forges burning, a forging gone live, a gate failed. */ forge?: { clan: ClanKey; text: string }[] }
 /**
  * `sack` (server/warHolds.ts): a hero sacked the Hold of t; `by` is the sacker's clan, or the holder itself when the hero was unsworn.
  * `grow` (W3): the holder (`by` = `from`) built its Hold of t up to `tier` (1 camp, 2 fortress; shared/war/holdTiers.ts).
@@ -267,6 +269,8 @@ export async function step(now: number) {
   if (rallyNow !== rallyWas) news.rally = { clan: rallyNow, was: rallyWas };
   const proclaim = takeProclamations();
   if (proclaim.length) news.proclaim = proclaim;
+  const forged = takeForgeNews();
+  if (forged.length) news.forge = forged;
   saved.log.push(...events);
   if (saved.log.length > LOG_MAX) saved.log.splice(0, saved.log.length - LOG_MAX);
   if (!process.env.NODE_TEST_CONTEXT) for (const e of events) console.log(`War: ${e.text}`);
@@ -821,6 +825,7 @@ export function attachWar(room: { broadcast(type: string, msg: unknown): void })
     }
     if (news.rally) room.broadcast("chat", { id: "", name: "Herald", text: rallyLine(news.rally.clan, news.rally.was) });
     for (const p of news.proclaim ?? []) room.broadcast("chat", { id: "", name: "Herald", text: proclaimLine(p.clan, p.text) }); // (M3: lead councils only)
+    for (const f of news.forge ?? []) room.broadcast("chat", { id: "", name: "Herald", text: f.text }); // (M4: the Forge, plain text)
   });
 }
 

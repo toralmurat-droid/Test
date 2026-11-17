@@ -2,7 +2,7 @@
  * The Forge on the server (roadmap M4, PR2; shared/forge.ts has the rules): the registry of every forging, research,
  * the sim gate, and what the rest of the server asks (forged monsters, drops, a capital's stock, the client's pack).
  *
- * - A clan commissions a recipe (commission: a war council's order from PR4; nothing calls it before that). It is
+ * - A clan commissions a recipe (commission: a war council's order, server/warCouncil.ts sessionForge). It is
  *   validated, paid with FORGE.armyCost of the clan's army (server/war.ts warSpendArmy), checked by the sim gate
  *   (tools/balance/forgeGate.ts, in a worker thread with a timeout; any error fails it) and goes live FORGE.researchDays
  *   war days later (forgeClock). At most FORGE.perDay commissions a war day, all clans together; past FORGE.perClan live
@@ -14,7 +14,9 @@
  *   and the listeners (each room re-sends the pack and recomputes its heroes' stats).
  * - Saved under its own kv key "forge" (the war's store, not the war save), one write at a time (like server/war.ts).
  * - Kill switch: killForge(on) or FORGE_KILL=1 stops spawns, drops, sales and commissions at once; items keep working.
- * - No email: everything is logged (capped), forgeDigest(day) gives the day's lines for a digest.
+ * - No email: everything is logged (capped), forgeDayLines(day) gives the day's lines for the war digest.
+ * - The Herald (M4 PR4): a lead commission ("the forges are burning"), a forging gone live and a failed gate queue a
+ *   plain-text line; server/war.ts takes them (takeForgeNews) with the next war tick's news.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -26,7 +28,7 @@ import {
 } from "../shared/forge";
 import { rollAffixes, setForgedGear, withLevel } from "../shared/gear";
 import { CLANS, CLAN_KEYS, type ClanKey } from "../shared/war/clans";
-import { warDay } from "../shared/war/council";
+import { warDay, type ForgeBriefCtx } from "../shared/war/council";
 import { openKv, type Kv } from "./store";
 import { warSpendArmy, warState } from "./war";
 
@@ -168,6 +170,17 @@ function log(e: Omit<ForgeLogEntry, "at"> & { at?: number }) {
   if (!process.env.NODE_TEST_CONTEXT) console.log(`Forge: ${e.text}`);
 }
 
+/** Herald lines waiting for the next war tick's news (server/war.ts step: news.forge). */
+const news: { clan: ClanKey; text: string }[] = [];
+export const takeForgeNews = () => news.splice(0);
+/** The Herald's plain-text line for a forge moment: a lead commission, a forging gone live, a gate failed. */
+export function forgeLine(moment: "burning" | "live" | "failed", clan: ClanKey, name: string, kind: "weapon" | "monster"): string {
+  const c = CLANS[clan].name;
+  if (moment === "burning") return `The forges of ${c} are burning: its smiths work on a new ${kind === "weapon" ? "weapon" : "beast"}.`;
+  if (moment === "live") return `${c} has forged ${name}! ${kind === "weapon" ? "The blade is sold in its capital and dropped by its beasts." : "The beast now walks in its lands."}`;
+  return `The forge of ${c} failed: ${name} did not survive its trials.`;
+}
+
 /** The current war day (undefined before the war is loaded: then nothing goes live). */
 const today = (): number | undefined => { const s = warState(); return s ? warDay(s.tick) : undefined; };
 
@@ -221,6 +234,7 @@ export function commission(clan: unknown, recipe: unknown, day: unknown, mode: F
   log({ at: now, kind: "commission", clan, day, id: idOf(p), text: `${name} commissioned ${what} (#${seq}, live on war day ${liveDay} if the gate passes)` });
   const spent = warSpendArmy(clan, FORGE.armyCost, now);
   log({ at: now, kind: "cost", clan, day, id: idOf(p), text: spent === undefined ? `${name}: no army spent (the war is not loaded)` : `${name} spent ${Math.round(spent)} men on the forging` });
+  news.push({ clan, text: forgeLine("burning", clan, c.recipe.name, c.recipe.kind) });
   void persist();
   startGate(clan, p);
   return { ok: true, seq, liveDay };
@@ -249,6 +263,7 @@ function gateDone(clan: ClanKey, p: ForgeProject, v: GateVerdict) {
   } else {
     list.splice(list.indexOf(p), 1);
     log({ kind: "gate_fail", clan, day: p.day, id: idOf(p), text: `${name}'s "${p.recipe.name}" failed the sim gate: ${v.reasons.slice(0, 5).join("; ")}` });
+    news.push({ clan, text: forgeLine("failed", clan, p.recipe.name, p.recipe.kind) });
   }
   void persist();
 }
@@ -311,6 +326,7 @@ export function forgeClock(day = today()) {
     const list = save.projects[k]!;
     list.splice(list.indexOf(p), 1);
     goLive(defFromRecipe(p.recipe, p.seq), day);
+    news.push({ clan: k, text: forgeLine("live", k, p.recipe.name, p.recipe.kind) });
   }
   rebuild();
   void persist();
@@ -357,11 +373,26 @@ export function killForge(on: boolean) {
 }
 export const forgeKilled = () => envKill() || !!save.killed;
 
-/** The day's forge lines, for a digest (no email: PR4's councils digest or an admin reads it). */
+/** The forge log's lines of war day `day` (the war digest's forge section). */
+export const forgeDayLines = (day: number): string[] => save.log.filter((e) => e.day === day).map((e) => e.text);
+/** The day's forge lines as one text (the admin view; no email). */
 export function forgeDigest(day: number): string {
-  const lines = save.log.filter((e) => e.day === day).map((e) => `- ${e.text}`);
+  const lines = forgeDayLines(day).map((t) => `- ${t}`);
   return lines.length ? `The Forge, war day ${day}:\n${lines.join("\n")}` : `The Forge, war day ${day}: nothing forged.`;
 }
+/** Clan k's side of the Forge for its council's briefing (shared/war/council.ts ForgeBriefCtx). */
+export function forgeBrief(k: ClanKey, day: number): ForgeBriefCtx {
+  const used = save.daily && save.daily.day === day ? save.daily.n : 0;
+  const out: ForgeBriefCtx = {
+    live: save.defs.filter((d) => d.clan === k && d.status === "active").map((d) => ({ id: d.id, kind: d.kind, name: d.name, base: d.base, palette: d.palette })),
+    projects: (save.projects[k] ?? []).map((p) => ({ seq: p.seq, kind: p.recipe.kind, name: p.recipe.name, base: p.recipe.base, day: p.day, liveDay: p.liveDay, gate: p.gate })),
+    leftToday: Math.max(0, FORGE.perDay - used),
+  };
+  if (forgeKilled()) out.killed = true;
+  return out;
+}
+/** Is the forge's own 15 s clock running (initForge)? If not, the war councils' clock drives forgeClock. */
+export const forgeTicking = () => !!timer;
 export function forgeAdmin(n = 50) {
   const d = today();
   return {
@@ -430,7 +461,8 @@ export function forgeQuery(msg: unknown): string[] | undefined {
 
 /** Tests: start over from this save (cleaned) and store (none: nothing written). */
 export function _resetForge(raw?: unknown, store?: Kv) {
-  save = cleanForge(raw); kv = store; runner = undefined; gating = Promise.resolve();
+  save = cleanForge(raw); kv = store; runner = undefined; gating = Promise.resolve(); news.length = 0;
+  if (timer) { clearInterval(timer); timer = undefined; }
   rebuild();
 }
 /** Tests only (no route or message reaches it): commission and force a recipe live at once, no cost, no gate. */
