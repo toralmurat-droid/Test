@@ -1,5 +1,6 @@
 {
   "date": "2026-11-17",
+  "patch": 319,
   "title": "Projectiles rebuilt in 3D",
   "changes": [
     "Arrows, crossbow bolts, Blood Lances, Void lances, ice shards, thrown knives and stones, fireballs, blood bolts, slime globs, frozen orbs, magic, shadow and sun bolts, plague rats and bats are now small 3D models baked to pixel art.",
