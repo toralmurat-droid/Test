@@ -46,6 +46,15 @@ export function followedSack(s: WarState, k: ClanKey, legal: readonly number[] =
   return best;
 }
 
+/**
+ * Clan `k`'s legal targets as its doctrine weighs them, best first, without the jitter (ties: lower id): what a War
+ * Council's briefing shows (council.ts) and what the scripted council picks from. Pure: never touches a Mind or a random.
+ */
+export function doctrineRank(s: WarState, k: ClanKey, legal: readonly number[] = targetsOf(s, k)): { t: number; v: number }[] {
+  const lead = leaderOf(s);
+  return legal.map((t) => ({ t, v: score(s, k, t, lead, () => 0.5) })).sort((a, b) => b.v - a.v || a.t - b.t);
+}
+
 /** Orders of every clan for this tick. `clever`: the clan playing the feint-and-night-push ruse. */
 export function scriptedOrders(s: WarState, minds: Record<ClanKey, Mind>, rnd: () => number, clever?: ClanKey): Record<ClanKey, Orders> {
   const lead = leaderOf(s), out = {} as Record<ClanKey, Orders>;

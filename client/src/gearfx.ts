@@ -1,4 +1,5 @@
 import type { FxStyle } from "../../shared/skills";
+import { artId } from "./forgeArt";
 import { baseId, GearSlot, itemElement, itemLevel } from "../../shared/gear";
 import type { Element } from "../../shared/elements";
 import { ISO } from "./isoflag";
@@ -47,7 +48,7 @@ export const ELEMENT_STYLE: Record<Element, FxStyle> = { fire: "fire", cold: "fr
 const styleOf = (id: string): FxStyle => {
   const el = itemElement(id);
   if (el) return ELEMENT_STYLE[el];
-  return baseId(id).startsWith("w") ? "steel" : STYLE[baseId(id)] ?? "arcane";
+  return artId(id).startsWith("w") ? "steel" : STYLE[artId(id)] ?? "arcane";
 };
 const pick = <T>(a: T[]) => a[Math.floor(Math.random() * a.length)];
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);

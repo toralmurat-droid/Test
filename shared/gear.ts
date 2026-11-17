@@ -350,15 +350,15 @@ export function isGearId(v: unknown): v is string {
     const head = v.slice(0, t), traits = luteTraits(v);
     return isLute(head) && isGearId(head) && traits.length > 0 && withTraits(head, traits) === v;
   }
-  const base = baseId(v);
-  if (!(base in GEAR)) return false;
+  const base = baseId(v), bd = baseDef(base);
+  if (!bd) return false;
   const plain = withLevel(base, itemLevel(v));
   if (plain === v) return true;
   // With random bonuses: they must be valid for this item and written the canonical way
-  if (GEAR[base].cls || plainId(v) !== plain) return false;
+  if (bd.cls || plainId(v) !== plain) return false;
   const r = itemRarity(v), aff = itemAffixes(v);
   if (r === 0 || aff.length < RARITY_AFFIXES[r][0] || aff.length > RARITY_AFFIXES[r][1]) return false;
-  const lvl = itemLevel(v), slot = GEAR[base].slot;
+  const lvl = itemLevel(v), slot = bd.slot;
   if (new Set(aff.map((a) => a.key)).size !== aff.length) return false;
   if (aff.some((a) => !affixFits(a.key, slot) || a.value < 1 || a.value > affixMax(a.key, lvl, r))) return false;
   return withAffixes(plain, r, aff) === v;
@@ -533,6 +533,63 @@ const growFrac = (v: number | undefined, l: number) => (v ? Math.round(v * (1 + 
 const growPct = (v: number | undefined, l: number) => (v ? Math.round(v * (1 + ILVL_GROWTH_FRAC * (l - 1))) : v);
 
 const defCache = new Map<string, GearDef>();
+
+// ---- Forged weapons (M4 "The Forge", shared/forge.ts) ------------------------------------------------------
+/**
+ * A clan's forged weapon is a new base item built on an existing weapon: id `fg<seq>_<baseGearId>` ("fg12_ws_bastard"),
+ * then level, affixes and runes as usual ("fg12_ws_bastard@30~R:atk3^ember2"). '_' separates the parts because '.'
+ * already splits runes and lute traits. The forge registry (setForgedGear) tells gear.ts what a forging gives; gear.ts
+ * never imports shared/forge.ts, so the gear rules load without the forge.
+ */
+export type ForgeStatus = "active" | "retired" | "revoked";
+/** What a forging gives its items: retired forgings keep their stats (no new copies), revoked ones fall back to the base. */
+export interface ForgedGearInfo {
+  base: string; name: string; tier: 1 | 2 | 3; bonus: GearBonus; elem?: { el: Element; share: number };
+  color: number; accent: number; status: ForgeStatus;
+}
+export const FORGED_GEAR_RE = /^fg([1-9]\d{0,8})_([a-z0-9_]+)$/;
+/** A weapon a forging may build on: a typed weapon (its wtype decides the attack) that drops for anyone, not a book or the lute. */
+export function isForgeWeaponBase(id: string): boolean {
+  const d = Object.hasOwn(GEAR, id) ? GEAR[id] : undefined;
+  return !!d && d.slot === "weapon" && !!d.wtype && !d.cls && !d.book && id !== LUTE_ID;
+}
+/** "fg12_ws_bastard@30~R:atk3" -> { seq: 12, base: "ws_bastard" }; undefined for anything that is not a forged id. */
+export function parseForgedGearId(id: string): { seq: number; base: string } | undefined {
+  const m = FORGED_GEAR_RE.exec(baseId(id));
+  return m && isForgeWeaponBase(m[2]) ? { seq: Number(m[1]), base: m[2] } : undefined;
+}
+let forgedLookup: ((seq: number) => ForgedGearInfo | undefined) | undefined;
+const forgedCache = new Map<string, GearDef>();
+/** Plug in the forge registry (server: the clans' forgings; tools: a forging under test). Returns the previous lookup. */
+export function setForgedGear(lookup?: (seq: number) => ForgedGearInfo | undefined) {
+  const prev = forgedLookup;
+  forgedLookup = lookup;
+  clearGearCache();
+  return prev;
+}
+/** Forget every cached item definition: call it whenever a forging is added, retired or revoked. */
+export function clearGearCache() { defCache.clear(); forgedCache.clear(); }
+/**
+ * The base definition of a forged id ("fg12_ws_bastard"). Unknown forgings (a save from another world, a lost
+ * registry) become "Forgotten <noun>" with the base weapon's stats, so a stray id never breaks a bag.
+ */
+function forgedDef(base: string): GearDef | undefined {
+  const hit = forgedCache.get(base);
+  if (hit) return hit;
+  const p = parseForgedGearId(base);
+  if (!p) return undefined;
+  const b = GEAR[p.base], info = forgedLookup?.(p.seq);
+  let out: GearDef;
+  if (!info || info.base !== p.base) out = { ...b, id: base, name: `Forgotten ${WEAPON_TYPE_NAMES[b.wtype!]}` };
+  else if (info.status === "revoked") out = { ...b, id: base, name: info.name };
+  else out = { ...b, id: base, name: info.name, tier: info.tier, bonus: { ...info.bonus }, elem: info.elem && { ...info.elem }, color: info.color, accent: info.accent };
+  forgedCache.set(base, out);
+  return out;
+}
+/** The definition behind a base id: a GEAR entry or a forged weapon. */
+function baseDef(base: string): GearDef | undefined {
+  return Object.hasOwn(GEAR, base) ? GEAR[base] : base.startsWith("fg") ? forgedDef(base) : undefined; // (own keys only: "toString" is no gear)
+}
 /** Item definition with its bonuses scaled to the item level. `id` is the full id; art and icons use baseId(id). */
 export function gearDef(id: string): GearDef | undefined {
   const hit = defCache.get(id);
@@ -544,7 +601,7 @@ export function gearDef(id: string): GearDef | undefined {
     defCache.set(id, out);
     return out;
   }
-  const d = GEAR[baseId(id)];
+  const d = baseDef(baseId(id));
   if (!d) return undefined;
   const l = itemLevel(id);
   if (d.id === LUTE_ID) { // the lute's stats come from its stage (shared/lute.ts LUTE_STAGES), not from item-level growth
@@ -752,7 +809,7 @@ export function rarityOdds(level: number, luck = 1): [number, number, number] {
 
 /** Roll a rarity and random bonuses onto a plain found item. */
 export function rollAffixes(plain: string, luck = 1, rnd = Math.random): string {
-  const d = GEAR[baseId(plain)];
+  const d = baseDef(baseId(plain));
   if (!d || d.cls) return plain;
   const lvl = itemLevel(plain);
   const [magic, rare, leg] = rarityOdds(lvl, luck);
@@ -846,7 +903,7 @@ export function withRunes(id: string, runes: Rune[]): string {
 
 /** Rune sockets of an item: none on ranged weapons, two on Rare and Legendary items, one on the rest; the lute by its stage. */
 export function socketsOf(id: string): number {
-  const d = GEAR[baseId(id)];
+  const d = baseDef(baseId(id));
   if (!d || d.slot === "ranged") return 0;
   if (d.id === LUTE_ID) return luteAt(itemLevel(id)).sockets;
   return itemRarity(id) >= 2 ? 2 : 1;
@@ -854,14 +911,14 @@ export function socketsOf(id: string): number {
 
 /** Weapon runes go in the main-hand weapon, armour runes in armour, shields, hats and shoes. */
 export function runeFits(id: string, r: Rune): boolean {
-  const d = GEAR[baseId(id)];
+  const d = baseDef(baseId(id));
   if (!d || d.slot === "ranged") return false;
   return RUNES[r.key].kind === (d.slot === "weapon" ? "weapon" : "armour");
 }
 
 /** Why the rune can't go in this item ("No free socket"), or "" when it can. */
 export function socketProblem(id: string, r: Rune): string {
-  const d = GEAR[baseId(id)];
+  const d = baseDef(baseId(id));
   if (!d) return "Not an item";
   if (!socketsOf(id)) return "This item has no rune socket";
   if (!runeFits(id, r)) return RUNES[r.key].kind === "weapon" ? "Weapon runes go in a weapon" : "Armour runes go in armour, shields, hats or shoes";

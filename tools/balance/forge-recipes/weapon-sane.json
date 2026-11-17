@@ -1,0 +1,1 @@
+{ "kind": "weapon", "clan": "redfang", "name": "Fang of Rourke", "base": "ws_bastard", "implicit": [{ "key": "atk", "value": 2 }, { "key": "str", "value": 1 }], "palette": "redfang" }
