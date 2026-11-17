@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { GOLEM_H, GOLEM_W, paintGolemFrame, type GolemDir, type GolemElement } from "./golems";
+import { FOOT, GOLEM_H, GOLEM_W, type GolemElement } from "./golems";
+import { golem, wisp } from "./golems3d";
 import { createCanvas } from "@napi-rs/canvas";
 import { addChampPose, MOB_POSES, posed, setPainted, type Dir } from "../characters";
 import { C2, P, blobPath, css, ellipseP, fillShape, glow, line, vol } from "./brush";
@@ -10,7 +11,7 @@ import { RATTLER_H, RATTLER_W, VULTURE_H, VULTURE_PAL, VULTURE_W, WARHOUND_H, WA
 import { CROWNCROW_PAL, GILDHOUND_PAL } from "./crown";
 import { bird, boneHound, crawler, hound, mistWraith, rattler, scorpion, sinkworm, type Pose } from "./beasts3d";
 import { SINKWORM_H, SINKWORM_W } from "./sinkholes";
-import { paintWisp, WISP_H, WISP_W, type WispElement } from "./wisps";
+import { WISP_FOOT, WISP_H, WISP_W, type WispElement } from "./wisps";
 import { renderMob, SIN, YAW, type MobFrame, type Model } from "./mob3d";
 import { blobModel, blobRadius, type BlobOpts, type BlobPal } from "./blobs3d";
 import { RAIDERS } from "../../../shared/raiders";
@@ -80,12 +81,31 @@ function humanoid(key: string, kind: string, w: number, h: number, oy: number, s
   });
   // 3D-built bodies (body3d.ts via body.ts MOB3D): ray-cast straight onto this sheet's texel grid
   const base = kind.replace(/_(axe|spear|bow|champ|folk)$/, "").replace(/_champ$/, "");
-  const pix = MOB3D.has(base) && !rip && !fall ? (f: number): MobFrame => {
+  const pix = MOB3D.has(base) ? (f: number): MobFrame => {
     const up = lift ? lift + Math.sin(f * 1.7) * 1.2 : 0;
-    setMob3D({ tw: Math.round(w * TX), th: Math.round(h * TX), k: scale * TX, x0: 16 - w / 2 / scale, y0: 29 - (oy * h - up) / scale, lift: up / scale });
+    setMob3D({ tw: Math.round(w * TX), th: Math.round(h * TX), k: scale * TX, x0: 16 - w / 2 / scale, y0: 29 - (oy * h - up) / scale, lift: up / scale, noShadow: fall && f >= FRAMES });
     humanoidFrame(kind, f, fall);
-    const body = lastMob3D!;
+    let body = lastMob3D!;
     setMob3D(null);
+    if (fall && f >= FRAMES) { // fall frames: the side view toppled backwards about the feet, as the painted sheet does
+      const k = f - FRAMES, a = (k ? -86 : -24) * Math.PI / 180, tw = Math.round(w * TX), th = Math.round(h * TX);
+      const px = w / 2 * TX + (k ? 9 : 2) * TX, py = oy * h * TX + (k ? -1.4 : 0) * TX, cx = w / 2 * TX, cy = oy * h * TX;
+      const out = new Uint8ClampedArray(body.length), ca = Math.cos(a), sa = Math.sin(a);
+      for (let y = 0; y < th; y++) for (let x = 0; x < tw; x++) {
+        const dx = x + 0.5 - px, dy = y + 0.5 - py, sx = Math.floor(cx + dx * ca + dy * sa), sy = Math.floor(cy - dx * sa + dy * ca);
+        if (sx < 0 || sy < 0 || sx >= tw || sy >= th) continue;
+        const i = (y * tw + x) * 4, j = (sy * tw + sx) * 4;
+        for (let q = 0; q < 4; q++) out[i + q] = body[j + q];
+      }
+      // a flat shadow under where the body lies
+      const sx0 = px - (k ? 12 : 3) * scale * TX, rx = 9 * scale * TX, ry = 2.2 * scale * TX;
+      for (let y = 0; y < th; y++) for (let x = 0; x < tw; x++) {
+        const i = (y * tw + x) * 4; if (out[i + 3]) continue;
+        const e = ((x + 0.5 - sx0) / rx) ** 2 + ((y + 0.5 - py) / ry) ** 2;
+        if (e < 1) out[i + 3] = 105;
+      }
+      body = out;
+    }
     return { body, under: new Uint8ClampedArray(body.length), done: true };
   } : undefined;
   return {
@@ -192,15 +212,12 @@ export function buildMobs(out: string, ONLY?: string[]) {
     blobSheet("mob_motherblob2", 24, 22, { G: 0x2c8796, L: 0xb0eef5, D: 0x184c56, E: 0x0b2a30 }, { bodyH: 17, extra: "mother2", seed: 10 }),
     blobSheet("mob_motherblob3", 24, 22, { G: 0x553b96, L: 0xd3c2ff, D: 0x2f205f, E: 0x140a2a }, { bodyH: 17, extra: "mother3", seed: 11 }),
     // the Summoner's golems (Murat 2026-11-07: style 2, bodies made of the element), and the Colossus they fuse into
-    ...(["fire", "cold", "poison", "shock"] as GolemElement[]).flatMap((el, i) => [
-      { key: `mob_golem_${el}`, w: GOLEM_W, h: GOLEM_H, draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintGolemFrame(c, "elemental", el, dir as GolemDir, pose, 7 + i, SH ?? undefined); } },
-      { key: `mob_golem_colossus_${el}`, w: GOLEM_W, h: GOLEM_H, draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintGolemFrame(c, "elemental", el, dir as GolemDir, pose, 31 + i, SH ?? undefined); } },
+    ...(["fire", "cold", "poison", "shock"] as GolemElement[]).flatMap((el) => [
+      beast3D(`mob_golem_${el}`, GOLEM_W, GOLEM_H, FOOT, (pose, f) => golem(el, pose, f)),
+      beast3D(`mob_golem_colossus_${el}`, GOLEM_W, GOLEM_H, FOOT, (pose, f) => golem(el, pose, f, true)),
     ]),
     // the Summoner's elemental wisps (wisps.ts): small orbs floating above their shadow
-    ...(["fire", "cold", "poison", "shock"] as WispElement[]).map((el) => ({
-      key: `mob_wisp_${el}`, w: WISP_W, h: WISP_H,
-      draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintWisp(c, SH, el, dir as "down" | "up" | "right", pose, f); },
-    })),
+    ...(["fire", "cold", "poison", "shock"] as WispElement[]).map((el) => beast3D(`mob_wisp_${el}`, WISP_W, WISP_H, WISP_FOOT, (pose, f) => wisp(el, pose, f))),
     // humanoids get taller frames than the pixel ones, about hero height (client: PAINTED_LOOK in textures.ts)
     humanoid("mob_skeleton", "skeleton", 20, 30, 27.5 / 30, 0.85),
     humanoid("mob_skeleton_axe", "skeleton_axe", 20, 30, 27.5 / 30, 0.85),

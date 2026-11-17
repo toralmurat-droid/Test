@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-17",
+  "title": "Bone Demon and clan soldiers rebuilt in 3D",
+  "changes": [
+    "The Bone Demon (with every set of harvested bones: skull pauldrons, rib cuirass, bone crown) and the clan war's soldiers and officers are now built as 3D models and drawn as pixel art, including the demon's harvest moves and the soldiers' fall when they die.",
+    "Same size on screen and no cost to performance."
+  ]
+}

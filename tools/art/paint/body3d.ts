@@ -293,7 +293,7 @@ export function build3D(L: Look, w: Dress3D, r: Rig3): Built {
     P.push(ell(at(0.1, 1.45), f, [brim, brim, 0.3], hm, 0.3));
     P.push(cap(at(-0.1, 1.5), at(-0.6, 1.5 + tall * 0.6), 2.15, 1.1, hm, 0.5), cap(at(-0.6, 1.5 + tall * 0.6), at(-2.0 - r.moving * 0.4, 1.5 + tall * 0.85), 1.1, 0.15, hm, 0.4));
     P.push(ell(at(-0.05, 1.95), f, [2.25, 2.25, 0.36], band, 0.1));
-  } else if ((hg === "hood" || hg === "horned") && L.skull) {
+  } else if ((hg === "hood" || (hg === "horned" && L.bones)) && L.skull) {
     // a deep cowl: the skull sits back in its shadow, only the burning eyes and teeth show
     const cm = mat(w.headCol, { lo: 0.32, hi: 1.35, grain: 0.1 }), inside = mat(0x0c080c, { lo: 0.7, hi: 1.3, n: 3 });
     const at = (a: number, si: number, z: number): V3 => [head[0] + f[0] * a + s[0] * si, head[1] + f[1] * a + s[1] * si, head[2] + z];
@@ -780,6 +780,24 @@ function beastParts3D(L: Look, r: Rig3, P: Prim[], f: P, s: P, J: Joints) {
     const cm = mat(L.claws, { lo: 0.4, hi: 1.25, spec: 0.3 });
     for (const H of [J.nearH, J.farH]) for (let k = -1; k <= 1; k++) P.push(cap(off(H, 0.5, k * 0.45, -0.2), off(H, 1.6, k * 0.6, -1.4), 0.3, 0.06, cm, 0.08));
   }
+  const ba = L.boneArmour ?? 0;
+  if (ba) { // the Bone Demon's harvested skeletons: skull pauldrons, a rib cuirass, a crown of finger bones
+    const bm = boneMat(0xd8ccb0), hole = mat(0x120d10, { lo: 0.7, hi: 1.2, n: 3 });
+    for (const S of [J.nearS, J.farS]) {
+      P.push(ell(off(S, 0, 0, 1.1), f, [2.4, 2.4, 1.8], bm, 0.3));
+      P.push({ ...sphere(off(S, 2.0, -0.6, 1.3), 0.5, hole, 0.1), cut: true }, { ...sphere(off(S, 2.0, 0.6, 1.3), 0.5, hole, 0.1), cut: true });
+      P.push(cap(off(S, -0.4, 0, 2.2), off(S, -1.0, 0, 3.6), 0.4, 0.08, bm, 0.1));
+    }
+    if (ba >= 2) for (let i = 0; i < 4; i++) { // ribs hooped round the chest, the sternum down the front
+      const z = chest[2] + 1.6 - i * 1.25;
+      P.push(custom([chest[0] - 6, chest[1] - 6, z - 1], [chest[0] + 6, chest[1] + 6, z + 1], (x, y, zz) => {
+        const qx = x - chest[0], qy = y - chest[1], a = qx * f[0] + qy * f[1], si = qx * s[0] + qy * s[1];
+        return Math.max(Math.hypot(Math.hypot(a / (2.6 * b), si / (3.4 * b)) - 1, (zz - z) / 0.35) * 2.4 - 0.36, -a);
+      }, bm, 0.1));
+    }
+    if (ba >= 2) P.push(cap(off(chest, 2.65 * b, 0, 2.2), off(chest, 2.45 * b, 0, -2.6), 0.45, 0.4, bm, 0.1));
+    if (ba >= 4) for (let k = 0; k < 7; k++) { const a = (k / 7) * Math.PI * 2; P.push(cap([J.head[0] + Math.cos(a) * 1.9, J.head[1] + Math.sin(a) * 1.9, J.head[2] + 1.6], [J.head[0] + Math.cos(a) * 2.3, J.head[1] + Math.sin(a) * 2.3, J.head[2] + 3.4 + (k % 2) * 0.8], 0.32, 0.08, bm, 0.08)); }
+  }
   if (L.fetishes !== undefined) { // bone and charm fetishes on cords from the belt
     const cord = mat(L.fetishes, { lo: 0.4, hi: 1.3 }), bone = boneMat(0xd8ccb0), sw = Math.sin(r.wave) * r.moving * 0.5;
     for (const [a, si, n] of [[1.6, 1.6, 2.6], [1.8, -0.4, 3.4], [0.6, -1.9, 2.2]] as const) {
@@ -839,7 +857,7 @@ export interface Ray3Out { rgba: Uint8ClampedArray; tag: Uint8Array; depth: Floa
  * Where a frame sits on the rig: tw x th texels, k texels per rig unit, its top-left at rig (x0, y0). Heroes use the
  * whole 32x32 rig square (Frame3.hero); monsters (paint/mobs.ts) put the rig's feet where their sheet wants them.
  */
-export interface Frame3 { tw: number; th: number; k: number; x0: number; y0: number; /** a flier hovers this many rig units over its ground shadow */ lift?: number }
+export interface Frame3 { tw: number; th: number; k: number; x0: number; y0: number; /** no ground shadow (the toppled fall frames draw their own) */ noShadow?: boolean; /** a flier hovers this many rig units over its ground shadow */ lift?: number }
 export const heroFrame3 = (W: number): Frame3 => ({ tw: W, th: W, k: W / 32, x0: 0, y0: 0 });
 
 /** Ray-casts the model into a frame (a number W = the hero's W x W square). Hand points come back in rig units on screen. */
