@@ -2,13 +2,13 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { GOLEM_H, GOLEM_W, paintGolemFrame, type GolemDir, type GolemElement } from "./golems";
 import { createCanvas } from "@napi-rs/canvas";
 import { addChampPose, MOB_POSES, posed, setPainted, type Dir } from "../characters";
-import { C2, P, blobPath, css, ellipseP, fillShape, glow, limb, line, sh, vol } from "./brush";
+import { C2, P, blobPath, css, ellipseP, fillShape, glow, line, vol } from "./brush";
 import { lastMob3D, lastRig, MOB3D, pixelAlpha, pixelize, setMob3D, shrink } from "./body";
 import { paintRaider, RAIDER_H, RAIDER_W } from "./raiders";
-import { HOUND_H, HOUND_W, WRAITH_H, WRAITH_W, paintWraith } from "./moors";
+import { HOUND_H, HOUND_W, WRAITH_H, WRAITH_W } from "./moors";
 import { RATTLER_H, RATTLER_W, VULTURE_H, VULTURE_PAL, VULTURE_W, WARHOUND_H, WARHOUND_PAL, WARHOUND_W } from "./badlands";
 import { CROWNCROW_PAL, GILDHOUND_PAL } from "./crown";
-import { bird, boneHound, hound, rattler, scorpion, sinkworm, type Pose } from "./beasts3d";
+import { bird, boneHound, crawler, hound, mistWraith, rattler, scorpion, sinkworm, type Pose } from "./beasts3d";
 import { SINKWORM_H, SINKWORM_W } from "./sinkholes";
 import { paintWisp, WISP_H, WISP_W, type WispElement } from "./wisps";
 import { renderMob, SIN, YAW, type MobFrame, type Model } from "./mob3d";
@@ -129,85 +129,6 @@ function humanoidFrame(kind: string, f: number, fall = false) {
 // ---------------------------------------------------------------- blobs (3D-built: blobs3d.ts)
 
 // ---------------------------------------------------------------- crawling skeleton (BONES.crawlChance)
-/**
- * The upper half of a broken skeleton dragging itself over the ground on its arms: skull low and forward,
- * ribcage and spine trailing back to a snapped end with loose vertebrae. Stand/step alternate the arms (one
- * reaches ahead and digs in, the other pulls under the chest); the wind-up rears the skull and one arm back,
- * the strike claws it forward. Facing right is a side view; down comes at the viewer, up crawls away.
- */
-function crawlerFrame(c: C2, w: number, h: number, f: number) {
-  const { dir, pose } = frameOf(f);
-  const BONE = 0xd8d2bc, DARK = 0x2a2622, RAG = 0x3b3640, EYE = 0xff5a3c;
-  const step = pose === "step", wind = pose === "wind", strike = pose === "strike";
-  const g = h - 2.2; // ground line
-  const sc = SH ?? c;
-  const shadow = (x: number, y: number, rx: number, ry: number) => { sc.save(); sc.translate(x, y); sc.scale(1, ry / rx); sc.fillStyle = "rgba(0,0,0,0.4)"; sc.beginPath(); sc.arc(0, 0, rx, 0, Math.PI * 2); sc.fill(); sc.restore(); };
-  const vert = (x: number, y: number, r: number) => { fillShape(c, ellipseP(x, y, r, r * 0.8), css(sh(BONE, 0.95))); fillShape(c, ellipseP(x - r * 0.25, y - r * 0.3, r * 0.45, r * 0.3), css(sh(BONE, 1.2), 0.8)); };
-  const skull = (x: number, y: number, s: number, face: "side" | "front" | "back") => {
-    fillShape(c, ellipseP(x, y, s * 1.05, s), css(sh(BONE, 0.55))); // outline
-    fillShape(c, ellipseP(x, y - 0.1, s * 0.95, s * 0.9), css(BONE));
-    fillShape(c, ellipseP(x - s * 0.3, y - s * 0.4, s * 0.45, s * 0.3), css(sh(BONE, 1.25), 0.9));
-    if (face === "back") { line(c, [[x, y - s * 0.8], [x, y + s * 0.6]], sh(BONE, 0.7), 0.25, 0.7); return; }
-    const ex = face === "side" ? [x + s * 0.45] : [x - s * 0.38, x + s * 0.38], ey = y - s * 0.05;
-    for (const e of ex) { fillShape(c, ellipseP(e, ey, s * 0.27, s * 0.3), css(DARK)); glow(c, e, ey, s * 0.45, EYE, 0.55); fillShape(c, ellipseP(e, ey, s * 0.12, s * 0.12), css(EYE)); }
-    const jx = face === "side" ? x + s * 0.55 : x, jy = y + s * 0.75, open = strike ? 0.5 : wind ? 0.35 : 0.15;
-    fillShape(c, ellipseP(jx, jy + open * s * 0.4, s * (face === "side" ? 0.45 : 0.55), s * (0.22 + open * 0.3)), css(DARK));
-    for (let k = -1; k <= 1; k++) line(c, [[jx + k * s * 0.22, jy - s * 0.05], [jx + k * s * 0.22, jy + s * 0.12]], 0xf0ead8, 0.22);
-  };
-  const ribs = (x0: number, y0: number, x1: number, y1: number, span: number, n: number) => {
-    for (let k = 0; k < n; k++) {
-      const t = (k + 0.5) / n, x = x0 + (x1 - x0) * t, y = y0 + (y1 - y0) * t, sp = span * (1 - t * 0.35);
-      const dx = x1 - x0, dy = y1 - y0, L = Math.hypot(dx, dy) || 1, nx = -dy / L, ny = dx / L;
-      line(c, [[x - nx * sp, y - ny * sp + 0.4], [x - nx * sp * 0.4, y - ny * sp * 0.4 - 0.3], [x, y]], sh(BONE, 0.85), 0.45);
-      line(c, [[x + nx * sp, y + ny * sp + 0.4], [x + nx * sp * 0.4, y + ny * sp * 0.4 - 0.3], [x, y]], sh(BONE, 0.85), 0.45);
-    }
-  };
-  const arm = (sx: number, sy: number, hx: number, hy: number, bend: number) => {
-    const ex = (sx + hx) / 2 + bend * 0.6, ey = Math.min(sy, hy) - Math.abs(bend) * 0.9 - 0.6; // elbow up, like a push-up
-    limb(c, [sx, sy], [ex, ey], 0.75, 0.6, BONE);
-    limb(c, [ex, ey], [hx, hy], 0.6, 0.5, BONE);
-    for (let k = -1; k <= 1; k++) line(c, [[hx, hy], [hx + 0.8 * Math.sign(hx - ex || 1) + k * 0.15, hy + 0.35 + k * 0.25]], sh(BONE, 1.05), 0.25); // finger bones
-  };
-  const lift = wind ? 1.4 : strike ? -0.3 : step ? 0.35 : 0; // how far it rears up
-  if (dir === "right") {
-    const hx = w - 6 + (strike ? 1.2 : 0), hy = g - 3.6 - lift; // skull
-    const sx = hx - 3.2, sy = g - 2.4 - lift * 0.6; // shoulders
-    const tx = 5.5, ty = g - 1.0; // snapped spine end
-    shadow((tx + hx) / 2, g + 0.2, (hx - tx) / 2 + 2, 1.3);
-    // loose vertebrae and a rag strip dragged behind
-    vert(tx - 2.2, g - 0.4, 0.45); vert(tx - 3.6, g - 0.1, 0.35);
-    line(c, [[tx + 1, ty - 0.6], [tx - 1.5, g - 0.2], [tx - 3, g + 0.1]], RAG, 0.9, 0.9);
-    // far arm (behind the chest), then spine, ribs, near arm in front
-    const far = step ? [sx + 3.6, g - 0.1] : [sx + 1.2, g];
-    arm(sx - 0.3, sy - 0.4, far[0], far[1], 0.4);
-    for (let k = 0; k <= 6; k++) { const t = k / 6; vert(tx + (sx - tx) * t, ty + (sy - ty) * t - Math.sin(t * Math.PI) * 0.6, 0.55 - t * 0.1); }
-    ribs(sx - 4.6, sy - 0.5, sx - 0.3, sy - 0.8, 1.5, 4);
-    fillShape(c, ellipseP(sx - 2.6, sy - 0.9, 2.6, 1.6), css(RAG, 0.55)); // tatters over the back
-    const near = wind ? [sx - 1.5, sy - 2.6] : strike ? [hx + 3.4, g - 0.6] : step ? [sx + 1.0, g + 0.2] : [sx + 3.8, g + 0.1];
-    arm(sx + 0.2, sy, near[0], near[1], wind ? -0.6 : 0.5);
-    limb(c, [sx + 0.2, sy - 0.2], [hx - 1.1, hy + 0.7], 0.7, 0.55, BONE); // neck
-    skull(hx, hy, 1.75, "side");
-  } else {
-    const toward = dir === "down", s = toward ? 1 : -1, cx = w / 2;
-    const hy = toward ? g - 2.6 - lift : g - 7.6 - lift * 0.5; // skull nearest the viewer when coming down
-    const shY = toward ? g - 4.4 - lift * 0.6 : g - 5.6, endY = toward ? g - 9.6 : g - 0.8;
-    shadow(cx, (shY + endY) / 2 + (toward ? 3 : 0.5), 4.6, 2.2);
-    if (!toward) { skull(cx, hy, 1.7, "back"); } // crawling away: its head is beyond the shoulders
-    // spine trailing back (up the screen when it comes toward us), snapped at the end
-    for (let k = 0; k <= 5; k++) { const t = k / 5; vert(cx + Math.sin(t * 3 + f) * 0.25, shY + (endY - shY) * t, 0.55 - t * 0.12); }
-    vert(cx + 1.6, endY + 1.4 * s * -1 + (toward ? -1 : 1.2), 0.38);
-    ribs(cx, shY + (endY - shY) * 0.15, cx, shY + (endY - shY) * 0.7, 2.6, 4);
-    if (!toward) { fillShape(c, ellipseP(cx - 1.4, shY + 0.4, 1.4, 0.8), css(sh(BONE, 0.9))); fillShape(c, ellipseP(cx + 1.4, shY + 0.4, 1.4, 0.8), css(sh(BONE, 0.9))); } // shoulder blades
-    fillShape(c, ellipseP(cx + 0.6, shY + (endY - shY) * 0.45, 2.2, 1.6), css(RAG, 0.5));
-    // arms reach out to either side and claw the ground ahead, alternating
-    const reachL = (step ? 1 : 0) + (wind ? -1.2 : 0), reachR = (step ? 0 : 1) + (strike ? 1.6 : 0);
-    const ahead = toward ? 1 : -1, gy = (r: number) => (toward ? g - 1.6 + Math.min(1, r) * 1.2 : shY - 1.4 - r * 1.8);
-    arm(cx - 2.2, shY, cx - 4.8 - reachL * 0.4, gy(reachL) + (wind ? -2.4 : 0), -0.8 * ahead);
-    arm(cx + 2.2, shY, cx + 4.8 + reachR * 0.4, gy(reachR) - (strike ? 0.8 : 0), 0.8 * ahead);
-    if (toward) skull(cx, hy, 1.85, "front");
-  }
-}
-
 // ---------------------------------------------------------------- the Sunscar's dune scorpion (Act 2)
 function blobSheet(key: string, w: number, h: number, pal: BlobPal, o: BlobOpts): Sheet {
   // 3D-built (blobs3d.ts, Murat 2026-11-17); the footprint centre sits half its depth above the old painted base line
@@ -321,7 +242,7 @@ export function buildMobs(out: string, ONLY?: string[]) {
     // Act 3, the Grey Barrow Moors (look.ts wight..barrowking)
     humanoid("mob_wight", "wight", 24, 30, 27.5 / 30, 0.9),
     beast3D("mob_bonehound", HOUND_W, HOUND_H, 19, (pose, f) => boneHound(pose, f)),
-    { key: "mob_mistwraith", w: WRAITH_W, h: WRAITH_H, draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintWraith(c, SH, dir as "down" | "up" | "right", pose, f); } },
+    beast3D("mob_mistwraith", WRAITH_W, WRAITH_H, 35, (pose, f) => mistWraith(pose, f)),
     humanoid("mob_boghag", "boghag", 26, 32, 31.2 / 32, 0.93),
     humanoid("mob_legionary", "legionary", 32, 32, 29.5 / 32, 0.95),
     humanoid("mob_cairnlord", "cairnlord", 38, 40, 37.5 / 40, 1.15),
@@ -371,11 +292,7 @@ export function buildMobs(out: string, ONLY?: string[]) {
     // wearing 1-4 harvested skeletons (look.ts demon1..4)
     ...[1, 2, 3, 4].map((n) => humanoid(`mob_demon${n}`, `demon${n}`, 28, 34, 33 / 34, 1.0, true)),
     // drawn on a 24x16 layout, 1.35x up into a 32x22 frame (about as long as a skeleton is tall)
-    { key: "mob_crawler", w: 32, h: 22, draw: (c: C2, f: number) => {
-      for (const k of SH ? [c, SH] : [c]) { k.save(); k.translate(16, 20); k.scale(1.35, 1.35); k.translate(-12, -14); }
-      crawlerFrame(c, 24, 16, f);
-      c.restore(); SH?.restore();
-    } },
+    beast3D("mob_crawler", 32, 22, 20, (pose, f) => crawler(pose, f)),
   ];
   // humanoid champions: the same sheet with their champion weapon (look.ts CHAMP_WEAPONS)
   for (const k of Object.keys(CHAMP_WEAPONS)) {
