@@ -123,3 +123,61 @@ export const DUNGEON3D: { key: string; w: number; h: number; frames: number; ox:
   { key: "dg_pole", w: 30, h: 58, frames: 3, ox: 15, oy: 55, model: pole },
   { key: "dg_spike", w: 22, h: 44, frames: 3, ox: 11, oy: 39, model: spike },
 ];
+
+// ---- quest objects: silk cocoon (30x50, origin 15,47) and the Hide Rite totem (40x76, origin 20,73) ---------------
+const SILK = [0x4a4840, 0x6e6a60, 0x8e8a7e, 0xb0aca0, 0xc8c4b6, 0xe6e2d4, 0xf4f0e4];
+export function cocoon(cut: boolean): PropModel {
+  const P: Prim[] = [], eyes: { p: V3; col: number }[] = [];
+  const silk = M(SILK, { grain: 0.06, spec: 0.15, shine: 6, tex: (x, y, z) => (Math.sin(z * 1.6 + Math.atan2(y, x) * 2.2) > 0.6 ? -0.28 : 0) });
+  if (!cut) {
+    // a body wrapped head to foot, hanging from threads, a face and a hand pressed against the silk
+    P.push(blob([0, 0, 15], 5.6, 5, 13, silk, 1.5)); P.push(blob([0.4, 0.4, 30], 3.6, 3.4, 4.2, silk, 1.5));
+    P.push(blob([3.6, 3.6, 19], 1.4, 1.4, 1.2, M(SILK, { tex: () => -0.05 }), 0.6)); // the hand
+    P.push(rod([0.4, 0.4, 33], [0.6, 0.6, 46], 0.3, silk, 0.3, 0.3));
+    for (let k = 0; k < 5; k++) { const a = k * 1.3; P.push(rod([Math.cos(a) * 3, Math.sin(a) * 3, 2], [Math.cos(a) * 7, Math.sin(a) * 7, 0], 0.25, silk, 0.25, 0.2)); }
+    const F = (du: number, dz: number, col: number) => eyes.push({ p: [0.4 + 3 + du, 0.4 + 3 - du, 30 + dz], col });
+    F(-1, 0.6, 0x6a5e50); F(1, 0.6, 0x6a5e50); F(0, -1.2, 0x5a4e42);
+  } else {
+    // cut down: a torn husk sagging on the floor, threads hanging from above
+    const husk = M(SILK, { grain: 0.08, tex: (x, y, z) => -0.08 + (Math.sin(z * 1.6 + Math.atan2(y, x) * 2.2) > 0.6 ? -0.2 : 0) });
+    P.push({ m: husk, k: 0.4, lo: [-10, -10, 0], hi: [10, 10, 9], d: (x, y, z) => {
+      const r = Math.hypot(x, y), R = 7.5 - z * 0.45 + (noise3(x * 0.5, y * 0.5, 2) - 0.5) * 2;
+      const shell = Math.abs(r - R) - 0.7, torn = z - (3 + noise3(Math.atan2(y, x) * 2, 0, 5) * 5);
+      return Math.max(shell, torn, -z);
+    } });
+    for (let k = 0; k < 4; k++) P.push(rod([-4 + k * 2.6, k % 2, 22], [-4 + k * 2.6 + 0.4, k % 2, 13 + k], 0.25, silk, 0.25, 0.1));
+  }
+  return { prims: P, eyes, shadow: [{ u: 0, v: 0, r: 7, a: 0.35 }], cast: 6 };
+}
+export function totem(burnt: boolean): PropModel {
+  const P: Prim[] = [], eyes: { p: V3; col: number }[] = [];
+  const wood = burnt ? M([0x0c0a08, 0x120e0c, 0x241c18, 0x3a302a, 0x4a3e36], { grain: 0.2, tex: (x, y, z) => (noise3(x, y, z * 0.5) > 0.7 ? 0.25 : 0) }) : timber(2);
+  P.push(box(-1.6, 1.6, -1.6, 1.6, 0, 58, wood, 0.3, 0.4));
+  P.push(rod([-14, 0, 46], [12, 0, 46], 1.2, burnt ? wood : timber(0), 1.2, 0.4)); P.push(rod([0, 0, 44.4], [0, 0, 47.6], 2, ropeM, 2, 0.2));
+  if (!burnt) {
+    const blood = M([0x2a0806, 0x3e0e0a, 0x6a1a12, 0x80241a]);
+    [0, 1, 2].forEach((s) => {
+      const hide: PMat = { ...M(HIDES[s], { grain: 0.12, tex: (_x, _y, z) => 0.1 + ((46 - z) % 7 < 0.6 ? -0.35 : 0) }) };
+      hide.sub = (x, _y, z) => (Math.abs(x - (-10 + s * 9)) < 0.8 && z > 33 && z < 40 ? blood : undefined);
+      P.push(cloth([-14 + s * 9.2, 0.6, 45], [8, 0, 0], [0, 0, -(24 - s * 3)], hide, (s2, t) => Math.sin(t * 3 + s) * 0.5 * t + s2 * 0.3, (s2, t) => !(t > 0.82 && noise3(s2 * 8, t * 6, s) > 0.5), 0.45));
+    });
+    for (const du of [-9, 8]) { P.push(rod([du, 4, 0], [du, 4, 5.5], 1.4, M(WAXR, { grain: 0.05 }), 1.3, 0.3)); eyes.push({ p: [du, 4, 6.4], col: 0xffd36a }, { p: [du, 4, 7.4], col: 0xff8a3a }); }
+  } else {
+    for (let s = 0; s < 3; s++) P.push(cloth([-14 + s * 9.2, 0.6, 45], [8, 0, 0], [0, 0, -6], M([0x0c0806, 0x1e1612, 0x2e221a]), () => 0, (s2, t) => noise3(s2 * 6, t * 4, s + 7) < 0.6, 0.45));
+    for (let k = 0; k < 8; k++) eyes.push({ p: [(hash3(k, 1, 9) - 0.5) * 24, 1.6, 6 + hash3(k, 2, 9) * 46], col: k % 2 ? 0xff7a2a : 0xc4461a });
+  }
+  // the horned skull on top
+  const C: V3 = [0.4, 0.6, 61.5], bone = M(BONER, { grain: 0.07, tex: () => (burnt ? -0.25 : 0) }), dark = M([0x0c0806, 0x120c0a, 0x1c1410]);
+  P.push(blob(C, 3.7, 3.7, 3.9, bone, 0.5)); P.push(blob([C[0] + 1.2, C[1] + 1.2, C[2] - 3.2], 2.5, 2.5, 1.6, bone, 0.6));
+  const f3 = (a: number, r: number, dz: number): V3 => [C[0] + Math.cos(Math.PI / 4 + a) * r, C[1] + Math.sin(Math.PI / 4 + a) * r, C[2] + dz];
+  for (const a of [-0.45, 0.45]) P.push({ ...blob(f3(a, 3.8, 0.2), 0.9, 0.9, 0.95, dark, 0.2), cut: true });
+  for (const s of [-1, 1]) { const pts: V3[] = []; for (let k = 0; k <= 6; k++) { const a = k * 0.5; pts.push([C[0] - 0.8 + Math.sin(a) * 0.3 * k, C[1] - s * (2.8 + k * 1.3), C[2] + 1.6 + Math.sin(a) * 2.6 - k * 0.2]); } for (let k = 1; k < pts.length; k++) P.push(rod(pts[k - 1], pts[k], 1 - k * 0.12, bone, 0.9 - k * 0.12, 0.3)); }
+  return { prims: P, eyes, shadow: [{ u: 0, v: 0, r: 8, a: 0.35 }], cast: 8 };
+}
+const WAXR = [0x4a3e2a, 0x6a5a40, 0x8a7a5a, 0xaa9a74, 0xc8b88e, 0xeae0c0, 0xf6f0dc];
+DUNGEON3D.push(
+  { key: "qobj_silk", w: 30, h: 50, frames: 1, ox: 15, oy: 46, model: () => cocoon(false) },
+  { key: "qobj_silk_cut", w: 30, h: 50, frames: 1, ox: 15, oy: 46, model: () => cocoon(true) },
+  { key: "qobj_totem", w: 40, h: 76, frames: 1, ox: 20, oy: 72, model: () => totem(false) },
+  { key: "qobj_totem_burnt", w: 40, h: 76, frames: 1, ox: 20, oy: 72, model: () => totem(true) },
+);
