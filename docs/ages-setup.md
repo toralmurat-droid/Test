@@ -15,8 +15,9 @@ players --> play.example.com --> [gateway]  --(private network)-->  [blue]  game
   (`data/saves.json`) are per service: two servers on files would be two separate games that lose each other's saves.
 - **One account, one server:** set `ACCOUNT_LEASES=1` on both game services (`server/accountGuard.ts`): a hero's
   account is open on one server at a time, and a server that does not hold it never writes it.
-- **No new save fields on a second Age** until "account save versioning" lands: an older build that
-  saves an account drops fields it does not know. Until then, both Ages must run builds with the same save format.
+- **Save versions:** a newer build that changes the save in a way older code would damage bumps `ACCOUNT_API`
+  (`shared/accountApi.ts`, rule in CLAUDE.md). The older Age then refuses those heroes ("This hero lives in the new
+  Age") and never writes them. Only new top-level optional fields are safe without a bump.
 - **Volumes and the restart handoff are per service.** `data/handoff.json` (where heroes stood during a restart) and
   the idea log live on each service's own volume; a player who moves to the other Age does not come back where they
   stood. Give each game service its own volume at `/app/data`.

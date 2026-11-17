@@ -124,7 +124,7 @@ only; the services are set up by the owner (`docs/ages-setup.md`).
 - Council proclamations are not saved, so a follower's Herald does not repeat them.
 - A follower Age's Gloam Tide meter is its own (memory only); merging kill counts is for a later PR.
 - `war-pre-<build>` and `war-valor:<holder>` rows stay one per build; prune them once the Ages run for real.
-- Accounts are not versioned yet: two Ages must not both write one account (next PR).
+- ~~Accounts are not versioned yet~~: done in part 5 (below).
 - The Forge on a server where it is hidden (a newer FORGE_API that allows no older reader) knows no forgings: its heroes'
   forged items show as their base until the newer build is gone. Its log lines of refused commissions on followers go
   to the console only (the forge log is the owner's).
@@ -176,6 +176,40 @@ on A after B started created a second account over it (password takeover), and "
 - During a deploy's overlap with leases on, a player reconnecting to the new server while the old one still saves waits
   up to ~3 s and may be refused once; the client shows the message (no automatic retry yet).
 - Held leases are trusted locally until 5 s before they run out; a server paused longer than that is fenced by SQL.
+
+## Built: part 5, account save versions (branch `claude/ages-account-versions`)
+An older build (a draining Age) must never damage a hero a newer build saved.
+- `shared/accountApi.ts`: `ACCOUNT_API` (1), `ACCOUNT_MIN_READER` (1) and `accountAccess(raw)`: "write" (`av` up to this
+  build's; a missing `av` is 1, every account so far), "read" (newer, `minReader` allows showing), "hide" (newer, or an
+  `av` that is no version). The war's rules (`shared/war/api.ts`), per account row.
+- `Account` gains optional `av` / `minReader`, stamped with this build's values whenever the account is queued for a
+  write (`markDirty`) and on new accounts. No field renamed or dropped; old saves load as version 1 and are written
+  with `av: 1`.
+- **Refused:** an account this build may not write: `login` (after the password check) and `peek` (unless "read") say
+  "This hero lives in the new Age: play it there"; `setEmail`, `resetPassword` (before a guess is counted) and the
+  shared-mode `edit` refuse the same way; `requestReset` sends no code. `claimAccount` (shared mode reloads the row)
+  checks again and gives the lease back, so a row written by a newer build between login and the room's claim is
+  refused too. `saveHero`, `saveStash`, `markChest`, `resetChests` do nothing on it, `markDirty` refuses it and `flush`
+  never copies it into a write (the last fence).
+- **Unknown fields kept:** the account object is kept and changed in place, so its unknown top-level fields (and heroes
+  of classes this build does not know) are written back as read. A hero's save is the room's snapshot, which knows only
+  this build's fields: `saveHero` / `saveStash` copy the old save's fields that are not in `HERO_KEYS` (every
+  `HeroSave` field, checked against the type) under the new snapshot (`keepUnknown`). Known fields the snapshot leaves
+  out (no clan, `wear`) are still dropped. New game (`saveHero(..., reset)`) keeps nothing of the old hero.
+- **The rule:** a new optional save field needs no bump (older builds keep it as it is). Bump `ACCOUNT_API` when older
+  builds must not write the new saves (a field's meaning changed, a migration on load, a field an older build would
+  clean away); raise `ACCOUNT_MIN_READER` only if older builds may not even list the heroes.
+- Tests: `tests/accountVersions.test.ts` (the contract; JSON: old save written with `av` 1 and unknown fields, a newer
+  account refused and untouched; shared: login, peek, edits, reset and a claim after a newer write refused, nothing
+  written; room: unknown account and hero fields, a hero of an unknown class, survive login, play and save, New game
+  drops the hero's).
+
+### Open (part 5)
+- "read" accounts are only listed by `peek`; nothing else shows them read-only (no viewer yet).
+- A hero field this build once had and removed without keeping it in `HeroSave` is now kept on save as unknown (harmless,
+  ignored on load).
+- An account on a draining Age's memory that a newer build bumps while the old one does not hold its lease (shared mode)
+  is refused at the next fresh read; in single-server mode (no leases) a stale memory copy is the part 3 issue.
 
 ## Built: part 6, status for both Ages (branch `claude/ages-metrics`)
 - `server/agesStatus.ts`: `GET /admin/ages.json?key=ADMIN_KEY` (the admin check of `server/index.ts`, 404 without;

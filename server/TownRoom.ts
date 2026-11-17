@@ -1319,7 +1319,7 @@ export class TownRoom extends Room<TownState> {
     // Never start boxed in (between crates and a barrel, say): step out to the nearest open ground
     if (boxedInAt(p.x, p.y)) { const o = openGroundNear(p.x, p.y); if (o) { p.x = o.x; p.y = o.y; } }
     this.holdWalls.admitWar(p, warState()); // a Hold wall rose where they stood: step out of it now
-    if (options?.newGame) saveHero(p.name, p.cls, this.snapshot(p));
+    if (options?.newGame) saveHero(p.name, p.cls, this.snapshot(p), true); // (nothing of the old hero is kept)
     else if (loaded) this.writeLoaded(p, loaded);
     // A quest that carries on by itself (QuestDef.auto) but did not start (they left right after the last one, or its
     // steps changed in an update): it is simply under way when they come back
