@@ -9,7 +9,7 @@ import os from "node:os";
 import path from "node:path";
 import { LEASE, Leases, memLeases, type LeaseBackend } from "../server/lease";
 import type { Kv } from "../server/store";
-import { AgeQueue } from "../server/ageQueue";
+import { AgeQueue, sharedStateOn } from "../server/ageQueue";
 import { CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import { newMinds } from "../shared/war/doctrine";
 import { newWar, WAR } from "../shared/war/rules";
@@ -57,6 +57,29 @@ test("age queue: batches numbered per holder, counted once by drained marks, dro
   assert.deepEqual(json(m, "q:b"), { holder: "b", seq: 3, batches: [{ n: 7, seq: 3 }] }, "counted batches dropped, numbering goes on");
   assert.deepEqual(await q.drain(kv, d1, (b) => got.push(b.n)), { b: 3 }); assert.deepEqual(got, [7]);
   assert.equal(await q.drain({ get: kv.get, set: kv.set }, d1, () => {}), undefined, "a store without list: nothing drained");
+});
+
+test("shared state turns on only for several servers on Postgres (AGE_SLOT or ACCOUNT_LEASES=1): one server keeps its files", () => {
+  const db = "postgres://x";
+  assert.equal(sharedStateOn({}), false, "JSON mode");
+  assert.equal(sharedStateOn({ DATABASE_URL: db }), false, "today's single server on Postgres: data/handoff.json and the idea file");
+  assert.equal(sharedStateOn({ DATABASE_URL: db, ACCOUNT_LEASES: "0" }), false);
+  assert.equal(sharedStateOn({ DATABASE_URL: db, AGE_SLOT: "blue" }), true);
+  assert.equal(sharedStateOn({ DATABASE_URL: db, ACCOUNT_LEASES: "1" }), true);
+  assert.equal(sharedStateOn({ AGE_SLOT: "blue" }), false, "no shared store without Postgres");
+  const src = fs.readFileSync(path.join(__dirname, "../server/index.ts"), "utf8");
+  assert.match(src, /if \(sharedStateOn\(\)\) \{ await useHandoffKv\(kv\); await initIdeas\(kv\); \}/, "index.ts gates both on it");
+});
+
+test("ideas without a shared store (one server): the file, as before", async () => {
+  const I = await import("../server/ideaStore");
+  I._resetIdeas();
+  assert.equal(I.ideasFollow(), false);
+  const r = I.submitIdea({ name: "Gil", level: 10 }, "A bigger bank for every hero please");
+  assert.ok(r.ok && !r.queued); assert.equal(r.idea!.id, 1);
+  I.saveIdeas(); await new Promise((res) => setTimeout(res, 600));
+  assert.equal(JSON.parse(fs.readFileSync(process.env.IDEAS_FILE!, "utf8")).ideas[0].author, "Gil");
+  I._resetIdeas();
 });
 
 // ---- Handoff spots ------------------------------------------------------------------------------------------------------

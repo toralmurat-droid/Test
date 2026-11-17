@@ -215,16 +215,18 @@ An older build (a draining Age) must never damage a hero a newer build saved.
 
 ## Built: part 7, shared state (branch `claude/ages-shared-state`)
 With two servers on one Postgres, what a player does on the server that does not own a shared row is neither lost nor
-applied twice. JSON mode (one server, no `DATABASE_URL`) is unchanged.
+applied twice. Handoff spots and the idea log move to kv only in a real multi-server setup (`sharedStateOn` in
+`server/ageQueue.ts`: Postgres and `AGE_SLOT` or `ACCOUNT_LEASES=1`, as the account leases); a single server, on files
+or on Postgres, keeps `data/handoff.json` and the idea file exactly as before.
 - `server/ageQueue.ts` (`AgeQueue`): the valor queue's machinery made generic. A follower writes its own kv row
   `<prefix><holder>` (numbered batches); the owner lists the prefix, applies each batch above its mark and keeps the
   marks (`drained`) in its own row, written with the change. Batches the owner counted are dropped by the follower.
   The war's valor queue now runs on it (same row format: old queue rows still read).
-- **Handoff spots** (`server/handoff.ts`): with Postgres each spot is also kv `handoff:<account>:<class>` (written when the
+- **Handoff spots** (`server/handoff.ts`): in multi-server mode each spot is also kv `handoff:<account>:<class>` (written when the
   hero leaves; shutdown waits for those writes), taken (read and deleted in one statement, `Kv.take`) in `onAuth` after
   the account is this server's (`fetchLive`); the newer of it and local memory wins. Spots older than 5 min are ignored,
   and pruned at start (`Kv.del`). `data/handoff.json` is still read once at start (a deploy from an older build).
-- **Idea log** (`server/ideaStore.ts`): with Postgres the log is kv row `ideas` (copied once from `data/ideas.json` when
+- **Idea log** (`server/ideaStore.ts`): in multi-server mode the log is kv row `ideas` (copied once from `data/ideas.json` when
   the row does not exist), written only by the holder of `lease:ideas`. Followers reload it every 15 s and queue their
   heroes' ideas and votes (`ideas-q:<holder>`): checked against the log they show, shown at once (a new idea under a
   temporary negative number, never sent as a vote target), numbered by the owner. The rooms' hourly round runs on the
@@ -259,7 +261,6 @@ applied twice. JSON mode (one server, no `DATABASE_URL`) is unchanged.
 - Mixed builds: an older owner ignores the new queues (`war-acts:`, `world-tide:`, `ideas-q:`) and an older world
   owner drops `drained` (a newer owner after it may count a follower's Tide kills again: low stakes).
 - A restart no longer forgets the sacks of the current tick (`warSacked` reads the log): one sack per land per tick now
-  also holds across a restart, in every mode (the only change a single server sees, besides the next point).
-- "Shared store" means `DATABASE_URL`: today's single server on Postgres also keeps its handoff spots and idea log in kv
-  from this build on (the idea file is copied into the `ideas` row once; `data/handoff.json` from the previous build is
-  still read once).
+  also holds across a restart, in every mode (the only change a single server sees).
+- Turning on multi-server mode the first time copies the idea file into the `ideas` row once (if the row does not
+  exist); `data/handoff.json` from the previous build is still read once. Ideas on the other service's volume are not merged.

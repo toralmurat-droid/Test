@@ -6,7 +6,15 @@
  * has not counted yet and records the last `seq` counted per holder in its own row (`drained`), in the same write as
  * the change: a batch is applied once, whichever server owns, however often either restarts. Never two writers on a key.
  */
+import { accountLeasesOn } from "./accountGuard";
 import type { Kv } from "./store";
+
+/**
+ * Whether per-server state (the handoff spots, the idea log) moves to the shared store: only for a real multi-server
+ * setup (Postgres and AGE_SLOT or ACCOUNT_LEASES=1, as the account leases). Today's single server, even on Postgres,
+ * keeps data/handoff.json and the idea file.
+ */
+export const sharedStateOn = (env = process.env) => accountLeasesOn(env);
 
 /** One batch: its number in the holder's queue and the module's own payload (which must not use `seq`). */
 export type Batch<B> = B & { seq: number };

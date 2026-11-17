@@ -10,6 +10,7 @@ import { TownRoom, announceUpgrade } from "./TownRoom";
 import { flushIdeas, ideaLog, initIdeas, publicLog } from "./ideaStore";
 import { backupAccounts, flushFinal, initAccounts, peek, releaseAccounts, requestReset, resetPassword, setEmail } from "./accounts";
 import { useHandoffKv, writeHandoff } from "./handoff";
+import { sharedStateOn } from "./ageQueue";
 import { flushWorldFinal, initWorld } from "./worldStore";
 import { clientIp } from "./ratelimit";
 import { flushWar, startWar, warLog, warNow } from "./war";
@@ -180,8 +181,9 @@ gameServer.onShutdown(async () => {
 Promise.all([initAccounts(), initWorld()])
   .then(async () => {
     const kv = await openKv(); await startWar(kv); await initForge(kv);
-    // Ages: with a shared store (Postgres) the handoff spots and the idea log live in kv (server/handoff.ts, server/ideaStore.ts)
-    if (process.env.DATABASE_URL) { await useHandoffKv(kv); await initIdeas(kv); }
+    // Ages: with several servers on one Postgres (AGE_SLOT or ACCOUNT_LEASES=1) the handoff spots and the idea log live in
+    // kv (server/handoff.ts, server/ideaStore.ts); a single server keeps its files
+    if (sharedStateOn()) { await useHandoffKv(kv); await initIdeas(kv); }
   })
   .then(() => gameServer.listen(PORT))
   .then(() => console.log(`Game server on http://localhost:${PORT}`))
