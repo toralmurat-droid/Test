@@ -48,4 +48,5 @@ and baked by `npx tsx tools/art/bake-props.ts [key...]` (PREVIEW=dir writes pain
 | # | Set | Props | Status |
 |---|---|---|---|
 | D1 | Village and camp | lantern pole, dummy, skull pike, pennants red/black, net rack, spear/weapon rack | done |
-| D2 | Watchtower, spears on the ground, mill wheel, cows, shipwreck | | next |
+| D2 | Watchtower, spears on the ground, mill wheel, cows | | done (shipwreck stays painted for now: a 300x200 2D painting) |
+| D3 | Smithy, witch camp, Saltmere harbour, element props, throne/crown stones, lanterns | | next |

@@ -9,6 +9,8 @@ import { bakeSheet, renderProp } from "./paint/prop3d";
 import { PROPS3D } from "./paint/props3d";
 import * as painted from "../../client/src/isoProps";
 import { BLACKR, REDR } from "../../client/src/isoProps";
+import { cow } from "../../client/src/farmArt";
+import { millWheel } from "../../client/src/millArt";
 
 const OUT = "client/public/assets/hd/props";
 const only = process.argv.slice(2);
@@ -22,7 +24,7 @@ function png(argb: Uint32Array, w: number, h: number) {
 const PAINTED: Record<string, (p: any, f: number) => void> = {
   wp_lantern_pole: painted.lanternPole, wp_dummy: painted.dummy, wp_skull_pike: painted.skullPike, wp_net_rack: painted.netRack,
   wp_pennant_red: painted.warPennant(REDR, false), wp_pennant_black: painted.warPennant(BLACKR, true),
-  wp_spear_rack: painted.spearRack(true), wp_weapon_rack: painted.spearRack(false),
+  wp_spear_rack: painted.spearRack(true), wp_watchtower: painted.watchtower, wp_cow0: cow(false), wp_cow1: cow(true), wp_millwheel: millWheel, wp_weapon_rack: painted.spearRack(false),
 };
 function paintedFrame(key: string, w: number, h: number, f: number) {
   const buf = new Uint32Array(w * h);

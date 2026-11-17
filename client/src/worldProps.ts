@@ -68,7 +68,8 @@ export function pen(buf: Uint32Array, W: number, H: number): Pen {
  */
 export const BAKED_PROPS: Record<string, [number, number]> = {
   wp_lantern_pole: [32, 90], wp_dummy: [34, 58], wp_skull_pike: [26, 72], wp_pennant_red: [44, 100], wp_pennant_black: [44, 100],
-  wp_net_rack: [54, 50], wp_spear_rack: [56, 80], wp_weapon_rack: [56, 80],
+  wp_net_rack: [54, 50], wp_spear_rack: [56, 80], wp_weapon_rack: [56, 80], wp_watchtower: [60, 126], wp_spears_ground: [40, 54],
+  wp_cow0: [COW_W, COW_H], wp_cow1: [COW_W, COW_H], wp_millwheel: [MILL_W, MILL_H],
 };
 export function preloadBakedProps(scene: Phaser.Scene) {
   for (const [k, [w, h]] of Object.entries(BAKED_PROPS)) if (!scene.textures.exists(k)) scene.load.spritesheet(k, `assets/hd/props/${k}.png`, { frameWidth: w, frameHeight: h });
