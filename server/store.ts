@@ -17,6 +17,15 @@ export interface Store<A> {
   save(changed: Record<string, A>, all: Record<string, A>): Promise<void>;
   /** Blocking write of everything (JSON only; used while shutting down). */
   saveSync?(all: Record<string, A>): void;
+  /** Writes a row only when the key does not exist yet (true when it wrote): a brand-new account, never over another server's. */
+  insertNew?(key: string, value: A): Promise<boolean>;
+  /**
+   * Writes the changed rows (one transaction) only where table `leases` holds `prefix + key` for `holder`, still running;
+   * rows that do not exist are not created. Returns the keys refused (server/accountGuard.ts: one account, one server).
+   */
+  saveFenced?(changed: Record<string, A>, holder: string, prefix: string): Promise<string[]>;
+  /** Up to `limit` rows whose top-level text field `field` equals `value` (the reset by email), without loading every row. */
+  findBy?(field: string, value: string, limit?: number): Promise<Record<string, A>>;
   close?(): Promise<void>;
 }
 
@@ -51,6 +60,19 @@ export function jsonStore<A>(file: string): Store<A> {
       fs.writeFileSync(file + ".sync.tmp", JSON.stringify(all));
       fs.renameSync(file + ".sync.tmp", file);
     },
+    // (one process owns the file: no fence. These merge into the file as written; accounts.ts never calls them on a file)
+    async insertNew(key, value) {
+      const all = readJsonFile<A>(file);
+      if (all[key] !== undefined) return false;
+      await this.save({ [key]: value }, { ...all, [key]: value });
+      return true;
+    },
+    async saveFenced(changed) { await this.save(changed, { ...readJsonFile<A>(file), ...changed }); return []; },
+    async findBy(field, value, limit = 5) {
+      const out: Record<string, A> = {};
+      for (const [k, a] of Object.entries(readJsonFile<A>(file))) if ((a as any)?.[field] === value && Object.keys(out).length < limit) out[k] = a;
+      return out;
+    },
   };
 }
 
@@ -67,6 +89,7 @@ export async function postgresStore<A>(url: string, importFrom?: string, table =
     data jsonb NOT NULL,
     updated_at timestamptz NOT NULL DEFAULT now()
   )`);
+  await leasesTable(pool); // (the write fence, saveFenced, reads it: made here too, so it exists whichever module starts first)
   const { rows } = await pool.query<{ n: string }>(`SELECT count(*) AS n FROM ${table}`);
   if (Number(rows[0].n) === 0 && importFrom && fs.existsSync(importFrom)) {
     const old = readJsonFile<A>(importFrom);
@@ -86,6 +109,17 @@ export async function postgresStore<A>(url: string, importFrom?: string, table =
       return r.rows[0]?.data;
     },
     save: (changed) => upsert(pool, changed, table),
+    async insertNew(key, value) {
+      const r = await pool.query(`INSERT INTO ${table} (key, data, updated_at) VALUES ($1, $2::jsonb, now()) ON CONFLICT (key) DO NOTHING`, [key, JSON.stringify(value)]);
+      return (r.rowCount ?? 0) > 0;
+    },
+    saveFenced: (changed, holder, prefix) => fencedUpdate(pool, changed, table, holder, prefix),
+    async findBy(field, value, limit = 5) {
+      const r = await pool.query<{ key: string; data: A }>(`SELECT key, data FROM ${table} WHERE data->>$1 = $2 ORDER BY key LIMIT $3`, [field, value, limit]);
+      const out: Record<string, A> = {};
+      for (const row of r.rows) out[row.key] = row.data;
+      return out;
+    },
     close: () => pool.end(),
   };
 }
@@ -116,6 +150,56 @@ async function upsert<A>(pool: pg.Pool, changed: Record<string, A>, table: strin
 }
 
 /**
+ * Makes table `leases`. Several pools make it at boot side by side (accounts, world, kv): CREATE TABLE IF NOT EXISTS is
+ * not safe against itself on a new database (one of two fails with a duplicate type or table), so that error is fine.
+ */
+async function leasesTable(pool: pg.Pool) {
+  try {
+    await pool.query("CREATE TABLE IF NOT EXISTS leases (key text PRIMARY KEY, holder text NOT NULL, until timestamptz NOT NULL)");
+  } catch (e: any) {
+    if (e?.code !== "23505" && e?.code !== "42P07") throw e;
+  }
+}
+
+/**
+ * The fenced write: first the lease rows of these keys still held by `holder` are locked (FOR SHARE, in key order, the
+ * order pgLeases takes them in), so no other server can take one over until this transaction ends; then only those rows
+ * are updated. The lease's end is checked against the clock (clock_timestamp), not the transaction's start.
+ */
+async function fencedUpdate<A>(pool: pg.Pool, changed: Record<string, A>, table: string, holder: string, prefix: string): Promise<string[]> {
+  const keys = Object.keys(changed).sort();
+  if (!keys.length) return [];
+  const wrote = new Set<string>();
+  const c = await pool.connect();
+  try {
+    await c.query("BEGIN");
+    for (let i = 0; i < keys.length; i += 500) {
+      const ks = keys.slice(i, i + 500);
+      const held = await c.query<{ key: string }>(
+        `SELECT key FROM leases WHERE key = ANY($1::text[]) AND holder = $2 AND until > clock_timestamp() ORDER BY key FOR SHARE`,
+        [ks.map((k) => prefix + k), holder],
+      );
+      const ok = new Set(held.rows.map((r) => r.key.slice(prefix.length)));
+      const mine = ks.filter((k) => ok.has(k));
+      if (!mine.length) continue;
+      const r = await c.query<{ key: string }>(
+        `UPDATE ${table} AS a SET data = t.d::jsonb, updated_at = now()
+         FROM unnest($1::text[], $2::text[]) AS t(k, d) WHERE a.key = t.k RETURNING a.key`,
+        [mine, mine.map((k) => JSON.stringify(changed[k]))],
+      );
+      for (const row of r.rows) wrote.add(row.key);
+    }
+    await c.query("COMMIT");
+  } catch (e) {
+    await c.query("ROLLBACK").catch(() => {});
+    throw e;
+  } finally {
+    c.release();
+  }
+  return keys.filter((k) => !wrote.has(k));
+}
+
+/**
  * Small named documents that are not accounts (the clan war's state): a row of table `kv` with DATABASE_URL, else
  * a JSON file per key next to the saves file (SAVE_FILE's folder, default data/).
  * `insertIfAbsent` writes only a key that does not exist yet (true when it wrote); `list` reads every key starting with
@@ -131,10 +215,11 @@ export interface Kv {
 
 /** Leases (server/lease.ts) in table `leases` of this pool: a key is taken when free, ran out, or the holder's own. */
 export async function pgLeases(pool: pg.Pool): Promise<LeaseBackend> {
-  await pool.query("CREATE TABLE IF NOT EXISTS leases (key text PRIMARY KEY, holder text NOT NULL, until timestamptz NOT NULL)");
+  await leasesTable(pool);
   return {
     async acquire(keys, holder, ttlMs) {
       if (!keys.length) return [];
+      keys = [...keys].sort(); // (key order, as the accounts' write fence locks them: no deadlock between the two)
       const r = await pool.query<{ key: string }>(
         `INSERT INTO leases (key, holder, until)
          SELECT k, $2, now() + $3 * interval '1 millisecond' FROM unnest($1::text[]) AS t(k)

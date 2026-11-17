@@ -4,6 +4,7 @@
  * of table `leases` (server/store.ts pgLeases) taken for a short time and renewed; another holder may take it only once
  * it ran out, so one holder at a time. Only an Age whose AGE_ROLE is "primary" (the default) competes; a "vanguard" or
  * "draining" Age never holds one. Without Postgres (JSON files: one process) a primary always holds every lease.
+ * Account leases (server/accountGuard.ts) pass `primary = true` whatever the role: every Age competes for its players.
  */
 
 /** Where leases live: one batched call takes or renews several keys, another gives them up. */
@@ -59,16 +60,37 @@ export class Leases {
   /** Takes or renews every wanted key (one call). A failed call keeps what was held until it runs out. */
   async renew(): Promise<void> {
     if (!this.primary || !this.backend || !this.wanted.size) return;
-    const at = this.now();
+    const at = this.now(), asked = [...this.wanted];
     try {
-      const keys = await this.backend.acquire([...this.wanted], this.holder, this.ttlMs);
+      const keys = new Set(await this.backend.acquire(asked, this.holder, this.ttlMs));
       const until = at + this.ttlMs - LEASE.skewMs;
-      this.got.clear();
-      for (const k of keys) if (this.wanted.has(k)) this.got.set(k, until);
+      // (only the keys asked about: a take() or drop() that ran meanwhile keeps its own answer)
+      for (const k of asked) if (keys.has(k) && this.wanted.has(k)) this.got.set(k, until); else this.got.delete(k);
     } catch (e: any) {
       console.error("Leases: could not renew:", e?.message ?? e);
     }
   }
+  /**
+   * Wants one more key and tries to take it now (account leases, server/accountGuard.ts: one call per login). True when
+   * held. A failed call throws (the caller decides; nothing is assumed held).
+   */
+  async take(key: string): Promise<boolean> {
+    this.wanted.add(key);
+    if (!this.primary) return false;
+    if (!this.backend) return true;
+    const at = this.now();
+    const got = (await this.backend.acquire([key], this.holder, this.ttlMs)).includes(key);
+    if (got && this.wanted.has(key)) this.got.set(key, at + this.ttlMs - LEASE.skewMs); else this.got.delete(key);
+    return got;
+  }
+  /** No longer wants these keys and gives them up, in one call (others may take them at once). Throws when the store cannot be reached. */
+  async drop(keys: string | readonly string[]): Promise<void> {
+    const ks = typeof keys === "string" ? [keys] : [...keys];
+    for (const k of ks) { this.wanted.delete(k); this.got.delete(k); }
+    if (this.backend && ks.length) await this.backend.release(ks, this.holder);
+  }
+  /** Every key this holder wants (held or not). */
+  keys(): string[] { return [...this.wanted]; }
   /** Gives up every lease (shutting down): another primary takes them at its next renewal. */
   async release(): Promise<void> {
     const keys = [...this.got.keys()];

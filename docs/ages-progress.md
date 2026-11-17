@@ -56,5 +56,42 @@ Also makes today's single server safer: a deploy's overlap no longer has two ser
 - `war-pre-<build>` and `war-valor:<holder>` rows stay one per build; prune them once the Ages run for real.
 - Accounts are not versioned yet: two Ages must not both write one account (next PR).
 
-## Part 3 (in progress): one account, one server
-Account leases `acct:<name>`, fresh account reads and a write fence, on with `ACCOUNT_LEASES=1` or `AGE_SLOT` (Postgres only). Off: exactly today.
+## Built: part 3, one account, one server (branch `claude/ages-account-lease`)
+Production is to be a gateway and two game servers on one Postgres. Before this, each server loaded every account at
+boot and wrote from memory: a stale copy on server B rolled back progress A had saved, a login on B for an account made
+on A after B started created a second account over it (password takeover), and "already playing" looked at one room.
+- **When:** Postgres and (`AGE_SLOT` set or `ACCOUNT_LEASES=1`), `accountLeasesOn` in `server/accountGuard.ts`. Off
+  (today's single server): the old code path, no extra queries, no `acct:` leases. `AGE_SLOT` without `DATABASE_URL`
+  refuses to start. In shared mode accounts are not loaded at boot; memory holds the ones read lately.
+- **Fresh reads:** `login`, `peek`, `setEmail`, `resetPassword` and `requestReset` read the row (`Store.loadOne`) unless
+  this server holds the account. A new account is written at once with `Store.insertNew` (insert if absent); if another
+  server made the name first, it is a normal login (password check). The reset by email looks the rows up in SQL
+  (`Store.findBy`, `data->>'email'`). `/admin/backup` reads the table (`backupAccounts`), this server's held accounts on top.
+- **Account lease** `acct:<lower-case name>` (`server/accountGuard.ts` `AccountGuard`, on `Leases.take` / `Leases.drop`,
+  primary whatever `AGE_ROLE`): taken in `onAuth` after the password check. Held already: memory is newest ("mine");
+  else the row is reloaded ("fresh"). Held by another server: 4 tries 1 s apart, then "This hero is playing on another
+  server". Sessions are counted per account across every room of the process (a second hero: "already playing"). All
+  held accounts renew in one call every 15 s. When the last session (or HTTP edit) leaves: save, wait for the COMMIT,
+  then release; a failed write keeps the lease (retried at each renewal). Shutdown: after `flushFinal`, every lease
+  but those of unsaved accounts goes back in one call (at most 5 s). A seat whose client left before `onJoin` (Colyseus
+  then skips `onLeave`) gives its account back after 10 s.
+- **Write fence** (`Store.saveFenced`, Postgres): in the flush's transaction, the lease rows still held by this holder
+  (`until > clock_timestamp()`) are locked `FOR SHARE` in key order, so no server takes one over until the commit; only
+  those rows are updated, rows are never created by it. Refused accounts are logged and dropped from the dirty set.
+  `pgLeases` takes keys in key order too (no deadlock with the fence).
+- **HTTP edits** (email, reset code, new password) for an account not playing here: take the lease, reload, change,
+  save, release; held elsewhere: "Leave the game first, then try again". A reset guess takes a lease only when a code
+  is pending.
+- No save field changed; the Player / Mob schema untouched.
+- Tests: `tests/accountGuard.test.ts` (guard and shared accounts on an in-memory fenced table, `tests/helpers/fencedStore.ts`),
+  `tests/accountLease-room.test.ts` (onAuth refused / taken, onLeave saves then releases), `tests/store.test.ts`
+  (Postgres: insertNew, fence, findBy).
+
+### Open (part 3)
+- A trade's two accounts are written in one transaction, but if one side's lease were lost, the other side is still
+  written (the fence refuses rows, not the whole flush). Both traders are on one server, so this needs a lease lost mid-trade.
+- A player whose lease is lost (database outage, then another server took it) keeps playing here with saves refused;
+  nothing kicks them yet (logged).
+- During a deploy's overlap with leases on, a player reconnecting to the new server while the old one still saves waits
+  up to ~3 s and may be refused once; the client shows the message (no automatic retry yet).
+- Held leases are trusted locally until 5 s before they run out; a server paused longer than that is fenced by SQL.

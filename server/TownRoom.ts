@@ -58,7 +58,7 @@ import { NIGHT_RAID, raiderByKey, raiderIgnores, RAIDERS } from "../shared/raide
 import { SLOTS_BY_ZONE, WORK_SLOTS } from "../shared/siege";
 import { DAY_CYCLE_MS, dayFrac, isUndeadNight, NIGHT_BOSSES, UNDEAD_NIGHT } from "../shared/daynight";
 import { AMBUSH, BANDIT_AI, BANDIT_ROLES, CAMPS, campOfZone, CHIEF, clearWalk, findPath, POSTS, postKind, postPos, roleOf } from "../shared/bandits";
-import { flush, flushFinal, HeroSave, loadHero, loadStash, login, markChest, openedChests, resetChests, saveHero, saveStash, type Stash } from "./accounts";
+import { accountsShared, claimAccount, flush, flushFinal, HeroSave, leaveAccount, loadHero, loadStash, login, markChest, openedChests, resetChests, saveHero, saveStash, type Stash } from "./accounts";
 import { offerFrom, Offer, settle, stashNear, STASH_GOLD_MAX, STASH_RANGE, STASH_SIZE, TRADE } from "../shared/trade";
 import { arrivalOf, cleanPortals, PORTAL_COMBAT_MS, PORTAL_RANGE, PORTAL_WAKE_RANGE, portalById, PORTALS } from "../shared/portals";
 import { rideFerry } from "./ferry";
@@ -1195,6 +1195,8 @@ export class TownRoom extends Room<TownState> {
 
   /** Remembers a hashed network address per player, so one person can't suggest or vote twice with alt heroes. */
   private addrs = new Map<string, string | undefined>();
+  /** Account leases on (server/accountGuard.ts): the account each session claimed, given back when it leaves. */
+  private accts = new Map<string, string>();
 
   /** Name + password check (server/accounts.ts); a new name creates the account. Also notes the network address for ideas. */
   async onAuth(client: Client, options: { name?: string; password?: string; cls?: string }, context: AuthContext) {
@@ -1204,6 +1206,19 @@ export class TownRoom extends Room<TownState> {
     let online = false;
     this.state.players.forEach((o) => { if (o.name.toLowerCase() === name.toLowerCase()) online = true; });
     if (online) throw new Error("This hero is already playing");
+    if (accountsShared()) {
+      // One account, one server: the hero's account is taken here (counted across every room) or refused
+      const c = await claimAccount(name);
+      if (c === "playing") throw new Error("This hero is already playing");
+      if (c === "elsewhere") throw new Error("This hero is playing on another server");
+      const sid = client.sessionId;
+      this.accts.set(sid, name);
+      // A seat whose client left before onJoin never reaches onLeave (Colyseus): give the account back here
+      setTimeout(() => {
+        if (this.accts.get(sid) !== name || this.clients.some((c) => c.sessionId === sid)) return;
+        this.accts.delete(sid); void leaveAccount(name);
+      }, 10_000).unref();
+    }
     // Local addresses are skipped so several tabs on one computer can still test ideas and votes
     this.addrs.set(client.sessionId, isLocalIp(ip) ? undefined : hashAddr(ip));
     return { name };
@@ -1354,6 +1369,9 @@ export class TownRoom extends Room<TownState> {
     this.chatBuckets.delete(client.sessionId);
     this.askBuckets.delete(client.sessionId);
     this.craftBuckets.delete(client.sessionId);
+    // (last, after every save above) the account is written, then its lease given back (server/accountGuard.ts)
+    const acct = this.accts.get(client.sessionId);
+    if (acct !== undefined) { this.accts.delete(client.sessionId); void leaveAccount(acct); }
   }
 
   onDispose() {
