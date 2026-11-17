@@ -1,4 +1,6 @@
 import { BOSS, ELITE, MOBS, SKELETON_WEAPONS, type MobKind } from "../../shared/constants";
+import { forgedMobOf } from "./forgePack";
+import { CLANS } from "../../shared/war/clans";
 import { AFFIXES, championFullName, taintElement, unpackAffixes, type AffixKey } from "../../shared/champions";
 import { ELEMENTS, ELEMENT_NAMES, ELEMENT_COLORS, MOB_AFFINITY, MOB_MELEE_ELEMENT, MOB_SHOT_ELEMENT, type Element } from "../../shared/elements";
 import { isSummonKind } from "../../shared/summons";
@@ -26,7 +28,7 @@ export function levelTone(mobLv: number, myLv: number): LevelTone {
 
 /** The fields of a monster this reads (Mob / MobState). */
 export interface MobLike {
-  kind: string; level?: number; hp?: number; maxHp?: number; title?: string; champion?: number; owner?: string; weapon?: string;
+  kind: string; level?: number; hp?: number; maxHp?: number; title?: string; champion?: number; forge?: string; owner?: string; weapon?: string;
   merged?: number; bones?: number; guard?: string; hidden?: boolean; dead?: boolean; stunned?: boolean; slowed?: boolean; broken?: boolean; winding?: boolean; fx?: string;
 }
 export interface InfoCtx {
@@ -112,6 +114,9 @@ export function monsterInfo(p: MobLike, ctx: InfoCtx): MonsterInfo {
   if (p.owner) {
     name = `${owner ?? "Someone"}'s ${kindName}${summon ? "" : " thrall"}`;
     rank = summon ? "summon" : "thrall";
+  } else if (p.forge && forgedMobOf(p.forge)) { // a clan's forged monster: its own name, its clan below; its affixes show but it is no champion
+    const f = forgedMobOf(p.forge)!;
+    name = f.name; sub = `${kindName} · Forged by ${CLANS[f.clan]?.name ?? "a clan"}${f.status === "active" ? "" : ` (${f.status})`}`;
   } else if (p.champion && p.title) {
     name = championFullName(p.title, p.champion); sub = kindName; rank = "champion"; frame = "champion";
   } else if (BOSS[kind]) { rank = "boss"; frame = "boss"; if (p.title) { name = p.title; sub = kindName; } }
@@ -145,7 +150,7 @@ export function monsterInfo(p: MobLike, ctx: InfoCtx): MonsterInfo {
     weak, resist, hits, weapon, extras, states,
     ear: snd ? { tier: snd.tier, pitch: snd.pitch, tip: earTip(p.kind), hint: hintFor(p.kind) || earTip(p.kind) } : undefined,
   };
-  info.key = [name, sub, level, info.tone, rank, p.kind, affixKeys.join("."), weak.join("."), resist.join("."), hits.join("."), weapon, extras.join("|"), states.map((s) => s.id).join("."), snd ? snd.tier + snd.pitch : ""].join("/");
+  info.key = [p.forge ?? "", name, sub, level, info.tone, rank, p.kind, affixKeys.join("."), weak.join("."), resist.join("."), hits.join("."), weapon, extras.join("|"), states.map((s) => s.id).join("."), snd ? snd.tier + snd.pitch : ""].join("/");
   return info;
 }
 

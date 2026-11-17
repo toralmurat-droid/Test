@@ -1092,3 +1092,39 @@ Ten Crown territories (ids 62-71), no capital, the five Crownways as land links,
 behind their gates, the Crown Keep Reckoning-only. Details, migration (`PRE_CROWN_NAMES`), sims and bench:
 [crown-progress.md](crown-progress.md) PR3.
 
+
+## M3 War Councils, part 1: the plumbing (2026-11-17)
+No AI call and no new dependency: the councils are a pluggable interface whose only built-in decider is the scripted
+doctrine. The owner's design (2026-11-17): councils will be run by scheduled Claude routines (cloud sessions) that post
+orders over HTTPS, not by an in-server API call. Routine prompt and setup: [war-council-routine.md](war-council-routine.md).
+- **Orders** (`shared/war/council.ts`): once per war day (144 war ticks, `warDay`), per clan, up to 3 target priorities,
+  a stance (`attack` / `defend` / `feint`), a proclamation (plain ASCII, 160 chars) and a rationale (200 chars).
+  `validateCouncil` names every illegal item (not an object, wrong clan or day, bad stance, not a list, too many, not a
+  whole number, unknown id, the Crown Keep, a capital, own land, not a legal target, named twice, non-text, control
+  characters or other non-ASCII, overlong; markup is stripped) and only a set with no error leads.
+- **Executor:** `councilOrders` = the doctrine's `scriptedOrders` (same random draws, so clans without an intent play
+  exactly as before), then each leading clan's intent as Orders the way its doctrine executes them (main target in its
+  Mind, a sack's siege first, raiders hit two places, stances). A main target that has not dropped below Control 80
+  after `DOCTRINE.stickTicks` gives way to the next priority; with no priority left legal the doctrine leads.
+- **Briefing** (`buildBriefing`): deterministic plain JSON of the clan's lands, legal targets (with the doctrine's
+  score; no capital, no Keep), enemies and wars, sieges, the brakes, the Crown and the Reckoning, the last day's events.
+- **Server** (`server/warCouncil.ts`): sessions in `step` before the ticks (one per clan per war day, provider bounded by
+  `COUNCIL.timeoutMs` 20 s, never two at once), modes `off` (default) / `shadow` (logged and compared with the doctrine's
+  main target each tick) / `lead`, providers `scripted` / `remote`, kill switch (`WAR_COUNCIL_KILL=1`, `killCouncils()`,
+  `POST /admin/war-council?key=&kill=1`), fallback to the doctrine on a throw, a timeout, illegal orders or (remote)
+  nothing submitted. Lead proclamations go out as Herald chat lines with the next tick's news.
+- **Save:** one optional `council` field in the war save (`cleanCouncil`: intents, last day held, pending remote
+  orders, a 300-entry council log, the last 7 daily digests); old saves load with none, a map change drops intents and
+  pending orders. No Player schema change, no hero save change.
+- **Remote routes:** `GET /api/war/council/briefing`, `POST /api/war/council/orders`, behind `WAR_COUNCIL_TOKEN`
+  (bearer, constant-time, off when unset or under 16 chars), rate-limited, 8 kB bodies. Orders for a past day are refused.
+- **Digest:** `dailyDigest` (plain text: council decisions, rejections, fallbacks, flips, battles, the Reckoning, the
+  land), one per war day in the save, read at `GET /admin/war-digest?key=ADMIN_KEY`. No email (needs the owner's OK).
+- **Sim** (`tools/balance/war.ts`, 200 runs x 30 days): councils off: identical to before (7.93 flips a day,
+  domination 0.0%). `--council=shadow`: 30000 sessions, 0 rejected, the doctrine's main target matched the council's
+  on 66.9% of clan-ticks, war unchanged. `--council=lead` (all five clans led by the scripted council): domination
+  1.0% (goal under 5%), but only 2.89 flips a day and the Night Raiders ride on 26.8% of night ticks (5.7% with the
+  doctrine): a once-a-day council with three priorities is a slower, lumpier war than the doctrine's continuous
+  retargeting. Watch this when a Claude council leads.
+- **Open:** the Claude routine itself (owner's subscription, token on Railway), a mid-day re-think for lead councils if
+  the tempo stays low, the war chronicle page, email for the digest (owner approval), undo of a council's day.
