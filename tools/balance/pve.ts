@@ -52,6 +52,8 @@ import { COLUMN } from "../../shared/war/marches";
 import { mouthHp, TUNNEL } from "../../shared/war/tunnels";
 import { SIEGE_BATTLE } from "../../shared/war/siege";
 import { ramHp, SIEGE_WORKS } from "../../shared/war/works";
+import { applyVariant, type ForgedMob } from "../../shared/forge";
+import type { Equipped } from "../../shared/gear";
 
 type Build = 0 | 1 | 2;
 
@@ -71,13 +73,18 @@ interface MobSpec {
   boss?: boolean; // elite, mini-boss, quest boss or Night Raider: executions deal EXECUTE.bossMult (shared/combat.ts)
 }
 
-export function mobSpec(kind: MobKind, level: number, opt: { weapon?: string; hpMult?: number; boss?: boolean } = {}): MobSpec {
-  const d = MOBS[kind], hpS = mobScale(level, "hp"), dmS = mobScale(level, "damage");
+/**
+ * A monster of this kind and level as the sim sees it. `variant`: a forged monster (shared/forge.ts applyVariant: its
+ * HP, damage and speed multipliers, its weapon unless `weapon` is given); its affixes are run by the caller (ChampF with `champion` false).
+ */
+export function mobSpec(kind: MobKind, level: number, opt: { weapon?: string; hpMult?: number; boss?: boolean; variant?: ForgedMob } = {}): MobSpec {
+  if (opt.variant && opt.weapon === undefined && opt.variant.weapon !== undefined) opt = { ...opt, weapon: opt.variant.weapon };
+  const d = opt.variant ? applyVariant(MOBS[kind], opt.variant) : MOBS[kind], hpS = mobScale(level, "hp"), dmS = mobScale(level, "damage");
   const role = kind === "bandit" ? BANDIT_ROLES[(opt.weapon ?? "cutthroat") as keyof typeof BANDIT_ROLES] : undefined;
   const sw = kind === "skeleton" ? SKELETON_WEAPONS[(opt.weapon ?? "sword") as SkeletonWeapon] : undefined;
   const body = mobBody(kind);
   const spec: MobSpec = {
-    kind, label: role ? role.name : kind === "skeleton" ? `skeleton (${opt.weapon ?? "sword"})` : d.name, level,
+    kind, label: opt.variant ? opt.variant.name : role ? role.name : kind === "skeleton" ? `skeleton (${opt.weapon ?? "sword"})` : d.name, level,
     hp: d.maxHp * hpS * (role?.hp ?? 1) * (opt.hpMult ?? 1),
     dmg: d.damage * dmS * (role?.dmg ?? 1) * (sw?.dmg ?? 1),
     cd: d.attackCooldownMs * (role?.cooldown ?? 1) * (sw?.cooldown ?? 1),
@@ -260,7 +267,7 @@ export class MobF extends F {
   get enraged() { return !!this.spec.enrage && this.hp < this.maxHp * this.spec.enrage.hpBelow; }
 }
 
-interface Pack { heal: number; mana: number; healUsed: number; manaUsed: number; size: number; lastDrink: number }
+export interface Pack { heal: number; mana: number; healUsed: number; manaUsed: number; size: number; lastDrink: number }
 
 export class PveDuel extends Duel {
   dodged = 0; teles = 0;
@@ -400,8 +407,9 @@ export class PveDuel extends Duel {
 export class ChampF extends MobF {
   rose = false; split = false; shifted = false; pools: [number, number][] = []; nextPool = 0; nextAura = 0;
   nextBallista = 0; ballistaUntil = 0; ballistaX = 0; nextBolt = 0; nextBlink = 0; goneUntil = 0; brands = 0; brandUntil = 0;
-  constructor(spec: MobSpec, public affixes: AffixKey[], id = "c") {
-    super({ ...spec, hp: spec.hp * CHAMPION.hpMult, dmg: spec.dmg * CHAMPION.dmgMult, poise: spec.poise }, id);
+  /** `champion` false: the affixes only, no champion HP / damage multiplier (a forged monster, shared/forge.ts). */
+  constructor(spec: MobSpec, public affixes: AffixKey[], id = "c", champion = true) {
+    super(champion ? { ...spec, hp: spec.hp * CHAMPION.hpMult, dmg: spec.dmg * CHAMPION.dmgMult, poise: spec.poise } : spec, id);
     this.nextBlink = affixes.includes("veil") ? CF.veil.firstMs : CF.buried.firstMs;
   }
   has(k: AffixKey) { return this.affixes.includes(k); }
@@ -573,13 +581,13 @@ function crownMob(level: number): MobSpec {
 let CROWN = false;
 
 const CHAIN = 6; // encounters per zone run: 1 monster (55%), 2 (35%) or 3 (10%)
-const potionSize = (level: number) => (level >= 20 ? 2 : level >= 10 ? 1 : 0);
+export const potionSize = (level: number) => (level >= 20 ? 2 : level >= 10 ? 1 : 0);
 
 export interface RunResult { won: boolean; kills: number; hpLostPerKill: number; secPerKill: number; heals: number; manas: number }
 
-/** One hero walks a zone: CHAIN fights in a row. */
-function zoneRun(cls: ClassKind, level: number, build: Build, mobLevel: (i: number) => number, potions = 3): RunResult {
-  const h = make("h", cls, level, build);
+/** One hero walks a zone: CHAIN fights in a row. `over`: gear worn instead of gearFor's (forgeGate: a forged weapon). */
+export function zoneRun(cls: ClassKind, level: number, build: Build, mobLevel: (i: number) => number, potions = 3, over?: Equipped): RunResult {
+  const h = make("h", cls, level, build, over);
   const pack: Pack = { heal: potions, mana: potions, healUsed: 0, manaUsed: 0, size: potionSize(level), lastDrink: -1e9 };
   let t = 0, kills = 0, lost = 0, fightMs = 0;
   for (let i = 0; i < CHAIN; i++) {

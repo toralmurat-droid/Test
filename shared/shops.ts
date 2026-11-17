@@ -269,3 +269,16 @@ export const SHOPS: Record<string, Shop> = {
   },
 };
 
+
+/**
+ * The Forge (M4, server/forge.ts forgedStock): a capital's quartermaster (`cap_<clan>`, shared/capitals.ts cityShopId)
+ * also sells its clan's live forged weapons, at the tier-3 price of the shop's highest item level. They come after the
+ * fixed stock, so the indices "buy" sends for it never move. Other shops, or no forgings: the shop as it is.
+ */
+export function shopWithForged(id: string, forged: readonly string[]): Shop | undefined {
+  const s = Object.hasOwn(SHOPS, id) ? SHOPS[id] : undefined;
+  if (!s || !forged.length || !/^cap_[a-z]+$/.test(id)) return s;
+  const lvl = Math.max(1, ...s.stock.filter((e) => gearDef(e.item)).map((e) => itemLevel(e.item)));
+  const price = Math.round(GEAR_PRICE[3] * (1 + PRICE_PER_LEVEL * (lvl - 1)));
+  return { ...s, stock: [...s.stock, ...forged.map((b) => ({ item: withLevel(b, lvl), price }))] };
+}

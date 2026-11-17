@@ -50,7 +50,7 @@ import { atLutemaker, breakItem, fitTrait, pickMat } from "./lutemaker";
 import { GAUGE, modeColour, PHRYGIAN, RESONANCE } from "../shared/songs";
 import { soundMult } from "../shared/combat";
 import type { SoundFx } from "../shared/skills";
-import { sellPrice, shopBuys, shopFuses, SHOPS } from "../shared/shops";
+import { sellPrice, shopBuys, shopFuses, shopWithForged } from "../shared/shops";
 import { BLOB_KINDS, CHAINS, CROWN_CHAIN, packQuest, chainDone, chainOpen, chainState, cleanMentor, inZone, isBlob, type MentorState, npcPresent, QuestState, questFinished, questStep, stepFor, stepGoal, Summon, type BossVoice, TUT_CHAIN, TUT_QUESTS, USE_RANGE } from "../shared/quests";
 import { bossHallAt, findHideSpot, HIDE, type HideSpot, MOTHER_KEEP_OUT, noMobsAt, spawnPoint, SPAWN_ZONES, villageDist, zoneCap } from "../shared/spawns";
 import { blocked, moveStep } from "../shared/movement";
@@ -91,6 +91,9 @@ import { respecCost } from "../shared/upkeep";
 import { ARSENAL, ATTUNE_ORDER, attuneOf, bondShare, DEFAULT_GRIMOIRE, SUMMONER_TREE, ESSENCE, GOLEM, GOLEM_OF, golemSlots, isElement, isSummonKind, parseGrimoire, PORTAL, SUMMON, summonElement, summonScaleLevel, WISP, wispEls, type AttuneElement, type SummonKind } from "../shared/summons";
 import { cleanFeast, familyOf, type Feast, feastMult, THRALL, thrallMax } from "../shared/devour";
 import { Champions, type ChampState } from "./champions";
+import { forgeQuery, forgedStock, onForge, packFor } from "./forge";
+import { forgedGoldMult, forgedKillDrop, forgedOf, isChampion, mobDmgK, zoneVariant } from "./forgeMobs";
+import { applyVariant, type ForgedMob } from "../shared/forge";
 import { QuestSteps, setMeta } from "./questSteps";
 import { Tide } from "./tide";
 import { Rumours } from "./rumours";
@@ -222,6 +225,7 @@ export class Mob extends Schema {
   // Keep the synced fields in the order of shared/mobView.ts MOB_FIELDS (server/mobView.ts sends them by index)
   @type("string") owner = ""; // a hero's summon (shared/summons.ts): session id of the hero it fights for
   @type("number") champion = 0; // a champion's affixes, packed (shared/champions.ts packAffixes); 0 = a plain monster
+  @type("string") forge = ""; // a clan's forged monster (server/forgeMobs.ts): its forging's id ("fm12"); "" = none
   champ?: ChampState; // a champion's own state (server/champions.ts)
   hk?: HideKinState; // a Hide-Kin's burrow, stitch or pit (server/hidekin.ts)
   cr?: CrownState; // one of the Crown's court: its oath, shield, decree, the Riven King's fight (server/crownMobs.ts)
@@ -562,11 +566,14 @@ const rangedOf = (m: Mob): RangedCfg | undefined =>
 const warlordOf = (k: MobKind) => BADLANDS_AI.warlords[k] ?? SINKHOLES_AI.warlords[k] ?? CROWN_AI.warlords[k];
 /** A monster's stats: its kind's numbers, a bandit's role on top, and the camp's horn alert (they come from far). */
 function mobDef(m: Mob, now = Date.now()): MobDef {
-  const d = mobDefOf(m, now);
+  let d = mobDefOf(m, now);
+  const fv = m.forge ? forgedOf(m) : undefined;
+  if (fv) d = applyVariant(d, fv); // a clan's forged monster (shared/forge.ts): its life, damage, speed and XP
   if (!m.champion) return d;
-  // a champion hits harder and is worth more (shared/champions.ts CHAMPION); Hide-Stitched in its other skin is faster
-  const sh = m.champ?.shifted;
-  return { ...d, damage: d.damage * CHAMPION.dmgMult, xp: d.xp * CHAMPION.xpMult,
+  // a champion hits harder and is worth more (shared/champions.ts CHAMPION); Hide-Stitched in its other skin is faster.
+  // A forged monster's affixes run like a champion's, without those multipliers
+  const sh = m.champ?.shifted, ch = !m.forge;
+  return { ...d, damage: ch ? d.damage * CHAMPION.dmgMult : d.damage, xp: ch ? d.xp * CHAMPION.xpMult : d.xp,
     speed: sh ? d.speed * AFFIX_FX.stitched.speed : d.speed, attackCooldownMs: sh ? d.attackCooldownMs * AFFIX_FX.stitched.cooldown : d.attackCooldownMs };
 }
 function mobDefOf(m: Mob, now: number): MobDef {
@@ -858,7 +865,9 @@ export class TownRoom extends Room<TownState> {
       if (r) for (const [id, p] of this.state.players.entries()) if (p.clan === r) this.clients.getById(id)?.send("chat", { id: "", name: "Herald", text: rallyTell(r) });
     }); // the clan war (server/war.ts) runs on its own; the room passes on the news
     const offCrown = this.reckoning.attach();
-    this.offWar = () => { offNews(); offTroops(); offCrown(); };
+    // The Forge (server/forge.ts): a forging went live, retired or was revoked: every client gets the pack, every hero's stats follow
+    const offForge = onForge((pack) => { this.broadcast("forge", pack); this.state.players.forEach((p) => this.applyStats(p)); });
+    this.offWar = () => { offNews(); offTroops(); offCrown(); offForge(); };
     this.limitMessages();
     this.qsteps = new QuestSteps({
       player: (pid) => this.state.players.get(pid),
@@ -963,7 +972,7 @@ export class TownRoom extends Room<TownState> {
       zone.name = z.name; zone.cap = zoneCap(z);
       this.state.zones.set(z.name, zone);
       for (const [kind, n] of Object.entries(z.mobs) as [MobKind, number][]) {
-        for (let i = 0; i < n; i++) { const id = `m${++this.mobSeq}`; this.spawnMob(kind, zi, id); this.champs.roll(this.state.mobs.get(id)!, id); }
+        for (let i = 0; i < n; i++) this.zoneSpawn(kind, zi, `m${++this.mobSeq}`);
       }
       zone.alive = zone.cap;
     });
@@ -1049,6 +1058,8 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("mentor", (client, msg: unknown) => { if (this.allow("ask", client)) this.apprentice.msg(client.sessionId, msg); });
     // Titles: {i} shows an earned title (0 = none), {} = resend; the reply is "title" {i, owned} (server/titles.ts)
     this.onMessage("title", (client, msg: unknown) => { const p = this.state.players.get(client.sessionId); if (p && this.allow("ask", client)) client.send("title", titleMsg(p, msg)); });
+    // The Forge: {ids: up to 20 forged ids} the pack lacks (retired or revoked forgings in bags); the answer is "forgeQ" {defs}
+    this.onMessage("forgeQ", (client, msg: unknown) => { if (!this.allow("ask", client)) return; const ids = forgeQuery(msg); if (ids) client.send("forgeQ", { defs: packFor(ids).defs }); });
     this.onMessage("shrine", (client) => client.send("shrine", { left: Math.max(0, this.shrineReadyAt - Date.now()) }));
     // The client is ready (loading screen gone): a hero on the first step of First Steps gets its banner
     this.onMessage("tutorial", (client) => {
@@ -1294,6 +1305,7 @@ export class TownRoom extends Room<TownState> {
     this.apprentice.join(client.sessionId); // mentoring state (server/apprentice.ts)
     if (Object.keys(p.feast).length) client.send("feast", { feast: p.feast }); // Devour: what this hero has eaten
     if (p.cls === "songweaver") client.send("songbook", this.songs.msg(p)); // her songs and materials (owner only)
+    client.send("forge", packFor()); // the live forgings: names, stats and palettes of forged items and monsters (server/forge.ts)
     const war = warNow(); if (war) client.send("war", war); // the clan war front plaque (client/src/warPlaque.ts)
     client.send("siege", this.sieges.view()); // the live siege battle's fronts (server/warSieges.ts)
     client.send("tunnels", this.tunnels.view()); // Hide-Kin tunnel mouths (server/warTunnels.ts)
@@ -1529,10 +1541,18 @@ export class TownRoom extends Room<TownState> {
     return null;
   }
 
-  private spawnMob(kind: MobKind, zi: number, id = `m${++this.mobSeq}`, at?: ReturnType<typeof spawnPoint>) {
+  /** A zone monster (re)spawns: in a land a clan holds, maybe as its forged monster (server/forgeMobs.ts), else maybe a champion. */
+  private zoneSpawn(kind: MobKind, zi: number, id: string, at?: ReturnType<typeof spawnPoint>) {
+    const fv = zoneVariant(zi, kind);
+    this.spawnMob(kind, zi, id, at, fv);
+    if (!fv) this.champs.roll(this.state.mobs.get(id)!, id); // about one in twenty comes as a champion (shared/champions.ts)
+  }
+
+  private spawnMob(kind: MobKind, zi: number, id = `m${++this.mobSeq}`, at?: ReturnType<typeof spawnPoint>, fv?: ForgedMob) {
     const m = this.state.mobs.get(id) ?? new Mob();
     let home = at ?? spawnPoint(SPAWN_ZONES[zi], kind);
     m.kind = kind;
+    m.forge = fv?.id ?? ""; // (before mobDef below: a forging's life)
     m.title = ""; this.champs.clear(m); // a respawn reusing this Mob starts plain (zone spawns may roll a champion after)
     m.weapon = kind === "skeleton" ? rollSkeletonWeapon() : Math.random() < (BEAST_FOLK[kind] ?? 0) ? "folk" : ""; // beast-folk: half get the other half-folk look
     m.camp = false; m.post = -1; m.perch = false; m.pLeg = 0; m.pDir = 1; m.stuckSince = 0; m.detourUntil = 0;
@@ -1556,6 +1576,7 @@ export class TownRoom extends Room<TownState> {
     } else if (kind === "bandit" && SPAWN_ZONES[zi]?.name === "Gullrock Cove") {
       m.weapon = (["cutthroat", "brute", "archer", "cutthroat"] as const)[this.mobSeq % 4]; // the raiding party: a mix of roles
     }
+    if (fv?.weapon !== undefined && !m.camp) m.weapon = fv.weapon; // a forging's skeleton weapon or bandit role
     const def = mobDef(m);
     m.zone = zi;
     m.x = m.homeX = home.x;
@@ -1575,6 +1596,7 @@ export class TownRoom extends Room<TownState> {
     m.canShoot = kind === "shooterblob"; m.canCharge = kind === "warriorblob"; m.canHeal = kind === "healerblob";
     if (kind === "motherblob") m.nextBrood = Date.now() + BROOD.minMs + Math.random() * (BROOD.maxMs - BROOD.minMs);
     if (!this.state.mobs.has(id)) this.state.mobs.set(id, m);
+    if (fv) this.champs.makeForged(m, fv.affixes); // its affixes, run by the champion machinery
     // An ambusher is already up in its tree when it comes (nobody is near: spawns keep NO_SPAWN_RANGE from heroes)
     if (m.ambusher && this.treeFor(m, Date.now())) this.hide(m, id, Date.now());
     this.hidekin.spawned(m, id); // (a Gullet Worm is already down in its pit)
@@ -1866,7 +1888,7 @@ export class TownRoom extends Room<TownState> {
       if (now < m.specialAt) return true;
       const move = m.specialKind === "slam" ? MOTHER.slam : MOTHER.bounce;
       m.specialAt = 0; m.winding = false; m.lastAttack = now;
-      const dmg = Math.round(MOBS.motherblob.damage * mobScale(m.level, "damage") * move.dmgMult * (m.champion ? CHAMPION.dmgMult : 1));
+      const dmg = Math.round(MOBS.motherblob.damage * mobScale(m.level, "damage") * move.dmgMult * mobDmgK(m));
       this.state.players.forEach((p, pid) => {
         if (p.dead) return;
         const dx = p.x - m.x, dy = p.y - m.y, d = Math.hypot(dx, dy);
@@ -1910,7 +1932,7 @@ export class TownRoom extends Room<TownState> {
     return out;
   }
   /** The blob's own damage at its level, times `mult`. */
-  private elemDmg(m: Mob, mult: number) { return Math.max(1, Math.round(MOBS[m.kind].damage * mobScale(m.level, "damage") * mult * (m.champion ? CHAMPION.dmgMult : 1))); }
+  private elemDmg(m: Mob, mult: number) { return Math.max(1, Math.round(MOBS[m.kind].damage * mobScale(m.level, "damage") * mult * mobDmgK(m))); }
   /** A ground hazard; `ms` long, hurting every `tickMs`. */
   private addHazard(m: Mob, id: string, x: number, y: number, r: number, ms: number, tickMs: number, dmg: number, el: Element, now: number) {
     this.hazards.push({ x, y, r, until: now + ms, next: now + 150, tickMs, dmg, el, by: id, level: m.level, name: mobDef(m).name });
@@ -3513,8 +3535,7 @@ export class TownRoom extends Room<TownState> {
           if (day && NIGHT_BOSSES.includes(m.kind)) continue;
           const at = this.freeSpawnPoint(zi, m.kind);
           if (!at) { blocked = true; break; }
-          this.spawnMob(m.kind, zi, id, at);
-          this.champs.roll(m, id); // about one in twenty comes back a champion (shared/champions.ts)
+          this.zoneSpawn(m.kind, zi, id, at); // maybe a champion (about one in twenty) or its land's forged monster
           if (undead) this.broadcast("necroraise", { pts: [[Math.round(m.x), Math.round(m.y)]], rise: 1 }); // climbing out of the ground
           revived = true;
           break;
@@ -4397,7 +4418,7 @@ export class TownRoom extends Room<TownState> {
   /** The sickness, bleeding or venom a beast's plain bite leaves (BEAST.plague / bleed / venom). */
   private beastRider(m: Mob, id: string, pid: string) {
     const kind = BEAST_RIDER[m.kind]!, R = BEAST[kind], name = `${mobDef(m).name}'s ${kind === "plague" ? "plague" : kind === "bleed" ? "rending bite" : "venom"}`;
-    const tick = Math.max(1, Math.round(MOBS[m.kind].damage * mobScale(m.level, "damage") * R.dmgMult * (m.champion ? CHAMPION.dmgMult : 1)));
+    const tick = Math.max(1, Math.round(MOBS[m.kind].damage * mobScale(m.level, "damage") * R.dmgMult * mobDmgK(m)));
     const el = kind === "bleed" ? undefined : "poison";
     for (let i = 1; i <= R.ticks; i++) this.host.later(R.tickMs * i, () => this.damagePlayer(pid, tick, name, [0, 0], 0, { dot: true, mobEl: el, el, atkLevel: m.level }));
   }
@@ -5705,8 +5726,9 @@ export class TownRoom extends Room<TownState> {
     // Kill XP: every group member in the same zone gets it (the killer alone when solo)
     const xp = Math.round(def.xp * mobScale(m.level, "xp") * (m.tide ? TIDE.xpMult : 1));
     for (const pid of a?.party ? this.groupNear(attackerId, m.x, m.y) : [attackerId]) this.grantXp(pid, xp, m);
-    this.dropLoot(m.kind, m.x, m.y, mobScale(m.level, "gold") * (m.kind === "bandit" ? BANDIT_ROLES[roleOf(m.weapon)].loot : 1) * (m.champion ? CHAMPION.goldMult : 1) * boonGoldMult(a?.clan), m.level); // (the crowned clan's boon: server/warCrown.ts)
-    if (m.champion) this.champLoot(m); // a champion: more gold, gear rolls, a potion and a rune
+    this.dropLoot(m.kind, m.x, m.y, mobScale(m.level, "gold") * (m.kind === "bandit" ? BANDIT_ROLES[roleOf(m.weapon)].loot : 1) * (isChampion(m) ? CHAMPION.goldMult : 1) * forgedGoldMult(m) * boonGoldMult(a?.clan), m.level); // (the crowned clan's boon: server/warCrown.ts)
+    if (isChampion(m)) this.champLoot(m); // a champion: more gold, gear rolls, a potion and a rune
+    if (m.forge) { const g = forgedKillDrop(m); if (g) this.dropItem("gear", m.x, m.y, 1, g); } // a forged monster: maybe its clan's forged weapon
     this.mobDied(m, targetId, attackerId, a?.name ?? "");
   }
 
@@ -5889,7 +5911,7 @@ export class TownRoom extends Room<TownState> {
   /** The shop of the trader the player stands next to. */
   private shopNear(p: Player) {
     const n = npcNear(p.x, p.y, TALK_RANGE * 1.5, (o) => npcPresent(o.id, p)); // a trader who isn't there for this hero doesn't trade
-    return n?.shop ? SHOPS[n.shop] : undefined;
+    return n?.shop ? shopWithForged(n.shop, n.shop.startsWith("cap_") ? forgedStock(n.shop.slice(4)) : []) : undefined; // (a capital also sells its clan's forged weapons)
   }
   /** What hero p pays for `base` at the trader beside them: less in a capturable town its clan holds (shared/war/towns.ts townPrice). */
   private priceFor(p: Player, base: number): number {
