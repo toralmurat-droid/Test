@@ -34,7 +34,7 @@ Clans get code of their own, behind a fixed interface, sandboxed, and never live
   `queueMicrotask`, `globalThis` deleted; `Math.random` seeded from the briefing (seed, day, clan); the briefing parsed
   and deep-frozen inside; 200 ms per call (microtasks included); answer at most 4 kB of JSON. Only strings cross. Not a
   security boundary by itself (JSDoc says so): the static check, the empty env, review and the pin are.
-- **Server**: `server/clanPlugins.ts`: `CLAN_PLUGINS` pins (8+ hex of the sha256; malformed pins ignored), the hash is
+- **Server**: `server/clanPlugins.ts`: `CLAN_PLUGINS` pins (16+ hex of the sha256, full hash recommended; malformed pins ignored), the hash is
   taken from the bytes, never from the manifest; provider `plugin` in `server/warCouncil.ts` (council log id
   `plugin:<clan>@<version>#<sha8>`, fits the saved 32-character field). Fails closed: not pinned, mismatch, killed,
   switched off, throw, timeout, worker crash or OOM, wrong clan / API / version, reserved point, unknown field, forge

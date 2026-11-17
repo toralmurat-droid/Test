@@ -180,7 +180,7 @@ kill switch is off, and the plug-in has not switched itself off. Anything else, 
 `CLAN_BUILD_VERBOSE=1 node tools/clans/build.mjs <folder>` prints `clan plug-in wardens@1 sha8 1a2b3c4d`). On the
 running server, `GET /admin/clan-plugins?key=ADMIN_KEY` shows for each clan the pin, the deployed bundle's `sha256` /
 `sha8`, `live` (pinned, matching, not killed, not switched off), failures in a row and the last runs. To let a
-reviewed version go live, set `CLAN_PLUGINS` in Railway to `<clan>:<sha8>` from there and redeploy (or restart). The
+reviewed version go live, set `CLAN_PLUGINS` in Railway to `<clan>:<full sha256>` from there (at least 16 hex; the full 64 is safest) and redeploy (or restart). The
 hash covers the exact bytes the server runs, the kit included: any later change to the clan's folder, to
 `shared/clans/api.ts` or to what the kit bundles (the scripted council, the Heralds' lines) gives a new hash, and the
 old pin then refuses the new bundle (the doctrine leads, logged as `hash mismatch`) until the new hash is pinned.

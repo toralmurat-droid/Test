@@ -49,3 +49,9 @@ test("the folder list matches the repository", () => {
   const dirs = fs.readdirSync(path.join(__dirname, "../shared/clans"), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort();
   assert.deepEqual(clanFolders(), dirs);
 });
+
+test("clan-scope: a folder name that is not lower-case letters is an error and never reaches the shell", () => {
+  const r = scopeOf("main", ["shared/clans/x;id/index.ts"], ["wardens", "x;id"]);
+  assert.deepEqual(r.clans, []);
+  assert.equal(r.errors.length, 1);
+});

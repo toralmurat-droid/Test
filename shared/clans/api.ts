@@ -64,7 +64,7 @@ export const CLAN_PLUGIN = {
   /** The worker's memory and stack (MB). */
   oldMb: 32, youngMb: 8, stackMb: 1,
   /** Shortest hash pin (hex characters of the bundle's sha256) CLAN_PLUGINS accepts. */
-  minPin: 8,
+  minPin: 16,
   /** The CI gate: briefings per clan, and its stricter per-call budget (ms). */
   gateBriefings: 200, gateMs: 20,
   /** A plug-in source file's size cap (bytes), and the longest `version` (fits the council log's provider id). */

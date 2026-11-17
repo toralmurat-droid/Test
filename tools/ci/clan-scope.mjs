@@ -15,9 +15,12 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
 export const KERNEL = ["shared/clans/api.ts", "shared/war/councilScript.ts", "server/clanPlugins.ts", "server/clanPluginWorker.ts", "tools/clans/"];
 
 /** The clan folders in the repository (shared/clans/<clan>/). */
+/** Clan folder names: lower-case letters only (they reach a shell in CI). */
+const CLAN_NAME = /^[a-z]+$/;
+
 export function clanFolders(root = ROOT) {
   const dir = path.join(root, "shared", "clans");
-  return fs.existsSync(dir) ? fs.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort() : [];
+  return fs.existsSync(dir) ? fs.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory() && CLAN_NAME.test(d.name)).map((d) => d.name).sort() : [];
 }
 
 /**
@@ -27,14 +30,18 @@ export function clanFolders(root = ROOT) {
  */
 export function scopeOf(branch, files, all = clanFolders()) {
   const touched = new Set(), errors = [];
-  for (const f of files) { const m = /^shared\/clans\/([^/]+)\//.exec(f); if (m) touched.add(m[1]); }
+  for (const f of files) {
+    const m = /^shared\/clans\/([^/]+)\//.exec(f);
+    if (!m) continue;
+    if (CLAN_NAME.test(m[1])) touched.add(m[1]); else errors.push(`${f}: clan folder names are lower-case letters only`);
+  }
   const kernel = files.some((f) => KERNEL.some((k) => (k.endsWith("/") ? f.startsWith(k) : f === k)));
   const cb = /^claude\/clan-([a-z]+)-/.exec(branch ?? "");
   if (cb) {
     const own = `shared/clans/${cb[1]}/`;
     for (const f of files) if (!f.startsWith(own)) errors.push(`${f}: the clan branch ${branch} may change only ${own}`);
   }
-  const clans = (kernel ? [...new Set([...all, ...touched])] : [...touched]).filter((c) => all.includes(c)).sort(); // (a deleted folder: nothing to gate)
+  const clans = (kernel ? [...new Set([...all, ...touched])] : [...touched]).filter((c) => CLAN_NAME.test(c) && all.includes(c)).sort(); // (a deleted folder: nothing to gate)
   return { clans, kernel, clanBranch: cb ? cb[1] : undefined, errors };
 }
 

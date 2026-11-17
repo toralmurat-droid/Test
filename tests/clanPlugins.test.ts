@@ -77,7 +77,7 @@ test("wrong hash: the bundle does not run, the doctrine leads", async () => {
   const sv = fresh();
   usePlugin();
   const b = (await clanBundle(K))!;
-  pin({ [K]: (b.sha256[0] === "0" ? "1" : "0") + b.sha256.slice(1, 12) });
+  pin({ [K]: (b.sha256[0] === "0" ? "1" : "0") + b.sha256.slice(1, 16) });
   const e = await sit(sv, 0);
   assert.equal(e.status, "fallback");
   assert.match(e.reason!, /hash mismatch/);
@@ -95,7 +95,7 @@ test("pinned default plug-in: provider plugin:<clan>@<v>#<sha8>, orders equal th
   usePlugin();
   const b = (await clanBundle(K))!;
   assert.ok(b.code.length < 40_000, "the bundle is small (the kit only, not the map)");
-  pin({ [K]: b.sha256.slice(0, 8) });
+  pin({ [K]: b.sha256.slice(0, 16) });
   const e = await sit(sv, 0);
   assert.equal(e.status, "led", e.reason);
   assert.equal(e.provider, `plugin:${K}@1#${b.sha256.slice(0, 8)}`);
@@ -143,7 +143,7 @@ test("failures fall back to the doctrine: hang, throw, wrong clan, wrong API, re
     const sv = fresh();
     usePlugin();
     _setClanBundle(K, code);
-    pin({ [K]: sha(code).slice(0, 10) });
+    pin({ [K]: sha(code).slice(0, 16) });
     const e = await sit(sv, 0);
     assert.equal(e.status, "fallback", name);
     assert.match(e.reason!, re, `${name}: ${e.reason}`);
@@ -156,7 +156,7 @@ test("a worker that runs out of memory is a failure, not a crash", async () => {
   usePlugin();
   const code = bundle("(b) => { const a = []; for (;;) a.push(new Array(1e5).fill(1.5)); }");
   _setClanBundle(K, code);
-  pin({ [K]: sha(code).slice(0, 8) });
+  pin({ [K]: sha(code).slice(0, 16) });
   const e = await sit(sv, 0);
   assert.equal(e.status, "fallback");
   assert.match(e.reason!, /plug-in failed: (timeout|the worker)/);
@@ -167,7 +167,7 @@ test("auto switch-off after 3 failures in a row; an admin re-enables it", async 
   usePlugin();
   const code = bundle("(b) => { throw new Error('no'); }");
   _setClanBundle(K, code);
-  pin({ [K]: sha(code).slice(0, 8) });
+  pin({ [K]: sha(code).slice(0, 16) });
   const r1 = await sit(sv, 0), r2 = await sit(sv, 1), r3 = await sit(sv, 2), r4 = await sit(sv, 3);
   assert.match(r1.reason!, /plug-in failed/);
   assert.match(r2.reason!, /plug-in failed/);
@@ -180,7 +180,7 @@ test("auto switch-off after 3 failures in a row; an admin re-enables it", async 
   // fixed and re-enabled: it runs again, and a success clears the count
   const good = bundle("(b) => ({ targets: [] , stance: 'defend' })");
   _setClanBundle(K, good);
-  pin({ [K]: sha(good).slice(0, 8) });
+  pin({ [K]: sha(good).slice(0, 16) });
   enableClanPlugin(K);
   assert.equal((await sit(sv, 5)).status, "led");
   assert.equal(((await clanPluginsAdmin()).clans[K] as { failsInARow: number }).failsInARow, 0);
@@ -190,7 +190,7 @@ test("kill switch from the env: pinned plug-ins never run", async () => {
   const sv = fresh();
   usePlugin();
   const b = (await clanBundle(K))!;
-  pin({ [K]: b.sha256.slice(0, 8) }, { CLAN_PLUGINS_KILL: "1" });
+  pin({ [K]: b.sha256.slice(0, 16) }, { CLAN_PLUGINS_KILL: "1" });
   assert.ok(clanPluginsKilled());
   const e = await sit(sv, 0);
   assert.equal(e.status, "fallback");
@@ -201,7 +201,7 @@ test("admin: wrong or no key 404; GET shows pins and hashes; POST kills, revives
   const KEY = "admin-key-for-tests";
   fresh();
   const b = (await clanBundle(K))!;
-  pin({ [K]: b.sha256.slice(0, 8) });
+  pin({ [K]: b.sha256.slice(0, 16) });
   const app = express();
   mountClanPluginAdmin(app, (req) => req.query.key === KEY);
   const srv = app.listen(0);
@@ -213,7 +213,7 @@ test("admin: wrong or no key 404; GET shows pins and hashes; POST kills, revives
     assert.equal((await fetch(`${base}?key=wrong&kill=1`, { method: "POST" })).status, 404);
     assert.equal(clanPluginsKilled(), false, "a wrong key changes nothing");
     const g = await (await fetch(`${base}?key=${KEY}`)).json() as { clans: Record<string, { pin: string; sha8: string; live: boolean }> };
-    assert.equal(g.clans[K].pin, b.sha256.slice(0, 8));
+    assert.equal(g.clans[K].pin, b.sha256.slice(0, 16));
     assert.equal(g.clans[K].sha8, b.sha256.slice(0, 8));
     assert.equal(g.clans[K].live, true);
     const k1 = await (await fetch(`${base}?key=${KEY}&kill=1`, { method: "POST" })).json() as { killed: boolean };
