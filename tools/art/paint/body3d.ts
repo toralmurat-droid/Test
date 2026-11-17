@@ -63,6 +63,8 @@ function ramp(col: number, n = 7, lo = 0.34, hi = 1.32): number[] {
   }
   return r;
 }
+/** White cloth would blow out under the stretched highlight ramp: keep its lights near the cloth's own colour. */
+const clothHi = (col: number, hi: number) => (((col >> 16) & 255) * 0.3 + ((col >> 8) & 255) * 0.59 + (col & 255) * 0.11) / 255 > 0.78 ? 1.06 : hi;
 const mat = (col: number, o: Partial<Mat> & { lo?: number; hi?: number; n?: number } = {}): Mat =>
   ({ ramp: ramp(col, o.n ?? 7, o.lo ?? 0.34, o.hi ?? 1.32), spec: o.spec ?? 0, grain: o.grain ?? 0, glow: o.glow });
 
@@ -242,6 +244,7 @@ export function build3D(L: Look, w: Dress3D, r: Rig3): Built {
   const neckTop: V3 = [head[0], head[1], head[2] - 2.0];
   const eyes: V3[] = [], hg = w.head;
   if (L.skull) skull3D(L, r, P, f, s, head, chest, eyes);
+  else if (monster && L.beast && !L.beastHood) beastHead3D(L, r, P, f, s, head, chest, eyes, false);
   else {
   P.push(cap([chest[0], chest[1], chest[2] + 2.6], neckTop, 1.05, 0.95, skin, 0.6));
   P.push(ell(head, f, [2.2, 2.1, 2.5], skin, 0.7));
@@ -282,7 +285,15 @@ export function build3D(L: Look, w: Dress3D, r: Rig3): Built {
       const at = (a: number, z: number): V3 => [head[0] + f[0] * a, head[1] + f[1] * a, head[2] + z];
       P.push(cap(at(1.6, 3.3), at(-0.6, 4.1), 0.75, 0.85, pm, 0.4), cap(at(-0.6, 4.1), at(-2.9, 2.2 - r.moving * 0.4), 0.85, 0.45, pm, 0.4));
     }
-  } else if ((hg === "hood" || hg === "horned") && L.skull) {
+  } else if (monster && (hg === "wizardhat" || hg === "witch" || hg === "wide")) {
+    // a tall pointed hat (a wide-brimmed one for "wide"), its tip bent back and drooping
+    const hm = mat(w.headCol, { lo: 0.36, hi: 1.4, grain: 0.12 }), band = mat(w.headTrim, { spec: 0.5, lo: 0.4, hi: 1.4, n: 5 });
+    const at = (a: number, z: number): V3 => [head[0] + f[0] * a, head[1] + f[1] * a, head[2] + z];
+    const brim = hg === "wide" ? 4.0 : hg === "witch" ? 3.6 : 3.1, tall = hg === "wide" ? 1.6 : 5.6;
+    P.push(ell(at(0.1, 1.45), f, [brim, brim, 0.3], hm, 0.3));
+    P.push(cap(at(-0.1, 1.5), at(-0.6, 1.5 + tall * 0.6), 2.15, 1.1, hm, 0.5), cap(at(-0.6, 1.5 + tall * 0.6), at(-2.0 - r.moving * 0.4, 1.5 + tall * 0.85), 1.1, 0.15, hm, 0.4));
+    P.push(ell(at(-0.05, 1.95), f, [2.25, 2.25, 0.36], band, 0.1));
+  } else if ((hg === "hood" || (hg === "horned" && L.bones)) && L.skull) {
     // a deep cowl: the skull sits back in its shadow, only the burning eyes and teeth show
     const cm = mat(w.headCol, { lo: 0.32, hi: 1.35, grain: 0.1 }), inside = mat(0x0c080c, { lo: 0.7, hi: 1.3, n: 3 });
     const at = (a: number, si: number, z: number): V3 => [head[0] + f[0] * a + s[0] * si, head[1] + f[1] * a + s[1] * si, head[2] + z];
@@ -299,7 +310,7 @@ export function build3D(L: Look, w: Dress3D, r: Rig3): Built {
     }
   } else if (hg === "hood" && monster) {
     // a hood: put in before the head so the face opening carves the hood, not the face
-    const cm = mat(w.headCol, { lo: 0.32, hi: 1.35, grain: 0.1 }), inside = mat(shade(w.headCol, 0.35), { lo: 0.7, hi: 1.2, n: 3 });
+    const cm = mat(w.headCol, { lo: 0.32, hi: clothHi(w.headCol, 1.35), grain: 0.1 }), inside = mat(shade(w.headCol, 0.35), { lo: 0.7, hi: 1.2, n: 3 });
     const at = (a: number, si: number, z: number): V3 => [head[0] + f[0] * a + s[0] * si, head[1] + f[1] * a + s[1] * si, head[2] + z];
     P.splice(headStart, 0,
       ell(at(-0.45, 0, 0.45), f, [2.85, 2.7, 2.95], cm, 0.5),
@@ -335,7 +346,9 @@ export function build3D(L: Look, w: Dress3D, r: Rig3): Built {
     }
   }
 
-  if (monster && !L.skull) face3D(L, P, f, s, head);
+  if (monster && L.beast && L.beastHood) beastHead3D(L, r, P, f, s, head, chest, eyes, true);
+  if (monster && !L.skull && !(L.beast && !L.beastHood)) face3D(L, P, f, s, head);
+  if (monster) beastParts3D(L, r, P, f, s, { nearS, farS, nearE, farE, nearH, farH, hips, knees, feet, chest, pelvis, waist, head });
   if (monster && !L.bones) extras3D(L, w, r, P, f, s, { nearS, farS, nearE, farE, nearH, farH, hips, knees, feet, chest, pelvis, waist, head });
   // ---- cape and collar
   if (w.cape) {
@@ -400,6 +413,8 @@ function face3D(L: Look, P: Prim[], f: P, s: P, head: V3) {
 /** Monster-only gear over a living body (heroes never wear these, so the vampire stays as it was). */
 function extras3D(L: Look, w: Dress3D, r: Rig3, P: Prim[], f: P, s: P, J: Joints) {
   const b = r.b, { chest, pelvis } = J;
+  if (w.legs === "robe" || w.legs === "dress") robe3D(w, r, P, f, s, J);
+  if (L.sash !== undefined) P.push(ell([pelvis[0], pelvis[1], pelvis[2] + 1.6], f, [2.1 * b, 2.9 * b, 0.62], mat(L.sash, { lo: 0.4, hi: 1.4, n: 5 }), 0.2)); // a sash knotted at the waist
   const off = (p: V3, a: number, si: number, z = 0): V3 => [p[0] + f[0] * a + s[0] * si, p[1] + f[1] * a + s[1] * si, p[2] + z];
   if (L.tabard) { // a long cloth panel front and back over the armour, the clan's sign on the chest
     const tm = mat(L.tabard.col, { lo: 0.36, hi: 1.38, grain: 0.1 }), trm = mat(L.tabard.trim, { lo: 0.4, hi: 1.3, n: 5 });
@@ -514,15 +529,34 @@ function bones3D(L: Look, w: Dress3D, r: Rig3, P: Prim[], f: P, s: P, J: Joints)
 function garb3D(L: Look, w: Dress3D, r: Rig3, P: Prim[], f: P, s: P, J: Joints) {
   const robe = w.torso === "robe" || w.legs === "robe";
   if (!robe && w.torso === "bare") return;
-  const tm = mat(w.torsoCol, { grain: 0.1, lo: 0.36, hi: 1.38 }), lm = mat(w.legCol, { grain: 0.1, lo: 0.36, hi: 1.38 });
-  const trimM = w.trim !== undefined ? mat(w.trim, { spec: 0.5, lo: 0.45, hi: 1.45, n: 5 }) : null;
+  const tm = mat(w.torsoCol, { grain: 0.1, lo: 0.36, hi: clothHi(w.torsoCol, 1.38) });
   const b = r.b, { chest, waist, pelvis } = J;
   if (w.torso !== "bare") {
     P.push(ell(chest, f, [1.95 * b, 2.9 * b, 2.9], tm, 1.2));
     P.push(ell(waist, f, [1.6 * b, 2.3 * b, 2.5], tm, 1.2));
     P.push(ell([chest[0] - f[0] * 0.2, chest[1] - f[1] * 0.2, chest[2] + 3.0], f, [1.5, 1.85, 0.9], tm, 0.5)); // collar
   }
-  if (robe) {
+  if (robe) robe3D(w, r, P, f, s, J);
+  // sash or belt round the waist
+  const beltCol = L.sash ?? w.belt;
+  if (beltCol !== undefined) P.push(ell([pelvis[0], pelvis[1], pelvis[2] + 1.6], f, [2.05 * b, 2.85 * b, 0.6], mat(beltCol, { lo: 0.4, hi: 1.4, n: 5 }), 0.2));
+  // sleeves over the arm bones, wide at the wrist
+  if (w.arms === "cloth" || w.arms === "plate" || w.arms === "wrap") {
+    const sm = w.arms === "plate" ? mat(w.sleeve, { spec: 0.7, lo: 0.3, hi: 1.4 }) : mat(w.sleeve, { grain: 0.1, lo: 0.36, hi: clothHi(w.sleeve, 1.38) });
+    for (const [S, E, H] of [[J.nearS, J.nearE, J.nearH], [J.farS, J.farE, J.farH]] as [V3, V3, V3][]) {
+      P.push(sphere(S, 1.4 * b, sm, 0.8));
+      P.push(cap(S, E, 1.05, 0.95, sm, 0.6));
+      const cuff = lerp3(E, H, 0.72);
+      P.push(cap(E, cuff, 0.95, w.arms === "cloth" ? 1.3 : 0.9, sm, 0.5));
+    }
+  }
+}
+
+/** A long robe hanging from the hips to the ground (the dead's grave-robes, living adepts' and priests' robes). */
+function robe3D(w: Dress3D, r: Rig3, P: Prim[], f: P, s: P, J: Joints) {
+  const b = r.b, { pelvis } = J, lm = mat(w.legCol, { grain: 0.1, lo: 0.36, hi: clothHi(w.legCol, 1.38) });
+  const trimM = w.trim !== undefined ? mat(w.trim, { spec: 0.5, lo: 0.45, hi: 1.45, n: 5 }) : null;
+  {
     // a long robe hanging from the hips to the ground, swinging with the stride, its hem frayed and dragged in the dirt
     const top = pelvis[2] + 1.8, len = top - 0.25, sw = r.moving * Math.sin(r.wave) * 0.5;
     const skirt = (x: number, y: number, z: number, grow: number) => {
@@ -537,19 +571,6 @@ function garb3D(L: Look, w: Dress3D, r: Rig3, P: Prim[], f: P, s: P, J: Joints) 
     const box: [V3, V3] = [[pelvis[0] - 8, pelvis[1] - 8, -1], [pelvis[0] + 8, pelvis[1] + 8, top + 1]];
     P.push(custom(box[0], box[1], (x, y, z) => skirt(x, y, z, 0), lm, 0.6));
     if (trimM) P.push(custom(box[0], box[1], (x, y, z) => Math.max(skirt(x, y, z, 0.12), z - 1.15), trimM, 0.1)); // a band at the hem
-  }
-  // sash or belt round the waist
-  const beltCol = L.sash ?? w.belt;
-  if (beltCol !== undefined) P.push(ell([pelvis[0], pelvis[1], pelvis[2] + 1.6], f, [2.05 * b, 2.85 * b, 0.6], mat(beltCol, { lo: 0.4, hi: 1.4, n: 5 }), 0.2));
-  // sleeves over the arm bones, wide at the wrist
-  if (w.arms === "cloth" || w.arms === "plate" || w.arms === "wrap") {
-    const sm = w.arms === "plate" ? mat(w.sleeve, { spec: 0.7, lo: 0.3, hi: 1.4 }) : mat(w.sleeve, { grain: 0.1, lo: 0.36, hi: 1.38 });
-    for (const [S, E, H] of [[J.nearS, J.nearE, J.nearH], [J.farS, J.farE, J.farH]] as [V3, V3, V3][]) {
-      P.push(sphere(S, 1.4 * b, sm, 0.8));
-      P.push(cap(S, E, 1.05, 0.95, sm, 0.6));
-      const cuff = lerp3(E, H, 0.72);
-      P.push(cap(E, cuff, 0.95, w.arms === "cloth" ? 1.3 : 0.9, sm, 0.5));
-    }
   }
 }
 
@@ -586,6 +607,217 @@ function skull3D(L: Look, r: Rig3, P: Prim[], f: P, s: P, head: V3, chest: V3, e
   }
   P.push({ ...ell(off(2.1, 0, -0.75), f, [0.6, 0.32, 0.45], hole, 0.15), cut: true }); // nose hole
   P.push({ ...ell(off(0.1, 0.4, 2.55), f, [1.5, 0.16, 0.6], mat(shade(L.skin, 0.4), { lo: 0.6, hi: 1, n: 3 }), 0.1), cut: true }); // a crack across the crown
+}
+
+// ---- beast-folk of the Mawdeep and the Hide-Kin (Look.beast / beastHood / tail / spiderLegs / wings / quills / claws) --
+/** Each animal head: fur, muzzle and nose colours, skull radii (forward, side, up), snout length and thickness, ears. */
+const BEAST3: Record<NonNullable<Look["beast"]>, { fur: number; muz: number; nose: number; r: V3; sn: number; sr: number; ear: "round" | "point" | "big" | "none"; k: number }> = {
+  rat: { fur: 0x6e655c, muz: 0x8a8076, nose: 0xc08a84, r: [2.0, 1.8, 1.9], sn: 2.5, sr: 0.95, ear: "round", k: 1.25 },
+  boar: { fur: 0x3e3028, muz: 0x7a5e4e, nose: 0x8a6a5a, r: [2.4, 2.2, 2.1], sn: 2.0, sr: 1.35, ear: "point", k: 1.3 },
+  spider: { fur: 0x2a2228, muz: 0x3a3036, nose: 0x1a1418, r: [2.3, 2.2, 2.0], sn: 0, sr: 0, ear: "none", k: 1.25 },
+  bat: { fur: 0x2e2426, muz: 0x4a3a3a, nose: 0x6a4a4a, r: [2.0, 1.95, 1.95], sn: 1.1, sr: 0.95, ear: "big", k: 1.25 },
+  wolf: { fur: 0x6a6866, muz: 0xa8a29a, nose: 0x1a1616, r: [2.2, 2.0, 2.0], sn: 2.6, sr: 1.05, ear: "point", k: 1.3 },
+  bull: { fur: 0x3a2a24, muz: 0x8a7a6a, nose: 0x5a4a44, r: [2.4, 2.3, 2.2], sn: 1.7, sr: 1.5, ear: "point", k: 1.4 },
+  bear: { fur: 0x4a3626, muz: 0x8a6a4a, nose: 0x1a1210, r: [2.6, 2.45, 2.3], sn: 1.7, sr: 1.25, ear: "round", k: 1.4 },
+  crow: { fur: 0x1e1a24, muz: 0x4a4650, nose: 0x2a2830, r: [2.1, 1.95, 2.0], sn: 0, sr: 0, ear: "none", k: 1.25 },
+  camel: { fur: 0xb88a58, muz: 0xd0aa78, nose: 0x5a3a24, r: [1.9, 1.75, 1.9], sn: 2.6, sr: 1.05, ear: "round", k: 1.3 },
+  lion: { fur: 0xc8923a, muz: 0xe2c690, nose: 0x3a2018, r: [2.2, 2.1, 2.1], sn: 1.4, sr: 1.25, ear: "round", k: 1.4 },
+  mole: { fur: 0x54483e, muz: 0xb89a8a, nose: 0xd89a98, r: [2.2, 2.05, 1.9], sn: 1.8, sr: 0.85, ear: "none", k: 1.3 },
+  hyena: { fur: 0x9a7a4a, muz: 0x3e2e22, nose: 0x120c0a, r: [2.2, 2.0, 2.0], sn: 2.2, sr: 1.15, ear: "round", k: 1.3 },
+  stag: { fur: 0x6a4a34, muz: 0xc0a080, nose: 0x1a1210, r: [2.0, 1.9, 2.1], sn: 2.3, sr: 0.9, ear: "point", k: 1.15 },
+  quill: { fur: 0x3e3228, muz: 0x8a7a68, nose: 0x1a1210, r: [2.2, 2.1, 2.0], sn: 1.9, sr: 0.9, ear: "round", k: 1.3 },
+};
+
+/**
+ * The animal head a beast-folk wears, built in the rig's head frame. `hood`: the flayed head worn back over a man's
+ * face (bigger, set up and back, dead-eyed), otherwise it is the whole head, with burning eyes.
+ */
+function beastHead3D(L: Look, r: Rig3, P: Prim[], f: P, s: P, head: V3, chest: V3, eyes: V3[], hood: boolean) {
+  const kind = L.beast!, B = BEAST3[kind], K = hood ? 1.0 : B.k;
+  const c: V3 = hood ? [head[0] - f[0] * 0.75, head[1] - f[1] * 0.75, head[2] + 0.95] : [head[0], head[1], head[2] + 0.2];
+  const at = (a: number, si: number, z: number): V3 => [c[0] + (f[0] * a + s[0] * si) * K, c[1] + (f[1] * a + s[1] * si) * K, c[2] + z * K];
+  const furM = mat(B.fur, { lo: 0.36, hi: 1.45, grain: 0.32 }), muzM = mat(B.muz, { lo: 0.38, hi: 1.35, grain: 0.15 });
+  const noseM = mat(B.nose, { lo: 0.4, hi: 1.35, spec: 0.5 }), dark = mat(0x160c10, { lo: 0.6, hi: 1.1, n: 3 }), mouth = mat(0x4a1018, { lo: 0.5, hi: 1.2, n: 4 });
+  const ivory = mat(0xe2d8bc, { lo: 0.45, hi: 1.15, n: 5, spec: 0.2 }), hornM = mat(0xcfc2a2, { lo: 0.36, hi: 1.22, grain: 0.18 });
+  const sc = (v: V3): V3 => [v[0] * K, v[1] * K, v[2] * K];
+  const open = r.attack >= 0 ? 0.8 : 0.12;
+  if (hood) P.push(cap(at(-1.2, 0, 0.6), [chest[0] - f[0] * 2.2, chest[1] - f[1] * 2.2, chest[2] + 1.0], 1.9 * K, 2.4, furM, 0.8)); // the hide hanging down the back
+  else P.push(cap([chest[0], chest[1], chest[2] + 2.2], at(-0.5, 0, -1.4), 1.55 * K, 1.35 * K, furM, 0.7)); // a thick furred neck
+  P.push(ell(at(-0.2, 0, 0.15), f, hood ? [B.r[0] * 1.05, Math.max(B.r[1], 2.35), B.r[2] * 0.85] : sc(B.r), furM, 0.7));
+  const ey = B.r[1] * 0.55, ea = B.r[0] * 0.72, ez = 0.45;
+  // the snout, nose and jaw
+  if (B.sn > 0) {
+    const hz = hood ? 0.9 : 0;
+    const s0 = at(B.r[0] * 0.55, 0, -0.45 + hz), droop = kind === "camel" ? 0.9 : kind === "rat" || kind === "mole" ? 0.6 : 0.3;
+    const s1 = at(B.r[0] * 0.55 + B.sn * (hood ? 0.6 : 1), 0, -0.45 - droop * (hood ? 0.3 : 1) + hz);
+    P.push(cap(s0, s1, B.sr * K, B.sr * 0.72 * K, muzM, 0.6));
+    if (!hood) P.push(cap(at(B.r[0] * 0.4, 0, -1.2), at(B.r[0] * 0.5 + B.sn * 0.85, 0, -1.3 - droop - open), B.sr * 0.62 * K, B.sr * 0.42 * K, kind === "hyena" ? muzM : furM, 0.4)); // lower jaw
+    if (open > 0.5 && !hood) P.push(cap(at(B.r[0] * 0.7, 0, -1.0), at(B.r[0] * 0.5 + B.sn * 0.8, 0, -1.0 - droop - open * 0.5), B.sr * 0.5 * K, B.sr * 0.3 * K, mouth, 0.2));
+    const tip = hood ? s1 : at(B.r[0] * 0.55 + B.sn + B.sr * 0.45, 0, -0.45 - droop + 0.1);
+    if (kind === "boar") P.push(ell(tip, f, sc([0.35, 1.1, 0.85]), noseM, 0.2));
+    else if (kind === "mole") for (let i = 0; i < 7; i++) { const a = (i / 7) * Math.PI * 2; P.push(cap(tip, [tip[0] + (f[0] * 0.3 + s[0] * Math.cos(a) * 0.8) * K, tip[1] + (f[1] * 0.3 + s[1] * Math.cos(a) * 0.8) * K, tip[2] + Math.sin(a) * 0.8 * K], 0.3 * K, 0.2 * K, noseM, 0.15)); }
+    else P.push(sphere(tip, (kind === "rat" || kind === "bat" ? 0.45 : 0.6) * K, noseM, 0.2));
+    if (kind === "bull") P.push(custom([tip[0] - 3, tip[1] - 3, tip[2] - 3], [tip[0] + 3, tip[1] + 3, tip[2] + 2], (x, y, z) => { // iron nose ring
+      const qx = x - tip[0], qy = y - tip[1], qz = z - (tip[2] - 0.9 * K), a = qx * f[0] + qy * f[1], si = qx * s[0] + qy * s[1];
+      return Math.hypot(Math.hypot(a - 0.2, qz) - 0.75 * K, si) - 0.2;
+    }, mat(0x8a8a86, { spec: 0.9, lo: 0.35, hi: 1.3 }), 0.05));
+    // teeth: incisors (rat), tusks (boar), fangs (the rest), shown more when the jaw drops
+    if (hood) { /* a flayed hood keeps no teeth worth showing */ }
+    else if (kind === "rat") for (const sg of [-0.3, 0.3]) P.push(cap(at(B.r[0] * 0.55 + B.sn + 0.2, sg, -1.1 - droop), at(B.r[0] * 0.55 + B.sn + 0.3, sg, -1.9 - droop), 0.22 * K, 0.18 * K, ivory, 0.05));
+    else if (kind === "boar") for (const sg of [-1, 1]) P.push(cap(at(B.r[0] + B.sn * 0.55, sg * B.sr * 0.8, -1.4), at(B.r[0] + B.sn * 0.75, sg * B.sr * 1.2, 0.2), 0.32 * K, 0.08 * K, ivory, 0.1));
+    else if (kind !== "camel" && kind !== "mole" && open > 0.5) for (const sg of [-1, 1]) P.push(cap(at(B.r[0] * 0.5 + B.sn * 0.8, sg * B.sr * 0.45, -0.9 - droop), at(B.r[0] * 0.5 + B.sn * 0.8, sg * B.sr * 0.45, -1.7 - droop), 0.2 * K, 0.05 * K, ivory, 0.05));
+  } else if (kind === "crow") { // a long hooked beak
+    const b0 = at(B.r[0] * 0.6, 0, -0.2), b1 = at(B.r[0] * 0.6 + 3.0, 0, -0.9);
+    P.push(cap(b0, b1, 0.95 * K, 0.12 * K, noseM, 0.3));
+    P.push(cap(at(B.r[0] * 0.6, 0, -0.85), at(B.r[0] * 0.6 + 2.2, 0, -1.2 - open), 0.6 * K, 0.1 * K, noseM, 0.2));
+    P.push(cap(at(-0.6, 0, B.r[2] * 0.9), at(-2.2, 0, B.r[2] * 1.2), 0.7 * K, 0.1 * K, furM, 0.3)); // a ragged crest
+  } else if (kind === "spider") { // chelicerae with black fangs under a cluster of eyes
+    for (const sg of [-1, 1]) {
+      const a0 = at(B.r[0] * 0.65, sg * 0.75, -0.9), a1 = at(B.r[0] * 0.8 + 0.8, sg * (0.6 - open * 0.3), -2.0);
+      P.push(cap(a0, a1, 0.62 * K, 0.42 * K, muzM, 0.3), cap(a1, at(B.r[0] * 0.8 + 0.7, sg * (0.2 - open * 0.3), -3.0 - open * 0.4), 0.3 * K, 0.06 * K, dark, 0.1));
+    }
+  }
+  // ears, horns, antlers, mane
+  for (const sg of [-1, 1]) {
+    if (B.ear === "round") P.push(ell(at(-0.7, sg * B.r[1] * 0.78, B.r[2] * 0.85), f, sc([0.32, 0.9, 0.95]), furM, 0.4));
+    else if (B.ear === "point") P.push(cap(at(-0.5, sg * B.r[1] * 0.65, B.r[2] * 0.6), at(-1.0, sg * B.r[1] * (kind === "stag" || kind === "bull" ? 1.45 : 0.85), B.r[2] * (kind === "stag" || kind === "bull" ? 0.75 : 1.5)), 0.7 * K, 0.08 * K, furM, 0.3));
+    else if (B.ear === "big") P.push(cap(at(-0.6, sg * B.r[1] * 0.7, B.r[2] * 0.55), at(-1.0, sg * B.r[1] * 1.3, B.r[2] * 2.0), 1.05 * K, 0.08 * K, furM, 0.3));
+    if (kind === "bull") { // horns: out to the sides, then up and forward
+      const h0 = at(-0.2, sg * B.r[1] * 0.75, B.r[2] * 0.6), h1 = at(0.1, sg * (B.r[1] + 1.7), B.r[2] * 0.8), h2 = at(0.7, sg * (B.r[1] + 2.4), B.r[2] * 0.8 + 1.9);
+      P.push(cap(h0, h1, 0.62 * K, 0.45 * K, hornM, 0.2), cap(h1, h2, 0.45 * K, 0.06 * K, hornM, 0.15));
+    }
+    if (kind === "stag") { // antlers: a beam back and up with three tines
+      const a0 = at(-0.4, sg * B.r[1] * 0.45, B.r[2] * 0.85), a1 = at(-1.2, sg * (B.r[1] + 1.4), B.r[2] + 2.4), a2 = at(-1.8, sg * (B.r[1] + 2.0), B.r[2] + 4.6);
+      P.push(cap(a0, a1, 0.36 * K, 0.3 * K, hornM, 0.15), cap(a1, a2, 0.3 * K, 0.12 * K, hornM, 0.1));
+      for (const [p, d] of [[lerp3(a0, a1, 0.5), [0.9, 0, 1.4]], [a1, [0.8, 0.3 * sg, 1.6]], [lerp3(a1, a2, 0.6), [0.6, 0.5 * sg, 1.2]]] as [V3, number[]][])
+        P.push(cap(p, [p[0] + (f[0] * d[0] + s[0] * d[1]) * K, p[1] + (f[1] * d[0] + s[1] * d[1]) * K, p[2] + d[2] * K], 0.22 * K, 0.07 * K, hornM, 0.08));
+    }
+  }
+  if (kind === "lion" && !hood) { // the sphinx's royal headcloth: gold and lapis stripes over the crown, lappets to the chest
+    const gold = mat(0xe0b040, { spec: 0.4, lo: 0.4, hi: 1.35, grain: 0.05 }), lapis = mat(0x2a4a9a, { lo: 0.4, hi: 1.4, grain: 0.05 });
+    const striped = (base: Prim) => { P.push(base); P.push(custom(base.lo, base.hi, (x, y, z) => Math.max(base.d(x, y, z) - 0.07, (Math.abs((((z / (1.1 * K)) % 1) + 1) % 1 - 0.5) - 0.24) * K), lapis, 0.02)); };
+    striped(ell(at(-0.45, 0, 0.75), f, sc([2.55, 2.75, 2.15]), gold, 0.5));
+    for (const sg of [-1, 1]) striped(ell(at(0.35, sg * 2.45, -2.4), f, sc([0.55, 1.25, 2.6]), gold, 0.4));
+    P.push(ell(at(0.25, 0, 0.55), f, sc([2.35, 2.62, 0.3]), mat(0xf0c850, { spec: 0.9, lo: 0.4, hi: 1.4 }), 0.05)); // brow band
+    P.push(cap(at(2.35, 0, 0.6), at(2.6, 0, 1.6), 0.28 * K, 0.38 * K, mat(0xf0c850, { spec: 0.9, lo: 0.4, hi: 1.4 }), 0.05)); // the rearing cobra
+  }
+  if (kind === "lion" && !hood) P.push(custom(at(-6, -6, -6), at(6, 6, 6), (x, y, z) => { // a heavy mane round the face
+    const qx = x - c[0], qy = y - c[1], qz = z - (c[2] - 0.3 * K), a = (qx * f[0] + qy * f[1]) / K, si = (qx * s[0] + qy * s[1]) / K, h = qz / K;
+    const R = 3.2 + Math.sin(Math.atan2(h, si) * 9) * 0.25;
+    return Math.max((Math.hypot(si, h) - R) * K, (Math.abs(a + 0.9) - 1.2) * K);
+  }, mat(0x8a5420, { lo: 0.36, hi: 1.4, grain: 0.4 }), 0.6));
+  if (kind === "hyena" || kind === "boar" || kind === "quill") for (let i = 0; i < 5; i++) { // a bristling crest over the crown
+    const p = at(0.6 - i * 0.75, 0, B.r[2] * (0.95 - i * 0.08));
+    P.push(cap(p, at(0.1 - i * 0.85, (i % 2 ? 0.25 : -0.25), B.r[2] * (0.95 - i * 0.08) + (kind === "quill" ? 1.9 : 1.1)), 0.42 * K, 0.06 * K, kind === "quill" ? hornM : mat(shade(B.fur, 0.6), { lo: 0.4, hi: 1.3, grain: 0.2 }), 0.15));
+  }
+  // eyes: burning on the beast, dead and dark on a flayed hood
+  if (kind === "spider") {
+    const pts: [number, number, number][] = [[0.95, 0.42, 0.55], [0.85, 1.05, 0.75], [0.6, 1.35, 0.25], [0.9, 0.45, 1.1]];
+    for (const [a, si, z] of pts) for (const sg of [-1, 1]) {
+      const p = at(B.r[0] * a, sg * si, z);
+      if (hood) P.push(sphere(p, 0.3 * K, dark, 0.05)); else if (!r.blink) eyes.push(p);
+    }
+  } else for (const sg of [-1, 1]) {
+    const p = at(ea + (kind === "crow" ? -0.2 : 0), sg * ey, ez + (hood ? 0.9 : 0));
+    if (hood || kind === "mole") P.push(sphere(p, (kind === "mole" ? 0.22 : 0.32) * K, dark, 0.05));
+    if (!hood && !r.blink && kind !== "mole") eyes.push(p);
+  }
+  // the stitched seam where hide meets the man (a dark band round the neck or under the hood's rim)
+  if (!hood) P.push(ell([c[0], c[1], c[2] - 2.2 * K], f, [1.6 * K, 1.6 * K, 0.22], mat(0x2a1c18, { lo: 0.5, hi: 1.2, n: 4 }), 0.1));
+}
+
+/** What the Hide Rite grew on their backs, and the claws and charms they carry: tail, spider legs, wings, quills. */
+function beastParts3D(L: Look, r: Rig3, P: Prim[], f: P, s: P, J: Joints) {
+  const b = r.b, { chest, pelvis, waist } = J, t = r.t;
+  const off = (p: V3, a: number, si: number, z = 0): V3 => [p[0] + f[0] * a + s[0] * si, p[1] + f[1] * a + s[1] * si, p[2] + z];
+  if (L.tail !== undefined) {
+    const tm = mat(L.tail, { lo: 0.38, hi: 1.35, grain: L.beast === "lion" ? 0.2 : 0.05 }), sw = Math.sin(t * 1.3) * 0.9;
+    const p0 = off(pelvis, -1.8 * b, 0, -0.6), p1 = off(pelvis, -4.0, sw * 0.6, -2.2), p2 = off(pelvis, -6.8, sw * 1.4, -pelvis[2] + 0.5);
+    P.push(cap(p0, p1, 0.72, 0.5, tm, 0.3), cap(p1, p2, 0.5, 0.18, tm, 0.2));
+    if (L.beast === "lion") P.push(ell(p2, f, [1.0, 0.8, 0.8], mat(0x5a3418, { lo: 0.4, hi: 1.3, grain: 0.3 }), 0.2));
+  }
+  if (L.spiderLegs !== undefined) {
+    const lm = mat(L.spiderLegs, { lo: 0.36, hi: 1.35, spec: 0.35, grain: 0.1 }), wig = Math.sin(t * 1.9) * 0.7;
+    for (const sg of [-1, 1]) for (let k = 0; k < 2; k++) {
+      const root = off(chest, -1.6 * b, sg * 1.3 * b, 0.6 - k * 1.5);
+      const knee = off(root, -1.6 - k * 0.6, sg * (4.0 + k * 0.9), 3.4 - k * 1.0 + (k ? wig : -wig));
+      const tip = off(knee, -0.8 + k * 0.6, sg * (2.0 + k), -(knee[2] - 1.5 - k * 2.0));
+      P.push(cap(root, knee, 0.55, 0.45, lm, 0.2), sphere(knee, 0.5, lm, 0.1), cap(knee, tip, 0.45, 0.12, lm, 0.15));
+    }
+  }
+  if (L.wings) {
+    const rest = !!L.wings.rest, bat = L.wings.kind === "bat", flap = Math.sin(t * 1.7) * (rest ? 0.25 : 1);
+    const wm = mat(L.wings.col, { lo: 0.34, hi: 1.4, grain: bat ? 0.06 : 0.3 }), bone = mat(shade(L.wings.col, 0.7), { lo: 0.4, hi: 1.3 });
+    const tipM = L.wings.tip !== undefined ? mat(L.wings.tip, { lo: 0.4, hi: 1.4, grain: 0.2 }) : wm;
+    for (const sg of [-1, 1]) {
+      const root = off(chest, -1.7 * b, sg * 1.2 * b, 1.6);
+      const span = rest ? 7.5 : 11, lift = (rest ? 7.0 : 5.0) + flap * 3.2;
+      const elbow = off(root, -0.9, sg * span * 0.42, lift), tip = off(root, -1.4, sg * span, lift * 0.45 - 0.6);
+      const low: V3[] = [];
+      for (let k = 4; k >= 1; k--) { const u = k / 4.5, dip = k % 2 ? 0 : bat ? 1.2 : 0.4; low.push(off(root, -1.2 * u - 0.4, sg * span * u * 0.95, -3.4 + u * 2.6 + dip + flap * 0.5)); }
+      const poly = [root, elbow, tip, ...low];
+      const tris: [V3, V3, V3][] = [];
+      for (let i = 1; i < poly.length - 1; i++) tris.push([root, poly[i], poly[i + 1]]);
+      const lo: V3 = [Math.min(...poly.map((p) => p[0])) - 1, Math.min(...poly.map((p) => p[1])) - 1, Math.min(...poly.map((p) => p[2])) - 1];
+      const hi: V3 = [Math.max(...poly.map((p) => p[0])) + 1, Math.max(...poly.map((p) => p[1])) + 1, Math.max(...poly.map((p) => p[2])) + 1];
+      P.push(custom(lo, hi, (x, y, z) => { let d = Infinity; for (const T of tris) d = Math.min(d, triDist([x, y, z], T[0], T[1], T[2])); return d - 0.28; }, wm, 0.3));
+      P.push(cap(root, elbow, 0.55, 0.4, bone, 0.15), cap(elbow, tip, 0.4, 0.12, bone, 0.1));
+      if (bat) for (const q of low) P.push(cap(elbow, q, 0.2, 0.1, bone, 0.08)); // finger bones through the membrane
+      else for (let k = 0; k < 6; k++) { const a = lerp3(elbow, tip, k / 6); P.push(cap(a, off(a, -0.6, -sg * 0.2, -3.0 + k * 0.3), 0.3, 0.12, k > 1 ? tipM : wm, 0.1)); } // primaries
+    }
+  }
+  if (L.quills !== undefined) { // a porcupine's back: banded quills fanning out of the spine
+    const qd = mat(L.quills, { lo: 0.4, hi: 1.3 }), qt = mat(0xe8dfc4, { lo: 0.45, hi: 1.15, n: 5 });
+    for (let k = 0; k < 18; k++) {
+      const u = (k + 0.5) / 18, side = Math.cos(u * Math.PI * 5.3) * (0.4 + u * 0.6), rs = ((k * 7919) % 13) / 13;
+      const a = off(chest, -2.0 * b, side * 2.2 * b, 2.0 - u * 5.0);
+      const len = 3.6 + rs * 2.0, dir: V3 = [-f[0] * 0.75 + s[0] * side * 0.6, -f[1] * 0.75 + s[1] * side * 0.6, 0.65 - u * 0.4];
+      const m = lerp3(a, [a[0] + dir[0] * len, a[1] + dir[1] * len, a[2] + dir[2] * len], 0.6), e: V3 = [a[0] + dir[0] * len, a[1] + dir[1] * len, a[2] + dir[2] * len];
+      P.push(cap(a, m, 0.32, 0.22, qd, 0.1), cap(m, e, 0.22, 0.05, qt, 0.05));
+    }
+  }
+  if (L.claws !== undefined) { // big digging claws on both hands
+    const cm = mat(L.claws, { lo: 0.4, hi: 1.25, spec: 0.3 });
+    for (const H of [J.nearH, J.farH]) for (let k = -1; k <= 1; k++) P.push(cap(off(H, 0.5, k * 0.45, -0.2), off(H, 1.6, k * 0.6, -1.4), 0.3, 0.06, cm, 0.08));
+  }
+  const ba = L.boneArmour ?? 0;
+  if (ba) { // the Bone Demon's harvested skeletons: skull pauldrons, a rib cuirass, a crown of finger bones
+    const bm = boneMat(0xd8ccb0), hole = mat(0x120d10, { lo: 0.7, hi: 1.2, n: 3 });
+    for (const S of [J.nearS, J.farS]) {
+      P.push(ell(off(S, 0, 0, 1.1), f, [2.4, 2.4, 1.8], bm, 0.3));
+      P.push({ ...sphere(off(S, 2.0, -0.6, 1.3), 0.5, hole, 0.1), cut: true }, { ...sphere(off(S, 2.0, 0.6, 1.3), 0.5, hole, 0.1), cut: true });
+      P.push(cap(off(S, -0.4, 0, 2.2), off(S, -1.0, 0, 3.6), 0.4, 0.08, bm, 0.1));
+    }
+    if (ba >= 2) for (let i = 0; i < 4; i++) { // ribs hooped round the chest, the sternum down the front
+      const z = chest[2] + 1.6 - i * 1.25;
+      P.push(custom([chest[0] - 6, chest[1] - 6, z - 1], [chest[0] + 6, chest[1] + 6, z + 1], (x, y, zz) => {
+        const qx = x - chest[0], qy = y - chest[1], a = qx * f[0] + qy * f[1], si = qx * s[0] + qy * s[1];
+        return Math.max(Math.hypot(Math.hypot(a / (2.6 * b), si / (3.4 * b)) - 1, (zz - z) / 0.35) * 2.4 - 0.36, -a);
+      }, bm, 0.1));
+    }
+    if (ba >= 2) P.push(cap(off(chest, 2.65 * b, 0, 2.2), off(chest, 2.45 * b, 0, -2.6), 0.45, 0.4, bm, 0.1));
+    if (ba >= 4) for (let k = 0; k < 7; k++) { const a = (k / 7) * Math.PI * 2; P.push(cap([J.head[0] + Math.cos(a) * 1.9, J.head[1] + Math.sin(a) * 1.9, J.head[2] + 1.6], [J.head[0] + Math.cos(a) * 2.3, J.head[1] + Math.sin(a) * 2.3, J.head[2] + 3.4 + (k % 2) * 0.8], 0.32, 0.08, bm, 0.08)); }
+  }
+  if (L.fetishes !== undefined) { // bone and charm fetishes on cords from the belt
+    const cord = mat(L.fetishes, { lo: 0.4, hi: 1.3 }), bone = boneMat(0xd8ccb0), sw = Math.sin(r.wave) * r.moving * 0.5;
+    for (const [a, si, n] of [[1.6, 1.6, 2.6], [1.8, -0.4, 3.4], [0.6, -1.9, 2.2]] as const) {
+      const top = off(waist, a * b, si * b, -0.4), bot = off(top, sw, 0, -n);
+      P.push(cap(top, bot, 0.12, 0.12, cord, 0.05), sphere(bot, 0.55, n > 3 ? bone : cord, 0.1));
+    }
+  }
+}
+
+/** Distance from p to the triangle abc (exact, unsigned). */
+function triDist(p: V3, a: V3, b: V3, c: V3): number {
+  const sub = (u: V3, v: V3): V3 => [u[0] - v[0], u[1] - v[1], u[2] - v[2]], dot = (u: V3, v: V3) => u[0] * v[0] + u[1] * v[1] + u[2] * v[2];
+  const crs = (u: V3, v: V3): V3 => [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+  const ba = sub(b, a), pa = sub(p, a), cb = sub(c, b), pb = sub(p, b), ac = sub(a, c), pc = sub(p, c), n = crs(ba, ac);
+  const sg = Math.sign(dot(crs(ba, n), pa)) + Math.sign(dot(crs(cb, n), pb)) + Math.sign(dot(crs(ac, n), pc));
+  if (sg < 2) {
+    const seg = (e: V3, q: V3) => { const h = clamp(dot(e, q) / (dot(e, e) || 1e-6)); return Math.hypot(e[0] * h - q[0], e[1] * h - q[1], e[2] * h - q[2]); };
+    return Math.min(seg(ba, pa), seg(cb, pb), seg(ac, pc));
+  }
+  return Math.abs(dot(n, pa)) / (Math.hypot(...n) || 1e-6);
 }
 
 // ---- ray casting ------------------------------------------------------------------------------------------------
@@ -625,7 +857,7 @@ export interface Ray3Out { rgba: Uint8ClampedArray; tag: Uint8Array; depth: Floa
  * Where a frame sits on the rig: tw x th texels, k texels per rig unit, its top-left at rig (x0, y0). Heroes use the
  * whole 32x32 rig square (Frame3.hero); monsters (paint/mobs.ts) put the rig's feet where their sheet wants them.
  */
-export interface Frame3 { tw: number; th: number; k: number; x0: number; y0: number }
+export interface Frame3 { tw: number; th: number; k: number; x0: number; y0: number; /** no ground shadow (the toppled fall frames draw their own) */ noShadow?: boolean; /** a flier hovers this many rig units over its ground shadow */ lift?: number }
 export const heroFrame3 = (W: number): Frame3 => ({ tw: W, th: W, k: W / 32, x0: 0, y0: 0 });
 
 /** Ray-casts the model into a frame (a number W = the hero's W x W square). Hand points come back in rig units on screen. */

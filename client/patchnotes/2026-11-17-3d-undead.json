@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-17",
+  "patch": 302,
+  "title": "The last undead rebuilt in 3D",
+  "changes": [
+    "The crawler, the mist wraith, the Bone Bride and the Hollow King are now built as 3D models and drawn as pixel art: a half skeleton dragging itself on its arms, a hovering hood of see-through mist with a cold core, a bridal dress with its red sash, and the Hollow King's crown and cape.",
+    "White robes and dresses keep their folds instead of glaring, and sashes show on robed monsters. Same size on screen and no cost to performance."
+  ]
+}

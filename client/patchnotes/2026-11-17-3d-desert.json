@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-17",
+  "patch": 301,
+  "title": "Desert monsters rebuilt in 3D",
+  "changes": [
+    "The Sunscar's nomads, sand-dead, Veiled adepts, camel-folk, sphinx warriors and the Sunwright are now built as 3D models and drawn as pixel art: long robes that sway, the sphinx's striped royal headcloth and folded golden wings, the camel-folk's heads and capes.",
+    "Robed beast-folk of the Mawdeep (crow seer, weaver, Hide-Mother) now wear their full robes too. Same size on screen and no cost to performance."
+  ]
+}

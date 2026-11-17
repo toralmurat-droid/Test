@@ -217,7 +217,7 @@ test("forge (room): spawns in the owner's land with its stats, multiplied damage
     assert.equal(m.champion, 0, "no affixes: no champion bits");
     plain.level = m.level; plain.weapon = m.weapon;
     const host = room.champs.host;
-    assert.ok(host.dmg(m, 1) > host.dmg(plain, 1), "a forging's damage");
+    assert.ok(host.dmg(m, 10) > host.dmg(plain, 10), "a forging's damage"); // (x10: at x1 a low-level mob rounds both to the same number)
     assert.ok(Math.abs(host.dmg(m, 10) / host.dmg(plain, 10) - 1.2) < 0.05);
     // another clan takes the land: no forged spawns there
     warState()!.owner[SITE.t.id] = "wardens";
