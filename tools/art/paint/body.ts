@@ -4,7 +4,7 @@ import {
   C2, P, blobPath, canvas, clipTo, css, curve, ellipseP, fillShape, glow, grain, hashStr, ik, limb, line, metal, mix, poly, rad, rng, sh, Shape, vol,
 } from "./brush";
 import { drawFormWeapon, formOf } from "./weaponArt";
-import { build3D, Dress3D, render3D, setMonster3D, TAG_HAND, type Frame3 } from "./body3d";
+import { build3D, Dress3D, render3D, setHeroFull3D, setMonster3D, TAG_HAND, type Frame3 } from "./body3d";
 import { BOOKS, paintBook } from "./books";
 import { HeadGear, HERO_BODIES, LINEN, Look, LOOKS, MOB_LOOKS, TorsoKind } from "./look";
 
@@ -2154,8 +2154,8 @@ export function paintFrame(name: string, p: PoseLike, info: FrameInfo, withShado
   c.scale(S, S);
   const r = alt ? blendRig(rig(name, p, info), rig(name, alt.p, alt.info), alt.diag) : rig(name, p, info), L = r.L, dir = r.dir;
   lastRig = { nearH: r.nearH, farH: r.farH, nearS: r.nearS, farS: r.farS, head: r.head, chest: [r.cx, r.sy + 3] };
-  if (mob3D && is3D(name)) { lastMob3D = paint3DPix(r, p, 8, flash, true, mob3D); return new HiCanvas(32, 32, 1); }
-  if (PIX && RAY3D.has(name) && ray3d) return paint3D(r, p, K, S, flash, withShadow);
+  if (mob3D && is3D(name)) { setHeroFull3D(false); lastMob3D = paint3DPix(r, p, 8, flash, true, mob3D); return new HiCanvas(32, 32, 1); }
+  if (PIX && RAY3D.has(name) && ray3d) { setHeroFull3D(name !== "vampire"); return paint3D(r, p, K, S, flash, withShadow); }
   const under = scratch("under", N, N), uc = under.getContext("2d"); uc.scale(S, S);
 
   const legs = () => {
@@ -2327,7 +2327,7 @@ export function shrink(src: ReturnType<typeof canvas>, id: string, w: number, h:
 
 // ---------------------------------------------------------------- 3D-built heroes (body3d.ts)
 /** Heroes whose body is modelled in 3D and ray-cast (Murat 2026-11-16: the vampire first). Held items stay painted. */
-export const RAY3D = new Set(["vampire"]);
+export const RAY3D = new Set(["vampire", "wizard", "summoner", "songweaver"]);
 let ray3d = true;
 /** Turn the 3D body off (to compare with the painted one). */
 export function setRay3D(on: boolean) { ray3d = on; }
