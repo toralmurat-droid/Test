@@ -157,7 +157,8 @@ No email is sent: that needs the owner's approval first.
 ## Clan plug-ins (Living Code, M6 part 1)
 
 A clan's council can also be its own code: `shared/clans/<clan>/index.ts` exports a `plugin` (API v1: `council`,
-briefing in, orders out, once a war day; it may import only `shared/clans/api.ts`). The defaults return the scripted
+briefing in, orders out, once a war day; it may import only `shared/clans/api.ts` and, since part 2, helper `.ts`
+files in its own folder as `./<file>`). The defaults return the scripted
 council's answer, so switching one on changes nothing until its code is rewritten. Murat's rule (2026-11-17): **no
 AI-written code goes live without his OK, and the OK is the hash pin.** Code: `server/clanPlugins.ts` (provider,
 pins, kill switch, admin), `server/clanPluginWorker.ts` (the sandbox), `tools/clans/` (build, static check, gate).
@@ -170,7 +171,7 @@ kill switch is off, and the plug-in has not switched itself off. Anything else, 
 
 | Variable | Value | Effect |
 |---|---|---|
-| `CLAN_PLUGINS` | `wardens:1a2b3c4d,host:5e6f7a8b` (example values) (8 to 64 hex characters of the bundle's sha256 per clan) | pins: only these bundles may run. Unset = off |
+| `CLAN_PLUGINS` | `wardens:<sha256>,host:<sha256>` (16 to 64 hex characters of the bundle's sha256 per clan; the full 64 is safest) | pins: only these bundles may run. Unset = off |
 | `WAR_COUNCIL_PROVIDER` | e.g. `wardens:plugin` | that clan's council asks its plug-in |
 | `WAR_COUNCIL` | e.g. `wardens:shadow`, later `wardens:lead` | as for any council: start with `shadow` |
 | `CLAN_PLUGINS_KILL` | `1` | kill switch: no plug-in runs, the doctrine leads |
@@ -195,6 +196,8 @@ re-enables it, and it switches off again after 3 more failures.
 
 The council log names the code that decided: provider `plugin:<clan>@<version>#<sha8>`. `npx tsx tools/clans/check.ts
 <clan>` and `npx tsx tools/clans/gate.ts <clan>` are the checks CI runs on a PR that touches a clan folder; a branch
-named `claude/clan-<clan>-...` may change only `shared/clans/<clan>/`. The sandbox (a worker thread with no env and
+named `claude/clan-<clan>-...` may change only `shared/clans/<clan>/`. Before a PR, `npm run clans:verify -- <clan>`
+runs both plus the war sim against the baseline and prints the block for the PR body (part 2: the scheduled clan code
+routine, [living-code-routine.md](living-code-routine.md), opens those PRs). The sandbox (a worker thread with no env and
 32 MB, a fresh `node:vm` context without `require`, `process`, `Date`, timers, `Intl` or string code generation,
 `Math.random` seeded from the briefing) is not a security boundary on its own: the static check, review and the pin are.

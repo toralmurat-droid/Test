@@ -14,6 +14,7 @@
     "start": "NODE_ENV=production node --enable-source-maps server-dist/index.cjs",
     "ages:drill": "node tools/ages-drill.mjs",
     "test": "tsx --test tests/*.test.ts && tsx tools/ideas-check.ts",
+    "clans:verify": "tsx tools/clans/verify.ts",
     "art": "tsx tools/art/generate.ts"
   },
   "dependencies": {

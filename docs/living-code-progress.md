@@ -8,11 +8,13 @@ Clans get code of their own, behind a fixed interface, sandboxed, and never live
   items, not for code.)
 - Orchestrator 2026-11-17: no auto-merge override in part 1 (merged plug-in code never runs unless pinned); revisit in
   part 2 (the AI PR bot). No new critical-area label: part 1 sits in `area:deploy` (CI workflow, `package.json`).
+- Murat 2026-11-17 (part 2): a scheduled Claude routine per clan opens PRs that change only `shared/clans/<clan>/`. They
+  may merge normally; the hash pin stays the only gate to running live. No email (not approved).
 
 | Part | Scope | State |
 |---|---|---|
 | 1 | Clan folders behind a fixed interface: API v1 (`council` only), sandbox worker, build + manifest, hash pins, kill switch, auto switch-off, static check, gate, CI scope, `--plugin` in the war sim | done (branch `claude/clan-plugins`) |
-| 2 | AI PR bot writing clan code on `claude/clan-<clan>-*` branches; auto-merge rules for clan folders | to do |
+| 2 | Clan code routine: `npm run clans:verify`, helper files in a clan folder, the routine's prompt (`docs/living-code-routine.md`) | repo side done (branch `claude/clan-routines`); routines not scheduled yet |
 
 ## Part 1: what exists
 - **Folders**: `shared/clans/<clan>/index.ts` for the five clans, each exporting `plugin: ClanPlugin` (`api: 1`,
@@ -51,6 +53,31 @@ Clans get code of their own, behind a fixed interface, sandboxed, and never live
   bundles in the same sandbox (in process, no pin); implies `--council=lead`.
 - No save, schema, `ACCOUNT_API` or `WAR_API` change; nothing in `TownRoom.ts` or the client.
 
+## Part 2: what exists
+- **Routine**: [living-code-routine.md](living-code-routine.md) is the exact prompt of the scheduled routine (one per
+  clan, `{CLAN}` replaced). A run reads its folder, this log, the lore (`shared/war/clans.ts`, `heralds.ts`) and the sim
+  baseline, makes one small in-character change to target choice or stance, bumps `version`, runs `clans:verify`, the
+  tests and the build, and when all pass pushes `claude/clan-<clan>-<yyyymmdd>` and opens one PR (`gh api -X POST
+  repos/toralmurat-droid/Test/pulls`, ready, title `[clan code] <Clan>: <what> [no patch note]`, body: the verify block
+  and the leader's rationale, also a comment in the code). It skips when its last PR is still open; a failure opens
+  nothing and ends with one `clan-code <clan> <date> FAILED ...` line (the run history is the log). It never touches
+  other files, env or pins.
+- **Verify**: `npm run clans:verify -- <clan> [--wars=60] [--days=30] [--out=<file>]` (`tools/clans/verify.ts`): the
+  static check, the sandbox gate, then `tools/balance/war.ts` twice in parallel on the same seeds (`--council=lead`,
+  `--plugin=<clan>`; new `--json=<file>` hands the numbers back, `daily` land shares included). Prints the PR block:
+  clan, version, full sha256 and sha16, check / gate / sim gate, each clan's average and peak land before and after,
+  dominated wars, flips a day, plug-in calls and failures. Exit 1 on any failure. The sim gate (`simGate`, pure): a war
+  is dominated when one clan holds over `CLAN_PLUGIN.domShare` (30%) for more than `domDays` (3) days in a row after
+  settling; fail at `domWars` (5%) of the plug-in run's wars, or when the clan's average land is over `landGainMax`
+  (+3 points) above the baseline. Wars and days: `verifyWars` / `verifyDays` (60 x 30).
+- **Helper files**: a plug-in may import `../api` and `./<file>` (a `.ts` file directly in its folder, name a letter
+  then letters, digits, `-`, `_`). `tools/clans/check.ts` checks the name and that the file exists, and runs every rule
+  on each helper; `tools/clans/build.mjs` refuses at bundle time any import from a clan file that resolves outside
+  `shared/clans/api.ts` and its own folder (`fenced`). Every other denylist rule is unchanged.
+- Editing `shared/clans/api.ts` (the new constants) changed every clan's bundle hash (the minifier's names shift); no
+  pin existed yet. Defaults now: wardens `f8ae6beb4cd071c5`, host `414e9e40e2209635` (sha16).
+- No save, schema, server or client change.
+
 ## Balance (2026-11-17)
 `npx tsx tools/balance/war.ts 200 30 --council=lead` before the change, after it, and with `--plugin=all`: every
 number identical (wardens 23.1% / 31.9%, redfang 19.4% / 30.6%, host 17.3% / 26.4%, hidekin 17.7% / 23.6%, veiled
@@ -59,4 +86,6 @@ dominated runs 1.0%). The plug-in run: 30000 plug-in calls, 0 failed; 195 s agai
 
 ## Open
 - Auto switch-off and the admin kill are in memory (no save change in part 1); a restart re-reads the env.
-- Part 2: the AI PR bot, auto-merge policy for clan folders, more API points (as data where they act per tick).
+- Part 2: schedule the five routines (owner); decide whether clan PRs stay ready (auto-merge) or open as drafts; a
+  shared run log beyond the routine's own history (email is not approved); more API points (as data where they act per
+  tick).
