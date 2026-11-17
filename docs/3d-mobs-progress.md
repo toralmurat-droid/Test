@@ -58,4 +58,5 @@ and baked by `npx tsx tools/art/bake-props.ts [key...]` (PREVIEW=dir writes pain
 | D9 | Morwen's tent (tent3d.ts; the alchemy rig is already isoPaint 3D) | | done |
 | D10 | Heart Shards x4 whole/broken, spirit lanterns dark/lit (shards3d.ts). Saltmere harbour, smithy, rig, houses already isoPaint 3D: skipped | | done |
 | A1 | Skill/monster projectiles (shots3d.ts, bake-fx.ts -> assets/hd/fx/fx3_<look>.png; skillfx SHOT3D + swap3d, 16 heading frames for arrows/lances/shards) | | done |
-| A2 | Impacts, areas, auras (skillfx Graphics effects) | | next |
+| A2 | Solid area-spell objects: spikes (blood/earth/frost/steel, 3 shapes), void blades (16 headings), grave soil, Judgement sword, boulder, rain arrow (`tools/art/paint/areafx3.ts`, skillfx `AREA3D` + `area3d()`, fallback to drawn) | | done |
+| A3 | Remaining Graphics effects worth a model (impacts/auras stay particles) | | next |
