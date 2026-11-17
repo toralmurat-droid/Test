@@ -550,7 +550,7 @@ export interface ForgedGearInfo {
 export const FORGED_GEAR_RE = /^fg([1-9]\d{0,8})_([a-z0-9_]+)$/;
 /** A weapon a forging may build on: a typed weapon (its wtype decides the attack) that drops for anyone, not a book or the lute. */
 export function isForgeWeaponBase(id: string): boolean {
-  const d = GEAR[id];
+  const d = Object.hasOwn(GEAR, id) ? GEAR[id] : undefined;
   return !!d && d.slot === "weapon" && !!d.wtype && !d.cls && !d.book && id !== LUTE_ID;
 }
 /** "fg12_ws_bastard@30~R:atk3" -> { seq: 12, base: "ws_bastard" }; undefined for anything that is not a forged id. */
@@ -588,7 +588,7 @@ function forgedDef(base: string): GearDef | undefined {
 }
 /** The definition behind a base id: a GEAR entry or a forged weapon. */
 function baseDef(base: string): GearDef | undefined {
-  return GEAR[base] ?? (base.startsWith("fg") ? forgedDef(base) : undefined);
+  return Object.hasOwn(GEAR, base) ? GEAR[base] : base.startsWith("fg") ? forgedDef(base) : undefined; // (own keys only: "toString" is no gear)
 }
 /** Item definition with its bonuses scaled to the item level. `id` is the full id; art and icons use baseId(id). */
 export function gearDef(id: string): GearDef | undefined {

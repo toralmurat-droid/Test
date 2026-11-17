@@ -6,7 +6,7 @@ it can appear. Plan: four PRs.
 | PR | Scope | State |
 |---|---|---|
 | PR1 | Rules and sim gate: `shared/forge.ts`, forged ids in `shared/gear.ts`, `mobSpec(..., { variant })`, `tools/balance/forgeGate.ts`. No live effect. | done (branch `claude/forge-rules`) |
-| PR2 | Server live loop: registry and saves, research (`FORGE.researchDays`), cost (`FORGE.armyCost`), gate in a worker thread, forged monsters in the clan's lands, `applyVariant` in the server's mob definition, affixes through the champion machinery. | to do |
+| PR2 | Server live loop: registry and saves, research (`FORGE.researchDays`), cost (`FORGE.armyCost`), gate in a worker thread, forged monsters in the clan's lands, `applyVariant` in the server's mob definition, affixes through the champion machinery. | done (branch `claude/forge-live`) |
 | PR3 | Client art: palettes on the base sprites and weapon icons, "Forgotten" items. | to do |
 | PR4 | War councils order forgings (`validateRecipe` on the council's order). | to do |
 
@@ -82,6 +82,46 @@ Weapons (per class: zone-run gain / duel win vs the usual gearFor weapon, Lv 22 
 
 Duel / PvE numbers are unchanged: with `Math.random` seeded the same way, `pve.ts 30 --champions`, `pve.ts 20 --zones`
 and `duel.ts 60 --brief` print byte-identical output before and after this PR.
+
+## PR2: the live loop
+- **`server/forge.ts`**: the registry, its own kv key `forge` (the war's store, opened once in `server/index.ts` and
+  shared; not inside the war save), loaded after the war and before the server listens. `cleanForge` never throws;
+  forgings it cannot read go to `lost` (kept, never dropped); a save that is not an object is kept aside as
+  `forge-old-<ms>`. Writes are chained like the war's (never two in flight); `flushForge()` on shutdown.
+  Every change goes through `rebuild()`: `setForgedGear` (clears both gear caches), the monster index, the pack
+  version and the listeners (rooms re-send the pack and recompute every hero's stats).
+- **`commission(clan, recipe, day, mode)`** (PR4's councils call it; nothing does yet): validated, `shadow` only logs;
+  `lead` checks `FORGE.perDay`, takes a registry number, pays `FORGE.armyCost` of the clan's army
+  (`server/war.ts warSpendArmy`, written with the next war save) and queues the gate. Cost is paid even if the gate then
+  fails (research spent). Live on war day `day + FORGE.researchDays` (`forgeClock`, every 15 s); past
+  `FORGE.perClan[kind]` live forgings the clan's oldest of that kind retires.
+- **Gate**: `runGate` fails closed on an id that doesn't match its forging (also in `forgeGate` itself), then runs in a
+  worker (`server-dist/forgeGate.cjs`, second esbuild entry `server/forgeGateWorker.ts`), killed after
+  `FORGE.gate.timeoutMs` + 5 s; in dev and tests in-process (the import path is not spelled out, so the sims stay out of
+  `index.cjs`). Gates run one at a time; pending ones restart after a reboot (the gate is deterministic).
+- **Statuses**: `retired` (admin or the per-clan cap) keeps stats, no new spawns, drops or sales; `revoked` = base stats
+  (items and living monsters). Kill switch `killForge(on)` / `FORGE_KILL=1`: no spawns, drops, sales or commissions.
+- **Admin**: `GET /admin/forge`, `POST /admin/forge?kill=1|0&retire=<id>&revoke=<id>` (ADMIN_KEY). No email:
+  `forgeDigest(day)` returns the day's lines (shown in `/admin/forge` for yesterday) for PR4's digest.
+- **Monsters** (`server/forgeMobs.ts`): a zone (re)spawn of the base kind in a territory its clan holds comes as the
+  forging `FORGE.spawnShare` of the time (never in sanctuaries: villages, dungeons, lairs, wild zones; not in bandit
+  camps, which keep their posted roles). `Mob.forge` (synced, last field, `MOB_FIELDS` too) names it; `mobDef` applies
+  `applyVariant`; affixes via `Champions.makeForged` (no champion HP, name, sword, damage, XP, gold, loot or rune);
+  the room's inline damage sites use `mobDmgK`. Gold x `forgedRewardMult`; `FORGE.dropChance` for one of its clan's
+  live forged weapons.
+- **Shops**: `shopWithForged(cap_<clan>, forgedStock(clan))` appends the clan's live forged weapons after the fixed
+  stock (indices stay), at the shop's highest item level and the tier-3 price.
+- **Client messages**: `forge` {v, defs} on join and on every change; `forgeQ` {ids: 1-20 forged ids} -> `forgeQ`
+  {defs} (any status), `ask` rate limit.
+- New numbers in `FORGE`: `spawnShare` 0.25, `dropChance` 0.05, `perClan` 2 / 2, `perDay` 5, `logMax` 200 (owner may tune).
+
+## Open for PR3 (client)
+- Read `forge` / `forgeQ` and call `setForgedGear(forgeLookup(weapon defs))` on the client too, so forged items get
+  their names and stats; ask `forgeQ` for `fg` / `fm` ids in bags or near monsters the pack lacks.
+- Draw `Mob.forge` monsters with their palette and name (a forged monster with affixes has `champion` bits set: the
+  client should show the affixes but not the champion name or tint, if it wants).
+- The capital quartermaster's window (`client/src/npcs.ts`) reads `SHOPS[n.shop]`: use
+  `shopWithForged(n.shop, forgedStock)` from the pack so the forged entries (indices after the fixed stock) show.
 
 ## Open for PR2+
 - The server registry: persist forgings (seq, recipe, status) with the war state; call `setForgedGear(forgeLookup(...))`

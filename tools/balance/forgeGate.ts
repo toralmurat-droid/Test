@@ -17,7 +17,7 @@
 import { readFileSync } from "node:fs";
 import { ACTIVE_CLASSES, type ClassKind } from "../../shared/classes";
 import {
-  defFromRecipe, FORGE, FORGE_MOB_BAND, itemPower, mobPower, validateRecipe, weaponInfo,
+  defFromRecipe, FORGE, FORGE_MOB_BAND, forgedGearId, forgedMobId, itemPower, parseForgedGearId, parseForgedMobId, mobPower, validateRecipe, weaponInfo,
   type Forged, type ForgedMob, type ForgedWeapon, type ForgeRecipe, type MonsterRecipe, type WeaponRecipe,
 } from "../../shared/forge";
 import { gearFor, make, pointsFor, Duel, type F } from "./duel";
@@ -74,8 +74,20 @@ class Timeout extends Error {}
 const mean = (a: number[]) => a.reduce((s, v) => s + v, 0) / Math.max(1, a.length);
 const r3 = (v: number) => Math.round(v * 1000) / 1000;
 
+/** A forging whose id doesn't say what it is (another seq or base, a garbled id) fails closed: its items would resolve to something else. */
+function idProblem(def: Forged): string | undefined {
+  if (!Number.isInteger(def?.seq) || def.seq < 1) return "bad_id: seq must be a whole number from 1";
+  if (def.kind === "weapon") {
+    const p = parseForgedGearId(String(def.id));
+    return !p || p.seq !== def.seq || p.base !== def.base || def.id !== forgedGearId(def.seq, def.base) ? `bad_id: ${def.id} is not forging ${def.seq} on ${def.base}` : undefined;
+  }
+  return def.id !== forgedMobId(def.seq) || parseForgedMobId(String(def.id)) !== def.seq ? `bad_id: ${def.id} is not monster forging ${def.seq}` : undefined;
+}
+
 /** Run the gate on a forging. Never throws: any problem is a failed verdict. */
 export function forgeGate(def: Forged, opts: GateOpts = {}): GateResult {
+  const idBad = idProblem(def);
+  if (idBad) return { ok: false, reasons: [idBad], numbers: { kind: "invalid" } };
   const recipe = recipeOf(def), check = validateRecipe(recipe);
   if (!check.ok) return { ok: false, reasons: check.errors.map((e) => `${e.code}: ${e.msg}`), numbers: { kind: "invalid" } };
   const runs = Math.max(1, Math.floor(opts.runs ?? FORGE.gate.runs)), timeoutMs = opts.timeoutMs ?? FORGE.gate.timeoutMs;
