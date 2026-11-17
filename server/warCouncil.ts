@@ -237,7 +237,10 @@ export const proclaimLine = (clan: ClanKey, text: string) => `The war council of
 // ---- Sessions --------------------------------------------------------------------------------------------------------
 
 let busy: Promise<void> | undefined;
+const cap = (m: string[]) => m.slice(0, 12).map((x) => x.slice(0, 200)); // as on load: client text never grows the save
 function logCouncil(cs: CouncilSave, e: CouncilLogEntry) {
+  if (e.errors) e.errors = cap(e.errors);
+  if (e.forge?.errors) e.forge = { ...e.forge, errors: cap(e.forge.errors) };
   cs.log.push(e);
   if (cs.log.length > COUNCIL.logMax) cs.log.splice(0, cs.log.length - COUNCIL.logMax);
   if (!process.env.NODE_TEST_CONTEXT) console.log(`War council: ${e.k} day ${e.day} ${e.status}${e.reason ? ` (${e.reason})` : ""}${e.errors?.length ? `: ${e.errors.join("; ")}` : ""}`);
@@ -299,6 +302,7 @@ function sessionForge(cs: CouncilSave, k: ClanKey, day: number, raw: unknown, mo
   const res = commission(k, r, day, mode, now);
   if (!res.ok) return refused(`${res.code}: ${res.msg}`);
   (cs.forged ??= {})[k] = day;
+  if (mode === "lead") warCouncilChanged(now, true); // the forge saved its project at once: so must the war, or a crash forges twice
   return { note: mode === "lead" ? { status: "commissioned", ...what, ...(res.seq ? { seq: res.seq } : {}), ...(res.liveDay !== undefined ? { liveDay: res.liveDay } : {}) } : { status: "shadow", ...what }, recipe: r };
 }
 
