@@ -99,9 +99,10 @@ export const MILESTONES: Milestone[] = [
     goal: "Clans invent new weapons and monsters from the Codex, live without a restart.",
     exit: "A forged item goes from council order to live in under a war day, passing sims, with art.",
     items: [
-      { name: "Codex recipes and power budgets", owner: "Lead Designer + Balance", status: "later" },
-      { name: "Art from recipe parameters (tools/art)", owner: "Art Director", status: "later" },
-      { name: "Content packs hot-loaded by the running server", owner: "Server & Live Ops", status: "later" },
+      { name: "Codex recipes, power budgets and the sim gate", owner: "Lead Designer + Balance", status: "done", pr: 493 },
+      { name: "Art from recipe parameters (palette recolours in the client)", owner: "Art Director", status: "doing", pr: 495 },
+      { name: "Content packs hot-loaded by the running server", owner: "Server & Live Ops", status: "doing", pr: 494 },
+      { name: "Councils order forgings (one a war day, Herald news)", owner: "AI Engineer", status: "doing" },
     ],
   },
   {

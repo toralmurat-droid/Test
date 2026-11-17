@@ -47,6 +47,37 @@ Also makes today's single server safer: a deploy's overlap no longer has two ser
 - Tests: `tests/ages.test.ts` (leases, api, newer / corrupt saves, follower ticks and events, follower valor, takeover
   and snapshot, losing the lease, shutdown), `tests/store.test.ts` (Postgres: leases, insertIfAbsent, list, loadOne).
 
+## Built (part 2: the Forge's lease, branch `claude/ages-forge-lease`, on top of PR #496)
+- `shared/forgeApi.ts`: `FORGE_API` (1) and `forgeAccess`, the war's contract (`shared/war/api.ts`) for the forge save
+  (kv key `forge`): a newer save is read-only when `minReader` allows, else hidden, never written. Unlike the war, an
+  object with no usable `v` still loads as version 1 (every forge save so far); only a non-object is corrupt (kept aside
+  under `forge-old-*`, as before). `ForgeSave` gains optional `minReader` and `wrote`.
+- `server/forge.ts`: lease `lease:forge` (its own `Leases` on the store's backend, like the world). Roles as the war's:
+  owner / follower / read / hidden (`forgeRole()`, also in `/admin/forge`). One beat every `LEASE.renewMs` (the old 15 s
+  clock): renew, take over when the lease became ours, then the owner runs `forgeClock`, the others reload the row.
+  - Only the owner runs the clock and the gates, takes commissions and admin changes (kill, retire, revoke), and writes
+    (`persist` checks at write time). A commission elsewhere is refused with `not_owner` (console-logged, nothing spent
+    or saved), and also when this server does not tick the war: the army is paid from the war save, and a forge owner
+    that is not the war's owner would have forged for free. A gate that finishes after the lease went is dropped; the
+    project stays pending and the next owner gates it (`gatePending` at takeover; one queued already is not run twice).
+  - Followers reload the row; when it changed and was not this server's own last write, they clean it and `rebuild()`
+    (gear lookup, forged monsters, capital stock, a new pack to the rooms): items forged on the other server are known.
+  - Takeover: read the row, snapshot it once per build to `forge-pre-<build>` (shared store only), load, gate pending
+    research. Writes carry a stamp (`wrote`, shared store only: JSON saves keep their shape); regaining the lease with
+    our own stamp still in the row keeps unsaved progress, another server's stamp reloads.
+  - `flushForge` returns a promise: with a shared store it sets `stopping` (no takeover, clock or save after it), writes
+    once more if it owns, waits for queued writes, and releases the lease. `server/index.ts` waits for it together with
+    the war's, inside the same 5 s cap. Without a shared store: the blocking JSON write, as before.
+- Review fix: the war's and the forge's leases could split (one server the forge's, another the war's), refusing every
+  commission. With a shared store only the war's owner competes for `lease:forge`; a forge owner that lost the war
+  writes the forge once more and releases (`handOver`), so the war's owner takes it at its next beat. A `not_owner`
+  refusal on the forge's owner goes to the forge log (`/admin/forge`). A follower's init always installs the registry it
+  loaded.
+- Tests: `tests/agesForge.test.ts` (late gate dropped and gated once on takeover, the split leases resolving, a second
+  follower init; api, JSON mode unchanged, a follower refuses and learns the owner's forgings,
+  takeover with snapshot and gates, newer saves read-only / hidden, flush during a takeover, the lease lost and regained,
+  shutdown write and release).
+
 ## Open
 - On a follower only valor reaches the owner. Sacks, town claims, battle deaths and banners, column losses and remote
   council submissions stay local (sacks and claims are refused there) until they get queues of their own.
@@ -55,6 +86,11 @@ Also makes today's single server safer: a deploy's overlap no longer has two ser
 - A follower Age's Gloam Tide meter is its own (memory only); merging kill counts is for a later PR.
 - `war-pre-<build>` and `war-valor:<holder>` rows stay one per build; prune them once the Ages run for real.
 - Accounts are not versioned yet: two Ages must not both write one account (next PR).
+- The Forge on a server where it is hidden (a newer FORGE_API that allows no older reader) knows no forgings: its heroes'
+  forged items show as their base until the newer build is gone. Its log lines of refused commissions on followers go
+  to the console only (the forge log is the owner's).
+- A follower's room shows no forging's news beyond the new pack; `forge-pre-<build>` rows stay one per build (prune
+  them with the war's).
 
 ## Built: part 3, one account, one server (branch `claude/ages-account-lease`)
 Production is to be a gateway and two game servers on one Postgres. Before this, each server loaded every account at
@@ -76,7 +112,7 @@ on A after B started created a second account over it (password takeover), and "
   but those of unsaved accounts goes back in one call (at most 5 s). A seat whose client left before `onJoin` (Colyseus
   then skips `onLeave`) gives its account back after 10 s.
 - **Write fence** (`Store.saveFenced`, Postgres): in the flush's transaction, the lease rows still held by this holder
-  (`until > clock_timestamp()`) are locked `FOR SHARE` in key order, so no server takes one over until the commit; only
+  (`until > clock_timestamp()`) are locked `FOR SHARE` in byte order, so no server takes one over until the commit; only
   those rows are updated, rows are never created by it. A refused account whose lease only lapsed (a database outage,
   nobody took it) stays dirty and keeps its lease (`settle` is false), so the next renewal takes it again and the write
   goes through; one a renewal showed another server holds is given up (logged). `pgLeases` takes and releases keys in
@@ -90,7 +126,7 @@ on A after B started created a second account over it (password takeover), and "
   is pending.
 - No save field changed; the Player / Mob schema untouched.
 - Tests: `tests/accountGuard.test.ts` (guard and shared accounts on an in-memory fenced table, `tests/helpers/fencedStore.ts`),
-  `tests/accountLease-room.test.ts` (onAuth refused / taken, onLeave saves then releases), `tests/store.test.ts`
+  `tests/accountLease-room.test.ts` (onAuth refused / taken, onLeave saves then releases, orphaned seat, sent away on takeover), `tests/store.test.ts`
   (Postgres: insertNew, fence, findBy).
 
 ### Open (part 3)

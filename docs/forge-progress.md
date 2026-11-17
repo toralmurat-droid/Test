@@ -8,7 +8,7 @@ it can appear. Plan: four PRs.
 | PR1 | Rules and sim gate: `shared/forge.ts`, forged ids in `shared/gear.ts`, `mobSpec(..., { variant })`, `tools/balance/forgeGate.ts`. No live effect. | done (branch `claude/forge-rules`) |
 | PR2 | Server live loop: registry and saves, research (`FORGE.researchDays`), cost (`FORGE.armyCost`), gate in a worker thread, forged monsters in the clan's lands, `applyVariant` in the server's mob definition, affixes through the champion machinery. | done (branch `claude/forge-live`) |
 | PR3 | Client art: palettes on the base sprites and weapon icons, "Forgotten" items. | to do |
-| PR4 | War councils order forgings (`validateRecipe` on the council's order). | to do |
+| PR4 | War councils order forgings (`validateRecipe` on the council's order). | done (branch `claude/forge-councils`) |
 
 ## Owner defaults (2026-11-17), recorded in `FORGE`
 - `researchDays = 1`; `armyCost = 0.1` (a share of the clan's army; used from PR2).
@@ -131,3 +131,31 @@ and `duel.ts 60 --brief` print byte-identical output before and after this PR.
   champion HP / damage multipliers, rune or title; gold x `forgedRewardMult`.
 - Starfire Wand forgings sit close to the lines for the Wizard (+1 Dex alone: 3-12% faster, 51-61% of duels against the
   Dragonfire the sim bots carry): by design (the gate compares to the usual gear), worth knowing for PR4's councils.
+
+## PR4: councils order forgings
+- **Order**: `CouncilOrders.forge?` is a recipe (`validateRecipe`), checked by `validateForgeOrder(raw, clan)` apart
+  from `validateCouncil` (which ignores the field): `clan` left out is the council's own, another clan's is
+  `forge.bad_clan`; every error is `forge.<code>: <msg>`. A bad recipe never stops the targets from leading, and bad
+  targets never stop a legal recipe.
+- **The Codex** (`shared/forge.ts forgeCodex()`, built once): weapon bases with their power, built-in bonuses with
+  their max and power per point, elements, palettes, monster bases with level band / affixes / weapons, affix costs,
+  ranges, budgets and one legal example of each kind. `ORDER_SCHEMA.orders.forge` carries it (once per briefing
+  response); each briefing has a `forge` section (`ForgeBriefing`: live forgings, projects in research, `leftToday`,
+  `perClan`, `armyCost` share and men, `researchDays`, a Codex summary). The war sim passes no forge context, so its
+  briefings have no forge section and `tools/balance/war.ts 200 30` prints the same as before.
+- **Sessions** (`server/warCouncil.ts sessionForge`): `lead` calls `commission(clan, recipe, day, "lead")`, `shadow`
+  calls it in `"shadow"` (log only, nothing spent). One forge order per clan per war day (`CouncilSave.forged`, an
+  optional save field); the forge's own refusals (day cap, kill switch) are logged as `refused`. The outcome is a
+  `ForgeNote` on the session's log entry (`commissioned` / `shadow` / `rejected` / `refused`).
+- **Remote route**: the 8 kB cap holds (a full order set with a 3-bonus weapon is under 1 kB). The answer has
+  `forge: {accepted, errors, recipe?}`; targets fine + recipe bad = 200, targets stored without the recipe, a
+  `forge_rejected` log entry; targets bad = 422 with both. A recipe is refused at submission while the forge is killed.
+  `cleanOrdersSave` keeps a legal recipe (a recipe no longer legal after a budget change is dropped on load).
+- **Herald** (`server/forge.ts forgeLine`, queued and taken by `server/war.ts` as `news.forge`, plain text): "The
+  forges of <Clan> are burning" (lead commission), "<Clan> has forged <name>!" (goes live), "The forge of <Clan>
+  failed: <name> did not survive its trials." (gate failed).
+- **Digest**: `DigestInput.forge` (the forge log's lines of the day, `forgeDayLines`) adds a `Forge:` section; council
+  lines show their forge note.
+- **Clock**: `councilClock` runs `forgeClock` when the forge's own 15 s timer is not running (`forgeTicking()`).
+- The scripted council never forges; tests give it a recipe with `_setScriptedForge`.
+- `client/src/roadmap.ts` is left for the client side.

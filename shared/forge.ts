@@ -374,6 +374,67 @@ export function applyVariant(def: MobDef, v: ForgedMob): MobDef {
   };
 }
 
+// ---- The Codex: what a recipe may use, in one plain object -------------------------------------------------------
+/** A machine-readable list of every part a recipe may name and the numbers it is judged by. */
+export interface ForgeCodex {
+  name: { max: number; chars: string };
+  palettes: Record<string, string>;
+  weapon: {
+    bases: { id: string; name: string; wtype: string; tier: number; power: number; bonus: GearBonus; elem?: { el: Element; share: number } }[];
+    implicit: Record<string, { stat: string; max: number; powerPerPoint: number }>;
+    implicitCount: [number, number];
+    elements: readonly Element[]; maxShare: number; shareStep: number;
+    /** itemPower = sum of bonus x weight + element share x share weight x attack; must be at most powerCap. */
+    weights: typeof FORGE.weight; powerCap: number;
+  };
+  monster: {
+    bases: { kind: MobKind; name: string; levels: [number, number]; affixes: ChampAffixKey[]; weapons?: readonly string[] }[];
+    maxAffixes: number; affixCost: Record<string, number>; affixPair: number;
+    range: typeof FORGE.range;
+    /** mobPower = hp x dmg x sqrt(speed) x (1 + affix costs, + affixPair with two); must be at most budget. */
+    budget: number;
+  };
+  /** One legal recipe of each kind (clan left out: the council's own). */
+  examples: { weapon: Omit<WeaponRecipe, "clan">; monster: Omit<MonsterRecipe, "clan"> };
+}
+const r2f = (x: number) => Math.round(x * 100) / 100;
+let codex: ForgeCodex | undefined;
+/** The Codex (built once): a council reads it to write a recipe validateRecipe accepts. */
+export function forgeCodex(): ForgeCodex {
+  if (codex) return codex;
+  const W = FORGE.weight, perPoint = (stat: string) =>
+    stat === "atk" ? W.atk : ["str", "mag", "dex", "sta"].includes(stat) ? W.str : /Dmg$/.test(stat) ? W.elemFlat : 0;
+  const implicit: ForgeCodex["weapon"]["implicit"] = {};
+  for (const k of FORGE_IMPLICIT_KEYS) { const stat = GEAR_AFFIXES[k].bonus as string; implicit[k] = { stat, max: implicitMax(k), powerPerPoint: perPoint(stat) }; }
+  codex = {
+    name: { max: FORGE.nameMax, chars: "ASCII letters, digits, spaces, ' and -" },
+    palettes: Object.fromEntries(PALETTE_KEYS.map((k) => [k, FORGE_PALETTES[k].name])),
+    weapon: {
+      bases: FORGE_WEAPON_BASES.map((id) => {
+        const d = GEAR[id], b: ForgeCodex["weapon"]["bases"][number] = { id, name: d.name, wtype: d.wtype ?? "", tier: d.tier, power: r2f(itemPower(d)), bonus: { ...d.bonus } };
+        if (d.elem) b.elem = { ...d.elem };
+        return b;
+      }),
+      implicit, implicitCount: [FORGE.minImplicits, FORGE.maxImplicits],
+      elements: ELEMENTS, maxShare: FORGE.maxShare, shareStep: FORGE.shareStep,
+      weights: FORGE.weight, powerCap: r2f(weaponCap()),
+    },
+    monster: {
+      bases: FORGE_MOB_BASES.map((kind) => {
+        const b: ForgeCodex["monster"]["bases"][number] = { kind, name: MOBS[kind].name, levels: [...FORGE_MOB_BAND[kind]!] as [number, number], affixes: forgeMobAffixes(kind) };
+        if (FORGE_MOB_WEAPONS[kind]) b.weapons = FORGE_MOB_WEAPONS[kind];
+        return b;
+      }),
+      maxAffixes: FORGE.maxAffixes, affixCost: { ...FORGE.affixCost }, affixPair: FORGE.affixPair, range: FORGE.range, budget: FORGE.mobBudget,
+    },
+    examples: {
+      weapon: { kind: "weapon", name: "Fang of Rourke", base: "ws_bastard", implicit: [{ key: "atk", value: 2 }, { key: "str", value: 1 }], palette: "redfang" },
+      monster: { kind: "monster", name: "Gore-Sewn Tusker", base: "tuskborn", affixes: ["stitched"], hp: 1.2, dmg: 1.1, speed: 1, palette: "hidekin" },
+    },
+  };
+  return codex;
+}
+
 /** A clan's live (active) forged weapons in seq order: the order of its quartermaster's forged stock, on server and client alike. */
 export const liveWeapons = (defs: Iterable<Forged>, clan: string): ForgedWeapon[] =>
   [...defs].filter((d): d is ForgedWeapon => d.kind === "weapon" && d.clan === clan && d.status === "active").sort((a, b) => a.seq - b.seq);
