@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-17",
+  "patch": 299,
+  "title": "Beast-folk rebuilt in 3D",
+  "changes": [
+    "The beast-folk of the Mawdeep Warrens (rat, boar, spider and bat kin, the crow seer, the gnasher, the weaver, the packlord, the horn brute and the Hide-Mother) are now built as 3D models and drawn as pixel art: animal heads with snouts, tusks, horns and fangs, flayed hoods, naked tails, spider legs and wings that beat.",
+    "Flying beast-folk now hover over their shadow. Same size on screen and no cost to performance."
+  ]
+}

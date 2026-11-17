@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-17",
+  "patch": 298,
+  "title": "Moors, Sinkholes and Crown monsters rebuilt in 3D",
+  "changes": [
+    "The Grey Barrow Moors' wights, bog hags, legionaries, the Cairn-Lord and the Barrow-King, the Hide-Kin of the Mawdeep Sinkholes up to the Mawfather, and the Crown's oathbreakers, guards, heralds, court magi, the Pretender, the Throne Warden and the Riven King are now built as 3D models and drawn as pixel art: tall wizard hats, cold mist at the feet, crowns, capes and burial cloaks.",
+    "The Firebrand's palm flame shows again. Same size on screen and no cost to performance."
+  ]
+}
