@@ -72,6 +72,7 @@ export const BAKED_PROPS: Record<string, [number, number]> = {
   wp_cow0: [COW_W, COW_H], wp_cow1: [COW_W, COW_H], wp_millwheel: [MILL_W, MILL_H],
   siege_catapult: [152, 118], siege_ram: [144, 104], siege_tower: [116, 192], siege_lumber: [112, 62], siege_sawhorse: [60, 40],
   dg_brazier: [32, 50], dg_torch: [18, 58], dg_rack: [50, 54], dg_pole: [30, 58], dg_spike: [22, 44],
+  dp_candles: [30, 30], dp_skulls: [40, 40], dp_jar: [24, 30],
 };
 export function preloadBakedProps(scene: Phaser.Scene) {
   for (const [k, [w, h]] of Object.entries(BAKED_PROPS)) if (!scene.textures.exists(k)) scene.load.spritesheet(k, `assets/hd/props/${k}.png`, { frameWidth: w, frameHeight: h });
