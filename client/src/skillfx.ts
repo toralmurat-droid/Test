@@ -110,6 +110,25 @@ const BASIC_SHOTS = new Set(["fireball", "arrow", "bolt", "knife", "stone", "sli
 const lift = (h: number): [number, number] => (ISO ? [-h, -h] : [0, -h]);
 /** Screen-space vector between two world points (for drawing lightning and blades in a block). */
 const screenDelta = (dx: number, dy: number): [number, number] => (ISO ? [dx - dy, (dx + dy) / 2] : [dx, dy]);
+
+/**
+ * Shots modelled in 3D and baked (tools/art/bake-fx.ts -> assets/hd/fx/fx3_<look>.png, 1.5 texels per world px):
+ * [frame w, h, headings]. Headings > 1: frame k points along world heading k * 360/headings deg, picked at spawn
+ * instead of rotating the pixel art. Missing sheets fall back to the drawn shot.
+ */
+export const SHOT3D: Record<string, [number, number, number]> = {
+  arrow: [26, 22, 16], bolt: [22, 20, 16], bloodlance: [34, 26, 16], voidlance: [34, 26, 16], iceshard: [20, 18, 16],
+  knife: [18, 14, 1], stone: [12, 12, 1], fireball: [14, 14, 1], bloodbolt: [12, 12, 1], slimeball: [12, 12, 1], magicbolt: [10, 10, 1],
+  sunbolt: [12, 12, 1], shadowbolt: [14, 14, 1], frozenorb: [22, 20, 1], rat: [20, 14, 1], bat: [20, 14, 1],
+};
+export function preloadShotSheets(scene: Phaser.Scene) {
+  for (const [k, [w, h]] of Object.entries(SHOT3D)) if (!scene.textures.exists(`fx3_${k}`)) scene.load.spritesheet(`fx3_${k}`, `assets/hd/fx/fx3_${k}.png`, { frameWidth: w, frameHeight: h });
+}
+/** Heading frame of a world velocity (ISO: world axes; top-down: the screen direction turned back into world axes). */
+const headingFrame = (vx: number, vy: number, n: number) => {
+  const [u, v] = ISO ? [vx, vy] : [vy + vx / 2, vy - vx / 2];
+  return ((Math.round(Math.atan2(v, u) / (Math.PI * 2 / n)) % n) + n) % n;
+};
 /** World offset that shows as `sx` px to the right on screen. */
 const side = (sx: number): [number, number] => (ISO ? [sx / 2, -sx / 2] : [sx, 0]);
 
@@ -2014,6 +2033,7 @@ export class SkillFx {
         if (!BASIC_SHOTS.has(look)) return undefined;
         g = this.basicShot(look, s, size);
     }
+    if (SHOT3D[look] && this.scene.textures.exists(`fx3_${look}`)) g = this.swap3d(g, look, s, size);
     // Enchanted (Fire Arrows + Volley...): the shot glows in the enchantment's colour; tickShots adds its flames
     const imb = PALETTE[s.imb as FxStyle];
     if (imb && g instanceof Phaser.GameObjects.Container) {
@@ -2022,6 +2042,27 @@ export class SkillFx {
     }
     this.shots.set(id, { s, g, look, born: this.t, tint: look === "wave" ? this.spawnTint : undefined }); // a note's colour is fixed here, for its whole flight and its impact
     return g;
+  }
+
+  /**
+   * Puts the baked 3D sprite where the drawn body was: the sprite sits in its own little container, so tickShots'
+   * moves on that child (wobble, scurry, wing beats) and spins on the shot still apply; heading shots stop rotating.
+   */
+  private swap3d(g: any, look: string, s: any, size: number) {
+    const [, , n] = SHOT3D[look], key = `fx3_${look}`;
+    const spr = this.scene.add.image(0, 0, key, n > 1 ? headingFrame(s.vx ?? 1, s.vy ?? 0, n) : 0).setScale(size / 1.5);
+    const body = this.scene.add.container(0, 0, [spr]);
+    if (g instanceof Phaser.GameObjects.Container) {
+      const i = g.list.findIndex((o) => o instanceof Phaser.GameObjects.Graphics);
+      if (i >= 0) { const old = g.list[i] as Phaser.GameObjects.Graphics; body.setScale(old.scaleX < 0 ? -1 : 1, 1); g.addAt(body, i); old.destroy(); }
+      else g.add(body);
+      if (n > 1) g.setAngle(0);
+      return g;
+    }
+    const c = this.scene.add.container(s.x, s.y, [body]).setDepth(DEPTH);
+    if (n === 1) c.setAngle(g.angle ?? 0);
+    g.destroy();
+    return c;
   }
 
   /** Screen angle (degrees) of a world direction: in the iso view a world heading turns on screen. */
