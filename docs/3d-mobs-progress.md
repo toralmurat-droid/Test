@@ -34,6 +34,6 @@ never smooth. Performance: everything is baked by `tools/art` at the old sheet s
 | 5 | Beast-folk (Mawdeep) | gnawkin, tuskborn, silkwretch, duskwing, crowseer, gnasher, weaver, packlord, hornbrute, hidemother, folk variants | done (body3d.ts beastHead3D + beastParts3D; also unlocks camel, lion, mole, hyena, stag, quill heads) |
 | 6 | Desert | nomad, sanddead, veiled, camelfolk, sphinx, sunwright | done (robe3D for living robed monsters, sphinx nemes in beastHead3D) |
 | 7 | Moors / Badlands / Sinkholes / Crown | boghag, legionary, cairnlord, barrowking, delver, cackler, stagkin, quillback, stitcher, hidechief, mawfather, oathbreaker, crownguard, hollowherald, courtmagus, pretender, thronewarden, rivenking | done: wight, boghag, legionary, cairnlord, barrowking, delver, cackler, stagkin, quillback, stitcher, hidechief, mawfather, oathbreaker, crownguard, hollowherald, courtmagus, pretender, thronewarden, rivenking (wizard hats, painted mist/palm flame over 3D) |
-| 8 | Demons and bosses | demon 1-4 (bone harvest frames), hollowking | hollowking done in 2b |
+| 8 | Demons and bosses | demon 1-4 (bone harvest frames), hollowking | done: demon 1-4 (rip frames in 3D, boneArmour in beastParts3D), hollowking in 2b |
 | 9 | Golems and wisps | golem/colossus x4 elements, wisps x4 | done (golems3d.ts) |
-| 10 | War troops | war_* soldiers (fall frames), carts, rams, tunnels | |
+| 10 | War troops | war_* soldiers (fall frames), carts, rams, tunnels | soldiers done (fall frames rotated in 3D); carts, rams, tunnels still painted |

@@ -81,12 +81,31 @@ function humanoid(key: string, kind: string, w: number, h: number, oy: number, s
   });
   // 3D-built bodies (body3d.ts via body.ts MOB3D): ray-cast straight onto this sheet's texel grid
   const base = kind.replace(/_(axe|spear|bow|champ|folk)$/, "").replace(/_champ$/, "");
-  const pix = MOB3D.has(base) && !rip && !fall ? (f: number): MobFrame => {
+  const pix = MOB3D.has(base) ? (f: number): MobFrame => {
     const up = lift ? lift + Math.sin(f * 1.7) * 1.2 : 0;
-    setMob3D({ tw: Math.round(w * TX), th: Math.round(h * TX), k: scale * TX, x0: 16 - w / 2 / scale, y0: 29 - (oy * h - up) / scale, lift: up / scale });
+    setMob3D({ tw: Math.round(w * TX), th: Math.round(h * TX), k: scale * TX, x0: 16 - w / 2 / scale, y0: 29 - (oy * h - up) / scale, lift: up / scale, noShadow: fall && f >= FRAMES });
     humanoidFrame(kind, f, fall);
-    const body = lastMob3D!;
+    let body = lastMob3D!;
     setMob3D(null);
+    if (fall && f >= FRAMES) { // fall frames: the side view toppled backwards about the feet, as the painted sheet does
+      const k = f - FRAMES, a = (k ? -86 : -24) * Math.PI / 180, tw = Math.round(w * TX), th = Math.round(h * TX);
+      const px = w / 2 * TX + (k ? 9 : 2) * TX, py = oy * h * TX + (k ? -1.4 : 0) * TX, cx = w / 2 * TX, cy = oy * h * TX;
+      const out = new Uint8ClampedArray(body.length), ca = Math.cos(a), sa = Math.sin(a);
+      for (let y = 0; y < th; y++) for (let x = 0; x < tw; x++) {
+        const dx = x + 0.5 - px, dy = y + 0.5 - py, sx = Math.floor(cx + dx * ca + dy * sa), sy = Math.floor(cy - dx * sa + dy * ca);
+        if (sx < 0 || sy < 0 || sx >= tw || sy >= th) continue;
+        const i = (y * tw + x) * 4, j = (sy * tw + sx) * 4;
+        for (let q = 0; q < 4; q++) out[i + q] = body[j + q];
+      }
+      // a flat shadow under where the body lies
+      const sx0 = px - (k ? 12 : 3) * scale * TX, rx = 9 * scale * TX, ry = 2.2 * scale * TX;
+      for (let y = 0; y < th; y++) for (let x = 0; x < tw; x++) {
+        const i = (y * tw + x) * 4; if (out[i + 3]) continue;
+        const e = ((x + 0.5 - sx0) / rx) ** 2 + ((y + 0.5 - py) / ry) ** 2;
+        if (e < 1) out[i + 3] = 105;
+      }
+      body = out;
+    }
     return { body, under: new Uint8ClampedArray(body.length), done: true };
   } : undefined;
   return {
