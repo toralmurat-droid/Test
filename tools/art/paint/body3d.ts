@@ -283,6 +283,14 @@ export function build3D(L: Look, w: Dress3D, r: Rig3): Built {
       const at = (a: number, z: number): V3 => [head[0] + f[0] * a, head[1] + f[1] * a, head[2] + z];
       P.push(cap(at(1.6, 3.3), at(-0.6, 4.1), 0.75, 0.85, pm, 0.4), cap(at(-0.6, 4.1), at(-2.9, 2.2 - r.moving * 0.4), 0.85, 0.45, pm, 0.4));
     }
+  } else if (monster && (hg === "wizardhat" || hg === "witch" || hg === "wide")) {
+    // a tall pointed hat (a wide-brimmed one for "wide"), its tip bent back and drooping
+    const hm = mat(w.headCol, { lo: 0.36, hi: 1.4, grain: 0.12 }), band = mat(w.headTrim, { spec: 0.5, lo: 0.4, hi: 1.4, n: 5 });
+    const at = (a: number, z: number): V3 => [head[0] + f[0] * a, head[1] + f[1] * a, head[2] + z];
+    const brim = hg === "wide" ? 4.0 : hg === "witch" ? 3.6 : 3.1, tall = hg === "wide" ? 1.6 : 5.6;
+    P.push(ell(at(0.1, 1.45), f, [brim, brim, 0.3], hm, 0.3));
+    P.push(cap(at(-0.1, 1.5), at(-0.6, 1.5 + tall * 0.6), 2.15, 1.1, hm, 0.5), cap(at(-0.6, 1.5 + tall * 0.6), at(-2.0 - r.moving * 0.4, 1.5 + tall * 0.85), 1.1, 0.15, hm, 0.4));
+    P.push(ell(at(-0.05, 1.95), f, [2.25, 2.25, 0.36], band, 0.1));
   } else if ((hg === "hood" || hg === "horned") && L.skull) {
     // a deep cowl: the skull sits back in its shadow, only the burning eyes and teeth show
     const cm = mat(w.headCol, { lo: 0.32, hi: 1.35, grain: 0.1 }), inside = mat(0x0c080c, { lo: 0.7, hi: 1.3, n: 3 });

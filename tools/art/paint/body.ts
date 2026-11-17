@@ -2364,7 +2364,7 @@ let mob3D: Frame3 | null = null;
 export let lastMob3D: Uint8ClampedArray | null = null;
 export function setMob3D(fr: Frame3 | null) { mob3D = fr; lastMob3D = null; setMonster3D(!!fr); }
 /** Monster bodies modelled in 3D (base kind before any _variant / _champ). */
-export const MOB3D = new Set<string>(["skeleton", "skeletonmage", "necromancer", "bandit", "bandit_brute", "bandit_archer", "banditchief", "outrider", "crossbowman", "firebrand", "redcaptain", "rourke", "gnawkin", "tuskborn", "silkwretch", "duskwing", "crowseer", "gnasher", "weaver", "packlord", "hornbrute", "hidemother", "nomad", "sanddead", "veiled", "camelfolk", "sphinx", "sunwright"]);
+export const MOB3D = new Set<string>(["skeleton", "skeletonmage", "necromancer", "bandit", "bandit_brute", "bandit_archer", "banditchief", "outrider", "crossbowman", "firebrand", "redcaptain", "rourke", "gnawkin", "tuskborn", "silkwretch", "duskwing", "crowseer", "gnasher", "weaver", "packlord", "hornbrute", "hidemother", "nomad", "sanddead", "veiled", "camelfolk", "sphinx", "sunwright", "wight", "boghag", "legionary", "cairnlord", "barrowking", "delver", "cackler", "stagkin", "quillback", "stitcher", "hidechief", "mawfather", "oathbreaker", "crownguard", "hollowherald", "courtmagus", "pretender", "thronewarden", "rivenking"]);
 const is3D = (name: string) => MOB3D.has(name) || MOB3D.has(name.replace(/_(axe|spear|bow|champ|folk)$/, "")) || MOB3D.has(name.replace(/_champ$/, ""));
 
 /** The 3D body plus its painted weapons, effects and shadow, finished pixels in frame `F` (rig units -> texels). */
@@ -2395,7 +2395,11 @@ function paint3DPix(r: Rig, p: PoseLike, S: number, flash: number, withShadow: b
   const behind = r.dir === "up" && (p.attack < 1 || p.attack === 3);
   const weaponNow = (c: C2) => { if (!p.noWeapon) at(c, dn, () => weapon(c, r)); };
   const back = layer("w3b", (c) => { if (behind) weaponNow(c); });
-  const front = layer("w3f", (c) => { rangedGear(c, r); at(c, df, () => shield(c, r)); if (!behind) weaponNow(c); });
+  const front = layer("w3f", (c) => {
+    rangedGear(c, r); at(c, df, () => shield(c, r)); if (!behind) weaponNow(c);
+    if (r.L.palmFlame !== undefined && p.attack < 0 && r.dir !== "up") palmFlame(c, r, r.L.palmFlame);
+    if (r.L.mist !== undefined) coldMist(c, r, r.L.mist); // painted wisps over the 3D feet
+  });
   // effects in front, and behind (smears, circles, the ground shadow)
   const under = scratch("under", NW, NH), uc0 = under.getContext("2d"); toCanvas(uc0);
   const fx = scratch("fx", NW, NH), fc = fx.getContext("2d");
