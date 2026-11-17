@@ -1,0 +1,1 @@
+{ "kind": "monster", "clan": "host", "name": "Siege-Risen Axeman", "base": "skeleton", "affixes": ["siege", "risen"], "weapon": "axe", "hp": 0.9, "dmg": 0.9, "speed": 1, "palette": "host" }
