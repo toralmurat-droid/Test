@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { GOLEM_H, GOLEM_W, paintGolemFrame, type GolemDir, type GolemElement } from "./golems";
 import { createCanvas } from "@napi-rs/canvas";
 import { addChampPose, MOB_POSES, posed, setPainted, type Dir } from "../characters";
-import { C2, P, blobPath, css, ellipseP, poly, fillShape, glow, limb, line, metal, mix, rng, sh, vol } from "./brush";
+import { C2, P, blobPath, css, ellipseP, fillShape, glow, limb, line, mix, sh, vol } from "./brush";
 import { lastRig, pixelAlpha, pixelize, shrink } from "./body";
 import { paintRaider, RAIDER_H, RAIDER_W } from "./raiders";
 import { HOUND_H, HOUND_W, WRAITH_H, WRAITH_W, paintHound, paintWraith } from "./moors";
@@ -10,6 +10,8 @@ import { RATTLER_H, RATTLER_W, VULTURE_H, VULTURE_W, WARHOUND_H, WARHOUND_W, pai
 import { CROWNCROW_PAL, GILDHOUND_PAL } from "./crown";
 import { SINKWORM_H, SINKWORM_W, paintSinkworm } from "./sinkholes";
 import { paintWisp, WISP_H, WISP_W, type WispElement } from "./wisps";
+import { renderMob, SIN, YAW, type MobFrame } from "./mob3d";
+import { blobModel, blobRadius, type BlobOpts, type BlobPal } from "./blobs3d";
 import { RAIDERS } from "../../../shared/raiders";
 import { AFFIX_KEYS, AFFIXES, type AffixKey } from "../../../shared/champions";
 import { CHAMP_WEAPONS } from "./look";
@@ -39,7 +41,7 @@ function frameOf(f: number): { dir: Dir; pose: "stand" | "step" | "wind" | "stri
   return { dir: (["down", "up", "right"] as Dir[])[k >> 1], pose: k % 2 ? "strike" : "wind" };
 }
 
-interface Sheet { key: string; w: number; h: number; draw: (c: C2, f: number) => void; frames?: number; hands?: number[][] }
+interface Sheet { key: string; w: number; h: number; draw: (c: C2, f: number) => void; frames?: number; hands?: number[][]; pix?: (f: number) => MobFrame }
 
 /**
  * Bone Demon's Bone Harvest (client TownScene demonRip): 9 more frames after the 12, 3 per facing (down, up, right):
@@ -108,240 +110,7 @@ function humanoidFrame(kind: string, f: number, fall = false) {
   }
 }
 
-// ---------------------------------------------------------------- blobs
-interface BlobPal { G: number; L: number; D: number; E: number }
-interface BlobOpts { bodyH: number; extra?: "shooter" | "warrior" | "healer" | "mother1" | "mother2" | "mother3" | "venom" | "frost" | "fire" | "storm"; seed?: number }
-
-function blobFrame(c: C2, w: number, h: number, pal: BlobPal, o: BlobOpts, f: number) {
-  const { dir, pose } = frameOf(f), squish = pose === "step";
-  const wind = pose === "wind", strike = pose === "strike";
-  // wind-up: sink low and wide, leaning away from the target; strike: spring up tall and narrow toward it
-  const lean = dir === "right" ? (wind ? -0.9 : strike ? 1.1 : 0) : 0;
-  const cx = w / 2 + lean, base = h - 1.3 + (dir === "down" && strike ? 0.4 : 0);
-  const rx = wind ? w / 2 - 0.25 : strike ? w / 2 - 1.7 : (squish ? w / 2 - 0.35 : w / 2 - 1.0);
-  const ry = o.bodyH * (wind ? 0.74 : strike ? 1.08 : squish ? 0.84 : 1) * 0.97;
-  const top = base - ry;
-  // ground shadow
-  const sc = SH ?? c;
-  sc.save(); sc.translate(cx, base + 0.3); sc.scale(1, 0.32);
-  const sg = sc.createRadialGradient(0, 0, 0, 0, 0, rx + 1);
-  sg.addColorStop(0, "rgba(0,0,0,0.45)"); sg.addColorStop(0.7, "rgba(0,0,0,0.35)"); sg.addColorStop(1, "rgba(0,0,0,0)");
-  sc.fillStyle = sg; sc.beginPath(); sc.arc(0, 0, rx + 1, 0, Math.PI * 2); sc.fill(); sc.restore();
-  // ---- body: a lumpy, sagging sack of slime (same lumps every frame, a little wobble per frame)
-  const seed = o.seed ?? 3, sr = rng(seed * 977 + 13), ph = [sr() * 6.3, sr() * 6.3, sr() * 6.3], wob = f * 0.7;
-  const lump = (a: number) => 0.06 * Math.sin(a * 3 + ph[0]) + 0.04 * Math.sin(a * 5 + ph[1]) + 0.018 * Math.sin(a * 8 + ph[2] + wob);
-  const pts: P[] = [];
-  const N = 30;
-  for (let k = 0; k <= N; k++) {
-    const a = Math.PI + (k / N) * Math.PI, sag = 1 + 0.16 * Math.pow(1 - Math.abs(Math.sin(a)), 1.6); // bulges low on the sides
-    pts.push([cx + Math.cos(a) * rx * sag * (1 + lump(a)), base - 0.2 + Math.sin(a) * ry * (1 + lump(a) * 0.8)]);
-  }
-  // sloppy underside spreading onto the ground
-  for (let k = 1; k < 8; k++) { const t = k / 8; pts.push([cx + rx * 1.12 - t * rx * 2.24, base + 0.35 + Math.sin(t * 9 + ph[1]) * 0.25]); }
-  const dome = blobPath(pts);
-  const bile = mix(pal.G, 0x8c8a3c, 0.3), gunk = mix(pal.D, 0x2b2a12, 0.35);
-  // puddle of ooze it leaves under itself
-  fillShape(c, ellipseP(cx + 0.2, base + 0.45, rx * 1.2, Math.max(0.7, rx * 0.22)), css(sh(pal.D, 0.75), 0.85));
-  fillShape(c, ellipseP(cx - rx * 0.4, base + 0.3, rx * 0.35, 0.3), css(mix(pal.L, bile, 0.5), 0.6));
-  // dark rim (outline), then the jelly
-  c.save(); c.beginPath(); dome(c); c.strokeStyle = css(sh(gunk, 0.45), 0.9); c.lineWidth = 0.7; c.stroke(); c.restore();
-  const g = c.createRadialGradient(cx - rx * 0.35, top + ry * 0.3, 0.2, cx, base - ry * 0.35, Math.max(rx, ry) * 1.25);
-  g.addColorStop(0, css(mix(pal.L, bile, 0.5), 0.97)); g.addColorStop(0.4, css(bile, 0.95)); g.addColorStop(0.8, css(pal.D, 0.96)); g.addColorStop(1, css(sh(gunk, 0.6), 0.98));
-  c.beginPath(); dome(c); c.fillStyle = g; c.fill();
-  c.save(); c.beginPath(); dome(c); c.clip();
-  const r = rng(seed + (squish ? 1 : 0));
-  const rs = rng(seed * 31 + 7); // stable across frames (blotches, debris, pustules)
-  // mottled, unhealthy skin: bilious and bruised blotches
-  for (let k = 0; k < Math.max(5, w / 2); k++) {
-    const bx = cx + (rs() - 0.5) * rx * 1.9, by = base - rs() * ry * 1.05, br = 0.5 + rs() * Math.max(0.8, rx * 0.22);
-    fillShape(c, ellipseP(bx, by, br, br * (0.6 + rs() * 0.5), rs() * 3), css(rs() < 0.5 ? mix(bile, 0xb5b04a, 0.5) : sh(gunk, 0.9), 0.24));
-  }
-  // murky core with things floating in it (a bone, grit, a half-digested leaf)
-  fillShape(c, ellipseP(cx + rx * 0.1, base - ry * 0.32, rx * 0.5, ry * 0.3), css(sh(gunk, 0.8), 0.45));
-  if (w >= 10) {
-    const bx = cx - rx * 0.2 + rs() * rx * 0.3, by = base - ry * 0.3;
-    line(c, [[bx - 1.0, by + 0.3], [bx + 1.0, by - 0.4]], 0xd8d0b0, 0.35, 0.75);
-    for (const [ex, ey] of [[bx - 1.0, by + 0.3], [bx + 1.0, by - 0.4]]) fillShape(c, ellipseP(ex, ey, 0.32, 0.32), css(0xd8d0b0, 0.75));
-    fillShape(c, ellipseP(cx + rx * 0.45, base - ry * 0.22, 0.7, 0.4, 0.6), css(0x5a4a1c, 0.6));
-  }
-  for (let k = 0; k < Math.max(2, w / 5); k++) fillShape(c, ellipseP(cx + (rs() - 0.5) * rx * 1.2, base - 0.6 - rs() * ry * 0.5, 0.18, 0.18), css(0x2a2410, 0.7));
-  // a few greasy bubbles
-  for (let k = 0; k < Math.max(2, w / 5); k++) {
-    const bx = cx + (r() - 0.5) * rx * 1.4, by = base - 0.8 - r() * ry * 0.75, br = 0.2 + r() * 0.35;
-    c.beginPath(); c.arc(bx, by, br, 0, Math.PI * 2); c.strokeStyle = css(mix(pal.L, bile, 0.4), 0.5); c.lineWidth = 0.12; c.stroke();
-  }
-  if (o.extra?.startsWith("mother")) {
-    // babies curled up inside her, half dissolved
-    for (const [bx, by, s] of [[cx - rx * 0.5, base - 2.2, 1.6], [cx + rx * 0.45, base - 3.0, 1.4], [cx + 0.4, base - 1.4, 1.2]]) {
-      fillShape(c, ellipseP(bx, by, s * 1.1, s * 0.8), css(mix(pal.L, bile, 0.5), 0.5));
-      fillShape(c, ellipseP(bx + s * 0.3, by, s * 0.25, s * 0.25), css(gunk, 0.7));
-    }
-  }
-  // elemental skins (Murat 2026-11-05): what each piece of the Gloam soaked up shows through its jelly
-  const ex = o.extra;
-  if (ex === "fire") {
-    // a crust of black cinder plates floating on molten jelly, the cracks between them glowing
-    const cr = rng(seed * 53 + 1);
-    for (let k = 0; k < 9; k++) {
-      const px = cx + (cr() - 0.5) * rx * 1.8, py = base - 0.6 - cr() * ry * 0.95, pr = 0.9 + cr() * rx * 0.22;
-      const pts: P[] = [];
-      for (let v = 0; v < 6; v++) { const a = v / 6 * Math.PI * 2 + cr() * 0.4; pts.push([px + Math.cos(a) * pr * (0.75 + cr() * 0.4), py + Math.sin(a) * pr * 0.65 * (0.75 + cr() * 0.4)]); }
-      fillShape(c, poly(pts), css(0x231210, 0.92));
-      line(c, [pts[0], pts[1], pts[2]], 0x4a2a20, 0.22, 0.8); // lit rim on the plate
-    }
-    glow(c, cx, base - ry * 0.35, rx * 0.9, 0xff8a2a, wind ? 0.55 : 0.32);
-  } else if (ex === "frost") {
-    // rime: white frost crusting over the top, frozen bubbles and a cold blue core
-    const fr = rng(seed * 59 + 2);
-    for (let k = 0; k < 16; k++) {
-      const a = Math.PI * (1.05 + fr() * 0.9), d = 0.55 + fr() * 0.45;
-      fillShape(c, ellipseP(cx + Math.cos(a) * rx * d, base - 0.2 + Math.sin(a) * ry * d, 0.35 + fr() * 0.5, 0.25 + fr() * 0.3), css(0xf4fbff, 0.75));
-    }
-    for (let k = 0; k < 4; k++) { const bx = cx + (fr() - 0.5) * rx, by = base - ry * (0.2 + fr() * 0.5); c.beginPath(); c.arc(bx, by, 0.3 + fr() * 0.4, 0, Math.PI * 2); c.strokeStyle = css(0xe8f8ff, 0.7); c.lineWidth = 0.14; c.stroke(); }
-    glow(c, cx + rx * 0.1, base - ry * 0.35, rx * 0.6, 0x9fdcff, 0.3);
-  } else if (ex === "venom") {
-    // purple bruises and dark veins of poison running through it
-    const vr = rng(seed * 61 + 3);
-    for (let k = 0; k < 5; k++) {
-      let x0 = cx + (vr() - 0.5) * rx * 1.4, y0 = base - vr() * ry * 0.3; const pts: P[] = [[x0, y0]];
-      for (let v = 0; v < 4; v++) { x0 += (vr() - 0.5) * 1.6; y0 -= 0.6 + vr() * 0.9; pts.push([x0, y0]); }
-      line(c, pts, 0x3a1440, 0.22, 0.7);
-    }
-    for (let k = 0; k < 6; k++) fillShape(c, ellipseP(cx + (vr() - 0.5) * rx * 1.6, base - vr() * ry * 0.9, 0.4 + vr() * 0.6, 0.3 + vr() * 0.4), css(0x6a2a6a, 0.3));
-  } else if (ex === "storm") {
-    // lightning trapped inside: a bright zigzag flickering through the jelly, a new shape every frame
-    const lr = rng(seed * 67 + f * 7 + 4);
-    for (let k = 0; k < 2; k++) {
-      let x0 = cx - rx * 0.7 + lr() * rx * 0.3, y0 = base - ry * (0.2 + lr() * 0.5); const pts: P[] = [[x0, y0]];
-      while (x0 < cx + rx * 0.7) { x0 += 0.8 + lr() * 1.0; y0 += (lr() - 0.5) * 1.6; pts.push([x0, Math.min(base - 0.5, Math.max(top + 1, y0))]); }
-      line(c, pts, 0x8fa8ff, 0.55, 0.45); line(c, pts, 0xf6f8ff, 0.2, 0.95);
-    }
-    glow(c, cx, base - ry * 0.4, rx * 0.8, 0x8090f8, 0.35);
-  }
-  // dim rim light along the top-left edge
-  c.beginPath(); dome(c); c.strokeStyle = css(mix(pal.L, bile, 0.3), 0.3); c.lineWidth = 0.5; c.translate(0.35, 0.35); c.stroke();
-  c.restore();
-  // pustules and warts swelling out of the skin
-  const nP = Math.max(1, Math.round(w / 7));
-  for (let k = 0; k < nP; k++) {
-    const a = Math.PI * (1.15 + rs() * 0.7), d = 0.55 + rs() * 0.4;
-    const px = cx + Math.cos(a) * rx * d, py = base - 0.2 + Math.sin(a) * ry * d, pr = 0.45 + rs() * Math.max(0.35, w / 20);
-    fillShape(c, ellipseP(px, py, pr * 1.25, pr * 1.15), css(sh(bile, 0.7), 0.95));
-    fillShape(c, ellipseP(px, py - pr * 0.15, pr, pr * 0.9), css(mix(0xd8cf6a, pal.L, 0.25), 0.95));
-    fillShape(c, ellipseP(px - pr * 0.3, py - pr * 0.4, pr * 0.3, pr * 0.25), "rgba(255,255,230,0.85)");
-  }
-  // wet streaks instead of one clean shine
-  for (let k = 0; k < 3; k++) {
-    const hx = cx - rx * (0.55 - k * 0.22), hy = top + ry * (0.3 + k * 0.08);
-    line(c, [[hx - rx * 0.08, hy + 0.15], [hx + rx * 0.08, hy - 0.15]], 0xf8f8e0, 0.25, 0.7 - k * 0.15);
-  }
-  // drips sliding down and hanging off the edge
-  for (let k = 0; k < Math.max(2, Math.round(w / 6)); k++) {
-    const dx = cx + (rs() - 0.5) * rx * 1.7, len = 0.8 + rs() * 1.2 + (f % 3) * 0.25;
-    const dy = base - 0.3;
-    limb(c, [dx, dy - len * 0.6], [dx + 0.05, dy + len * 0.45], 0.55, 0.35, bile);
-    fillShape(c, ellipseP(dx + 0.05, dy + len * 0.5, 0.38, 0.45), css(mix(pal.L, bile, 0.3), 0.95));
-  }
-  // face: mismatched, bloodshot eyes and a drooling maw full of crooked teeth
-  const ey = base - ry * 0.52, gap = Math.max(1, w / 6.5), es = Math.max(0.55, w / 18);
-  const eye = (x: number, y: number, k: number, look: number) => {
-    const s = es * k;
-    fillShape(c, ellipseP(x, y, s * 1.05, s * 1.2), css(sh(gunk, 0.6)));
-    fillShape(c, ellipseP(x, y, s * 0.92, s * 1.05), css(0xe6dfa8));
-    if (s > 0.6) for (let v = 0; v < 3; v++) { const a = v * 2.1 + seed; line(c, [[x + Math.cos(a) * s * 0.9, y + Math.sin(a) * s], [x + Math.cos(a) * s * 0.35, y + Math.sin(a) * s * 0.4]], 0xc0392b, 0.1, 0.8); }
-    fillShape(c, ellipseP(x + look * s * 0.3, y + s * 0.2, s * 0.42, s * 0.5), css(pal.E));
-    fillShape(c, ellipseP(x + look * s * 0.3 - s * 0.15, y - s * 0.05, s * 0.13, s * 0.13), "rgba(255,255,240,0.9)");
-    line(c, [[x - s, y - s * 0.75], [x + s, y - s * 0.95]], sh(gunk, 0.5), Math.max(0.25, s * 0.35), 0.9); // heavy lid
-  };
-  const maw = (mx: number, my: number, mw: number) => {
-    const open = (wind ? 0.9 : strike ? 1.5 : 0.6) * es;
-    const m = blobPath([[mx - mw, my], [mx - mw * 0.4, my - open * 0.3], [mx + mw * 0.5, my - open * 0.2], [mx + mw, my + open * 0.1], [mx + mw * 0.3, my + open], [mx - mw * 0.5, my + open * 0.8]]);
-    fillShape(c, m, css(0x1e0a10));
-    fillShape(c, ellipseP(mx, my + open * 0.7, mw * 0.45, open * 0.3), css(0x7a2633, 0.9)); // tongue
-    for (let k = 0; k < 4; k++) { const tx = mx - mw * 0.7 + k * mw * 0.45; fillShape(c, poly([[tx - 0.22, my - open * 0.15], [tx + 0.22, my - open * 0.15], [tx + (k % 2 ? 0.1 : -0.05), my + open * (0.35 + (k % 3) * 0.12)]]), css(0xe8e0bc)); }
-    limb(c, [mx + mw * 0.35, my + open * 0.8], [mx + mw * 0.4, my + open * 0.8 + 1.0 + (f % 2) * 0.4], 0.32, 0.18, mix(pal.L, 0xffffff, 0.3)); // drool
-  };
-  if (dir === "down") { eye(cx - gap, ey, 1.15, 0.6); eye(cx + gap * 1.05, ey + 0.25, 0.8, -0.4); maw(cx + 0.2, ey + es * 2.0, Math.max(0.9, gap * 0.85)); }
-  else if (dir === "right") { eye(cx + rx * 0.52, ey, 1.05, 0.8); eye(cx + rx * 0.08, ey - 0.15, 0.75, 0.8); maw(cx + rx * 0.62, ey + es * 2.0, Math.max(0.7, gap * 0.6)); }
-  if ((wind || strike) && dir !== "up") {
-    // angry brows slanting in toward the nose
-    const bw = Math.max(0.35, es * 0.55), bc = sh(pal.D, 0.35);
-    const xs = dir === "down" ? [cx - gap, cx + gap] : [cx + rx * 0.05, cx + rx * 0.5];
-    for (const x of xs) { const s = dir === "down" ? (x < cx ? 1 : -1) : 1; line(c, [[x - es * 1.1 * s, ey - es * 1.7], [x + es * 0.8 * s, ey - es * 1.05]], bc, bw, 0.95); }
-  }
-  // extras
-  const x = o.extra;
-  if (x === "shooter") {
-    const sx = dir === "right" ? cx + rx * 0.4 : cx, sy = top + 0.4;
-    limb(c, [sx, sy + 1.4], [sx + (dir === "right" ? 1.6 : 0), sy - 2.0], 2.0, 1.6, 0x4a4458);
-    fillShape(c, ellipseP(sx + (dir === "right" ? 1.6 : 0), sy - 2.0, 0.85, dir === "right" ? 0.85 : 0.45), css(0x0e0c14));
-  } else if (x === "warrior") {
-    const hs = (cc: C2) => { cc.moveTo(cx - rx * 0.78, top + ry * 0.38); cc.bezierCurveTo(cx - rx * 0.8, top - 1.4, cx + rx * 0.8, top - 1.4, cx + rx * 0.78, top + ry * 0.38); cc.closePath(); };
-    metal(c, hs, 0xaeb6c2, [cx - rx, top - 1], [cx + rx, top + 2]);
-    line(c, [[cx - rx * 0.8, top + ry * 0.36], [cx + rx * 0.8, top + ry * 0.36]], 0x5b6470, 0.5);
-    for (let k = 0; k < 5; k++) line(c, [[cx + (k - 2) * 0.35, top - 0.6], [cx + (k - 2) * 0.6 - 0.5, top - 2.8 + Math.abs(k - 2) * 0.3]], k % 2 ? 0xe63946 : 0xb3262e, 0.55);
-  } else if (x === "healer") {
-    c.save(); c.translate(cx, top - 1.4); c.scale(1, 0.35);
-    c.beginPath(); c.arc(0, 0, rx * 0.55, 0, Math.PI * 2); c.strokeStyle = css(0xffd54f, 0.95); c.lineWidth = 0.9; c.stroke(); c.restore();
-    glow(c, cx, top - 1.4, rx * 0.8, 0xffd54f, 0.35);
-    if (dir !== "up") { const gx = dir === "right" ? cx + rx * 0.3 : cx, gy = base - ry * 0.18; line(c, [[gx, gy - 1.1], [gx, gy + 1.1]], 0x43c463, 0.75); line(c, [[gx - 1.1, gy], [gx + 1.1, gy]], 0x43c463, 0.75); }
-  } else if (x === "fire") {
-    // flames licking up from the crown of its head, flickering per frame; it rears back to breathe them out
-    const fl = rng(f * 13 + 5), n = 5;
-    for (let k = 0; k < n; k++) {
-      const u = (k + 0.5) / n, fx = cx - rx * 0.55 + u * rx * 1.1, fy = top + ry * 0.12 + Math.abs(u - 0.5) * ry * 0.5;
-      const hgt = (1.6 + fl() * 1.6) * (1 - Math.abs(u - 0.5) * 0.9) * (wind ? 1.5 : 1), lean = (fl() - 0.5) * 0.8 - (dir === "right" ? 0.4 : 0);
-      const tongue = blobPath([[fx - 0.7, fy + 0.4], [fx - 0.35, fy - hgt * 0.5], [fx + lean, fy - hgt], [fx + 0.4, fy - hgt * 0.45], [fx + 0.7, fy + 0.4]]);
-      fillShape(c, tongue, css(0xe0461a, 0.95));
-      fillShape(c, blobPath([[fx - 0.35, fy + 0.3], [fx + lean * 0.6, fy - hgt * 0.62], [fx + 0.35, fy + 0.3]]), css(0xffb347, 0.95));
-      fillShape(c, ellipseP(fx, fy, 0.25, 0.3), css(0xfff0a8));
-    }
-    glow(c, cx, top, rx * 0.9, 0xff8a2a, 0.4);
-    for (let k = 0; k < 3; k++) fillShape(c, ellipseP(cx + (fl() - 0.5) * rx * 1.4, top - 2 - fl() * 3, 0.22, 0.22), css(0xffd27a, 0.9)); // embers
-  } else if (x === "frost") {
-    // a crown of ice spikes growing out of its top, icicles hanging off the rim
-    for (const [u, hgt, w2] of [[-0.55, 2.2, 0.9], [-0.15, 3.6, 1.1], [0.22, 2.9, 1.0], [0.55, 1.8, 0.8]] as const) {
-      const bx = cx + u * rx, by = top + ry * (0.18 + Math.abs(u) * 0.35), tip: P = [bx + u * 0.9, by - hgt * (wind ? 1.2 : 1)];
-      fillShape(c, poly([[bx - w2, by + 0.3], tip, [bx + w2, by + 0.3]]), css(0x9fd0f0, 0.96));
-      fillShape(c, poly([[bx - w2, by + 0.3], tip, [bx - w2 * 0.1, by + 0.3]]), css(0xeaf8ff, 0.96)); // lit facet
-      line(c, [[bx - w2 * 0.05, by + 0.2], tip], 0xffffff, 0.12, 0.9);
-    }
-    for (let k = 0; k < 4; k++) { const ix = cx - rx * 0.8 + k * rx * 0.5, iy = base - 0.4; fillShape(c, poly([[ix - 0.35, iy - 0.2], [ix + 0.35, iy - 0.2], [ix + 0.05, iy + 0.9 + (k % 2) * 0.5]]), css(0xdff4ff, 0.9)); }
-    glow(c, cx - rx * 0.1, top - 1, rx * 0.7, 0xbfe8ff, 0.3);
-  } else if (x === "venom") {
-    // swollen poison sacs on its back, glowing green; they bulge when it is about to spit
-    const sw = wind ? 1.35 : strike ? 0.8 : 1;
-    for (const [u, v, r0] of [[-0.45, 0.25, 1.5], [0.35, 0.18, 1.8], [-0.02, 0.05, 1.2]] as const) {
-      const sx2 = cx + u * rx, sy2 = top + ry * v + 0.8, r = r0 * sw * Math.max(0.8, w / 14);
-      fillShape(c, ellipseP(sx2, sy2, r * 1.08, r), css(0x2a3e12, 0.95));
-      fillShape(c, ellipseP(sx2, sy2 - 0.1, r * 0.95, r * 0.88), css(0x8fd13a, 0.92));
-      line(c, [[sx2 - r * 0.6, sy2 + r * 0.2], [sx2 - r * 0.1, sy2 - r * 0.3], [sx2 + r * 0.4, sy2 + r * 0.1]], 0x3a5a14, 0.18, 0.8); // veins
-      fillShape(c, ellipseP(sx2 - r * 0.35, sy2 - r * 0.4, r * 0.3, r * 0.22), "rgba(240,255,200,0.85)");
-      glow(c, sx2, sy2, r * 1.8, 0x9be564, 0.25);
-    }
-    // a drip of venom off its lip
-    if (dir !== "up") limb(c, [cx + 0.6, base - ry * 0.25], [cx + 0.7, base - ry * 0.25 + 1.2 + (f % 3) * 0.4], 0.35, 0.22, 0xb4e04e);
-  } else if (x === "storm") {
-    // hair of crackling static standing up on end, and sparks jumping off it
-    const st = rng(f * 17 + 9);
-    for (let k = 0; k < 6; k++) {
-      const u = (k + 0.5) / 6 - 0.5, bx = cx + u * rx * 1.4, by = top + ry * (0.15 + Math.abs(u) * 0.6);
-      const len = 1.4 + st() * 1.4 + (wind ? 0.8 : 0), pts: P[] = [[bx, by]];
-      let px = bx, py = by;
-      for (let v = 0; v < 3; v++) { px += u * 0.8 + (st() - 0.5) * 0.9; py -= len / 3; pts.push([px, py]); }
-      line(c, pts, 0x4e4ac8, 0.45, 0.9); line(c, pts, 0xd8e0ff, 0.16, 0.95);
-    }
-    for (let k = 0; k < 3; k++) { const a = st() * Math.PI * 2, d = rx * (0.9 + st() * 0.4); const sx3 = cx + Math.cos(a) * d, sy3 = base - ry * 0.5 + Math.sin(a) * ry * 0.6;
-      line(c, [[sx3, sy3], [sx3 + 0.5, sy3 - 0.4], [sx3 + 0.2, sy3 - 0.8], [sx3 + 0.8, sy3 - 1.2]], 0xf6f8ff, 0.2, 0.95); }
-    glow(c, cx, top, rx * 0.8, 0x8090f8, 0.35);
-  } else if (x === "mother1" || x === "mother3") {
-    // a gold tiara with a ruby (tier 1), an iron spiked crown (tier 3)
-    const iron = x === "mother3", tw = rx * 0.5, ty = top + 0.6;
-    const pts: P[] = [[cx - tw, ty + 1], [cx - tw, ty - 1.2], [cx - tw * 0.5, ty - 0.2], [cx, ty - (iron ? 2.6 : 1.9)], [cx + tw * 0.5, ty - 0.2], [cx + tw, ty - 1.2], [cx + tw, ty + 1]];
-    metal(c, (cc) => { cc.moveTo(pts[0][0], pts[0][1]); for (const q of pts.slice(1)) cc.lineTo(q[0], q[1]); cc.closePath(); }, iron ? 0x9aa3ad : 0xffc93c, [cx - tw, ty - 2], [cx + tw, ty + 1]);
-    if (dir !== "up") { fillShape(c, ellipseP(cx, ty + 0.2, 0.55, 0.55), css(0xe63946)); glow(c, cx, ty + 0.2, 1.2, 0xe63946, 0.5); }
-  }
-}
+// ---------------------------------------------------------------- blobs (3D-built: blobs3d.ts)
 
 // ---------------------------------------------------------------- crawling skeleton (BONES.crawlChance)
 /**
@@ -530,7 +299,9 @@ function scorpionFrame(c: C2, w: number, h: number, f: number) {
 }
 
 function blobSheet(key: string, w: number, h: number, pal: BlobPal, o: BlobOpts): Sheet {
-  return { key, w, h, draw: (c, f) => blobFrame(c, w, h, pal, o, f) };
+  // 3D-built (blobs3d.ts, Murat 2026-11-17); the footprint centre sits half its depth above the old painted base line
+  const oy = h - 1.3 - blobRadius(w) * SIN;
+  return { key, w, h, draw: () => {}, pix: (f) => { const { dir, pose } = frameOf(f); return renderMob(blobModel(w, pal, o, pose, f), YAW[dir as "down" | "up" | "right"], w, h, oy, TX); } };
 }
 
 
@@ -710,6 +481,16 @@ export function buildMobs(out: string, ONLY?: string[]) {
     const cv = createCanvas(tw * NF, th), oc = cv.getContext("2d");
     const sheet = oc.createImageData(tw * NF, th);
     for (let f = 0; f < NF; f++) {
+      if (s.pix) { // 3D-built: already on the texel grid; pixelize only posterizes, rims, outlines and weathers it
+        const m = s.pix(f), b = m.body, u = m.under;
+        pixelize(b, tw, th, true, { y0: Math.round(th * 0.7), y1: th, mud: 0.12, sat: 0.95 });
+        pixelAlpha(u);
+        for (let y = 0; y < th; y++) for (let x = 0; x < tw; x++) {
+          const i = (y * tw + x) * 4, o = (y * tw * NF + f * tw + x) * 4, src = b[i + 3] ? b : u;
+          for (let k = 0; k < 4; k++) sheet.data[o + k] = src[i + k];
+        }
+        continue;
+      }
       const body = createCanvas(s.w * HI, s.h * HI), shadow = createCanvas(s.w * HI, s.h * HI);
       const c = body.getContext("2d"), sc = shadow.getContext("2d");
       c.scale(HI, HI); sc.scale(HI, HI);
