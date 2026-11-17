@@ -1,4 +1,4 @@
-import { AGE_SLOT_RE, CROSS, type AgeRow, type AgesMsg } from "../../shared/ageCross";
+import { AGE_SLOT_RE, CROSS, CROSS_SPEAKER, CROSS_TEXT, type AgeRow, type AgesMsg } from "../../shared/ageCross";
 import { icon as pxIcon } from "./pixelicons";
 
 /**
@@ -11,6 +11,7 @@ export class AgeCrossPanel {
   private rows: AgeRow[] | null = null; // null = waiting for the answer
   private err = "";
   private busy = false;
+  private target = "";
 
   constructor(private send: (type: string, msg?: unknown) => void) {
     this.el.id = "agemenu";
@@ -21,7 +22,7 @@ export class AgeCrossPanel {
       if (!b || b.disabled) return;
       if (b.dataset.slot !== undefined) {
         if (this.busy || !AGE_SLOT_RE.test(b.dataset.slot)) return;
-        this.busy = true;
+        this.busy = true; this.target = b.dataset.slot;
         this.send("cross", { slot: b.dataset.slot });
         this.render();
       } else this.close();
@@ -40,6 +41,13 @@ export class AgeCrossPanel {
 
   close() { this.el.hidden = true; }
 
+  /** A chat line from the Ages speaker while crossing is a refusal or a failed save: the buttons come back. */
+  onChat(name: string) {
+    if (name !== CROSS_SPEAKER || !this.busy) return;
+    this.busy = false;
+    if (this.open) this.render();
+  }
+
   /** The server's "ages" answer (the join notice has no list and is ignored here). */
   onAges(m: AgesMsg) {
     if (!this.open || (!m.list && !m.err)) return;
@@ -53,6 +61,7 @@ export class AgeCrossPanel {
     let body: string;
     if (this.rows === null) body = `<p class="pt-note">Looking for other Ages...</p>`;
     else if (this.err) body = `<p class="pt-note warn">${esc(this.err)}</p>`;
+    else if (this.busy) body = `<p class="pt-note">${esc(CROSS_TEXT.going(this.rows.find((r) => r.slot === this.target)?.name ?? this.target))}</p>`;
     else body = this.rows.map((r) => r.why
       ? `<button class="pt-row${r.here ? " here" : ""}" disabled>${esc(r.name)}<span>${esc(r.why)}</span></button>`
       : `<button class="pt-row" data-slot="${esc(r.slot)}"${this.busy ? " disabled" : ""}>${esc(r.name)}<span>Cross</span></button>`).join("");

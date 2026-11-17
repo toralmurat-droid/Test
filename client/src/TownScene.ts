@@ -1647,7 +1647,7 @@ export class TownScene extends Phaser.Scene {
       this.deathTimer = window.setInterval(tick, 100);
     });
     this.room.onMessage("xp", ({ amount, x, y }) => this.floatText(x, y - 10, `+${amount} XP`, "#ffd166"));
-    this.room.onMessage("chat", ({ id, name, text }) => this.chatMessage(id, name, text));
+    this.room.onMessage("chat", ({ id, name, text }) => { this.ageCross?.onChat(name); this.chatMessage(id, name, text); });
     this.room.onMessage("pinvite", ({ from, name, ms }) => this.party?.invited(from, name, ms));
     this.room.onMessage("party", ({ text }) => this.party?.notice(text));
     this.room.onMessage("ideas", (view) => this.ideaBoard?.update(view));

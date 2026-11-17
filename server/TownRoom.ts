@@ -86,6 +86,7 @@ import { Asker, boardFor } from "../shared/ideas";
 import { hashAddr, ideaLog, ideaNews, ideaRoundNow, saveIdeas, submitIdea, voteIdea } from "./ideaStore";
 import { dropLive, fetchLive, handoffWritten, LiveState, rememberLive, takeLive } from "./handoff";
 import { AgeCross } from "./ageCross";
+import { AGE_TAKEN_CLOSE } from "../shared/ageCross";
 import { MobView } from "./mobView";
 import { copyPatches } from "./patchCopy";
 import { act1Home, actAt, actOpen, actSpawn, cityGateOf, gateColdNote, gateOpen, WAYGATE_RANGE, waygateArrival, waygateById, WAYGATES } from "../shared/act2";
@@ -1226,7 +1227,7 @@ export class TownRoom extends Room<TownState> {
     for (const c of this.clients) {
       if (this.accts.get(c.sessionId)?.toLowerCase() !== k) continue;
       c.send("chat", { id: "", name: "Oakvale", text: "This hero was opened on another server." });
-      c.leave(4409);
+      c.leave(AGE_TAKEN_CLOSE);
     }
   }
 

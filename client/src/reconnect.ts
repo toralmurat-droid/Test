@@ -191,7 +191,7 @@ export async function crossNow(login: Rejoin, slot: string) {
   carry();
   let ok = false;
   try {
-    const r = await fetch(`${base}/age/${slot}`, { redirect: "manual", credentials: "same-origin" });
+    const r = await fetch(`${base}/age/${slot}`, { redirect: "manual", credentials: "same-origin", signal: AbortSignal.timeout(8000) });
     ok = r.type === "opaqueredirect" || (r.status >= 300 && r.status < 400);
     if (r.status === 404) { try { sessionStorage.setItem(NOTE, `${Date.now()}|${CROSS_TEXT.justClosed}`); } catch { /* ignore */ } }
   } catch { /* gateway not answering */ }
