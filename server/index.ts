@@ -8,7 +8,7 @@ import { Server } from "colyseus";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { TownRoom, announceUpgrade } from "./TownRoom";
 import { ideaLog, publicLog } from "./ideaStore";
-import { allAccounts, flushFinal, initAccounts, peek, requestReset, resetPassword, setEmail } from "./accounts";
+import { backupAccounts, flushFinal, initAccounts, peek, releaseAccounts, requestReset, resetPassword, setEmail } from "./accounts";
 import { writeHandoff } from "./handoff";
 import { flushWorldFinal, initWorld } from "./worldStore";
 import { clientIp } from "./ratelimit";
@@ -97,12 +97,15 @@ const adminOk = (req: express.Request) => {
   const got = Buffer.from(String(req.query.key ?? ""));
   return want.length >= 12 && got.length === want.length && crypto.timingSafeEqual(got, want);
 };
-app.get("/admin/backup", (req, res) => {
+app.get("/admin/backup", async (req, res) => {
   if (!adminOk(req)) { res.sendStatus(404); return; }
+  // (with account leases on, memory holds only some accounts: the backup reads the table, server/accounts.ts)
+  let saves;
+  try { saves = await backupAccounts(); } catch (e: any) { res.status(500).send(String(e?.message ?? e)); return; }
   const day = new Date().toISOString().slice(0, 10);
   res.setHeader("Content-Disposition", `attachment; filename="game-backup-${day}.json"`);
   res.setHeader("Cache-Control", "no-store");
-  res.json({ at: new Date().toISOString(), saves: allAccounts(), ideas: ideaLog });
+  res.json({ at: new Date().toISOString(), saves, ideas: ideaLog });
 });
 
 // War Councils (M3, server/warCouncil.ts): the daily digests and the council log; the kill switch (?kill=1 / ?kill=0)
@@ -162,10 +165,11 @@ gameServer.onBeforeShutdown(async () => { announceUpgrade(); await wait(400); })
 // The rooms are gone by now (everyone saved and remembered where they stood): hand those spots to the next server
 // The war's and the Forge's last writes and their leases handed on (Ages: server/war.ts flushWar, server/forge.ts
 // flushForge) run alongside, given at most 5 s together.
+// With account leases on (server/accountGuard.ts), the accounts' leases go back after their last write (at most 5 s).
 gameServer.onShutdown(async () => {
   writeHandoff();
   const war = flushWar(), forge = flushForge();
-  await flushFinal(); await flushWorldFinal();
+  await flushFinal(); await Promise.race([releaseAccounts(), wait(5_000)]); await flushWorldFinal();
   await Promise.all([wait(800), Promise.race([Promise.all([war, forge]), wait(5_000)])]);
 });
 

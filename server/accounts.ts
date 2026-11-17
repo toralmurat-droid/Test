@@ -6,7 +6,9 @@ import type { MentorState } from "../shared/quests";
 // Saves live in a JSON file on the server (SAVE_FILE, default data/saves.json).
 import path from "node:path";
 import crypto from "node:crypto";
-import { jsonStore, postgresStore, readJsonFile, Store } from "./store";
+import { jsonStore, openLeases, postgresStore, readJsonFile, Store } from "./store";
+import { AccountGuard, accountLeasesOn, ACCT, type Claim } from "./accountGuard";
+import type { LeaseBackend } from "./lease";
 import { sendMail, mailReady } from "./mailer";
 import { FailDelay, isLocalIp, KeyedLimiter, LOGIN_BURST, LOGIN_PER_SEC, SIGNUP_BURST, SIGNUP_PER_SEC } from "./ratelimit";
 
@@ -87,7 +89,7 @@ export interface HeroSave {
   swMats?: Record<string, number>;
 }
 
-interface Account {
+export interface Account {
   name: string;
   salt: string;
   hash: string;
@@ -110,13 +112,90 @@ const FILE = path.resolve(process.env.SAVE_FILE ?? path.join(__dirname, "../data
 let store: Store<Account> = jsonStore<Account>(FILE);
 let accounts: Record<string, Account> = process.env.DATABASE_URL ? {} : readJsonFile<Account>(FILE);
 
-/** Opens the account store. With DATABASE_URL the accounts come from Postgres (imported once from SAVE_FILE). */
-export async function initAccounts() {
+/**
+ * One account, one server (server/accountGuard.ts): set when account leases are on (Postgres and AGE_SLOT or
+ * ACCOUNT_LEASES=1). Then memory holds only the accounts read lately: every check reads the row afresh unless this
+ * server holds the account, and only held accounts are written. Undefined: today's single server, nothing changes.
+ */
+let guard: AccountGuard | undefined;
+
+/**
+ * Opens the account store. With DATABASE_URL the accounts come from Postgres (imported once from SAVE_FILE).
+ * `shared`: tests (a store and a lease backend of their own, account leases on).
+ */
+export async function initAccounts(shared?: { store: Store<Account>; leases: LeaseBackend; holder?: string; retryMs?: number }) {
+  if (shared) {
+    store = shared.store; accounts = {}; dirty.clear();
+    guard = new AccountGuard(shared.leases, guardHooks, shared.holder, { retryMs: shared.retryMs });
+    return;
+  }
   const url = process.env.DATABASE_URL;
+  if (process.env.AGE_SLOT && !url) throw new Error("AGE_SLOT is set but DATABASE_URL is not: an Age slot needs the shared Postgres");
   if (!url) return;
   store = await postgresStore<Account>(url, FILE);
+  if (accountLeasesOn()) {
+    guard = new AccountGuard(await openLeases(url), guardHooks);
+    guard.start();
+    console.log(`Accounts: Postgres, shared (one account, one server; holder ${guard.holder})`);
+    return;
+  }
   accounts = await store.load();
   console.log(`Accounts: Postgres, ${Object.keys(accounts).length} account(s)`);
+}
+
+/** Account leases are on (server/TownRoom.ts claims and leaves accounts only then). */
+export const accountsShared = () => !!guard;
+
+/** The account as saved, unless this server holds it (then memory is newest). Shared mode only. */
+async function fresh(k: string): Promise<Account | undefined> {
+  if (guard!.inUse(k)) return accounts[k];
+  const row = await store.loadOne!(k);
+  if (row) accounts[k] = row; else delete accounts[k];
+  return row;
+}
+
+const guardHooks = {
+  async reload(k: string) { const row = await store.loadOne!(k); if (row) accounts[k] = row; },
+  settle: (k: string) => settle(k),
+  unsaved: (k: string) => dirty.has(k),
+  lost: (k: string) => { for (const f of lostListeners) f(k); },
+};
+const lostListeners: ((k: string) => void)[] = [];
+/** Another server took this account (key: lower-case name) while it was in use here: server/TownRoom.ts sends its players away. */
+export function onAccountLost(f: (k: string) => void) { lostListeners.push(f); }
+
+/**
+ * Shared mode: a hero joins (`play`) or leaves. "playing": already in a room on this server; "elsewhere": another
+ * server has the account. Off: always "mine" (nothing to do). Every answer but those two needs one `leaveAccount`.
+ */
+export async function claimAccount(name: string, play = true): Promise<Claim> {
+  return guard ? guard.claim(key(name), play) : "mine";
+}
+/** The session ends: the last one here saves the account, waits for the commit, then gives its lease back. */
+export function leaveAccount(name: string, play = true): Promise<void> {
+  return guard ? guard.leave(key(name), play) : Promise.resolve();
+}
+/** Renews the account leases now (tests; the guard's own timer does it every 15 s). */
+export const renewAccounts = () => (guard ? guard.renewAll() : Promise.resolve());
+/** Shutting down, after flushFinal: gives back every account lease (not those of accounts left unsaved). */
+export function releaseAccounts(): Promise<void> {
+  return guard ? guard.releaseAll() : Promise.resolve();
+}
+
+/**
+ * An account change from the login screen (email, reset) in shared mode: holds the account while it changes, so a
+ * server where it plays is never overwritten. Held elsewhere: refused. The change is saved before the lease goes back.
+ */
+async function edit<T>(k: string, fn: (acc: Account) => T | Promise<T>): Promise<T> {
+  const g = guard!;
+  if ((await g.claim(k)) === "elsewhere") throw new Error("Leave the game first, then try again");
+  try {
+    const acc = accounts[k];
+    if (!acc) throw new Error("No account with this name");
+    return await fn(acc);
+  } finally {
+    await g.leave(k);
+  }
 }
 
 export const NAME_RE = /^[A-Za-z0-9_ -]{3,16}$/;
@@ -157,7 +236,7 @@ export async function login(nameIn: unknown, pwIn: unknown, ip = ""): Promise<st
   if (pw.length < MIN_PASSWORD || pw.length > 64) throw new Error(`Password: at least ${MIN_PASSWORD} characters`);
   const k = key(name);
   throttle(ip, k);
-  const acc = accounts[k];
+  const acc = guard ? await fresh(k) : accounts[k];
   if (acc) {
     await check(acc, k, pw);
     return acc.name;
@@ -166,6 +245,15 @@ export async function login(nameIn: unknown, pwIn: unknown, ip = ""): Promise<st
   if (!isLocalIp(ip) && !signups.take(ip)) throw new Error("Too many new accounts from this network. Try again later.");
   const salt = crypto.randomBytes(16).toString("hex");
   const hash = await hashPw(pw, salt);
+  if (guard) {
+    // Shared: written at once, only if no server made the name meanwhile; if one did, this is a normal login try
+    const made: Account = { name, salt, hash, created: Date.now(), heroes: {} };
+    if (await store.insertNew!(k, made)) { accounts[k] = made; return name; }
+    const other = await fresh(k);
+    if (!other) throw new Error("Could not create the account. Try again.");
+    await check(other, k, pw);
+    return other.name;
+  }
   // Someone else may have taken the name while the hash was computed: then this is a normal login try
   const raced = accounts[k];
   if (raced) {
@@ -183,7 +271,7 @@ export async function peek(nameIn: unknown, pwIn: unknown, ip = ""): Promise<{ e
   const pw = String(pwIn ?? "").slice(0, 64);
   const k = key(name);
   throttle(ip, k);
-  const acc = accounts[k];
+  const acc = guard ? await fresh(k) : accounts[k];
   if (!acc) return { exists: false, heroes: {} };
   await check(acc, k, pw);
   const heroes: Record<string, number> = {};
@@ -209,12 +297,17 @@ export async function setEmail(nameIn: unknown, pwIn: unknown, emailIn: unknown,
   if (email && (email.length > 190 || !EMAIL_RE.test(email))) throw new Error("That does not look like an email address");
   const k = key(name);
   throttle(ip, k);
-  const acc = accounts[k];
+  const acc = guard ? await fresh(k) : accounts[k];
   if (!acc) throw new Error("No account with this name");
   await check(acc, k, pw);
-  if (email) acc.email = email; else delete acc.email;
-  markDirty(k);
-  return acc.email ?? "";
+  const set = (a: Account) => {
+    if (email) a.email = email; else delete a.email;
+    markDirty(k);
+    return a.email ?? "";
+  };
+  if (!guard) return set(acc);
+  // (reloaded under the lease: a password changed on another server meanwhile is checked again)
+  return edit(k, async (a) => { if (a.hash !== acc.hash) await check(a, k, pw); return set(a); });
 }
 
 /** Hide most of an email: "murat@gmail.com" -> "mu***@gmail.com". */
@@ -233,19 +326,25 @@ export async function requestReset(whoIn: unknown, ip = "", now = Date.now()): P
   if (!mailReady()) throw new Error("Password reset by email is not ready yet. Try again soon.");
   if (!isLocalIp(ip) && !resetAsks.take(ip, now)) throw new Error("Too many reset requests. Try again later.");
   const byEmail = who.includes("@");
-  const found = byEmail
+  const found = guard ? await sharedFind(who, byEmail) : byEmail
     ? Object.entries(accounts).filter(([, a]) => a.email === who).slice(0, 5)
     : accounts[key(who)]?.email ? [[key(who), accounts[key(who)]] as [string, Account]] : [];
   const lines: string[] = [];
   let to = "";
-  for (const [k, acc] of found) {
+  for (const [k, found1] of found) {
     if (now - (resetLast.get(k) ?? 0) < 60_000 || !resetPerAcc.take(k, now)) continue;
     resetLast.set(k, now);
     const code = String(crypto.randomInt(0, 1_000_000)).padStart(6, "0");
-    acc.reset = { hash: codeHash(code), until: now + RESET_MINUTES * 60_000, tries: 0 };
-    markDirty(k);
-    lines.push(`Name: ${acc.name}\nCode: ${code}`);
-    to = acc.email!;
+    const give = (acc: Account) => {
+      if (!acc.email) return false;
+      acc.reset = { hash: codeHash(code), until: now + RESET_MINUTES * 60_000, tries: 0 };
+      markDirty(k);
+      lines.push(`Name: ${acc.name}\nCode: ${code}`);
+      to = acc.email;
+      return true;
+    };
+    // (shared: an account playing on another server gets no code; the answer looks the same as ever)
+    if (!guard) give(found1); else await edit(k, give).catch(() => false);
   }
   if (!lines.length) return { sent: false };
   await sendMail({
@@ -258,6 +357,14 @@ export async function requestReset(whoIn: unknown, ip = "", now = Date.now()): P
   return byEmail ? { sent: true } : { sent: true, to: maskEmail(to) };
 }
 
+/** Shared mode: the accounts a reset asks for, read from the store (by email: an SQL lookup, not every account). */
+async function sharedFind(who: string, byEmail: boolean): Promise<[string, Account][]> {
+  if (!byEmail) { const k = key(who), a = await fresh(k); return a?.email ? [[k, a]] : []; }
+  const rows = Object.entries(await store.findBy!("email", who, 5));
+  for (const [k, a] of rows) if (!guard!.inUse(k)) accounts[k] = a;
+  return rows.map(([k, a]) => [k, guard!.inUse(k) ? accounts[k] ?? a : a]);
+}
+
 /** Set a new password with an emailed code. */
 export async function resetPassword(nameIn: unknown, codeIn: unknown, pwIn: unknown, ip = "", now = Date.now()): Promise<string> {
   const name = String(nameIn ?? "").trim();
@@ -266,23 +373,29 @@ export async function resetPassword(nameIn: unknown, codeIn: unknown, pwIn: unkn
   if (pw.length < MIN_NEW_PASSWORD || pw.length > 64) throw new Error(`New password: at least ${MIN_NEW_PASSWORD} characters`);
   const k = key(name);
   if (!isLocalIp(ip) && !loginTries.take(ip)) throw new Error("Too many tries. Wait a moment and try again.");
-  const acc = accounts[k];
-  const r = acc?.reset;
   const bad = "This code is wrong or too old. Ask for a new one.";
-  if (!acc || !r || r.until < now || r.tries >= RESET_TRIES) throw new Error(bad);
-  const ok = /^\d{6}$/.test(code) && crypto.timingSafeEqual(Buffer.from(codeHash(code), "hex"), Buffer.from(r.hash, "hex"));
-  if (!ok) {
-    r.tries++;
-    if (r.tries >= RESET_TRIES) delete acc.reset;
+  const pending = (a: Account | undefined): a is Account => !!a?.reset && a.reset.until >= now && a.reset.tries < RESET_TRIES;
+  const use = async (acc: Account | undefined) => {
+    const r = acc?.reset;
+    if (!acc || !r || r.until < now || r.tries >= RESET_TRIES) throw new Error(bad);
+    const ok = /^\d{6}$/.test(code) && crypto.timingSafeEqual(Buffer.from(codeHash(code), "hex"), Buffer.from(r.hash, "hex"));
+    if (!ok) {
+      r.tries++;
+      if (r.tries >= RESET_TRIES) delete acc.reset;
+      markDirty(k);
+      throw new Error(bad);
+    }
+    acc.salt = crypto.randomBytes(16).toString("hex");
+    acc.hash = await hashPw(pw, acc.salt);
+    delete acc.reset;
+    fails.ok(k);
     markDirty(k);
-    throw new Error(bad);
-  }
-  acc.salt = crypto.randomBytes(16).toString("hex");
-  acc.hash = await hashPw(pw, acc.salt);
-  delete acc.reset;
-  fails.ok(k);
-  markDirty(k);
-  return acc.name;
+    return acc.name;
+  };
+  if (!guard) return use(accounts[k]);
+  // Shared: the account is held only when a code is pending (a stranger's guess at a name takes no lease)
+  if (!pending(await fresh(k))) throw new Error(bad);
+  return edit(k, use);
 }
 
 export function loadHero(name: string, cls: string): HeroSave | undefined {
@@ -358,7 +471,19 @@ export function flush(): Promise<void> {
   // (the JSON store turns everything into text before its first await, which is the same snapshot)
   const changed: Record<string, Account> = {};
   if (store.kind === "postgres") for (const k of keys) if (accounts[k]) changed[k] = structuredClone(accounts[k]);
-  writing = store.save(changed, accounts)
+  // Shared (server/accountGuard.ts): only accounts this server holds are written. A refused one whose lease only lapsed
+  // (no renewal showed another holder) is kept for the next write, and its lease with it (settle stays false); one
+  // another server took is given up
+  const g = guard;
+  const save = g
+    ? store.saveFenced!(changed, g.holder, ACCT).then((refused) => {
+      const kept = refused.filter((k) => g.retryWrite(k)), lost = refused.filter((k) => !g.retryWrite(k));
+      for (const k of kept) dirty.add(k);
+      if (kept.length) console.error(`Accounts: not saved yet, the lease ran out (tried again after it is renewed): ${kept.join(", ")}`);
+      if (lost.length) console.error(`Accounts: not saved, another server has them now (or the row is missing): ${lost.join(", ")}`);
+    })
+    : store.save(changed, accounts);
+  writing = save
     .catch((e) => {
       for (const k of keys) dirty.add(k);
       console.error("Could not write saves:", e);
@@ -380,7 +505,25 @@ export async function flushFinal() {
 }
 setInterval(() => { if (dirty.size) void flush(); }, 5000).unref();
 
-/** All accounts as stored on disk (password hashes, never passwords), for the admin backup download. */
-export function allAccounts() {
-  return accounts;
+/**
+ * Waits until the account's changes are committed (a write under way that may carry them, then one more if they are
+ * still waiting). False when the writes failed: the account must not be let go yet (server/accountGuard.ts).
+ */
+async function settle(k: string): Promise<boolean> {
+  for (let i = 0; i < 8; i++) {
+    if (writing) { await writing; continue; }
+    if (!dirty.has(k)) return true;
+    await flush();
+    if (dirty.has(k)) return false; // (the write failed or was refused for now: keep the lease, try again at the renewal)
+  }
+  return !writing && !dirty.has(k);
 }
+
+/** The admin backup, every account as stored (password hashes, never passwords). Shared mode reads the table (memory holds only some), with this server's held ones on top. */
+export async function backupAccounts(): Promise<Record<string, Account>> {
+  if (!guard) return accounts;
+  const all = await store.load();
+  for (const [k, a] of Object.entries(accounts)) if (guard.inUse(k)) all[k] = a;
+  return all;
+}
+
