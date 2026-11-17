@@ -77,7 +77,7 @@ Then **move the public domain** (e.g. `play.fmtpa.ch`) from today's game service
 
 ## 4. Shifting players to a new Age
 1. Deploy the new build to the idle service (say green, `AGE_ROLE=vanguard`).
-2. Try it yourself: open `/age/green?key=<ADMIN_KEY>` (green still has weight 0). Check `/gateway/status?key=...` (each Age's `/health` and build, and the split).
+2. Try it yourself: open `/age/green?key=<ADMIN_KEY>` (green still has weight 0). Check `/gateway/status?key=...` (each Age's `/health`, build, roles and leases, and the split; see Checks).
 3. Open it to some new visitors: `AGE_SPLIT=blue=90,green=10` on the gateway (a redeploy of the gateway: players
    reconnect).
 4. When green is the Age to keep: set `AGE_ROLE=primary` on green and `draining` on blue (blue hands the war's,
@@ -93,6 +93,25 @@ Then **move the public domain** (e.g. `play.fmtpa.ch`) from today's game service
 - The gateway has no state of its own: deleting it loses nothing.
 
 ## Checks
+Both Ages at a glance: **`https://<domain>/gateway/status?key=<ADMIN_KEY>`**. The gateway and both game services must
+have the same `ADMIN_KEY` (the gateway asks each Age with its own key).
 - `https://<domain>/gateway/health` → `ok` (the gateway).
-- `https://<domain>/gateway/status?key=<ADMIN_KEY>` → `{ primary, split, backends: [{ slot, ok, build, ms }] }`.
+- `https://<domain>/gateway/status?key=<ADMIN_KEY>` → `{ primary, split, backends: [{ slot, ok, build, ms, ages }] }`:
+  each Age's `/health` and, under `ages`, its own `/admin/ages.json` (below). An Age that does not answer within 2 s
+  shows `agesError` instead (`timeout`, `status 404` = a different `ADMIN_KEY` there, `ECONNREFUSED` = down).
+- `/admin/ages.json?key=<ADMIN_KEY>` on a game server (`server/agesStatus.ts`; 404 without the key, like every
+  `/admin` page; counts and ids, no player names):
+  - `slot`, `role` (`AGE_ROLE`), `build`, `api` (`WAR_API`, `FORGE_API`), `holder` and `holders` (the lease holder ids
+    of the war, world, Forge and accounts);
+  - `roles`: `war` / `forge` `owner` | `follower` | `read` | `hidden`, `world` `owner` | `follower`; `leases`: the ones
+    this server holds now. **Exactly one Age should show `owner` and all three leases**; the other `follower` and none.
+    `read` / `hidden` means the save was written by a newer build (expected on the old Age while a newer one owns it);
+  - `online`: heroes and accounts in its rooms (counts);
+  - `accounts`: `shared` (account leases on: should be `true` on both Ages), `leasesHeld`, `inUse`, `claims` since boot
+    (`ok`, `elsewhere` = "playing on another server", `playing` = "already playing", `retries`, `lost` = taken by the
+    other Age while playing here, players sent away), `fencedRefused` (account writes refused because the lease was gone);
+  - `flush`: `dirty` (accounts not written yet), `lagMs` (age of the oldest unsaved change: normally under ~6 s; growing
+    means the database is not taking writes), `failures` since boot;
+  - `uptimeS`, `at`.
+  A rising `lost` or `fencedRefused`, or `lagMs` above a minute, needs a look at the logs.
 - `https://<domain>/health` → the build of *your* Age (header `X-Build`).

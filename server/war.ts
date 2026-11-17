@@ -1106,6 +1106,8 @@ let pulsing = false;
 let stopping = false;
 /** This server's part in the war (tests, logs). */
 export const warRole = (): WarRole => role;
+/** The war's lease as this server sees it (server/agesStatus.ts): its holder id and whether it holds it now. */
+export const warLease = () => ({ holder: lease?.holder, held: !!lease?.held(LEASE_KEY) });
 const canWrite = () => !stopping && role === "owner" && (!lease || lease.held(LEASE_KEY));
 
 /** Every LEASE.renewMs: renew the lease, take the war over when it became ours, then tick (owner) or follow. */

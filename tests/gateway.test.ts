@@ -15,6 +15,14 @@ function backend(name: string) {
   const s = http.createServer((req, res) => {
     seen.push(`${name} ${req.method} ${req.url}`);
     if (req.url === "/hang") return; // never answers
+    // The Ages status (server/agesStatus.ts): blue answers when the gateway's key is right, green never answers
+    if (req.url?.startsWith("/admin/ages.json")) {
+      if (name === "green") return;
+      const ok = new URL(req.url, "http://x").searchParams.get("key") === "a-long-admin-key";
+      res.writeHead(ok ? 200 : 404, { "content-type": "application/json" });
+      res.end(ok ? JSON.stringify({ slot: name, roles: { war: "owner" } }) : "");
+      return;
+    }
     let body = "";
     req.on("data", (c) => (body += c));
     req.on("end", () => {
@@ -232,10 +240,15 @@ test("/gateway/health answers itself; /gateway/status needs the admin key", asyn
   assert.equal((await fetch(`${g.url}/gateway/status?key=wrong-admin-key`)).status, 404);
   r = await fetch(`${g.url}/gateway/status?key=a-long-admin-key`);
   assert.equal(r.status, 200);
-  const s = await r.json() as { primary: string; split: Record<string, number>; backends: { slot: string; ok: boolean; build: string }[] };
+  const s = await r.json() as { primary: string; split: Record<string, number>; backends: { slot: string; ok: boolean; build: string; ages?: any; agesError?: string }[] };
   assert.equal(s.primary, "blue");
   assert.deepEqual(s.split, { blue: 90, green: 10 });
   assert.deepEqual(s.backends.map((b) => [b.slot, b.ok, b.build]), [["blue", true, "blue-build"], ["green", true, "green-build"]]);
+  // Each Age's own status comes along (same key); one that does not answer within 2 s is reported, not waited for
+  assert.deepEqual(s.backends[0].ages, { slot: "blue", roles: { war: "owner" } });
+  assert.equal(s.backends[0].agesError, undefined);
+  assert.equal(s.backends[1].ages, undefined);
+  assert.equal(s.backends[1].agesError, "timeout");
   // /health itself is the player's Age's (client/src/reconnect.ts reads its X-Build)
   r = await fetch(`${g.url}/health`, { headers: { cookie: "ptb_age=green" } });
   assert.equal(r.headers.get("x-build"), "green-build");

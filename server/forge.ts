@@ -252,6 +252,8 @@ let pulsing = false;
 let stopping = false;
 /** This server's part in the forge (tests, logs, /admin/forge). */
 export const forgeRole = (): ForgeRole => role;
+/** The forge's lease as this server sees it (server/agesStatus.ts): its holder id and whether it holds it now. */
+export const forgeLease = () => ({ holder: lease?.holder, held: !!lease?.held(LEASE_KEY) });
 const canWrite = () => !stopping && role === "owner" && (!lease || lease.held(LEASE_KEY));
 
 /** Stamps of the forge writes this process made (ForgeSave.wrote; NONE: a row without one, as loaded). Trimmed to the last 64. */

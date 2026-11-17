@@ -25,6 +25,7 @@ const COOKIE_AGE = 30 * 24 * 3600; // s
 const CONNECT_MS = 5_000;
 const IDLE_MS = 60_000; // an HTTP exchange silent this long (once connected) is cut
 const HEAD_MAX = 16_384;
+const AGES_MS = 2_000; // /gateway/status: how long each backend's /admin/ages.json may take
 const SLOT_RE = /^[a-z0-9][a-z0-9_-]{0,23}$/;
 
 /** `GATEWAY_TARGETS="blue=http://host:port,green=http://host:port"`; throws on a bad entry so a typo fails at boot. */
@@ -173,6 +174,22 @@ export function createGateway(cfg: GatewayConfig): http.Server {
     r.on("timeout", () => r.destroy(new Error("timeout")));
     r.on("error", (e) => ok({ slot: b.slot, url: b.url.origin, ok: false, error: (e as NodeJS.ErrnoException).code ?? e.message, ms: Date.now() - t0 }));
   });
+  /** A backend's own status (server/agesStatus.ts), asked with the same admin key; a failure is reported, never thrown. */
+  const ages = (b: Backend) => new Promise<{ ages?: unknown; agesError?: string }>((ok) => {
+    const path = `/admin/ages.json?key=${encodeURIComponent(cfg.adminKey ?? "")}`;
+    const r = http.get({ host: b.url.hostname, port: port(b), path, agent: false, timeout: AGES_MS }, (res) => {
+      let body = "";
+      res.setEncoding("utf8");
+      res.on("data", (c) => { body += c; if (body.length > 65_536) r.destroy(new Error("too big")); });
+      res.on("end", () => {
+        if (res.statusCode !== 200) return ok({ agesError: `status ${res.statusCode}` });
+        try { ok({ ages: JSON.parse(body) }); } catch { ok({ agesError: "bad json" }); }
+      });
+      res.on("error", (e) => ok({ agesError: e.message }));
+    });
+    r.on("timeout", () => r.destroy(new Error("timeout")));
+    r.on("error", (e) => ok({ agesError: (e as NodeJS.ErrnoException).code ?? e.message }));
+  });
   const json = (res: http.ServerResponse, code: number, body: unknown) => {
     res.writeHead(code, { "content-type": "application/json", "cache-control": "no-store" });
     res.end(JSON.stringify(body));
@@ -183,7 +200,8 @@ export function createGateway(cfg: GatewayConfig): http.Server {
     if (u.pathname === "/gateway/health") { res.writeHead(200, { "content-type": "text/plain", "cache-control": "no-store" }); res.end("ok"); return; }
     if (u.pathname === "/gateway/status") {
       if (!adminOk(u)) { res.writeHead(404); res.end(); return; }
-      void Promise.all(cfg.targets.map(probe)).then((backends) => json(res, 200, { primary: cfg.primary, split: cfg.split, backends }));
+      // Each Age's /health and its own /admin/ages.json (roles, leases, players, flush lag), side by side
+      void Promise.all(cfg.targets.map(async (b) => { const [h, a] = await Promise.all([probe(b), ages(b)]); return { ...h, ...a }; })).then((backends) => json(res, 200, { primary: cfg.primary, split: cfg.split, backends }));
       return;
     }
     const age = /^\/age\/([^/]+)\/?$/.exec(u.pathname);
