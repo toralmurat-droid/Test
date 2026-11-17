@@ -1,5 +1,6 @@
 {
   "date": "2026-11-17",
+  "patch": 310,
   "title": "Siege works rebuilt in 3D",
   "changes": [
     "The necromancers' half-built catapults, battering rams and siege towers, their lumber piles and sawhorses are now 3D models baked to pixel art: real depth, light and shadow instead of flat drawings.",
