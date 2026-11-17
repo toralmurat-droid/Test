@@ -24,4 +24,5 @@ RUN mkdir -p /app/data
 EXPOSE 2567
 # Run node directly (not through npx) so Railway's stop signal reaches the game: it then saves everyone before exiting.
 # The server is pre-bundled into one plain JavaScript file by `npm run build` (faster ticks, less memory than tsx).
-CMD ["node", "--enable-source-maps", "server-dist/index.cjs"]
+# server-dist/start.cjs loads that game server, or the Ages gateway when GATEWAY_TARGETS is set (docs/ages-setup.md).
+CMD ["node", "--enable-source-maps", "server-dist/start.cjs"]
