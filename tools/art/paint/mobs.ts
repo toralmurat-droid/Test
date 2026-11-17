@@ -5,7 +5,8 @@ import { createCanvas } from "@napi-rs/canvas";
 import { addChampPose, MOB_POSES, posed, setPainted, type Dir } from "../characters";
 import { C2, P, blobPath, css, ellipseP, fillShape, glow, line, vol } from "./brush";
 import { lastMob3D, lastRig, MOB3D, pixelAlpha, pixelize, setMob3D, shrink } from "./body";
-import { paintRaider, RAIDER_H, RAIDER_W } from "./raiders";
+import { RAIDER_G, RAIDER_H, RAIDER_W } from "./raiders";
+import { raider } from "./raiders3d";
 import { HOUND_H, HOUND_W, WRAITH_H, WRAITH_W } from "./moors";
 import { RATTLER_H, RATTLER_W, VULTURE_H, VULTURE_PAL, VULTURE_W, WARHOUND_H, WARHOUND_PAL, WARHOUND_W } from "./badlands";
 import { CROWNCROW_PAL, GILDHOUND_PAL } from "./crown";
@@ -303,7 +304,7 @@ export function buildMobs(out: string, ONLY?: string[]) {
     ...WAR_TUNNELS.map((k) => ({ key: `mob_${k}`, w: TUNNEL_W, h: TUNNEL_H, frames: TUNNEL_FRAMES, draw: (c: C2, f: number) => paintTunnel(c, SH, k, f) })),
     beast3D("mob_scorpion", 36, 30, 27, (pose, f) => scorpion(pose, f)),
     // the Night Raiders (raiders.ts): one sheet for each of the Seven
-    ...RAIDERS.map((R) => ({ key: `mob_nightraider_${R.key}`, w: RAIDER_W, h: RAIDER_H, draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintRaider(c, SH, R, dir as "down" | "up" | "right", pose, f); } })),
+    ...RAIDERS.map((R) => beast3D(`mob_nightraider_${R.key}`, RAIDER_W, RAIDER_H, RAIDER_G, (pose, f) => raider(R, pose, f))),
     // champion details (shared/champions.ts): one small painted sheet per affix, laid over the monster by the client
     ...AFFIX_KEYS.filter((k) => AFFIXES[k].overlay).map((k) => ({ key: `mob_champ_${k}`, w: CHAMP_W, h: CHAMP_H, frames: 2, draw: (c: C2, f: number) => champOverlay(c, k, f) })),
     // wearing 1-4 harvested skeletons (look.ts demon1..4)
