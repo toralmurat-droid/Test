@@ -4,6 +4,11 @@
  * players' valor of the last ten minutes is added, and shared/war/rules.ts moves the fronts. The state is saved after
  * every tick (Postgres table kv, or data/war.json) so a deploy never resets the war. The save names its territories, so
  * a new land or zone remaps the war by name (migrateWar) instead of restarting it.
+ *
+ * Ages (roadmap M5, docs/ages-progress.md): several servers may share the save. Only the holder of lease `lease:war`
+ * (server/lease.ts: a primary Age; always, without a shared store) ticks and writes it; the others follow the saved row
+ * and pass each tick on to their rooms, their heroes' valor reaching the owner through a queue per server. A save of a
+ * newer version (shared/war/api.ts) is never written over: shown read-only when it allows, else hidden.
  */
 import { TILE } from "../shared/constants";
 import { CLANS, CLAN_KEYS, type ClanKey } from "../shared/war/clans";
@@ -27,6 +32,9 @@ import {
 import { frontStep } from "../shared/war/siege";
 import { TOWN, TOWNS, townById, townCounts, townPatron, townStep, townsView, type TownChange, type TownState, type TownsMsg } from "../shared/war/towns";
 import { openKv, type Kv } from "./store";
+import { randomUUID } from "node:crypto";
+import { buildId, LEASE, Leases } from "./lease";
+import { readable, WAR_API, warAccess } from "../shared/war/api";
 import { cleanCrown, crownClock, crownTick, crownValor, crownView, type CrownSave } from "./warCrown";
 import { cleanCouncil, councilClock, councilOnNewMap, leaderOrders, noteOrders, proclaimLine, takeProclamations, type CouncilSave } from "./warCouncil";
 
@@ -56,7 +64,8 @@ const GROW_NEWS = 3;
 export interface ColSave { fallen: number; halt: number; met?: "live" | "sim" }
 export interface BattleSave { list: Battle[]; day: number; n: number; meets: number; pitched: number }
 interface Saved {
-  v: 1; state: WarState; minds: Record<ClanKey, Mind>; next: number; log: WarEvent[]; names?: string[]; rel?: (number | null)[];
+  /** The save's version (shared/war/api.ts WAR_API; `minReader`: the oldest version that may show it, set by newer builds). */
+  v: number; minReader?: number; state: WarState; minds: Record<ClanKey, Mind>; next: number; log: WarEvent[]; names?: string[]; rel?: (number | null)[];
   ahead?: Partial<Record<ClanKey, Orders>>; cols?: Record<string, ColSave>; battles?: BattleSave;
   /** W6: each capturable town's holder and contest (shared/war/towns.ts). Optional: read through cleanTowns, dropped on a map change. */
   towns?: Record<string, TownState>;
@@ -64,6 +73,10 @@ interface Saved {
   crown?: CrownSave;
   /** War Councils (M3, server/warCouncil.ts): intents, pending remote orders, the council log, daily digests. Optional: read through cleanCouncil; intents dropped on a map change. */
   council?: CouncilSave;
+  /** Ages (M5): per following server (holder id), the last batch of its valor queue the owner counted. Optional. */
+  drained?: Record<string, number>;
+  /** Ages (M5): a stamp of the write (unique per write): a server that sees its own last stamp knows nobody wrote since. Optional. */
+  wrote?: string;
 }
 
 const KEY = "war";
@@ -105,13 +118,13 @@ function rng(seed: number) {
 const namesNow = () => TERRITORIES.map((t) => t.name);
 
 function fresh(now: number): Saved {
-  return { v: 1, state: newWar(), minds: newMinds(), next: now + WAR.tickMs, log: [], names: namesNow() };
+  return { v: WAR_API, state: newWar(), minds: newMinds(), next: now + WAR.tickMs, log: [], names: namesNow() };
 }
 
 /** A saved war that is whole: every per-territory list the same length (any length: the map may have changed since). */
 function wellFormed(s: Saved | undefined): s is Saved {
   const st = s?.state, n = st?.owner?.length;
-  return !!s && s.v === 1 && !!st && Number.isFinite(s.next) && Array.isArray(s.log) && Array.isArray(st.owner) && n! > 0
+  return !!s && readable(s) && !!st && Number.isFinite(s.next) && Array.isArray(s.log) && Array.isArray(st.owner) && n! > 0
     && [st.control, st.fort, st.siege, st.pressure].every((a) => Array.isArray(a) && a.length === n)
     && (s.names === undefined || (Array.isArray(s.names) && s.names.length === n && s.names.every((x) => typeof x === "string") && new Set(s.names).size === n))
     && st.owner.every((k) => !!CLANS[k]) && CLAN_KEYS.every((k) => Number.isFinite(st.army?.[k]) && !!s.minds?.[k]);
@@ -213,47 +226,87 @@ function load(got: Saved | undefined): Saved | undefined {
   return old && migrateWar(got, old, names);
 }
 
-/** Loads the war (or starts it) and starts the clock. Safe to call more than once. */
-export async function startWar(store?: Kv) {
+/**
+ * Loads the war and starts the clock (every LEASE.renewMs: renew the lease, then tick as the owner or follow the
+ * owner's save). `leases`: tests. Safe to call more than once.
+ */
+export async function startWar(store?: Kv, leases?: Leases) {
   if (timer) return;
+  stopping = false;
   kv = store ?? (await openKv());
+  lease = (leases ?? new Leases(kv.leases)).want(LEASE_KEY);
+  await lease.renew();
   // A load error stops the start (like the accounts): never let a fresh war overwrite a saved one we failed to read
-  const got = await kv.get<Saved>(KEY), war = load(got);
-  saved = war ?? fresh(Date.now());
+  if (lease.held(LEASE_KEY)) await takeOver(Date.now());
+  else await follow(Date.now());
+  timer = setInterval(() => { void pulse(Date.now()); }, LEASE.renewMs);
+  timer.unref?.();
+}
+
+/**
+ * This server becomes the war's owner (at the start, or on taking the lease over): reads the saved war as it stands,
+ * snapshots it once per build (`war-pre-<build>`, only with a shared store: the owner may change), and goes on with
+ * it. A save of a newer version is never written over (read-only or hidden, and the lease given back); one that cannot
+ * be read at all is kept aside and a new war begins, as before the Ages.
+ */
+async function takeOver(now: number) {
+  const got = await kv!.get<Saved>(KEY), access = got === undefined ? undefined : warAccess(got);
+  if (stopping) return;
+  if (access === "read" || access === "hide") { adoptNewer(got!, access); await lease?.release(); return; }
+  if (saved && role !== "owner" && got && ownStamp(got)) { // (the lease is back, e.g. after a database outage, and nobody wrote meanwhile)
+    role = "owner"; seenRow = "";
+    console.log("War: the war's lease is back and nobody wrote the war meanwhile: going on with this server's war (unsaved changes kept)");
+    const mine = pendingValor; pendingValor = [];
+    for (const [t, k, a, by] of mine) addValor(t, k, a, by);
+    return;
+  }
+  if (got !== undefined && lease?.shared) {
+    const pre = `${KEY}-pre-${buildId().replace(/[^a-z0-9_-]/gi, "_").slice(0, 80)}`;
+    if (kv!.insertIfAbsent) await kv!.insertIfAbsent(pre, got);
+    else if ((await kv!.get(pre)) === undefined) await kv!.set(pre, got);
+    if (stopping) return;
+  }
+  if (got) ours.add(typeof got.wrote === "string" ? got.wrote : NONE); // (the row as loaded: still this server's war until someone else writes)
+  const war = load(got), was = role;
+  saved = war ?? fresh(now);
   if (!war) {
-    if (got) await kv.set(`${KEY}-old-${Date.now()}`, got); // a war that cannot be read: kept aside, not lost
+    if (got) await kv!.set(`${KEY}-old-${Date.now()}`, got); // a war that cannot be read: kept aside, not lost
     console.log(got ? "War: the saved war cannot be read or mapped to this map, a new war begins (old one kept)" : "War: a new war begins");
   } else {
     const old = got!.names ?? unnamed(got!.state.owner.length, war.names!);
     if (old && (old.length !== war.names!.length || old.some((n, i) => n !== war.names![i]))) {
-      await kv.set(`${KEY}-old-${Date.now()}`, got); // the map changed: the remapped war goes on, the old save is kept aside
+      await kv!.set(`${KEY}-old-${Date.now()}`, got); // the map changed: the remapped war goes on, the old save is kept aside
       const kept = war.names!.filter((n) => old.includes(n)).length;
       console.log(`War: the map changed (${kept} territories kept, ${war.names!.length - kept} new, ${old.length - kept} gone)`);
     }
     console.log(`War: tick ${saved.state.tick}, next in ${Math.max(0, Math.round((saved.next - Date.now()) / 1000))} s`);
   }
+  role = "owner"; seenRow = "";
+  if (was !== "owner") console.log(`War: ${lease?.holder ?? "this server"} ticks the war`);
   relate(saved.rel ?? []);
   cleanBattles();
   cleanTowns(); // (W6)
   saved.crown = cleanCrown(saved.crown); // (Crown PR4)
   saved.council = cleanCouncil(saved.council); // (M3)
   try { lookAhead(saved.next - WAR.tickMs); } catch (e) { console.error("War: the orders ahead could not be given:", e); } // (the next tick tries again)
-  timer = setInterval(() => { step(Date.now()).catch((e) => console.error("War: tick failed:", e)); }, 15_000);
-  timer.unref?.();
+  const mine = pendingValor; pendingValor = []; // (valor heroes earned here while following: counted at once)
+  for (const [t, k, a, by] of mine) addValor(t, k, a, by);
 }
 
 export function stopWar() { if (timer) clearInterval(timer); timer = undefined; }
 
 /** Runs every war tick that is due (at most CATCH_UP after downtime). Exported for tests. */
 export async function step(now: number) {
-  if (!saved) return;
+  if (!saved || role !== "owner") return;
   settleMeetings(now);
   try { battleClock(now); } catch (e) { console.error("War: battles failed:", e); } // (with no room open, the battles go on here)
   try { crownClock(now); } catch (e) { console.error("War: the Reckoning failed:", e); } // (Crown PR4: its warning, start, standings and close)
   // War Councils (M3): the sessions for the war day of the next orders, before the ticks that give them
   if (now >= saved.next) try { await councilClock(now); } catch (e) { console.error("War: the councils failed (the doctrine leads):", e); }
-  if (!saved) return;
+  if (!saved || stopping) return;
   if (now < saved.next) { if (dirtyAt && now - lastSave >= COLUMN.saveMs) await save(now); return; }
+  await drainValor(); // (Ages: the valor other servers' heroes earned, into this tick)
+  if (stopping) return;
   const late = Math.floor((now - saved.next) / WAR.tickMs);
   if (late >= CATCH_UP) saved.next = now - (CATCH_UP - 1) * WAR.tickMs;
   const events: WarEvent[] = [], news: WarNews = {}, rallyWas = rallyClan(saved.state);
@@ -278,11 +331,24 @@ export async function step(now: number) {
 /** War saves run one after another, each writing the war as it stands then: two writes in flight could land out of
  * order (a Postgres pool, one tmp file) and an older one would bring back a Reckoning's pay already claimed. */
 let saving: Promise<void> = Promise.resolve();
+/** Every war write (the war, a valor queue) goes through here: one after another, never two in flight. */
+function chain(write: () => Promise<void>) { saving = saving.then(write, write); return saving; }
 async function save(now: number) {
   dirtyAt = 0; lastSave = now;
-  const write = async () => { if (kv) await kv.set(KEY, saved).catch((e) => console.error("War: could not save:", e)); };
-  saving = saving.then(write, write);
-  await saving;
+  // (checked when the write runs: a server that lost the lease meanwhile, or follows, never writes the war)
+  await chain(async () => { if (kv && canWrite()) await kv.set(KEY, stamped(saved!)).catch((e) => console.error("War: could not save:", e)); });
+}
+
+/** Stamps of the war writes this process made (Saved.wrote; NONE: a row without one, as loaded). Trimmed to the last 64. */
+const ours = new Set<string>(), NONE = "-";
+const ownStamp = (got: Saved) => ours.has(typeof got.wrote === "string" ? got.wrote : NONE);
+/** The war with a new stamp of this process, about to be written. */
+function stamped(s: Saved): Saved {
+  const id = randomUUID();
+  ours.add(id);
+  if (ours.size > 64) ours.delete(ours.values().next().value!);
+  s.wrote = id;
+  return s;
 }
 
 function tickOnce(at: number, news: WarNews): WarEvent[] {
@@ -327,6 +393,11 @@ function tickOnce(at: number, news: WarNews): WarEvent[] {
 export function addValor(t: number, k: ClanKey, amount: number, by?: string): boolean {
   if (!saved || !(t >= 0 && t < TERRITORIES.length) || !CLANS[k] || !(amount > 0)) return false;
   const v = Math.min(amount, WAR.valorPerAdd);
+  if (role !== "owner") { // (Ages: another server ticks: queued for it, server/war.ts pushValor)
+    if (pendingValor.length >= VALOR_PENDING_MAX) return false;
+    pendingValor.push(typeof by === "string" ? [t, k, v, by] : [t, k, v]);
+    return true;
+  }
   valor[t][k] = (valor[t][k] ?? 0) + v;
   crownValor(t, k, v, by);
   return true;
@@ -339,7 +410,7 @@ export function addValor(t: number, k: ClanKey, amount: number, by?: string): bo
  * snapshot, and the war is saved. `hero`: the sacker's name for the log. Undefined when nothing changed.
  */
 export function strikeHold(t: number, k: ClanKey | undefined, half: boolean, hero = "A hero", now = Date.now()): { control: number; siege: boolean } | undefined {
-  if (!saved) return undefined;
+  if (!saved || role !== "owner") return undefined; // (Ages: only the owner changes the war between ticks)
   const s = saved.state, from = s.owner[t], r = from && sackHold(s, t, k, half);
   if (!r) return undefined;
   const land = TERRITORIES[t].name, name = (c: ClanKey) => CLANS[c].name;
@@ -350,7 +421,7 @@ export function strikeHold(t: number, k: ClanKey | undefined, half: boolean, her
   if (!process.env.NODE_TEST_CONTEXT) for (const e of events) console.log(`War: ${e.text}`);
   const view = viewOf(saved);
   listeners.forEach((f) => { try { f(view, events, {}); } catch (e) { console.error("War listener:", e); } });
-  kv?.set(KEY, saved).catch((e) => console.error("War: could not save:", e));
+  if (canWrite()) kv?.set(KEY, stamped(saved)).catch((e) => console.error("War: could not save:", e));
   return { control: r.control, siege: !!r.siege };
 }
 
@@ -531,7 +602,7 @@ const pitchedLeft = (bs: BattleSave, now: number) => pitchedTimes(battleDay(now)
  * step's quota. Idempotent.
  */
 export function battleClock(now = Date.now()) {
-  if (!saved || !BATTLE.live) return;
+  if (!saved || !BATTLE.live || role !== "owner") return; // (Ages: a follower shows the owner's battles as saved)
   const bs = book(now), s = saved.state;
   const slot = pitchedSlot(now);
   if (slot.at - now <= BATTLE.noticeMs && slot.at > bs.pitched) {
@@ -773,12 +844,28 @@ export const warPlan = (k: ClanKey): WarPlan | undefined => lastPlans[k];
 /** Called after every war tick with the new view and what happened. Returns an unsubscribe function. */
 export function onWar(f: (v: WarView, events: WarEvent[], news: WarNews) => void) { listeners.add(f); return () => { listeners.delete(f); }; }
 
-/** Blocking save at shutdown (JSON store only; Postgres saves after every tick anyway). */
-export function flushWar() { if (saved && kv?.setSync) try { kv.setSync(KEY, saved); } catch (e) { console.error("War: could not save:", e); } }
+/**
+ * Blocking save at shutdown (JSON store only; Postgres saves after every tick anyway). With a shared store (Ages) the
+ * clock stops and a beat under way stops at its next step (`stopping`: no takeover, tick or save after it), the war is
+ * written one last time (a follower writes its last valor instead) and the lease given back, so the next server takes
+ * over at once. Resolves when that is done (server/index.ts waits for it, capped).
+ */
+export function flushWar(): Promise<void> {
+  const own = !!saved && canWrite();
+  if (own && kv?.setSync) try { kv.setSync(KEY, stamped(saved!)); } catch (e) { console.error("War: could not save:", e); }
+  if (!lease?.shared) return Promise.resolve();
+  stopping = true; stopWar();
+  const l = lease, snap = saved, store = kv;
+  const last = own && snap && store && !store.setSync ? chain(() => store.set(KEY, stamped(snap)).catch((e) => console.error("War: could not save:", e)))
+    : pushValor(Date.now()).catch((e) => console.error("War: could not write the valor queue:", e));
+  if (role === "owner") role = "follower";
+  return last.then(() => saving).then(() => l.release());
+}
 
 /** Tests: start from a given state without a store or a clock. */
 export function _resetWar(s?: Saved, store?: Kv) {
-  stopWar(); saved = s ?? fresh(Date.now()); saved.names ??= namesNow(); kv = store; valor = TERRITORIES.map(() => ({})); lastOrders = undefined; lastStrikes = []; lastPlans = {}; lastRaided = []; relate(saved.rel ?? []);
+  stopWar(); saved = s ?? fresh(Date.now()); saved.names ??= namesNow(); kv = store;
+  role = "owner"; lease = undefined; seenRow = ""; pendingValor = []; queue = undefined; pulsing = false; stopping = false; ours.clear(); valor = TERRITORIES.map(() => ({})); lastOrders = undefined; lastStrikes = []; lastPlans = {}; lastRaided = []; relate(saved.rel ?? []);
   marches = []; paths.clear(); meets = undefined; seenLive.clear(); halting.clear(); joined.clear(); dirtyAt = 0; colVersion++;
   pendingLive.clear(); fielded.clear(); captainRoom.clear(); bannerReports.clear(); scoredWin.clear(); heroCaps.clear(); clanCaps.clear(); battleNews.length = 0; cleanBattles(); battleVer++;
   heldGate.clear(); cleanTowns(); townVer++; // (W6)
@@ -924,7 +1011,7 @@ export const _townsHeld = () => [...heldGate];
  */
 export function townClaim(id: string, k: ClanKey, hero = "A hero", now = Date.now()): boolean {
   const st = saved?.towns?.[id], p = townPatron(id);
-  if (!saved || !TOWN.live || !st?.c || st.c.by !== k || p < 0) return false;
+  if (!saved || role !== "owner" || !TOWN.live || !st?.c || st.c.by !== k || p < 0) return false; // (Ages: the owner only)
   const from = st.k;
   saved.towns![id] = { k };
   heldGate.delete(id);
@@ -936,7 +1023,7 @@ export function townClaim(id: string, k: ClanKey, hero = "A hero", now = Date.no
   townVer++;
   const view = viewOf(saved);
   listeners.forEach((f) => { try { f(view, [e], {}); } catch (err) { console.error("War listener:", err); } });
-  kv?.set(KEY, saved).catch((err) => console.error("War: could not save:", err));
+  if (canWrite()) kv?.set(KEY, stamped(saved)).catch((err) => console.error("War: could not save:", err));
   return true;
 }
 /** Tests: set a town's state as it is (no checks). */
@@ -996,6 +1083,169 @@ export function warCouncilChanged(now: number, atOnce = false) {
 /** When the next war tick is due (ms), or undefined before the war is loaded. */
 export const warNextTick = (): number | undefined => saved?.next;
 
+// ---- Ages (roadmap M5: two builds side by side on one Postgres; docs/ages-progress.md) ------------------------------------
+
+/**
+ * This server's part in the war: the "owner" ticks and writes it (holder of lease `lease:war`; always, without a shared
+ * store); a "follower" (another server ticks) reads the saved war every LEASE.renewMs and passes each tick on to its
+ * rooms; "read" shows a war saved by a newer build that allows it, "hidden" one that does not. Only the owner writes.
+ */
+export type WarRole = "owner" | "follower" | "read" | "hidden";
+let role: WarRole = "owner";
+let lease: Leases | undefined;
+const LEASE_KEY = "lease:war";
+/** The saved row as a follower last read it (JSON text: any difference is a change). */
+let seenRow = "";
+let pulsing = false;
+/** Shutting down (flushWar): a beat under way takes over, ticks and saves nothing more. */
+let stopping = false;
+/** This server's part in the war (tests, logs). */
+export const warRole = (): WarRole => role;
+const canWrite = () => !stopping && role === "owner" && (!lease || lease.held(LEASE_KEY));
+
+/** Every LEASE.renewMs: renew the lease, take the war over when it became ours, then tick (owner) or follow. */
+async function pulse(now: number) {
+  if (pulsing || stopping || !lease || !kv) return;
+  pulsing = true;
+  try {
+    if (role === "read" || role === "hidden") await lease.release(); // (a newer war: this build never competes for it)
+    else await lease.renew();
+    if (stopping) return;
+    const mine = lease.held(LEASE_KEY);
+    if (role === "owner" && !mine) { role = "follower"; seenRow = ""; console.log("War: lost the war's lease (another server holds it, or the database cannot be reached): following, not writing"); }
+    if (role === "follower" && mine) await takeOver(now);
+    if (stopping) return;
+    if (role === "owner") await step(now);
+    else await follow(now);
+  } catch (e) { console.error("War: tick failed:", e); }
+  finally { pulsing = false; }
+}
+/** Tests: one clock beat as the timer would run it. */
+export const _pulse = (now = Date.now()) => pulse(now);
+
+/** A save of a newer version: shown read-only when it allows this build (`minReader`), else hidden. Never written. */
+function adoptNewer(got: Saved, access: "read" | "hide") {
+  const war = access === "read" ? load(got) : undefined, next: WarRole = war ? "read" : "hidden";
+  if (role !== next) console.log(`War: the saved war is version ${got.v} (this build knows ${WAR_API}): ${war ? "shown read-only" : "hidden"}, never written`);
+  role = next; saved = war;
+}
+
+/**
+ * Not the owner: read the saved war; when it changed, take it as it is and tell the listeners what the owner's tick (or
+ * a sack, a claim) brought: the new log lines, the Rally passing, the Night Raiders' strike (computed on the state the
+ * tick started from, as the owner did). Then write this server's valor queue.
+ */
+async function follow(now: number) {
+  const got = await kv!.get<Saved>(KEY), row = got === undefined ? "" : JSON.stringify(got), changed = row !== seenRow;
+  if (stopping) return;
+  const access = got === undefined ? undefined : warAccess(got), prev = saved;
+  seenRow = row;
+  if (access === "read" || access === "hide") { if (changed || role === "owner" || role === "follower") adoptNewer(got!, access); }
+  else {
+    if (role !== "follower") console.log(`War: ${lease?.holder ?? "this server"} follows the war (another server ticks it)`);
+    role = "follower";
+    const war = changed && !(saved && got && ownStamp(got)) ? load(got) : undefined; // (our own last write: keep ours, it may be newer)
+    if (war) saved = war;
+    else if (changed && got !== undefined) console.error("War: the saved war cannot be read here, showing the last one read");
+  }
+  if (saved && saved !== prev) {
+    relate(saved.rel ?? []);
+    cleanBattles(); cleanTowns();
+    saved.crown = cleanCrown(saved.crown); saved.council = cleanCouncil(saved.council);
+    const ticked = !prev || prev.state.tick !== saved.state.tick;
+    if (prev && ticked && prev.ahead) { lastOrders = prev.ahead; lastStrikes = tunnelStrikes(prev.state, prev.ahead); } // (the orders ahead were the tick's)
+    if (ticked) try { lookAhead(saved.next - WAR.tickMs); } catch (e) { console.error("War: the orders ahead could not be read:", e); }
+    battleVer++; townVer++; colVersion++;
+    if (prev) told(prev, ticked);
+  }
+  await pushValor(now);
+}
+
+const sameEvent = (a: WarEvent, b: WarEvent) => a.at === b.at && a.tick === b.tick && a.kind === b.kind && a.t === b.t && a.text === b.text;
+/** The listeners hear what changed from `prev` to the saved war now (a follower: the owner's tick or news). */
+function told(prev: Saved, ticked: boolean) {
+  const s = saved!, last = prev.log[prev.log.length - 1];
+  let from = 0;
+  if (last) { from = s.log.length; for (let i = s.log.length - 1; i >= 0; i--) if (sameEvent(s.log[i], last)) { from = i + 1; break; } }
+  const events = from < s.log.length ? s.log.slice(from) : last ? s.log.filter((e) => e.at > last.at) : [];
+  if (!ticked && !events.length) return; // (columns, battles, councils only: the rooms read those as they go)
+  const news: WarNews = {};
+  if (ticked) {
+    const rallyWas = rallyClan(prev.state), rallyNow = rallyClan(s.state);
+    if (rallyNow !== rallyWas) news.rally = { clan: rallyNow, was: rallyWas };
+    const raid = s.state.tick === prev.state.tick + 1 ? nightRaid(prev.state, warPhase(prev.next)) : undefined;
+    lastRaided = raid?.ts ?? [];
+    if (raid?.ts.length) news.raid = { clan: raid.clan, ts: [...raid.ts] };
+  }
+  const view = viewOf(s);
+  listeners.forEach((f) => { try { f(view, events, news); } catch (e) { console.error("War listener:", e); } });
+}
+
+/** A hero's valor on a server that does not tick: [territory, clan, amount, hero]. */
+type ValorAdd = [number, ClanKey, number, string?];
+/** A server's valor queue (kv key `war-valor:<holder>`): written by that server only, counted by the owner by `seq`. */
+interface ValorQueue { holder: string; seq: number; batches: { seq: number; adds: ValorAdd[] }[] }
+const VALOR_KEY = "war-valor:";
+/** Most valor adds a follower keeps unwritten, and most batches its queue keeps while the owner does not count them. */
+const VALOR_PENDING_MAX = 20_000, VALOR_BATCHES_MAX = 240;
+let pendingValor: ValorAdd[] = [];
+let queue: ValorQueue | undefined;
+
+const int0 = (x: unknown) => (typeof x === "number" && Number.isInteger(x) && x >= 0 ? x : undefined);
+/** A raw valor queue cleaned (any server's: never trusted), or undefined when it is not one. */
+function cleanQueue(raw: unknown): ValorQueue | undefined {
+  const r = raw && typeof raw === "object" ? (raw as Partial<ValorQueue>) : undefined;
+  if (!r || typeof r.holder !== "string" || !r.holder || r.holder.length > 200 || int0(r.seq) === undefined || !Array.isArray(r.batches)) return undefined;
+  const batches = r.batches.flatMap((b) => {
+    const seq = int0(b?.seq);
+    if (seq === undefined || !Array.isArray(b.adds)) return [];
+    const adds = b.adds.flatMap((a): ValorAdd[] => (Array.isArray(a) && typeof a[0] === "number" && typeof a[1] === "string" && typeof a[2] === "number"
+      ? [typeof a[3] === "string" ? [a[0], a[1] as ClanKey, a[2], a[3].slice(0, 64)] : [a[0], a[1] as ClanKey, a[2]]] : []));
+    return [{ seq, adds }];
+  });
+  return { holder: r.holder, seq: r.seq!, batches };
+}
+
+/** A follower writes its valor since the last beat as a new batch, dropping the batches the owner has counted. */
+async function pushValor(_now: number) {
+  if (!kv || !lease || role === "owner") return;
+  const key = VALOR_KEY + lease.holder, seen = saved?.drained?.[lease.holder] ?? 0;
+  if (!queue) {
+    const raw = await kv.get<ValorQueue>(key);
+    queue = cleanQueue(raw) ?? { holder: lease.holder, seq: 0, batches: [] };
+    queue.holder = lease.holder;
+  }
+  const q = queue, n = q.batches.length;
+  q.batches = q.batches.filter((b) => b.seq > seen);
+  q.seq = Math.max(q.seq, seen);
+  let dirtyQ = q.batches.length !== n;
+  if (pendingValor.length) { q.batches.push({ seq: ++q.seq, adds: pendingValor }); pendingValor = []; dirtyQ = true; }
+  if (q.batches.length > VALOR_BATCHES_MAX) q.batches.splice(0, q.batches.length - VALOR_BATCHES_MAX);
+  if (dirtyQ) await chain(async () => { await kv!.set(key, q).catch((e) => console.error("War: could not write the valor queue:", e)); });
+}
+
+/** The owner, before a tick: counts every queue's batches it has not counted yet (into this tick's valor). */
+async function drainValor() {
+  if (!kv?.list || !saved) return;
+  let qs: Record<string, unknown>;
+  try { qs = await kv.list(VALOR_KEY); } catch (e) { console.error("War: could not read the valor queues:", e); return; }
+  const live = new Set<string>();
+  for (const raw of Object.values(qs)) {
+    const q = cleanQueue(raw);
+    if (!q) continue;
+    live.add(q.holder);
+    const seen = saved.drained?.[q.holder] ?? 0;
+    let top = seen;
+    for (const b of q.batches) {
+      if (b.seq <= seen) continue;
+      for (const [t, k, a, by] of b.adds) addValor(t, k, a, by);
+      top = Math.max(top, b.seq);
+    }
+    if (top > seen) (saved.drained ??= {})[q.holder] = top;
+  }
+  if (saved.drained) for (const h of Object.keys(saved.drained)) if (!live.has(h)) delete saved.drained[h]; // (a queue gone: nothing left to count)
+}
+
 // ---- The Forge (M4: server/forge.ts) ------------------------------------------------------------------------------------
 
 /**
@@ -1003,7 +1253,7 @@ export const warNextTick = (): number | undefined => saved?.next;
  * written with the next step's save. Returns the men spent, or undefined before the war is loaded.
  */
 export function warSpendArmy(k: ClanKey, share: number, now = Date.now()): number | undefined {
-  if (!saved || !CLANS[k] || !(share > 0 && share < 1)) return undefined;
+  if (!saved || !canWrite() || !CLANS[k] || !(share > 0 && share < 1)) return undefined; // (only the war's owner spends)
   const s = saved.state, spent = Math.max(0, s.army[k] * share);
   s.army[k] -= spent;
   dirtyAt ||= now;
