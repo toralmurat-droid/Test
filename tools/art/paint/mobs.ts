@@ -19,9 +19,10 @@ import { RAIDERS } from "../../../shared/raiders";
 import { AFFIX_KEYS, AFFIXES, type AffixKey } from "../../../shared/champions";
 import { CHAMP_WEAPONS } from "./look";
 import { WAR_SOLDIERS } from "./warLooks";
-import { CART_FRAMES, CART_H, CART_W, WAR_CARTS, paintCart } from "./warCarts";
-import { WAR_RAMS, paintRam } from "./warRam";
-import { TUNNEL_FRAMES, TUNNEL_H, TUNNEL_W, WAR_TUNNELS, paintTunnel } from "./warTunnel";
+import { CART_FRAMES, CART_H, CART_W, G, WAR_CARTS } from "./warCarts";
+import { WAR_RAMS } from "./warRam";
+import { TUNNEL_FRAMES, TUNNEL_H, TUNNEL_W, WAR_TUNNELS } from "./warTunnel";
+import { cartModel, ramModel, siegeFrame, tunnelModel } from "./siege3d";
 
 /**
  * Monster sheets for the iso look. Same textures as client/src/textures.ts mobTexture (6 frames:
@@ -297,11 +298,11 @@ export function buildMobs(out: string, ONLY?: string[]) {
     // the clan war's soldiers (warLooks.ts): 36 px wide so the fallen body fits; officers are taller
     ...WAR_SOLDIERS.map((k) => k.endsWith("_cap") || k.endsWith("_chief") || k.endsWith("_adept") ? humanoid(`mob_${k}`, k, 36, 34, 32 / 34, 0.95, false, 0, true) : humanoid(`mob_${k}`, k, 36, 32, 30 / 32, 0.9, false, 0, true)),
     // the clan war's supply carts (warCarts.ts): 14 frames, 12 = staggering, 13 = wrecked
-    ...WAR_CARTS.map((k) => ({ key: `mob_${k}`, w: CART_W, h: CART_H, frames: CART_FRAMES, draw: (c: C2, f: number) => paintCart(c, SH, k, f) })),
+    ...WAR_CARTS.map((k) => ({ key: `mob_${k}`, w: CART_W, h: CART_H, frames: CART_FRAMES, draw: () => {}, pix: (f: number) => siegeFrame(cartModel(k, f), CART_W, CART_H, G, TX) })),
     // the Ossuary Host's bone siege ram (warRam.ts): same frame size and 14-frame layout
-    ...WAR_RAMS.map((k) => ({ key: `mob_${k}`, w: CART_W, h: CART_H, frames: CART_FRAMES, draw: (c: C2, f: number) => paintRam(c, SH, k, f) })),
+    ...WAR_RAMS.map((k) => ({ key: `mob_${k}`, w: CART_W, h: CART_H, frames: CART_FRAMES, draw: () => {}, pix: (f: number) => siegeFrame(ramModel(f), CART_W, CART_H, G, TX) })),
     // the Hide-Kin tunnel mouth (warTunnel.ts): 80x44 frames, the same 14-frame layout
-    ...WAR_TUNNELS.map((k) => ({ key: `mob_${k}`, w: TUNNEL_W, h: TUNNEL_H, frames: TUNNEL_FRAMES, draw: (c: C2, f: number) => paintTunnel(c, SH, k, f) })),
+    ...WAR_TUNNELS.map((k) => ({ key: `mob_${k}`, w: TUNNEL_W, h: TUNNEL_H, frames: TUNNEL_FRAMES, draw: () => {}, pix: (f: number) => siegeFrame({ m: tunnelModel(f), dir: "down" }, TUNNEL_W, TUNNEL_H, G, TX) })),
     beast3D("mob_scorpion", 36, 30, 27, (pose, f) => scorpion(pose, f)),
     // the Night Raiders (raiders.ts): one sheet for each of the Seven
     ...RAIDERS.map((R) => beast3D(`mob_nightraider_${R.key}`, RAIDER_W, RAIDER_H, RAIDER_G, (pose, f) => raider(R, pose, f))),
