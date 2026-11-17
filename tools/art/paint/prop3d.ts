@@ -19,6 +19,8 @@ export interface PropModel {
   shadow?: { u: number; v: number; r: number; a?: number }[];
   /** Height (texels) of the parts that throw a real shadow on the ground (0 = none). */
   cast?: number;
+  /** Painted effects over the model (flames, sparks): px(x, y, colour) in frame texels; `at` = screen point of a model point. */
+  overlay?: (px: (x: number, y: number, c: number) => void, at: (q: V3) => [number, number]) => void;
 }
 /** Per-material colour switch (stripes, quartered shields): another material where `sub` says so. */
 export type PMat = Mat & { sub?: (x: number, y: number, z: number) => Mat | undefined };
@@ -135,6 +137,7 @@ export function renderProp(model: PropModel, W: number, H: number, ox: number, o
     }
     if (al > 0 && dith(x, y) < 0.7) buf[a] = (Math.round(al * 255) << 24) >>> 0;
   }
+  model.overlay?.((x, y, c) => { x = Math.round(x); y = Math.round(y); if (x >= 0 && y >= 0 && x < W && y < H) buf[y * W + x] = (0xff000000 | c) >>> 0; }, (q) => [ox + q[0] - q[1], oy + (q[0] + q[1]) / 2 - q[2]]);
   return buf;
 }
 
@@ -232,7 +235,7 @@ export function scaleProp(m: PropModel, k: number): PropModel {
   return {
     ...m,
     prims: m.prims.map((p) => ({ ...p, lo: sv(p.lo), hi: sv(p.hi), k: p.k * k, d: (x: number, y: number, z: number) => p.d(x / k, y / k, z / k) * k })),
-    eyes: m.eyes?.map((e) => ({ ...e, p: sv(e.p) })), halos: m.halos?.map((h) => ({ ...h, p: sv(h.p), r: h.r * k })),
+    eyes: m.eyes?.map((e) => ({ ...e, p: sv(e.p) })), overlay: m.overlay && ((px, at) => m.overlay!(px, (q) => at(sv(q)))), halos: m.halos?.map((h) => ({ ...h, p: sv(h.p), r: h.r * k })),
     shadow: m.shadow?.map((s) => ({ ...s, u: s.u * k, v: s.v * k, r: s.r * k })), cast: (m.cast ?? 0) * k,
   };
 }
