@@ -187,8 +187,10 @@ export function createGateway(cfg: GatewayConfig): http.Server {
       });
       res.on("error", (e) => ok({ agesError: e.message }));
     });
+    const hard = setTimeout(() => r.destroy(new Error("timeout")), AGES_MS); // (a hard limit: the socket timeout is only idle time)
+    r.on("close", () => clearTimeout(hard));
     r.on("timeout", () => r.destroy(new Error("timeout")));
-    r.on("error", (e) => ok({ agesError: (e as NodeJS.ErrnoException).code ?? e.message }));
+    r.on("error", (e) => ok({ agesError: (e as NodeJS.ErrnoException).message === "timeout" ? "timeout" : (e as NodeJS.ErrnoException).code ?? e.message }));
   });
   const json = (res: http.ServerResponse, code: number, body: unknown) => {
     res.writeHead(code, { "content-type": "application/json", "cache-control": "no-store" });

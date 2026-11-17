@@ -103,7 +103,7 @@ have the same `ADMIN_KEY` (the gateway asks each Age with its own key).
   `/admin` page; counts and ids, no player names):
   - `slot`, `role` (`AGE_ROLE`), `build`, `api` (`WAR_API`, `FORGE_API`), `holder` and `holders` (the lease holder ids
     of the war, world, Forge and accounts);
-  - `roles`: `war` / `forge` `owner` | `follower` | `read` | `hidden`, `world` `owner` | `follower`; `leases`: the ones
+  - `roles`: `war` / `forge` `owner` | `follower` | `read` | `hidden`, `world` `owner` | `follower` (`off` before the world has loaded); `leases`: the ones
     this server holds now. **Exactly one Age should show `owner` and all three leases**; the other `follower` and none.
     `read` / `hidden` means the save was written by a newer build (expected on the old Age while a newer one owns it);
   - `online`: heroes and accounts in its rooms (counts);
