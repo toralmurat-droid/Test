@@ -9,6 +9,7 @@ import { isSolidAt, isSolidTile } from "../map";
 import type { ClanKey } from "./clans";
 import { anyHoldWall, holdReachPx, tierReachPx, tierWallAt } from "./holdWalls";
 import type { HoldTier } from "./holdTiers";
+import type { TroopRole } from "./troops";
 import { HOLDS, STANDARDS } from "./standards";
 import { TERRITORIES } from "./territories";
 
@@ -294,20 +295,22 @@ export function garrisonSpots(t: number, n: number, tier: HoldTier = 1): { x: nu
 }
 
 /**
- * Art keys of each clan's soldiers: a line soldier (`kinds`, picked per soldier) and the `officer` who leads the column.
+ * Art keys of each clan's soldiers: a line soldier (`kinds`, picked per soldier), the `officer` who leads the column, and
+ * the soldiers of its other roles (`roles`: shared/war/troops.ts CLAN_ROLES; a role whose sheet is missing falls back to `kinds`).
  * Painted sheets `mob_<key>` (tools/art/paint/warLooks.ts); art-only, they are not monster kinds and sit in no gameplay table.
  * Without the painted look (`?pixel=1`) the client falls back to older monster sheets (client/src/warTroops.ts LEGACY).
  */
-export const TROOP_LOOK: Record<ClanKey, { kinds: string[]; officer: string }> = {
-  wardens: { kinds: ["war_warden"], officer: "war_warden_cap" },
-  redfang: { kinds: ["war_redfang"], officer: "war_redfang_chief" },
-  host: { kinds: ["war_host"], officer: "war_host_cap" },
-  hidekin: { kinds: ["war_hidekin"], officer: "war_hidekin_chief" },
-  veiled: { kinds: ["war_veiled"], officer: "war_veiled_adept" },
+export const TROOP_LOOK: Record<ClanKey, { kinds: string[]; officer: string; roles: Partial<Record<TroopRole, string>> }> = {
+  wardens: { kinds: ["war_warden"], officer: "war_warden_cap", roles: { archer: "war_warden_bow", pike: "war_warden_pike", rider: "war_warden_rider" } },
+  redfang: { kinds: ["war_redfang"], officer: "war_redfang_chief", roles: { archer: "war_redfang_sling", rider: "war_redfang_rider" } },
+  host: { kinds: ["war_host"], officer: "war_host_cap", roles: { archer: "war_host_bow", pike: "war_host_pike", rider: "war_host_rider" } },
+  hidekin: { kinds: ["war_hidekin"], officer: "war_hidekin_chief", roles: { pike: "war_hidekin_spear", rider: "war_hidekin_rider" } },
+  veiled: { kinds: ["war_veiled"], officer: "war_veiled_adept", roles: { archer: "war_veiled_caster", rider: "war_veiled_rider" } },
 };
 
-/** The sprite kind soldier number `seed` of clan `clan` wears (the officer has his own): the one rule client and server share. */
-export function troopLook(clan: ClanKey, seed: number, officer = false): string {
+/** The sprite kind soldier number `seed` of clan `clan` wears (the officer has his own, so does a role): the one rule client and server share. */
+export function troopLook(clan: ClanKey, seed: number, officer = false, role: TroopRole = "foot"): string {
   const l = TROOP_LOOK[clan];
-  return officer ? l.officer : l.kinds[Math.abs(Math.floor(seed)) % l.kinds.length];
+  if (officer) return l.officer;
+  return (role !== "foot" && l.roles[role]) || l.kinds[Math.abs(Math.floor(seed)) % l.kinds.length];
 }

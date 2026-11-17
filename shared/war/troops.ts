@@ -4,10 +4,12 @@
  * shared/war/patrols.ts, guard the Hold, hunt the wild monsters of their land and fight heroes sworn to clans at war
  * with theirs, or who provoked them or are Wanted by them (shared/war/feuds.ts, troopStance).
  * The clan rides in the existing Mob.weapon string ("<clanKey>", "<clanKey>*" for the officer), so the synced Mob
- * schema is unchanged. Pure rules and numbers: the room module and the tests read them.
+ * schema is unchanged; so does a soldier's role (TroopRole: "<clanKey>)" an archer, ">" a rider, "|" a pike). Pure rules
+ * and numbers: the room module and the tests read them.
  */
 import { MOBS, mobScale } from "../constants";
 import type { ClanKey } from "./clans";
+import type { HoldTier } from "./holdTiers";
 import { TROOP, type Patrol } from "./patrols";
 import { atWar, grudgeActive, type FeudState } from "./feuds";
 import { isClan, STANDARD } from "./standards";
@@ -79,12 +81,81 @@ export const TROOP_OFFICER = { hp: 1.7, dmg: 1.25 };
  */
 export const TROOP_VETERAN = { from: 8, hp: 0.02, dmg: 0.025 };
 
-/** A trooper's fighting numbers at `level` (server/warTroops.ts and the PvE sim read the same). */
-export function troopStats(k: ClanKey, level: number, officer = false): { hp: number; dmg: number; speed: number; cd: number } {
+/**
+ * What a soldier does in the line (Murat: "archers, cavalry, spikemen"): the plain `foot` soldier, an `archer` who shoots
+ * from range and steps back, a `rider` (phase 2: defined, not fielded yet: roleOf gives foot) and a `pike` who holds its
+ * place with a longer reach. Officers are always foot. Carried as one mark on the clan key in Mob.weapon (troopWeapon).
+ */
+export type TroopRole = "foot" | "archer" | "rider" | "pike";
+export const TROOP_ROLES: readonly TroopRole[] = ["foot", "archer", "rider", "pike"];
+
+/**
+ * The roles' numbers on top of the clan's (troopStats): `mult` on HP, melee damage and speed; the archer's bow
+ * (`ranged`: its shot hits shotMult of a foot soldier's blow, from up to `range`, stepping back from foes inside
+ * `keepAway`; a guard archer steps back at most `guardTetherTiles` from its post); the pike's reach past a foot soldier's
+ * and how far it leaves its post or column place (`pike.tetherTiles`); the counters between troops (`vs`: attacker role ->
+ * defender role -> damage multiplier, troop against troop only: never on heroes or wild monsters).
+ */
+export const TROOP_ROLE = {
+  mult: {
+    foot: { hp: 1, dmg: 1, speed: 1 },
+    archer: { hp: 0.7, dmg: 0.6, speed: 1 },
+    rider: { hp: 1.1, dmg: 1.1, speed: 1.6 },
+    pike: { hp: 1.2, dmg: 1, speed: 0.85 },
+  } as Record<TroopRole, { hp: number; dmg: number; speed: number }>,
+  // (the plan's 0.8 / 170 px / 80 px / 1.6 s cost a lone wizard 10-25 points against a Hold's garrison: pve.ts --garrison keeps it within 10)
+  ranged: { shotMult: 0.6, range: 150, keepAway: 64, everyMs: 2000, windupMs: 500, sightPx: 200, radius: 3, guardTetherTiles: 2 },
+  pike: { reach: 14, tetherTiles: 3 },
+  /** Riders stay off the field until phase 2 (their charge and the pikes' brace): roleOf fields foot in their place. */
+  rider: { fielded: false },
+  vs: { archer: { pike: 1.25 }, pike: { rider: 2 }, rider: { archer: 1.5 } } as Partial<Record<TroopRole, Partial<Record<TroopRole, number>>>>,
+};
+
+/** One clan's take on a role: its name ("Warden longbowman") and, for archers, what it shoots (a client projectile kind) and how fast (px/s). */
+export interface ClanRole { name: string; shot?: string; shotSpeed?: number }
+/**
+ * Which roles each clan fields, by doctrine rather than the same for all: the Wardens' longbows and pikes, Redfang's
+ * slingers (no pikes: they rush), the Host's bone archers and phalanx, the Hide-Kin's burrow-spears (no ranged: they
+ * close in), the Veiled's sun-casters. A role a clan lacks is filled with foot (roleOf). Riders: phase 2.
+ */
+export const CLAN_ROLES: Record<ClanKey, Partial<Record<Exclude<TroopRole, "foot">, ClanRole>>> = {
+  wardens: { archer: { name: "longbowman", shot: "arrow", shotSpeed: 230 }, pike: { name: "pikeman" }, rider: { name: "lancer" } },
+  redfang: { archer: { name: "slinger", shot: "stone", shotSpeed: 170 }, rider: { name: "raider" } },
+  host: { archer: { name: "bone archer", shot: "arrow", shotSpeed: 210 }, pike: { name: "pike phalanx" }, rider: { name: "bone rider" } },
+  hidekin: { pike: { name: "burrow-spear" }, rider: { name: "boar rider" } },
+  veiled: { archer: { name: "sun-caster", shot: "sunbolt", shotSpeed: 160 }, rider: { name: "dune rider" } },
+};
+
+/** Who stands in each place: a patrol column of 8 (the officer first) and a Hold's guards per tier (outpost, camp, fortress). */
+const ROLE_PLAN: { march: TroopRole[]; guard: Record<HoldTier, TroopRole[]> } = {
+  march: ["foot", "rider", "pike", "pike", "foot", "archer", "foot", "archer"],
+  guard: {
+    0: ["foot", "archer", "pike"],
+    1: ["foot", "archer", "pike", "archer", "foot", "pike"],
+    2: ["foot", "archer", "pike", "archer", "pike", "archer", "rider", "foot"],
+  },
+};
+
+/**
+ * The role of place `i` in clan `k`'s patrol column (`march`) or its Hold's guard (`guard`, at Hold `tier`): pure and
+ * by index, so the counts never change: place 0 (the officer) is foot, a role the clan lacks or one not fielded yet is foot.
+ */
+export function roleOf(k: ClanKey, kind: "march" | "guard", tier: HoldTier, i: number): TroopRole {
+  const r = (kind === "march" ? ROLE_PLAN.march : ROLE_PLAN.guard[tier] ?? ROLE_PLAN.guard[1])[i] ?? "foot";
+  if (r === "foot" || i === 0 || !CLAN_ROLES[k]?.[r] || (r === "rider" && !TROOP_ROLE.rider.fielded)) return "foot";
+  return r;
+}
+
+/** A trooper's fighting numbers at `level` (server/warTroops.ts and the PvE sim read the same); `shot` only for an archer (its bow's damage). */
+export function troopStats(k: ClanKey, level: number, officer = false, role: TroopRole = "foot"): { hp: number; dmg: number; speed: number; cd: number; shot?: number } {
   const d = MOBS.trooper, c = TROOP_COMBAT[k], o = officer ? TROOP_OFFICER : { hp: 1, dmg: 1 }, V = TROOP_VETERAN, up = Math.max(0, level - V.from);
-  return { hp: Math.max(1, Math.round(d.maxHp * mobScale(level, "hp") * c.hp * o.hp * (1 + V.hp * up))),
-    dmg: Math.max(1, Math.round(d.damage * mobScale(level, "damage") * c.dmg * o.dmg * (1 + V.dmg * up))),
-    speed: d.speed * c.speed, cd: d.attackCooldownMs * c.cd };
+  const r = TROOP_ROLE.mult[role] ?? TROOP_ROLE.mult.foot, base = d.damage * mobScale(level, "damage") * c.dmg * o.dmg;
+  const st: { hp: number; dmg: number; speed: number; cd: number; shot?: number } = {
+    hp: Math.max(1, Math.round(d.maxHp * mobScale(level, "hp") * c.hp * o.hp * r.hp * (1 + V.hp * up))),
+    dmg: Math.max(1, Math.round(base * r.dmg * (1 + V.dmg * up))),
+    speed: d.speed * c.speed * r.speed, cd: d.attackCooldownMs * c.cd };
+  if (role === "archer") st.shot = Math.max(1, Math.round(base * TROOP_ROLE.ranged.shotMult * (1 + V.dmg * up)));
+  return st;
 }
 
 /** What a trooper is: a fighting soldier or officer, or an object heroes wreck (a supply cart, a siege ram: shared/war/works.ts, a Hide-Kin tunnel mouth: shared/war/tunnels.ts). */
@@ -92,23 +163,37 @@ export type TroopPart = "soldier" | "officer" | "cart" | "ram" | "mouth";
 /** The suffix each part carries on its clan key in Mob.weapon. */
 const PART_MARK: Record<TroopPart, string> = { soldier: "", officer: "*", cart: "^", ram: "#", mouth: "~" };
 const MARK_PART: Record<string, TroopPart> = { "*": "officer", "^": "cart", "#": "ram", "~": "mouth" };
+/** The suffix a soldier's role carries (foot: none). Only a soldier has one, and one at most. */
+export const ROLE_MARK: Record<TroopRole, string> = { foot: "", archer: ")", rider: ">", pike: "|" };
+const MARK_ROLE: Record<string, Exclude<TroopRole, "foot">> = { ")": "archer", ">": "rider", "|": "pike" };
 
 /**
  * The Mob.weapon value of a trooper of clan `k`: "<clan>", "<clan>*" for an officer, "<clan>^" for a supply cart
- * (shared/war/caravans.ts), "<clan>#" for a siege ram (shared/war/works.ts, `ram`), "<clan>~" for a tunnel mouth (shared/war/tunnels.ts, `mouth`).
+ * (shared/war/caravans.ts), "<clan>#" for a siege ram (shared/war/works.ts, `ram`), "<clan>~" for a tunnel mouth (shared/war/tunnels.ts, `mouth`);
+ * a soldier of another `role` than foot: "<clan>)" an archer, "<clan>>" a rider, "<clan>|" a pike (officers and objects carry none).
  */
-export const troopWeapon = (k: ClanKey, officer = false, cart = false, ram = false, mouth = false) =>
-  k + PART_MARK[mouth ? "mouth" : ram ? "ram" : cart ? "cart" : officer ? "officer" : "soldier"];
+export const troopWeapon = (k: ClanKey, officer = false, cart = false, ram = false, mouth = false, role: TroopRole = "foot") => {
+  const part: TroopPart = mouth ? "mouth" : ram ? "ram" : cart ? "cart" : officer ? "officer" : "soldier";
+  return k + (part === "soldier" ? ROLE_MARK[role] ?? "" : PART_MARK[part]);
+};
 
-/** A parsed trooper weapon. `object` (a cart, a ram or a tunnel mouth) never fights and is never fought by troopers; `officer`/`cart` are kept for older callers. */
-export interface TroopInfo { clan: ClanKey; part: TroopPart; officer: boolean; cart: boolean; object: boolean }
+/**
+ * A parsed trooper weapon. `object` (a cart, a ram or a tunnel mouth) never fights and is never fought by troopers;
+ * `officer`/`cart` are kept for older callers; `role` is set only on a soldier marked with one (absent: foot, so an
+ * older weapon string parses exactly as it did): read it as `role ?? "foot"`.
+ */
+export interface TroopInfo { clan: ClanKey; part: TroopPart; officer: boolean; cart: boolean; object: boolean; role?: Exclude<TroopRole, "foot"> }
 
-/** A trooper's clan and part from its Mob.weapon (carts and rams are troopers too, so every trooper gate applies), or undefined for anything else. */
+/** A trooper's clan, part and role from its Mob.weapon (carts and rams are troopers too, so every trooper gate applies), or undefined for anything else. */
 export function parseTroop(w: unknown): TroopInfo | undefined {
   if (typeof w !== "string") return undefined;
-  const part: TroopPart = MARK_PART[w.slice(-1)] ?? "soldier";
-  const k = part === "soldier" ? w : w.slice(0, -1);
-  return isClan(k) ? { clan: k, part, officer: part === "officer", cart: part === "cart", object: part === "cart" || part === "ram" || part === "mouth" } : undefined;
+  const last = w.slice(-1), role = MARK_ROLE[last];
+  const part: TroopPart = MARK_PART[last] ?? "soldier";
+  const k = part === "soldier" && !role ? w : w.slice(0, -1);
+  if (!isClan(k)) return undefined;
+  const t: TroopInfo = { clan: k, part, officer: part === "officer", cart: part === "cart", object: part === "cart" || part === "ram" || part === "mouth" };
+  if (role) t.role = role;
+  return t;
 }
 
 /** A trooper's level in territory `t`: soldiers at the middle of its monster band, officers at the top. */
@@ -132,11 +217,12 @@ export function troopStance(troop: ClanKey, hero: { clan?: ClanKey; level: numbe
   return grudgeActive(hero.feud, troop, now) ? "enemy" : "neutral";
 }
 
-/** A short name for a trooper (name label, death messages): "Redfang soldier", "Redfang captain", "Redfang supply cart", "Ossuary Host bone ram", "Hide-Kin tunnel". */
-export function troopName(k: ClanKey, officer = false, cart = false, ram = false, mouth = false): string {
+/** A short name for a trooper (name label, death messages): "Redfang soldier", "Redfang captain", "Redfang supply cart", "Ossuary Host bone ram", "Hide-Kin tunnel", "Warden longbowman" (a role: CLAN_ROLES). */
+export function troopName(k: ClanKey, officer = false, cart = false, ram = false, mouth = false, role: TroopRole = "foot"): string {
   if (mouth) return `${TROOP_SHORT[k]} tunnel`;
   if (ram) return `${k === "host" ? "Ossuary Host" : TROOP_SHORT[k]} bone ram`;
-  return `${TROOP_SHORT[k]} ${cart ? "supply cart" : officer ? "captain" : "soldier"}`;
+  const named = !cart && !officer && role !== "foot" ? CLAN_ROLES[k]?.[role]?.name : undefined;
+  return `${TROOP_SHORT[k]} ${named ?? (cart ? "supply cart" : officer ? "captain" : "soldier")}`;
 }
 /** The word a clan's soldiers go by (name tags): "The Hearthbound Wardens" -> "Warden". */
 export const TROOP_SHORT: Record<ClanKey, string> = { wardens: "Warden", redfang: "Redfang", host: "Ossuary", hidekin: "Hide-Kin", veiled: "Veiled" };

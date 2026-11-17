@@ -736,14 +736,15 @@ export class TownRoom extends Room<TownState> {
     heroes: () => this.state.players.entries(), hero: (id) => this.state.players.get(id),
     hidden: (id, now) => inVoid(this.state.players.get(id), now),
     strikeHero: (mid, pid, dmg, by) => { const m = this.state.mobs.get(mid); if (m) { this.broadcast("swing", { id: mid }); this.damagePlayer(pid, dmg, by, DIR_OFFSET[m.dir], 1, { atkLevel: m.level, from: mid }); this.battles.struck(mid, pid); } }, // (a battle soldier's blow keeps the hero active in the battle)
-    shoot: (mid, clan, tx, ty, dmg, by) => {
+    shoot: (mid, clan, tx, ty, dmg, by, spec) => { // a javelin, or an archer's shot (`spec`: server/troopRoles.ts)
       const m = this.state.mobs.get(mid), J = WAR_TROOPS.javelin;
       if (!m) return;
-      this.mobShot(m, mid, tx, ty, { keepAway: 0, far: 0, range: J.max, shot: "arrow", shotSpeed: J.speed, shotRadius: J.radius });
+      this.mobShot(m, mid, tx, ty, spec ? { keepAway: 0, far: 0, range: spec.range, shot: spec.kind, shotSpeed: spec.speed, shotRadius: spec.radius } : { keepAway: 0, far: 0, range: J.max, shot: "arrow", shotSpeed: J.speed, shotRadius: J.radius });
       const s = this.state.projectiles.get(`s${this.shotSeq}`);
       if (s) { s.damage = dmg; s.mobName = by; s.troop = clan; }
     },
-    strikeMob: (mid, tid, dmg) => { const m = this.state.mobs.get(mid), o = this.state.mobs.get(tid); if (m && o && !o.dead) { this.broadcast("swing", { id: mid }); this.mobHitsMob(m, mid, o, tid, dmg * this.battles.dmgMult(mid, tid)); } }, // (battle lines on each other: BATTLE.troopDmg)
+    strikeMob: (mid, tid, dmg, shot) => { const m = this.state.mobs.get(mid), o = this.state.mobs.get(tid); if (m && o && !o.dead) { if (!shot) this.broadcast("swing", { id: mid }); this.mobHitsMob(m, mid, o, tid, dmg * this.battles.dmgMult(mid, tid)); } }, // (battle lines on each other: BATTLE.troopDmg; an archer's shot landing: no swing)
+    sfx: (msg) => this.broadcast("sfx", msg),
     ranked: (pid, rank) => { const c = this.clients.getById(pid), p = this.state.players.get(pid); if (c && p) { c.send("clan", clanView(p)); c.send("chat", { id: "", name: "Herald", text: `Your renown grows: you are now ${rank}.` }); } },
     reserved: (): number => this.caravans.count + this.sieges.count + this.tunnels.count + this.rituals.count + this.feuds.count + this.marches.count + this.towns.count, // caravans, sieges, tunnels, rituals, manhunters, columns, town gates, then patrols
   });
