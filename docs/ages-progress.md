@@ -78,7 +78,46 @@ Also makes today's single server safer: a deploy's overlap no longer has two ser
   takeover with snapshot and gates, newer saves read-only / hidden, flush during a takeover, the lease lost and regained,
   shutdown write and release).
 
+## Built (the gateway, branch `claude/ages-gateway`)
+Owner's choice for production: one gateway and two game services (blue / green) on Railway, one Postgres. The code
+only; the services are set up by the owner (`docs/ages-setup.md`).
+- `server/gateway.ts`: reverse proxy on node:http / node:net, no dependency. `GATEWAY_TARGETS` (`slot=http://host:port,...`,
+  bad entries fail at boot), `GATEWAY_PRIMARY` (default the first), `AGE_SPLIT` (weights; default 100 % primary),
+  `ADMIN_KEY`, `PORT`.
+  - Cohort cookie `ptb_age=<slot>` drawn by the split on a first visit (30 days, HttpOnly, SameSite=Lax, Secure when
+    `X-Forwarded-Proto: https`), added to the proxied response. A cookie naming an unknown slot is drawn again.
+    `/age/<slot>` sets it and redirects to `/` (404 for an unknown slot).
+  - HTTP streamed both ways, hop-by-hop headers (and those `Connection` names) stripped, `X-Forwarded-For` appended (the
+    edge's client stays first for `TRUST_PROXY`), `-Proto` / `-Host` kept or set. The body is read only once the
+    backend accepted the connection, so a refused connection (or 5 s without one) retries the next live slot with the
+    whole body.
+  - **Deviation from the brief:** `/health` and `/matchmake/*` never fall back. A `/health` answered by the other Age
+    would make `client/src/reconnect.ts` reload into it, and a seat reserved there is unknown to the WebSocket, which
+    always goes to the cookie's Age; so these return 502 and the reconnect notice keeps polling, as with one server.
+  - WebSocket: on `upgrade`, a net socket to the cookie's Age, the request line and headers replayed (with
+    `X-Forwarded-*`), piped both ways, both closed on error / close. No fallback.
+  - `/gateway/health` (the gateway itself) and `/gateway/status?key=ADMIN_KEY` (each backend's `/health`: ok, build,
+    time; the primary and split; 404 without the key, as `/admin/*`).
+- `server/start.ts` -> `server-dist/start.cjs` (new Dockerfile CMD): `require("./gateway.cjs").main()` when
+  `GATEWAY_TARGETS` is set, else `require("./index.cjs")`, the game exactly as before in the same process (its SIGTERM
+  handling unchanged). `npm run build:server` bundles `gateway.cjs` and `start.cjs`. `npm start` and the smoke test
+  still run `index.cjs` directly. The gateway on SIGTERM stops listening and exits (open sockets cut after 3 s).
+- Review fixes: a chunked request body keeps chunked framing to the backend (Node adds none for GET / DELETE /
+  OPTIONS: raw bytes smuggled a second request); `/age/<slot>` for a weight-0 Age needs `?key=ADMIN_KEY`; a cookie-less
+  visitor's Age is drawn from a hash of their address (first X-Forwarded-For hop, else the socket), not per request; a
+  player leaving while the gateway connects no longer marks the backend down or retries; an HTTP exchange silent 60 s
+  (once connected) is cut with 502; upgrades other than `websocket` get 400, and the pipe opens only after the
+  backend's 101 (any other answer goes back to the client and closes). `server/start.ts`, `server/gateway.ts` and
+  `railway.gateway.json` are in `area:deploy` (`tools/ci/critical-areas.mjs`).
+- `railway.gateway.json`: the gateway service's config file (health check `/gateway/health`).
+- Tests: `tests/gateway.test.ts` (config, cookie by weights, `/age/<slot>`, re-pick, body and headers, hop-by-hop,
+  WebSocket pipe, fallback with body, pinned paths, status key), `tests/gateway-room.test.ts` (a hero joins the real
+  room through the gateway: matchmake and WebSocket). `tests/helpers/room.ts` exposes the room's `port`.
+
 ## Open
+- The gateway: "one account, one server" (ACCOUNT_LEASES) and account save versioning must land before two Ages take players
+  at once (`docs/ages-setup.md`). No per-slot health memory beyond the log (each request tries its own Age first). A
+  gateway redeploy drops every connection.
 - On a follower only valor reaches the owner. Sacks, town claims, battle deaths and banners, column losses and remote
   council submissions stay local (sacks and claims are refused there) until they get queues of their own.
 - A follower's rooms get no battle news (announce / start / end); they show the battles as saved.

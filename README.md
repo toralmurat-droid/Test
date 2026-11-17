@@ -148,7 +148,8 @@ Several servers on one Postgres (Ages, a deploy's overlap) take turns through a 
 the holder ticks the clan war and writes the world; `AGE_ROLE` (`primary` default, `vanguard`, `draining`: only a
 primary competes) and `AGE_SLOT` (default `main`) name the server (`docs/ages-progress.md`). Setting `AGE_SLOT` also turns
 on account leases (one account open on one server at a time; `ACCOUNT_LEASES=1` does the same without a slot) and
-needs `DATABASE_URL`: the server refuses to start without it (`DEPLOY.md`). Passwords are stored hashed
+needs `DATABASE_URL`: the server refuses to start without it (`DEPLOY.md`). Two Ages behind one address: the
+gateway (`server/gateway.ts`, on when `GATEWAY_TARGETS` is set; setup in `docs/ages-setup.md`). Passwords are stored hashed
 (scrypt). Back up the save file; it is not in git. During a restart, players are handed over through
 `data/handoff.json` and come back where they stood.
 

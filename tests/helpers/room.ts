@@ -30,6 +30,7 @@ export async function startRoom() {
   const port = (httpServer.address() as { port: number }).port;
   let n = 0;
   return {
+    port,
     get room() { return room; },
     async join(opts: Record<string, unknown> = {}) {
       const c = await new Client(`ws://localhost:${port}`).joinOrCreate<any>("town", { name: `Tester${++n}x${process.pid % 1000}`, password: "testpass1", cls: "knight", newGame: true, ...opts });
