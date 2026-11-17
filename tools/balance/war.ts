@@ -1,7 +1,7 @@
 /**
  * War sim: plays the clan war (shared/war/) headless with the scripted leaders, no players, and checks the design goal
  * (Murat 2026-11-13): left alone, the clans mostly cancel each other out; a clever plan wins some land but can't take over.
- * Run: npx tsx tools/balance/war.ts [runs=200] [days=30] [--clever=host] [--zeal=redfang[:30]] [--sack=redfang[:6]] [--sack-fort=0.1] [--tiers] [--ambush=hidekin[:0.5]] [--clash] [--per-soldier=30] [--battles] [--battle-heroes=redfang[:1.3]] [--old-brakes] [--towns] [--seed=1] [--verbose]
+ * Run: npx tsx tools/balance/war.ts [runs=200] [days=30] [--clever=host] [--zeal=redfang[:30]] [--sack=redfang[:6]] [--sack-fort=0.1] [--tiers] [--ambush=hidekin[:0.5]] [--clash] [--per-soldier=30] [--battles] [--battle-heroes=redfang[:1.3]] [--old-brakes] [--towns] [--seed=1] [--plugin=<clan>] [--json=<file>] [--verbose]
  *
  * Marching columns (W4, shared/war/marches.ts): every run prints the histogram of column sizes (men, officer included)
  * so COLUMN.perSoldier can be tuned (`--per-soldier=<n>` tries another value). `--ambush=<clan|all>[:share]`: each tick
@@ -55,6 +55,10 @@
  * process, no pin needed in the sim); a failed call leaves the doctrine leading that clan's day, as live. Implies
  * `--council=lead` unless --council is given. With the default plug-ins (the scripted council) every number equals
  * --council=lead's.
+ *
+ * `--json=<file>` (tools/clans/verify.ts): also writes the main run's numbers as JSON (runs, days, settle days, each
+ * clan's average and peak land share, dominated share, flips a war day, plug-in calls and failures, plug-in sha8s, and
+ * `daily`: per war, per war day after settling, each clan's land share in CLAN_KEYS order), so a caller can judge it.
  */
 import { CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
 import { newMinds, scriptedOrders } from "../../shared/war/doctrine";
@@ -168,6 +172,8 @@ interface Result {
   councils: number; councilRejected: number; agree: number; compared: number;
   /** --plugin: plug-in calls, and those that failed (the doctrine led that clan's day). */
   pluginCalls: number; pluginFails: number;
+  /** Per war, per war day after settling, each clan's land share (CLAN_KEYS order): --json. */
+  daily: number[][][];
 }
 /** Territories of the neutral lands (the Crown of the Marches): reported apart, so a snowball there shows. */
 const NEUTRAL = TERRITORIES.filter((t) => regionByKey(t.region)?.wards).map((t) => t.id);
@@ -190,10 +196,13 @@ function play(clever?: ClanKey): Result {
   let crownHalf = 0, crownFlips = 0, reckonings = 0, reckonKept = 0, reckonRepeat = 0;
   const reckonWins = Object.fromEntries(CLAN_KEYS.map((k) => [k, 0])) as Record<ClanKey, number>;
   let councils = 0, councilRejected = 0, agree = 0, compared = 0, pluginCalls = 0, pluginFails = 0;
+  const daily: number[][][] = [];
   const slots = pitchedTicks();
   for (let r = 0; r < RUNS; r++) {
     const rnd = mulberry(SEED * 7919 + r), s = newWar(), minds = newMinds();
     let streak = 0, dominated = false, prev = s.owner.slice();
+    const days: number[][] = [];
+    daily.push(days);
     const towns: Record<string, TownState> = {};
     if (TOWNS_ON) for (const t of TOWNS) towns[t.id] = { k: s.owner[townPatron(t.id)] };
     const announced = new Map<number, BattleSite>(); // settle tick (day index) -> the pitched battle placed 3 ticks before its start
@@ -326,6 +335,7 @@ function play(clever?: ClanKey): Result {
       streak = top > WAR.leaderShare ? streak + 1 : 0;
       if (streak > STREAK_DAYS) dominated = true;
       for (const k of CLAN_KEYS) { const sh = landOf(s, k) / N; avg[k] += sh; worst[k] = Math.max(worst[k], sh); }
+      days.push(CLAN_KEYS.map((k) => Math.round((landOf(s, k) / N) * 1e4) / 1e4));
       if (TOWNS_ON) for (const t of TOWNS) townsHeld[towns[t.id].k]++;
       if (NEUTRAL.length) {
         const held = CLAN_KEYS.map((k) => NEUTRAL.filter((t) => s.owner[t] === k).length);
@@ -350,7 +360,7 @@ function play(clever?: ClanKey): Result {
     men: menSum / Math.max(1, 2 * (battles.pitched + battles.storm + battles.meet)), mins: minSum / Math.max(1, battles.pitched + battles.storm + battles.meet),
     townFlips: townFlips / Math.max(1, RUNS * (DAYS - SETTLE_DAYS)), townContests: townContests / Math.max(1, RUNS * (DAYS - SETTLE_DAYS)), townOff: townOff / Math.max(1, RUNS * (DAYS - SETTLE_DAYS)), townsHeld,
     crownAvg, crownHalf: crownHalf / Math.max(1, samples), crownFlips: crownFlips / (RUNS * DAYS),
-    reckonings, reckonWins, reckonKept, reckonRepeat, councils, councilRejected, agree, compared, pluginCalls, pluginFails };
+    reckonings, reckonWins, reckonKept, reckonRepeat, councils, councilRejected, agree, compared, pluginCalls, pluginFails, daily };
 }
 
 const t0 = Date.now();
@@ -408,6 +418,13 @@ if (TIERS) {
 if (ruse && CLEVER) {
   console.log(`with the ${CLEVER} ruse (feint by day, push at night): ${CLEVER} averages ${pct(ruse.avg[CLEVER])} of the land vs ${pct(base.avg[CLEVER])} without; domination ${pct(ruse.dominated)}`);
   console.log(`  goal: the ruse pays (more land) but no clan dominates (under 5%)`);
+}
+const JSON_OUT = flag("json");
+if (JSON_OUT) {
+  fs.writeFileSync(JSON_OUT, JSON.stringify({ runs: RUNS, days: DAYS, settle: SETTLE_DAYS, seed: SEED, council: COUNCIL_MODE ?? null, clans: CLAN_KEYS,
+    avg: base.avg, peak: base.worst, dominated: base.dominated, flips: base.flips, councils: base.councils, councilRejected: base.councilRejected,
+    pluginCalls: base.pluginCalls, pluginFails: base.pluginFails, plugins: Object.fromEntries(PLUGIN_CLANS.map((k) => [k, PLUGINS[k]!.sha8])),
+    seconds: (Date.now() - t0) / 1000, daily: base.daily }));
 }
 const fail = !ZEAL.length && !SACK.length && !AMBUSH.length && !CLASH && !BH.length && (base.dominated >= 0.05 || (ruse && ruse.dominated >= 0.05));
 if (fail) { console.log("GOAL FAILED: the war does not hold itself in check"); process.exitCode = 1; }

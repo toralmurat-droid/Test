@@ -1,12 +1,13 @@
 // The static check on clan plug-in folders (tools/clans/check.ts): every denylisted name, import and construct is
-// refused with its line; the folder rules (only .ts files, no subfolders, size cap, index.ts); the real folders pass.
+// refused with its line; the folder rules (only .ts files, no subfolders, size cap, index.ts); helper files in the own
+// folder (part 2); the real folders pass.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { CLAN_PLUGIN } from "../shared/clans/api";
-import { checkClan, checkSource, clanFolders, DENIED } from "../tools/clans/check";
+import { checkClan, checkSource, clanFolders, DENIED, importAllowed } from "../tools/clans/check";
 
 const OK = `import { CLAN_PLUGIN_API, kit, type ClanPlugin } from "../api";
 export const plugin: ClanPlugin = { api: CLAN_PLUGIN_API, clan: "wardens", version: "2", council: (b) => {
@@ -37,16 +38,36 @@ test("every denylisted name is refused, as an identifier, a property or a string
   }
 });
 
-test("imports: only ../api; no require, dynamic import, import.meta", () => {
+test("imports: only ../api and ./<file> of the own folder; no require, dynamic import, import.meta", () => {
   refused(`import fs from "node:fs";`, /may import only "\.\.\/api"/);
   refused(`import { x } from "../../war/rules";`, /may import only/);
   refused(`import { y } from "../host";`, /may import only/);
-  refused(`import { z } from "./helper";`, /may import only/);
+  refused(`import { y } from "../host/index";`, /may import only/);
+  refused(`import { z } from "./sub/helper";`, /may import only/);
+  refused(`import { z } from "./../api";`, /may import only/);
+  refused(`import { z } from "./helper.ts";`, /may import only/);
+  refused(`import { z } from "./.hidden";`, /may import only/);
+  refused(`import { z } from "./";`, /may import only/);
+  refused(`import { z } from "fs";`, /may import only/);
+  refused(`const m = "./helper"; export { m };\nimport(m);`, /dynamic imports/);
   refused(`export * from "../../war/council";`, /may import only/);
   refused(`import x = require("fs");`, /require/);
   refused(`export const m = () => import("../api");`, /dynamic imports/);
   refused(`export const u = import.meta.url;`, /import\.meta/);
   assert.deepEqual(checkSource("a.ts", `import type { ClanPlugin } from "../api";\nexport type P = ClanPlugin;`), []);
+});
+
+test("helper files (part 2): ./<name> imports of a .ts file in the own folder pass; the denylist still holds in them", () => {
+  assert.deepEqual(checkSource("wardens/index.ts", `import { pick } from "./tactics";\nexport { pick };`), [], "unchecked folder: any helper name");
+  assert.deepEqual(checkSource("wardens/index.ts", `export * from "./tactics";`), []);
+  const files = new Set(["index", "tactics"]);
+  assert.deepEqual(checkSource("wardens/index.ts", `import { pick } from "./tactics";\nexport { pick };`, files), []);
+  assert.ok(checkSource("wardens/index.ts", `import { pick } from "./missing";\nexport { pick };`, files).some((m) => /no such \.ts file there/.test(m)));
+  assert.ok(importAllowed("../api") && importAllowed("./tactics") && importAllowed("./lore_2-b"));
+  for (const s of ["../api.ts", "./a/b", "./..", "./../host", "./x.ts", "./-x", "../host/index", "/abs", "./"]) assert.equal(importAllowed(s), false, s);
+  assert.equal(importAllowed("./tactics", new Set(["index"])), false);
+  // a helper is checked like index.ts
+  assert.ok(checkSource("wardens/tactics.ts", `export const t = () => Date.now();`).some((m) => /Date: not allowed/.test(m)));
 });
 
 test("unseeded randomness, async, with, declare and namespaces are refused", () => {
@@ -76,6 +97,18 @@ test("folder rules: only .ts files, no subfolders, size cap, index.ts required",
     fs.mkdirSync(c);
     fs.writeFileSync(path.join(c, "index.ts"), OK);
     assert.deepEqual(checkClan("wardens", dir), []);
+    // a helper file in the folder: index.ts may import it; a missing one or another clan's is refused
+    fs.writeFileSync(path.join(c, "tactics.ts"), `import type { CouncilBriefing } from "../api";\nexport const n = (b: CouncilBriefing) => b.targets.length;\n`);
+    fs.writeFileSync(path.join(c, "index.ts"), `import { n } from "./tactics";\n${OK}`);
+    assert.deepEqual(checkClan("wardens", dir), []);
+    fs.writeFileSync(path.join(c, "index.ts"), `import { n } from "./tactic";\n${OK}`);
+    assert.ok(checkClan("wardens", dir).some((m) => /wardens\/index\.ts:1: import "\.\/tactic".*no such \.ts file/.test(m)));
+    fs.writeFileSync(path.join(c, "tactics.ts"), `export const n = () => require("fs");\n`);
+    assert.ok(checkClan("wardens", dir).some((m) => /wardens\/tactics\.ts:1: require: not allowed/.test(m)), "helpers meet the denylist");
+    fs.writeFileSync(path.join(c, "my.helper.ts"), "export {};");
+    assert.ok(checkClan("wardens", dir).some((m) => /my\.helper\.ts: file names/.test(m)));
+    fs.rmSync(path.join(c, "my.helper.ts"));
+    fs.writeFileSync(path.join(c, "index.ts"), OK);
     fs.writeFileSync(path.join(c, "notes.json"), "{}");
     fs.writeFileSync(path.join(c, "types.d.ts"), "export {};");
     fs.mkdirSync(path.join(c, "sub"));

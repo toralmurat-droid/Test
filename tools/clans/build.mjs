@@ -1,7 +1,10 @@
 // Bundles each clan plug-in (shared/clans/<clan>/index.ts, Living Code M6) into one plain script for the sandbox
 // (server/clanPluginWorker.ts) and writes server-dist/clans/<clan>.js plus server-dist/clans/manifest.json
 // ({clan, version, api, sha256, bytes} per clan). Part of `npm run build:server`. The sha256 is of the exact bytes the
-// server runs: Murat pins its first 8+ hex characters in CLAN_PLUGINS (docs/war-council-routine.md) to let it go live.
+// server runs: Murat pins it (16+ hex characters, the full 64 safest) in CLAN_PLUGINS (docs/war-council-routine.md) to
+// let it go live. A plug-in may import only shared/clans/api.ts and .ts files in its own folder (helper files, part 2):
+// tools/clans/check.ts refuses anything else, and the bundler refuses it again (`fenced`), so a bundle never carries
+// code from outside the folder and the kit.
 // Usage: node tools/clans/build.mjs [outdir=server-dist/clans]
 // The server and the tools also call bundleClan in memory (dev, tests, the gate, the war sim): same options, same bytes.
 import crypto from "node:crypto";
@@ -27,27 +30,45 @@ export function listClans() {
 // The shared modules are data and pure functions: marked free of side effects, the bundle keeps only what the plug-in
 // reaches (the kit's scripted council and the Heralds' lines, ~15 kB) instead of the whole map (seconds to load).
 // Correctness is checked by tests/clanPlugins.test.ts (the default plug-ins' orders equal the scripted council's).
-const pureShared = {
+const pureShared = (dir) => ({
   name: "pure-shared",
   setup(b) {
     b.onResolve({ filter: /.*/ }, async (a) => {
       if (a.kind === "entry-point" || a.pluginData) return undefined;
       const r = await b.resolve(a.path, { resolveDir: a.resolveDir, kind: a.kind, importer: a.importer, pluginData: true });
       if (r.errors.length) return { errors: r.errors };
+      const why = fenced(a.importer, r.path, dir);
+      if (why) return { errors: [{ text: why }] };
       return { ...r, sideEffects: !r.path.startsWith(path.join(ROOT, "shared") + path.sep) };
     });
   },
-};
+});
+
+/**
+ * Why a file of a clan folder may not import `target` (both absolute paths), or undefined when it may: a clan file may
+ * reach only shared/clans/api.ts and .ts files directly in its own folder. Files outside clan folders (the kit) are free.
+ */
+export function fenced(importer, target, dir = CLANS_DIR) {
+  const rel = path.relative(dir, importer).split(path.sep);
+  if (rel.length !== 2 || rel[0] === "..") return undefined; // not a file of shared/clans/<clan>/
+  const own = path.join(dir, rel[0]);
+  if (target === path.join(dir, "api.ts")) return undefined;
+  if (path.dirname(target) === own && target.endsWith(".ts") && !target.endsWith(".d.ts")) return undefined;
+  return `${path.relative(ROOT, importer)}: may import only shared/clans/api.ts and .ts files in its own folder, not ${path.relative(ROOT, target)}`;
+}
 
 const sha256 = (s) => crypto.createHash("sha256").update(s).digest("hex");
 
-/** Clan `clan`'s bundle, in memory: { code, sha256 }. Deterministic for the same sources and esbuild version. */
-export async function bundleClan(clan) {
-  const entry = path.join(CLANS_DIR, clan, "index.ts");
+/**
+ * Clan `clan`'s bundle, in memory: { code, sha256 }. Deterministic for the same sources and esbuild version. `dir`: the
+ * folder holding the clan folders (tests bundle a scratch one).
+ */
+export async function bundleClan(clan, dir = CLANS_DIR) {
+  const entry = path.join(dir, clan, "index.ts");
   const r = await esbuild.build({
     entryPoints: [entry], absWorkingDir: ROOT, bundle: true, write: false, format: "iife", globalName: GLOBAL_NAME,
     platform: "neutral", target: "es2022", minify: true, charset: "ascii", legalComments: "none", sourcemap: false,
-    logLevel: "silent", plugins: [pureShared],
+    logLevel: "silent", plugins: [pureShared(dir)],
   });
   const code = r.outputFiles[0].text;
   return { code, sha256: sha256(code) };
