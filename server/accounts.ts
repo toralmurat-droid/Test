@@ -9,6 +9,7 @@ import crypto from "node:crypto";
 import { jsonStore, openLeases, postgresStore, readJsonFile, Store } from "./store";
 import { AccountGuard, accountLeasesOn, ACCT, type Claim } from "./accountGuard";
 import type { LeaseBackend } from "./lease";
+import { ACCOUNT_API, ACCOUNT_MIN_READER, accountAccess } from "../shared/accountApi";
 import { sendMail, mailReady } from "./mailer";
 import { FailDelay, isLocalIp, KeyedLimiter, LOGIN_BURST, LOGIN_PER_SEC, SIGNUP_BURST, SIGNUP_PER_SEC } from "./ratelimit";
 
@@ -103,7 +104,41 @@ export interface Account {
   email?: string;
   /** Pending password reset: sha256 of the emailed code, expiry (ms) and wrong tries so far. */
   reset?: { hash: string; until: number; tries: number };
+  /** Account save version (shared/accountApi.ts ACCOUNT_API) of the build that last wrote it; missing = 1 (older saves). */
+  av?: number;
+  /** The oldest ACCOUNT_API that may show (never write) this account; missing = `av`. */
+  minReader?: number;
 }
+
+/**
+ * Every HeroSave field this build knows. A saved hero's other fields (added by a newer build, an "Age" running side by
+ * side) are kept by saveHero; known ones the snapshot leaves out (no clan, `wear`, ...) are dropped as before.
+ */
+const HERO_KEYS: Record<keyof HeroSave, 1> = {
+  color: 1, xp: 1, level: 1, kills: 1, xpv: 1, gold: 1, potions: 1, mpotions: 1, pots: 1, ptSta: 1, ptStr: 1, ptMag: 1, ptDex: 1,
+  weapon: 1, armour: 1, shoes: 1, hat: 1, shield: 1, ranged: 1, bag: 1, talents: 1, slots: 1,
+  questId: 1, questStage: 1, questCount: 1, questVer: 1, boneId: 1, boneStage: 1, boneCount: 1, boneVer: 1,
+  redId: 1, redStage: 1, redCount: 1, redVer: 1, sunId: 1, sunStage: 1, sunCount: 1, sunVer: 1, kit: 1,
+  tutId: 1, tutStage: 1, tutCount: 1, tutVer: 1, crownId: 1, crownStage: 1, crownCount: 1, crownVer: 1,
+  beastId: 1, beastStage: 1, beastCount: 1, beastVer: 1, portals: 1, act: 1, bounty: 1, bountyDone: 1,
+  clan: 1, clanAt: 1, renown: 1, home: 1, capPaid: 1, feud: 1, claimDay: 1, claims: 1, writ: 1, writDay: 1, writN: 1,
+  wear: 1, feast: 1, grimoire: 1, suTree: 1, flags: 1, cosm: 1, rumour: 1, titles: 1, mentor: 1,
+  swTree: 1, swMode: 1, swKit: 1, swSongs: 1, swMats: 1,
+};
+
+/** The new hero save, with the fields of the old one this build does not know (a newer Age's) carried over. */
+export function keepUnknown(old: HeroSave | undefined, hero: HeroSave): HeroSave {
+  if (!old || typeof old !== "object") return hero;
+  const out: Record<string, unknown> = {};
+  for (const [f, v] of Object.entries(old)) if (!Object.hasOwn(HERO_KEYS, f)) out[f] = v;
+  return Object.assign(out, hero) as HeroSave;
+}
+
+/** Login and edits of an account a newer build wrote (shared/accountApi.ts): this build never writes it. */
+export const NEW_AGE = "This hero lives in the new Age: play it there";
+/** This build may write the account (its `av` is ACCOUNT_API or older). */
+const writable = (acc: Account | undefined): acc is Account => !!acc && accountAccess(acc) === "write";
+function mustWrite(acc: Account) { if (!writable(acc)) throw new Error(NEW_AGE); }
 
 export interface Stash { items: string[]; gold: number }
 
@@ -169,7 +204,11 @@ export function onAccountLost(f: (k: string) => void) { lostListeners.push(f); }
  * server has the account. Off: always "mine" (nothing to do). Every answer but those two needs one `leaveAccount`.
  */
 export async function claimAccount(name: string, play = true): Promise<Claim> {
-  return guard ? guard.claim(key(name), play) : "mine";
+  if (!guard) return "mine";
+  const k = key(name), c = await guard.claim(k, play);
+  // (the claim may have reloaded the row: a newer build may have written it since the login read it)
+  if ((c === "mine" || c === "fresh") && accounts[k] && !writable(accounts[k])) { await guard.leave(k, play); throw new Error(NEW_AGE); }
+  return c;
 }
 /** The session ends: the last one here saves the account, waits for the commit, then gives its lease back. */
 export function leaveAccount(name: string, play = true): Promise<void> {
@@ -192,6 +231,7 @@ async function edit<T>(k: string, fn: (acc: Account) => T | Promise<T>): Promise
   try {
     const acc = accounts[k];
     if (!acc) throw new Error("No account with this name");
+    mustWrite(acc);
     return await fn(acc);
   } finally {
     await g.leave(k);
@@ -239,6 +279,7 @@ export async function login(nameIn: unknown, pwIn: unknown, ip = ""): Promise<st
   const acc = guard ? await fresh(k) : accounts[k];
   if (acc) {
     await check(acc, k, pw);
+    mustWrite(acc);
     return acc.name;
   }
   if (pw.length < MIN_NEW_PASSWORD) throw new Error(`New account: the password needs at least ${MIN_NEW_PASSWORD} characters`);
@@ -247,17 +288,19 @@ export async function login(nameIn: unknown, pwIn: unknown, ip = ""): Promise<st
   const hash = await hashPw(pw, salt);
   if (guard) {
     // Shared: written at once, only if no server made the name meanwhile; if one did, this is a normal login try
-    const made: Account = { name, salt, hash, created: Date.now(), heroes: {} };
+    const made: Account = { name, salt, hash, created: Date.now(), heroes: {}, av: ACCOUNT_API, minReader: ACCOUNT_MIN_READER };
     if (await store.insertNew!(k, made)) { accounts[k] = made; return name; }
     const other = await fresh(k);
     if (!other) throw new Error("Could not create the account. Try again.");
     await check(other, k, pw);
+    mustWrite(other);
     return other.name;
   }
   // Someone else may have taken the name while the hash was computed: then this is a normal login try
   const raced = accounts[k];
   if (raced) {
     await check(raced, k, pw);
+    mustWrite(raced);
     return raced.name;
   }
   accounts[k] = { name, salt, hash, created: Date.now(), heroes: {} };
@@ -274,6 +317,7 @@ export async function peek(nameIn: unknown, pwIn: unknown, ip = ""): Promise<{ e
   const acc = guard ? await fresh(k) : accounts[k];
   if (!acc) return { exists: false, heroes: {} };
   await check(acc, k, pw);
+  if (accountAccess(acc) === "hide") throw new Error(NEW_AGE); // (a newer account that allows it is still listed: showing writes nothing)
   const heroes: Record<string, number> = {};
   for (const [cls, h] of Object.entries(acc.heroes)) if (h) heroes[cls] = h.level || 1;
   return { exists: true, heroes, email: acc.email ?? "" };
@@ -305,7 +349,7 @@ export async function setEmail(nameIn: unknown, pwIn: unknown, emailIn: unknown,
     markDirty(k);
     return a.email ?? "";
   };
-  if (!guard) return set(acc);
+  if (!guard) { mustWrite(acc); return set(acc); }
   // (reloaded under the lease: a password changed on another server meanwhile is checked again)
   return edit(k, async (a) => { if (a.hash !== acc.hash) await check(a, k, pw); return set(a); });
 }
@@ -336,7 +380,7 @@ export async function requestReset(whoIn: unknown, ip = "", now = Date.now()): P
     resetLast.set(k, now);
     const code = String(crypto.randomInt(0, 1_000_000)).padStart(6, "0");
     const give = (acc: Account) => {
-      if (!acc.email) return false;
+      if (!acc.email || !writable(acc)) return false;
       acc.reset = { hash: codeHash(code), until: now + RESET_MINUTES * 60_000, tries: 0 };
       markDirty(k);
       lines.push(`Name: ${acc.name}\nCode: ${code}`);
@@ -378,6 +422,7 @@ export async function resetPassword(nameIn: unknown, codeIn: unknown, pwIn: unkn
   const use = async (acc: Account | undefined) => {
     const r = acc?.reset;
     if (!acc || !r || r.until < now || r.tries >= RESET_TRIES) throw new Error(bad);
+    mustWrite(acc);
     const ok = /^\d{6}$/.test(code) && crypto.timingSafeEqual(Buffer.from(codeHash(code), "hex"), Buffer.from(r.hash, "hex"));
     if (!ok) {
       r.tries++;
@@ -402,10 +447,14 @@ export function loadHero(name: string, cls: string): HeroSave | undefined {
   return accounts[key(name)]?.heroes[cls];
 }
 
-export function saveHero(name: string, cls: string, hero: HeroSave) {
+/**
+ * Stores the hero (the snapshot of server/TownRoom.ts), keeping the saved hero's fields this build does not know;
+ * `reset` (New game): the hero starts over, nothing of the old one is kept.
+ */
+export function saveHero(name: string, cls: string, hero: HeroSave, reset = false) {
   const acc = accounts[key(name)];
-  if (!acc) return;
-  acc.heroes[cls] = hero;
+  if (!writable(acc)) return;
+  acc.heroes[cls] = reset ? hero : keepUnknown(acc.heroes[cls], hero);
   markDirty(key(name));
 }
 
@@ -420,7 +469,7 @@ export function openedChests(name: string, now = Date.now()): Record<string, num
 /** New game: every loot chest is full again for this account. */
 export function resetChests(name: string) {
   const acc = accounts[key(name)];
-  if (!acc?.chests) return;
+  if (!writable(acc) || !acc.chests) return;
   delete acc.chests;
   markDirty(key(name));
 }
@@ -428,7 +477,7 @@ export function resetChests(name: string) {
 /** Remember that this account emptied a chest until `refillAt`. */
 export function markChest(name: string, id: string, refillAt: number) {
   const acc = accounts[key(name)];
-  if (!acc) return;
+  if (!writable(acc)) return;
   (acc.chests ??= {})[id] = refillAt;
   markDirty(key(name));
 }
@@ -445,15 +494,21 @@ export function loadStash(name: string): Stash {
  */
 export function saveStash(name: string, stash: Stash, cls: string, hero: HeroSave) {
   const acc = accounts[key(name)];
-  if (!acc) return;
+  if (!writable(acc)) return;
   acc.stash = { items: [...stash.items], gold: stash.gold };
-  acc.heroes[cls] = hero;
+  acc.heroes[cls] = keepUnknown(acc.heroes[cls], hero);
   markDirty(key(name));
 }
 
 /** Accounts changed since the last write. */
 const dirty = new Set<string>();
-function markDirty(k: string) { dirty.add(k); }
+/** Queues the account's write, stamped with this build's save version; never one a newer build wrote (shared/accountApi.ts). */
+function markDirty(k: string) {
+  const acc = accounts[k];
+  if (acc && !writable(acc)) { console.error(`Accounts: ${k} was saved by a newer build: not written here`); return; }
+  if (acc) { acc.av = ACCOUNT_API; acc.minReader = ACCOUNT_MIN_READER; }
+  dirty.add(k);
+}
 
 let writing: Promise<void> | null = null;
 let again = false;
@@ -470,7 +525,8 @@ export function flush(): Promise<void> {
   // Postgres: copied now, so changes made while the write runs go into the next one
   // (the JSON store turns everything into text before its first await, which is the same snapshot)
   const changed: Record<string, Account> = {};
-  if (store.kind === "postgres") for (const k of keys) if (accounts[k]) changed[k] = structuredClone(accounts[k]);
+  // (never an account a newer build wrote: markDirty refuses them, this is the last fence)
+  if (store.kind === "postgres") for (const k of keys) if (writable(accounts[k])) changed[k] = structuredClone(accounts[k]);
   // Shared (server/accountGuard.ts): only accounts this server holds are written. A refused one whose lease only lapsed
   // (no renewal showed another holder) is kept for the next write, and its lease with it (settle stays false); one
   // another server took is given up
