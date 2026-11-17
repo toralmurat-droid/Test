@@ -237,7 +237,7 @@ test("tide (shared store): a follower's blob kills reach the owner's meter once,
   assert.equal(rows.get("world").tide, 11, "the queued kills and the unwritten one, each once");
   assert.deepEqual(rows.get("world").drained, { "main:me": 2 });
   // a full meter or a called march takes no kills (as on the owner)
-  rows.set("world", { ...rows.get("world"), tide: TIDE.goal - 1, marchAt: c.t + 1000 });
+  rows.set("world", { ...rows.get("world"), tide: TIDE.goal - 1, marchAt: Date.now() + 60_000 }); // (the world beat reads the wall clock)
   be.rows.delete("lease:world"); // (main:me shut down and gave it back)
   await setup("main:owner2");
   assert.equal(W.worldFollows(), false);

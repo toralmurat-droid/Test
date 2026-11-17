@@ -101,6 +101,19 @@ test("war (follower): a sack's valor travels in the act and counts only when the
   } finally { war.stopWar(); war._resetWar(); }
 });
 
+test("war (owner): a corrupt row's act fates are forgotten, never a crash", async () => {
+  const { war, c, m, t, foe, start } = await warSetup();
+  try {
+    await start("main:me");
+    const a = war.sackAct(t, foe, false, "Ann");
+    await war._pulse(c.t);
+    m.set("war", JSON.stringify({ ...JSON.parse(m.get("war")!), fates: "junk" }));
+    await start("main:owner");
+    await war._pulse(c.t);
+    assert.deepEqual(JSON.parse(m.get("war")!).fates, { [a!]: 1 });
+  } finally { war.stopWar(); war._resetWar(); }
+});
+
 test("war holds (follower): the war chest and renown wait for the owner; a dropped or unanswered sack pays nothing", async () => {
   const { war, c, t, foe, others, start } = await warSetup();
   const { WarHolds, _resetHolds } = await import("../server/warHolds");
@@ -177,7 +190,7 @@ test("war towns (follower): a claim's renown waits for the owner's answer", asyn
 
 // ---- 2. The Tide's march with no room open on the owner ------------------------------------------------------------------
 
-test("tide (owner, no room open): a meter the followers filled gets its march booked, and a missed march is moved", async () => {
+test("tide (owner, no room open): a meter the followers filled gets its march booked, and emptied once the march's time is up", async () => {
   const W = await import("../server/worldStore");
   const { Tide, bookIdleMarch } = await import("../server/tide");
   const c = clock(), be = memLeases(c.now), { kv, m } = memKv(be);
@@ -195,10 +208,13 @@ test("tide (owner, no room open): a meter the followers filled gets its march bo
   const booked = row.marchAt;
   await W._claimWorld();
   assert.equal(rows.get("world").marchAt, booked, "booked once");
-  // a march missed (no room here at dusk): moved to the next dusk
-  W.world().marchAt = Date.now() - TIDE.lateMs - 1;
+  // the march's time is up (the followers marched it for their heroes): the meter empties, as at a march's end
+  W.world().marchAt = Date.now() - TIDE.limitMs + 60_000;
   await W._claimWorld();
-  assert.ok(rows.get("world").marchAt >= before, "moved");
+  assert.equal(rows.get("world").tide, TIDE.goal, "still under way: nothing changes");
+  W.world().marchAt = Date.now() - TIDE.limitMs - 1;
+  await W._claimWorld();
+  assert.equal(rows.get("world").tide, 0); assert.equal(rows.get("world").marchAt, undefined); assert.equal(rows.get("world").marches, 1);
   // with a room open, its Tide books and moves (it may be marching): the idle booking stays out of it
   const w = { v: 1 as const, tide: TIDE.goal, marches: 0 } as { v: 1; tide: number; marches: number; marchAt?: number };
   const room = new Tide({
@@ -211,6 +227,35 @@ test("tide (owner, no room open): a meter the followers filled gets its march bo
   assert.equal(bookIdleMarch(w, Date.now(), () => 0.5), true);
   assert.ok(w.marchAt! > 0);
   assert.equal(bookIdleMarch({ v: 1, tide: TIDE.goal - 1, marches: 0 }, Date.now(), () => 0.5), false, "not full: nothing booked");
+});
+
+test("tide (follower): a march is set out for once, even when the owner's row brings the same march back after it ended", async () => {
+  const { Tide, _resetTideMarched } = await import("../server/tide");
+  _resetTideMarched();
+  const now = Date.now(), at = now - 1000;
+  let w = { v: 1 as const, tide: TIDE.goal, marches: 0, marchAt: at } as { v: 1; tide: number; marches: number; marchAt?: number };
+  const host = {
+    heroes: () => [], hero: () => undefined, mob: () => undefined, spawn: () => undefined, removeMob: () => {}, send: () => {},
+    act1: () => true, dayFrac: () => 0.5, pay: () => {}, world: () => w, changed: () => {}, follows: () => true, queueKill: () => {},
+  };
+  const t = new Tide(host);
+  try {
+    t.tick(now);
+    assert.equal(t.marching, true, "the follower marches at the shared dusk for its heroes");
+    (t as any).end(false);
+    assert.equal(w.tide, 0, "(its own copy emptied)");
+    w = { v: 1, tide: TIDE.goal, marches: 0, marchAt: at }; // (followWorld: the owner's row, the same march still booked)
+    t.tick(now + 2000);
+    assert.equal(t.marching, false, "never the same march twice");
+    t.release();
+    const t2 = new Tide(host); // (another room of this process)
+    t2.tick(now + 3000);
+    assert.equal(t2.marching, false, "nor from another room");
+    w = { v: 1, tide: TIDE.goal, marches: 1, marchAt: now + 2500 }; // (the next march the owner booked)
+    t2.tick(now + 4000);
+    assert.equal(t2.marching, true, "a new march sets out");
+    t2.release();
+  } finally { t.release(); _resetTideMarched(); }
 });
 
 // ---- 3. A queue that cannot be read keeps its items ----------------------------------------------------------------------
@@ -227,6 +272,14 @@ test("age queue: a row that cannot be read keeps the batch (false, no throw); a 
   o.fail = () => false;
   assert.equal(await q.push(kv, "b", 0), true);
   assert.deepEqual(json(m, "q:b").batches, [{ n: 1, seq: 1 }], "written at the next beat, with nothing new");
+  // two first pushes at once (a fresh queue): one read for both, no batch lost, no number used twice
+  const q2 = new AgeQueue<{ n: number }>("q:", (b) => (typeof b.n === "number" ? { n: b.n } : undefined));
+  let release!: () => void;
+  o.hold = (op) => (op === "get" ? new Promise<void>((r) => { release = r; }) : undefined);
+  const p1 = q2.push(kv, "b", 1, { n: 2 }), p2 = q2.push(kv, "b", 1, { n: 3 });
+  await later(); o.hold = () => undefined; release();
+  assert.deepEqual([await p1, await p2], [true, true]);
+  assert.deepEqual(json(m, "q:b"), { holder: "b", seq: 3, batches: [{ n: 2, seq: 2 }, { n: 3, seq: 3 }] });
   assert.deepEqual(requeue([1, 2], [3], 10), [1, 2, 3]);
   assert.deepEqual(requeue([1, 2], [3], 2), [1, 2], "capped");
 });

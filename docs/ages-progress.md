@@ -287,8 +287,13 @@ or on Postgres, keeps `data/handoff.json` and the idea file exactly as before.
   `townClaim`/`strikeHold` keep their follower branches (queue without reward) for other callers; the rooms use
   `sackAct`/`claimAct` + `warActFate`.
 - **Tide march with no room on the owner:** each world beat the owner runs `bookIdleMarch` (`server/tide.ts`) when no
-  Tide room is open in its process: a full meter with no march booked gets the next dusk, a march missed by more than
-  `TIDE.lateMs` moves to the next dusk, and the world row is written. With a room open its Tide does this (as before).
+  Tide room is open in its process: a full meter with no march booked gets the next dusk, and a booked march is
+  counted as run once its time is up (`marchAt + TIDE.limitMs`: meter 0, no march booked, `marches + 1`, the row
+  written), since the followers marched it for their heroes. With a room open its Tide does all this (as before).
+  A Tide (any room of a process) remembers the `marchAt` it set out for and never marches it again, so a follower whose
+  world the owner's row replaces after its march (same `marchAt`, meter still full) does not march and pay twice.
+- **Queues:** two first pushes at once share one read of the queue row (no batch lost, no number used twice). A
+  corrupt `fates` in the war row is dropped on load.
 - **Queues never lose a beat's items:** `AgeQueue.push` no longer throws; it returns false when the queue row cannot be
   read (the caller puts the items back with `requeue`, capped by the module's pending maximum), and a failed row
   write is retried at the next beat. The war pushes the valor and the act queue independently.
@@ -304,11 +309,15 @@ or on Postgres, keeps `data/handoff.json` and the idea file exactly as before.
   and the capped wait), `tests/agesShared.test.ts` (handoff: deleted at the join, not at login).
 
 ### Open (part 7)
-- A follower's sack/claim pays its heroes 15-45 s later (when the owner's war shows it applied); a hero who left the
-  room meanwhile gets no renown. An older owner never answers: those acts pay nothing (3 min timeout).
-- An owner with no room open moves a missed march to the next dusk, but the followers that marched at the old dusk
-  do not reset the shared meter (only the owner's Tide resets it at a march's end): while the owner has no room, the
-  meter stays full and the followers march at every dusk.
+- Known: a follower's sack/claim pays its heroes 15-45 s later (when the owner's war shows it applied); a hero who
+  left the room meanwhile gets no renown. If no fate arrives within `ACT_FATE_MS` (3 min) the rewards are withheld:
+  an older owner (which drops `ActMeta` and notes no fates) or an owner that is slow to drain (a database outage, a
+  long lease change) means those heroes get no war chest or renown, and with an older owner the clan valor of
+  follower sacks is not counted either. The war itself still applies the sack or claim if the owner accepts it.
+- An owner with no room open counts a booked march as run when its time is up, whether or not any follower had heroes
+  there to march it (no server may have marched it: the meter still empties, as a missed march no longer waits for
+  another dusk in that case).
+- `bookIdleMarch` reads the plain day clock (`shared/daynight.ts`), not TownRoom's `DAY_TIME` override.
 - A follower's own idea under its temporary number until the owner's row has it (up to ~30 s); its submitter gets no
   idea number in chat. Ideas win only while a room is open on the owner (as before, per process).
 - A hero who logs in on another server within the instant their old server writes the spot may miss it (it then

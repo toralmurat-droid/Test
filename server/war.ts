@@ -233,6 +233,7 @@ const unnamed = (n: number, names: readonly string[]) => (n === names.length ? n
 /** The saved war read for today's map, or undefined when it cannot be (malformed, or an unnamed save of an unknown size). */
 function load(got: Saved | undefined): Saved | undefined {
   if (!wellFormed(got)) return undefined;
+  if (got.fates !== undefined && (!got.fates || typeof got.fates !== "object" || Array.isArray(got.fates))) delete got.fates; // (Ages: a corrupt row's act fates: forgotten)
   const names = namesNow(), old = got.names ?? unnamed(got.state.owner.length, names);
   return old && migrateWar(got, old, names);
 }
@@ -1304,7 +1305,8 @@ export function warActFate(id: string): "ok" | "no" | undefined {
 /** The owner notes an act's fate in the war (written with it), the last FATES_MAX kept. */
 function noteFate(id: string | undefined, ok: boolean) {
   if (!id || !saved) return;
-  const f = (saved.fates ??= {});
+  if (!saved.fates || typeof saved.fates !== "object" || Array.isArray(saved.fates)) saved.fates = {};
+  const f = saved.fates;
   delete f[id]; f[id] = ok ? 1 : 0;
   const ks = Object.keys(f);
   for (let i = 0; i < ks.length - FATES_MAX; i++) delete f[ks[i]];

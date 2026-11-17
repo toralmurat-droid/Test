@@ -56,9 +56,15 @@ export class AgeQueue<B extends object> {
   async push(kv: Kv, holder: string, seen: number, add?: B, write: (f: () => Promise<void>) => Promise<unknown> = (f) => f()): Promise<boolean> {
     const key = this.prefix + holder;
     if (!this.row || this.row.holder !== holder) {
-      try { this.row = this.clean(await kv.get(key)) ?? { holder, seq: 0, batches: [] }; }
-      catch (e: any) { console.error(`Ages: could not read queue ${key} (kept for the next beat):`, e?.message ?? e); return false; }
-      this.row.holder = holder;
+      // (one read for every push waiting on it: two first pushes at once must not each start a row and lose a batch)
+      if (this.reading?.key !== key) {
+        const p = this.read(kv, key, holder);
+        this.reading = { key, p };
+        void p.finally(() => { if (this.reading?.p === p) this.reading = undefined; });
+      }
+      const got = await this.reading.p;
+      if (!got) return false;
+      if (!this.row || this.row.holder !== holder) this.row = got;
     }
     const q = this.row, n = q.batches.length;
     q.batches = q.batches.filter((b) => b.seq > seen);
@@ -79,9 +85,18 @@ export class AgeQueue<B extends object> {
   }
   /** The row in memory has batches the store may not have (the last write failed). */
   private unwritten = false;
+  /** The row read under way (shared by the pushes that wait on it). */
+  private reading?: { key: string; p: Promise<QueueRow<B> | undefined> };
+  private async read(kv: Kv, key: string, holder: string): Promise<QueueRow<B> | undefined> {
+    try {
+      const row = this.clean(await kv.get(key)) ?? { holder, seq: 0, batches: [] };
+      row.holder = holder;
+      return row;
+    } catch (e: any) { console.error(`Ages: could not read queue ${key} (kept for the next beat):`, e?.message ?? e); return undefined; }
+  }
 
   /** Forget the row read (tests, a module reset). */
-  reset() { this.row = undefined; this.unwritten = false; }
+  reset() { this.row = undefined; this.unwritten = false; this.reading = undefined; }
 
   /**
    * The owner: hands every queue's batches not counted yet (by `drained`) to `apply`, oldest first per holder. Returns
