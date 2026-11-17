@@ -15,6 +15,7 @@ import { FOE_NAME, leaderLine } from "./heralds";
 import { crownLands, keepOf } from "./crown";
 import { huntedClan, landOf, leaderOf, phaseOf, rallyClan, targetsOf, WAR, type Orders, type WarState } from "./rules";
 import { TERRITORIES } from "./territories";
+import { FORGE, forgeCodex, validateRecipe, type ForgeRecipe } from "../forge";
 
 export type CouncilMode = "off" | "shadow" | "lead";
 export const COUNCIL_MODES: readonly CouncilMode[] = ["off", "shadow", "lead"];
@@ -65,6 +66,11 @@ export interface CouncilOrders {
   proclamation?: string;
   /** One line on why (logged and in the digest, never shown to players). */
   rationale?: string;
+  /**
+   * The Forge (M4 PR4): a recipe (shared/forge.ts validateRecipe; `clan` may be left out). Checked apart from the rest
+   * (validateForgeOrder): a bad recipe is rejected on its own and never stops the targets from leading.
+   */
+  forge?: ForgeRecipe;
 }
 export interface CouncilCheck { ok: boolean; orders: CouncilOrders; errors: string[] }
 
@@ -126,6 +132,21 @@ export function validateCouncil(raw: unknown, s: Pick<WarState, "owner">, k: Cla
   const why = cleanText(r.rationale, COUNCIL.rationaleMax, "rationale", errors);
   if (why) orders.rationale = why;
   return { ok: !errors.length, orders, errors };
+}
+
+/** A council's forge order, checked: `recipe` when it is legal, else every problem in `errors` ("forge.<code>: ..."). */
+export interface ForgeOrderCheck { ok: boolean; recipe?: ForgeRecipe; errors: string[] }
+/**
+ * Checks the `forge` field of clan `k`'s orders, apart from the targets (validateCouncil ignores it). The recipe is
+ * the council's own clan's: `clan` left out is filled in, another clan's is an error. Only the recipe is checked here;
+ * the forge's own limits (FORGE.perDay, the kill switch, one order a clan a war day) are the server's at the session.
+ */
+export function validateForgeOrder(raw: unknown, k: ClanKey): ForgeOrderCheck {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { ok: false, errors: ["forge.not_object: the forge order is a recipe object"] };
+  const r = raw as Record<string, unknown>;
+  if (r.clan !== undefined && r.clan !== k) return { ok: false, errors: [`forge.bad_clan: a council forges for its own clan (${k})`] };
+  const c = validateRecipe({ ...r, clan: k });
+  return c.ok ? { ok: true, recipe: c.recipe, errors: [] } : { ok: false, errors: c.errors.map((e) => `forge.${e.code}: ${e.msg}`) };
 }
 
 /** The intent a legal order set becomes. */
@@ -190,7 +211,30 @@ export function agrees(s: Pick<WarState, "owner">, k: ClanKey, doctrine: Orders 
 /** A war event as the briefing and digest take it (server/war.ts WarEvent fits). */
 export interface CouncilEvent { tick: number; kind: string; by: ClanKey; from: ClanKey; text: string }
 /** What the server knows beyond the state: the clans at war (feuds.ts pair ids), last day's events, the Reckoning. */
-export interface BriefingCtx { /** Seeds the scripted council's jitter (the war sim: its run; default 0). */ seed?: number; wars?: readonly number[]; events?: readonly CouncilEvent[]; reckoning?: { start: number; end: number; on?: boolean; lastWinner?: ClanKey } }
+export interface BriefingCtx {
+  /** Seeds the scripted council's jitter (the war sim: its run; default 0). */ seed?: number;
+  wars?: readonly number[]; events?: readonly CouncilEvent[]; reckoning?: { start: number; end: number; on?: boolean; lastWinner?: ClanKey };
+  /** The Forge as the server knows it for this clan (server/forge.ts forgeBrief); none: the briefing has no forge section. */
+  forge?: ForgeBriefCtx;
+}
+/** The clan's side of the Forge: its live forgings, its projects in research, commissions left today, the kill switch. */
+export interface ForgeBriefCtx {
+  live: { id: string; kind: "weapon" | "monster"; name: string; base: string; palette: string }[];
+  projects: { seq: number; kind: "weapon" | "monster"; name: string; base: string; day: number; liveDay: number; gate: "pending" | "pass" }[];
+  /** Commissions left this war day (FORGE.perDay, every clan together). */
+  leftToday: number;
+  killed?: boolean;
+}
+/** The briefing's forge section: what the clan has, what a commission costs, the Codex in short (schema.forge has it all). */
+export interface ForgeBriefing extends ForgeBriefCtx {
+  /** Live forgings of each kind a clan keeps; a new one past this retires the clan's oldest of that kind. */
+  perClan: Record<"weapon" | "monster", number>;
+  /** Army spent on a commission (lead mode): the share and about how many men that is now. */
+  armyCost: { share: number; men: number };
+  researchDays: number;
+  codex: { weaponBases: number; monsterBases: number; weaponPowerCap: number; monsterBudget: number; palettes: string[]; see: string };
+  text: string;
+}
 
 export interface BriefingTarget { id: number; name: string; region: string; owner: ClanKey; control: number; fort: number; levels: [number, number]; siege?: { by: ClanKey; sack?: true; inTicks: number }; doctrineScore: number }
 export interface CouncilBriefing {
@@ -211,6 +255,8 @@ export interface CouncilBriefing {
   /** The doctrine's favourite targets without its jitter (the scripted council adds a jitter seeded by the day). */
   doctrinePick: number[];
   events: string[];
+  /** The Forge (server briefings only). */
+  forge?: ForgeBriefing;
 }
 
 const r2 = (x: number) => Math.round(x * 100) / 100;
@@ -265,6 +311,21 @@ export function buildBriefing(s: WarState, k: ClanKey, ctx: BriefingCtx = {}, da
     crown: { ...(keep ? { keep: { id: keep.id, name: keep.name, holder: s.owner[keep.id] } } : {}), land: crownLand, ...(ctx.reckoning ? { reckoning: { ...ctx.reckoning } } : {}) },
     doctrinePick: rank.slice(0, COUNCIL.maxTargets).map((r) => r.t),
     events: (ctx.events ?? []).filter((e) => e.by === k || e.from === k).slice(-COUNCIL.briefEvents).map((e) => e.text),
+    ...(ctx.forge ? { forge: forgeBriefing(ctx.forge, s.army[k]) } : {}),
+  };
+}
+
+/** The briefing's forge section from the server's facts (codex numbers from shared/forge.ts). */
+function forgeBriefing(f: ForgeBriefCtx, army: number): ForgeBriefing {
+  const c = forgeCodex();
+  return {
+    live: f.live.map((x) => ({ ...x })), projects: f.projects.map((x) => ({ ...x })), leftToday: f.leftToday, ...(f.killed ? { killed: true } : {}),
+    perClan: { ...FORGE.perClan }, armyCost: { share: FORGE.armyCost, men: Math.round(army * FORGE.armyCost) }, researchDays: FORGE.researchDays,
+    codex: {
+      weaponBases: c.weapon.bases.length, monsterBases: c.monster.bases.length, weaponPowerCap: c.weapon.powerCap, monsterBudget: c.monster.budget,
+      palettes: Object.keys(c.palettes), see: "schema.forge.codex lists every base, bonus, affix, range and budget",
+    },
+    text: "Optional: orders.forge commissions one weapon or monster recipe (at most one a war day). In lead mode it costs armyCost of your army at once, is tested by the balance sims, and appears researchDays later: monsters walk in your lands, weapons drop from them and sell at your capital. A recipe that breaks a rule is rejected on its own; your targets still stand.",
   };
 }
 
@@ -301,9 +362,18 @@ function hash(n: number): number {
  */
 export interface CouncilLogEntry {
   at: number; day: number; k: ClanKey; mode: CouncilMode; provider: string;
-  status: "led" | "shadow" | "fallback" | "rejected";
+  status: "led" | "shadow" | "fallback" | "rejected" | "forge_rejected";
   orders?: CouncilOrders; errors?: string[]; reason?: string; agree?: [number, number];
+  /** What came of the forge order of this session or submission. */
+  forge?: ForgeNote;
 }
+/**
+ * A forge order's fate: `commissioned` (lead: paid, in research as #seq), `shadow` (logged only), `rejected` (the
+ * recipe broke a rule), `refused` (a legal recipe the forge turned down: the day's cap, the kill switch, one a day).
+ */
+export interface ForgeNote { status: "commissioned" | "shadow" | "rejected" | "refused"; kind?: "weapon" | "monster"; name?: string; base?: string; seq?: number; liveDay?: number; errors?: string[] }
+/** Every forge note status (cleanCouncil keeps only these). */
+export const FORGE_NOTE_STATUSES: readonly ForgeNote["status"][] = ["commissioned", "shadow", "rejected", "refused"];
 
 /** What a day's digest is built from (all optional). */
 export interface DigestInput {
@@ -312,9 +382,18 @@ export interface DigestInput {
   battles?: readonly { kind: string; t: number; a: ClanKey; b: ClanKey; result?: string }[];
   reckoning?: { winner: ClanKey; kept: boolean };
   owner?: readonly ClanKey[];
+  /** The Forge's lines of the day (server/forge.ts forgeDayLines): commissions, gates, forgings gone live or retired. */
+  forge?: readonly string[];
 }
 
 const tName = (t: number) => TERRITORIES[t]?.name ?? `territory ${t}`;
+/** A forge note in the digest's words. */
+export function forgeNoteText(f: ForgeNote): string {
+  const what = f.name ? `${f.kind ?? "forging"} "${f.name}"${f.base ? ` on ${f.base}` : ""}` : "a forging";
+  if (f.status === "commissioned") return `commissioned ${what}${f.seq ? ` as #${f.seq}` : ""}${f.liveDay !== undefined ? `, live on war day ${f.liveDay} if the gate passes` : ""}`;
+  if (f.status === "shadow") return `would forge ${what} (shadow: nothing made)`;
+  return `${f.status} ${what}: ${f.errors?.join("; ") ?? "?"}`;
+}
 
 /** The plain-text digest of war day `day`: councils (decisions, rejections, fallbacks), flips, battles, the Reckoning, the map. Pure. */
 export function dailyDigest(day: number, inp: DigestInput): string {
@@ -328,7 +407,9 @@ export function dailyDigest(day: number, inp: DigestInput): string {
       out.push(`- ${who} ${e.status === "led" ? "led" : "shadowed"}: ${e.orders?.stance ?? "attack"} on ${ts}${e.orders?.rationale ? `. Why: ${e.orders.rationale}` : ""}${ag}`);
       if (e.status === "led" && e.orders?.proclamation) out.push(`  proclaimed: "${e.orders.proclamation}"`);
     } else if (e.status === "fallback") out.push(`- ${who} fell back to doctrine: ${e.reason ?? "invalid orders"}${e.errors?.length ? ` (${e.errors.join("; ")})` : ""}`);
+    else if (e.status === "forge_rejected") out.push(`- ${who} forge order rejected (targets accepted): ${e.errors?.join("; ") ?? "invalid"}`);
     else out.push(`- ${who} submission rejected: ${e.errors?.join("; ") ?? "invalid"}`);
+    if (e.forge && e.status !== "forge_rejected") out.push(`  forge: ${forgeNoteText(e.forge)}`);
   }
   const ev = inp.events ?? [], count = (k: string) => ev.filter((e) => e.kind === k).length;
   out.push(`Flips: ${count("flip")}, sieges laid: ${count("siege")}, held: ${count("held")}, Holds sacked: ${count("sack")}`);
@@ -339,6 +420,7 @@ export function dailyDigest(day: number, inp: DigestInput): string {
     for (const b of bs) out.push(`- ${b.kind} at ${tName(b.t)}: ${b.a} vs ${b.b}, ${b.result === "att" ? `${b.a} won` : b.result === "def" ? `${b.b} won` : b.result === "draw" ? "a draw" : "not over"}`);
   }
   if (inp.reckoning) out.push(`Reckoning: ${inp.reckoning.winner} ${inp.reckoning.kept ? "kept" : "took"} the Crown Keep`);
+  if (inp.forge) out.push(`Forge: ${inp.forge.length ? "" : "nothing forged"}`, ...inp.forge.map((l) => `- ${l}`));
   if (inp.owner) out.push(`Land: ${CLAN_KEYS.map((k) => `${k} ${inp.owner!.filter((o) => o === k).length}`).join(", ")}`);
   return out.join("\n");
 }
@@ -352,5 +434,11 @@ export const ORDER_SCHEMA = {
     stance: `one of ${COUNCIL_STANCES.join(" | ")} (default attack)`,
     proclamation: `optional, plain ASCII text, at most ${COUNCIL.proclamationMax} characters, announced to all players in lead mode`,
     rationale: `optional, plain ASCII text, at most ${COUNCIL.rationaleMax} characters, one line, logged only`,
+    forge: {
+      about: "optional, at most one forging a war day: a recipe for a weapon or a monster built from the parts in codex (clan may be left out). Checked apart from the targets: a bad recipe is rejected on its own (the answer's forge.errors) and the targets still stand.",
+      weapon: `{ kind: "weapon", name, base: codex.weapon.bases[].id, implicit: [${FORGE.minImplicits}-${FORGE.maxImplicits} of { key: codex.weapon.implicit key, value: 1..max }], elem?: { el: codex.weapon.elements, share: >0, <= ${FORGE.maxShare}, steps of ${FORGE.shareStep} }, palette: codex.palettes key }; itemPower <= codex.weapon.powerCap`,
+      monster: `{ kind: "monster", name, base: codex.monster.bases[].kind, affixes: [0-${FORGE.maxAffixes} of that base's affixes], weapon?: one of that base's weapons, hp, dmg, speed: within codex.monster.range, palette: codex.palettes key }; mobPower <= codex.monster.budget`,
+      codex: forgeCodex(),
+    },
   },
 } as const;

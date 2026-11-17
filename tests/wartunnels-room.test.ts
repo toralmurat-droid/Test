@@ -281,7 +281,7 @@ test("tunnels (room): caravans, a siege and the tunnel stay within maxTroops; pa
 
 test("tunnels (war): the strikes are read on the state the war tick started from, as rules.ts feeds them", async () => {
   try {
-    const state = newWar(), t0 = Date.now();
+    const state = newWar(), t0 = Date.UTC(2026, 10, 17, 20, 0); // (a fixed start: the war's day and night follow the clock, and some start hours bring no strike in 120 ticks)
     _resetWar({ v: 1, state, minds: newMinds(), next: t0, log: [] });
     let checked = 0;
     for (let i = 0; i < 120; i++) { // (on the moors map the Hide-Kin's first tunnels come after ~45 ticks)
