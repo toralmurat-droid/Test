@@ -75,6 +75,7 @@ export const BAKED_PROPS: Record<string, [number, number]> = {
   dp_candles: [30, 30], dp_skulls: [40, 40], dp_jar: [24, 30],
   wp_venom_caps: [34, 30], wp_ice_spikes: [34, 40], wp_ember_vent: [34, 34], wp_storm_stone: [30, 50], wp_hollow_throne: [108, 120],
   wp_crownstone0: [30, 54], wp_crownstone1: [30, 54], wp_crownstone2: [30, 54], qobj_ward: [30, 54], qobj_ward_broken: [30, 54],
+  wc_tent: [132, 110],
   qobj_silk: [30, 50], qobj_silk_cut: [30, 50], qobj_totem: [40, 76], qobj_totem_burnt: [40, 76],
 };
 export function preloadBakedProps(scene: Phaser.Scene) {
