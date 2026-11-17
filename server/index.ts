@@ -14,6 +14,8 @@ import { flushWorldFinal, initWorld } from "./worldStore";
 import { clientIp } from "./ratelimit";
 import { flushWar, startWar, warLog, warNow } from "./war";
 import { councilAdmin, killCouncils, mountCouncilRoutes } from "./warCouncil";
+import { flushForge, initForge, mountForgeAdmin } from "./forge";
+import { openKv } from "./store";
 
 const PORT = Number(process.env.PORT ?? 2567);
 const app = express();
@@ -115,6 +117,8 @@ app.post("/admin/war-council", (req, res) => {
   res.setHeader("Cache-Control", "no-store");
   res.json(councilAdmin(0));
 });
+// The Forge (M4, server/forge.ts): GET /admin/forge (registry, research, log), POST ?kill=1|0&retire=<id>&revoke=<id>
+mountForgeAdmin(app, adminOk);
 // The remote councils (scheduled Claude routines): briefings and orders, behind WAR_COUNCIL_TOKEN (off when unset)
 mountCouncilRoutes(app);
 
@@ -159,16 +163,17 @@ gameServer.onBeforeShutdown(async () => { announceUpgrade(); await wait(400); })
 // The war's last write and its lease handed on (Ages: server/war.ts flushWar) run alongside, given at most 5 s.
 gameServer.onShutdown(async () => {
   writeHandoff();
-  const war = flushWar();
+  const war = flushWar(); flushForge();
   await flushFinal(); await flushWorldFinal();
   await Promise.all([wait(800), Promise.race([war, wait(5_000)])]);
 });
 
 // Accounts first (Postgres when DATABASE_URL is set): players must never join before their saves are loaded.
 // The world state (the Gloam Tide's meter, server/worldStore.ts) loads with them; the clan war (server/war.ts, its
-// own kv table / data/war.json) starts after both, before the server listens.
+// own kv table / data/war.json) starts after both, before the server listens. The Forge's registry (server/forge.ts, its
+// own key in the same store) loads after the war and before the server listens: forged items in saves need it.
 Promise.all([initAccounts(), initWorld()])
-  .then(() => startWar())
+  .then(async () => { const kv = await openKv(); await startWar(kv); await initForge(kv); })
   .then(() => gameServer.listen(PORT))
   .then(() => console.log(`Game server on http://localhost:${PORT}`))
   .catch((e) => { console.error("Could not start:", e); process.exit(1); });

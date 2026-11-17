@@ -1245,3 +1245,17 @@ async function drainValor() {
   }
   if (saved.drained) for (const h of Object.keys(saved.drained)) if (!live.has(h)) delete saved.drained[h]; // (a queue gone: nothing left to count)
 }
+
+// ---- The Forge (M4: server/forge.ts) ------------------------------------------------------------------------------------
+
+/**
+ * A clan pays for a forging with a share of its army (FORGE.armyCost): the men are gone at once, and the war save is
+ * written with the next step's save. Returns the men spent, or undefined before the war is loaded.
+ */
+export function warSpendArmy(k: ClanKey, share: number, now = Date.now()): number | undefined {
+  if (!saved || !canWrite() || !CLANS[k] || !(share > 0 && share < 1)) return undefined; // (only the war's owner spends)
+  const s = saved.state, spent = Math.max(0, s.army[k] * share);
+  s.army[k] -= spent;
+  dirtyAt ||= now;
+  return spent;
+}

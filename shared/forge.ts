@@ -9,7 +9,7 @@
  * a forged monster never becomes a new MobKind: it is the base kind with a ForgedMob variant (applyVariant), so every
  * Record<MobKind, ...> table (loot, combat, art) applies unchanged.
  *
- * Pure rules and data. PR1: no live effect (the server loop, client art and council orders come in later PRs).
+ * Pure rules and data. The live loop (registry, research, spawns, drops, sales) is server/forge.ts and server/forgeMobs.ts.
  */
 import { BOSS, ELITE, MOBS, SKELETON_WEAPONS, type MobDef, type MobKind } from "./constants";
 import { BANDIT_ROLES } from "./bandits";
@@ -33,6 +33,16 @@ export const FORGE = {
   armyCost: 0.1,
   /** Owner default: forged monsters walk only in the clan's own lands for now (not in its troops or garrisons). */
   mobsIn: "lands" as const,
+  /** Live loop (server/forge.ts, PR2): in a land its clan holds, a spawn of a forged monster's base kind comes as the forging this often. */
+  spawnShare: 0.25,
+  /** A forged monster leaves one of its clan's forged weapons this often (on top of its normal loot). */
+  dropChance: 0.05,
+  /** Live forgings per clan and kind: a new one past this retires the clan's oldest of that kind. */
+  perClan: { weapon: 2, monster: 2 } as Record<"weapon" | "monster", number>,
+  /** Commissions per war day, all clans together. */
+  perDay: 5,
+  /** Forge log entries kept (oldest dropped first). */
+  logMax: 200,
   nameMax: 32,
   /** Weapons: the element share may be at most this, in steps of shareStep. */
   maxShare: 0.5, shareStep: 0.05,
@@ -363,3 +373,7 @@ export function applyVariant(def: MobDef, v: ForgedMob): MobDef {
     xp: Math.round(def.xp * mobPower(v)),
   };
 }
+
+/** A clan's live (active) forged weapons in seq order: the order of its quartermaster's forged stock, on server and client alike. */
+export const liveWeapons = (defs: Iterable<Forged>, clan: string): ForgedWeapon[] =>
+  [...defs].filter((d): d is ForgedWeapon => d.kind === "weapon" && d.clan === clan && d.status === "active").sort((a, b) => a.seq - b.seq);
