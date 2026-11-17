@@ -1150,7 +1150,6 @@ export class SkillFx {
     this.scene.tweens.add({ targets: g, alpha: 0, delay: 900, duration: 900, onComplete: () => g.destroy() });
   }
 
-  /** A stone (or ice) spike bursting out of the ground and sinking back. */
   /** A baked area object (AREA3D) at (x, y), anchored at its ground point, or undefined when the sheet isn't loaded. */
   private area3d(key: string, x: number, y: number, depth: number, frame = 0): Phaser.GameObjects.Image | undefined {
     const a = AREA3D[key];
@@ -1158,6 +1157,7 @@ export class SkillFx {
     return this.scene.add.image(x, y, `fx3_${key}`, frame).setOrigin(a[3] / a[0], a[4] / a[1]).setScale(1 / 1.5).setDepth(depth);
   }
 
+  /** A stone (or ice) spike bursting out of the ground and sinking back. */
   private spike(x: number, y: number, style: FxStyle, h: number) {
     const im = this.area3d(`spike_${style}`, x, y, y, Math.floor(Math.random() * 3));
     if (im) {
