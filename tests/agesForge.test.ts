@@ -8,7 +8,7 @@ import {
   _forgeNow, _forgePulse, _forgeSave, _gatesDone, _resetForge, _setGateRunner, commission, flushForge, forgeClock, forgedStock, forgeRole,
   initForge, killForge, onForge, packFor, type ForgeSave,
 } from "../server/forge";
-import { _resetWar, warState } from "../server/war";
+import { _pulse, _resetWar, flushWar, startWar, stopWar, warRole, warState } from "../server/war";
 import type { Kv } from "../server/store";
 import { FORGE_API, forgeAccess } from "../shared/forgeApi";
 import type { WeaponRecipe } from "../shared/forge";
@@ -241,5 +241,82 @@ test("forge owner: shutdown writes once more and releases; a lost lease stops wr
     assert.notEqual(forgeRole(), "owner");
     await _forgePulse();
     assert.equal(writes.get("forge"), before + 1, "no beat after the shutdown");
+  } finally { _resetForge(); _resetWar(); }
+});
+
+test("forge gate: one finishing after the lease was lost is dropped, stays pending, and is gated exactly once on takeover", async () => {
+  const t0 = 60_000_000, c = clock(t0), be = memLeases(c.now), { kv } = memKv(be);
+  try {
+    const state = ownWar(); _resetForge();
+    await initForge(kv, new Leases(be, "main:me", true, c.now));
+    const g = gate(), runs: string[] = [];
+    _setGateRunner(async (d) => { runs.push(d.id); if (runs.length === 1) await g.p; return { ok: true, reasons: [] }; });
+    assert.ok(commission("redfang", WEAPON, warDay(state.tick)).ok);
+    await new Promise((r) => setTimeout(r, 5));
+    assert.equal(runs.length, 1, "gate under way");
+    be.rows.set("lease:forge", { holder: "main:other", until: c.t + LEASE.ttlMs }); // (another server holds it now)
+    await _forgePulse();
+    assert.equal(forgeRole(), "follower");
+    g.open(); await _gatesDone();
+    assert.equal(_forgeSave().projects.redfang![0].gate, "pending", "the verdict came too late: dropped");
+    c.t += LEASE.ttlMs + 1; // the other server is gone
+    await _forgePulse();
+    assert.equal(forgeRole(), "owner");
+    await _gatesDone(); await _forgePulse(); await _gatesDone();
+    assert.equal(runs.length, 2, "gated once more on takeover, and only once");
+    assert.equal(_forgeSave().projects.redfang![0].gate, "pass");
+    await flushForge();
+  } finally { _resetForge(); _resetWar(); }
+});
+
+test("forge and war leases split: no commission while the war is elsewhere; the forge moves to the war's owner within a beat or two", async () => {
+  const t0 = 70_000_000_000_000, c = clock(t0), be = memLeases(c.now), { kv, m, writes } = memKv(be);
+  m.set("war", JSON.stringify({ v: 1, state: newWar(), minds: newMinds(), next: t0 + 1e12, log: [] }));
+  try {
+    _resetWar(undefined); stopWar(); _resetForge();
+    await startWar(kv, new Leases(be, "main:me", true, c.now)); stopWar();
+    await initForge(kv, new Leases(be, "main:me", true, c.now));
+    assert.equal(warRole(), "owner"); assert.equal(forgeRole(), "owner");
+    // the war's lease goes to another server (B); this one (A) still holds the forge's until its next beat
+    be.rows.set("lease:war", { holder: "main:b", until: Infinity });
+    await _pulse(c.t);
+    assert.equal(warRole(), "follower");
+    const army0 = warState()!.army.redfang;
+    const r = commission("redfang", WEAPON, warDay(warState()!.tick));
+    assert.equal((r as { code?: string }).code, "not_owner");
+    assert.equal(warState()!.army.redfang, army0, "nothing spent");
+    assert.ok(_forgeSave().log.some((e) => e.kind === "refused" && /not_owner/.test(e.text)), "in the forge's log (/admin/forge)");
+    const n = writes.get("forge") ?? 0;
+    await _forgePulse();
+    assert.equal(forgeRole(), "follower", "handed on with the war");
+    assert.equal(be.rows.has("lease:forge"), false, "lease given back for the war's owner");
+    assert.equal(writes.get("forge"), n + 1, "written once more on the way out");
+    await _forgePulse();
+    assert.equal(be.rows.has("lease:forge"), false, "not taken again while the war is elsewhere");
+    // the other way round: this server gets the war back; its forge follows at its next beat
+    be.rows.delete("lease:war");
+    await _pulse(c.t);
+    assert.equal(warRole(), "owner");
+    await _forgePulse();
+    assert.equal(forgeRole(), "owner");
+    assert.equal(be.rows.get("lease:forge")!.holder, "main:me");
+    _setGateRunner(async () => ({ ok: true, reasons: [] }));
+    assert.ok(commission("redfang", WEAPON, warDay(warState()!.tick)).ok, "commissions again");
+    await _gatesDone(); await flushForge(); await flushWar();
+  } finally { stopWar(); _resetForge(); _resetWar(); }
+});
+
+test("forge: a second init as a follower installs the registry it loaded, not the previous one", async () => {
+  const c = clock(), be = memLeases(c.now), { kv, m } = memKv(be);
+  be.rows.set("lease:forge", { holder: "main:owner", until: Infinity });
+  m.set("forge", JSON.stringify("garbage")); // (a row this build cannot read: a follower leaves it and shows nothing)
+  try {
+    ownWar(); _resetForge();
+    const w = _forgeNow(WEAPON); // (a registry from before the init)
+    assert.equal(gearDef(w.id)!.name, WEAPON.name);
+    await initForge(kv, new Leases(be, "main:me", true, c.now));
+    assert.equal(forgeRole(), "follower");
+    assert.match(gearDef(w.id)!.name, /^Forgotten/);
+    assert.equal(packFor().defs.length, 0);
   } finally { _resetForge(); _resetWar(); }
 });

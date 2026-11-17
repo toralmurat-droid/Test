@@ -68,7 +68,13 @@ Also makes today's single server safer: a deploy's overlap no longer has two ser
   - `flushForge` returns a promise: with a shared store it sets `stopping` (no takeover, clock or save after it), writes
     once more if it owns, waits for queued writes, and releases the lease. `server/index.ts` waits for it together with
     the war's, inside the same 5 s cap. Without a shared store: the blocking JSON write, as before.
-- Tests: `tests/agesForge.test.ts` (api, JSON mode unchanged, a follower refuses and learns the owner's forgings,
+- Review fix: the war's and the forge's leases could split (one server the forge's, another the war's), refusing every
+  commission. With a shared store only the war's owner competes for `lease:forge`; a forge owner that lost the war
+  writes the forge once more and releases (`handOver`), so the war's owner takes it at its next beat. A `not_owner`
+  refusal on the forge's owner goes to the forge log (`/admin/forge`). A follower's init always installs the registry it
+  loaded.
+- Tests: `tests/agesForge.test.ts` (late gate dropped and gated once on takeover, the split leases resolving, a second
+  follower init; api, JSON mode unchanged, a follower refuses and learns the owner's forgings,
   takeover with snapshot and gates, newer saves read-only / hidden, flush during a takeover, the lease lost and regained,
   shutdown write and release).
 
