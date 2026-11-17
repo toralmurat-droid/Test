@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-17",
+  "title": "Projectiles rebuilt in 3D",
+  "changes": [
+    "Arrows, crossbow bolts, Blood Lances, Void lances, ice shards, thrown knives and stones, fireballs, blood bolts, slime globs, frozen orbs, magic, shadow and sun bolts, plague rats and bats are now small 3D models baked to pixel art.",
+    "Arrows, lances and shards now point along their flight from 16 drawn angles instead of a rotated sprite, so they stay crisp."
+  ]
+}
