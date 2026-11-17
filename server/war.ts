@@ -7,7 +7,7 @@
  */
 import { TILE } from "../shared/constants";
 import { CLANS, CLAN_KEYS, type ClanKey } from "../shared/war/clans";
-import { newMinds, scriptedOrders, type Mind } from "../shared/war/doctrine";
+import { newMinds, type Mind } from "../shared/war/doctrine";
 import { deployments, newWar, nightRaid, rallyClan, sackHold, supplyMap, WAR, warTick, type Orders, type TickExtra, type WarState } from "../shared/war/rules";
 import { initialOwners, TERRITORIES, type Territory } from "../shared/war/territories";
 import { regionByKey } from "../shared/war/regions";
@@ -28,12 +28,13 @@ import { frontStep } from "../shared/war/siege";
 import { TOWN, TOWNS, townById, townCounts, townPatron, townStep, townsView, type TownChange, type TownState, type TownsMsg } from "../shared/war/towns";
 import { openKv, type Kv } from "./store";
 import { cleanCrown, crownClock, crownTick, crownValor, crownView, type CrownSave } from "./warCrown";
+import { cleanCouncil, councilClock, councilOnNewMap, leaderOrders, noteOrders, proclaimLine, takeProclamations, type CouncilSave } from "./warCouncil";
 
 /**
  * What else a tick brought, for the room to announce (not logged, not saved): the Night Raiders' strike on the hunted
  * clan, and the Rally when the clan it is for changed (`rally` undefined: nobody is rallied any more).
  */
-export interface WarNews { raid?: { clan: ClanKey; ts: number[] }; rally?: { clan?: ClanKey; was?: ClanKey } }
+export interface WarNews { raid?: { clan: ClanKey; ts: number[] }; rally?: { clan?: ClanKey; was?: ClanKey }; /** War Councils in lead mode: their proclamations (server/warCouncil.ts). */ proclaim?: { clan: ClanKey; text: string }[] }
 /**
  * `sack` (server/warHolds.ts): a hero sacked the Hold of t; `by` is the sacker's clan, or the holder itself when the hero was unsworn.
  * `grow` (W3): the holder (`by` = `from`) built its Hold of t up to `tier` (1 camp, 2 fortress; shared/war/holdTiers.ts).
@@ -61,6 +62,8 @@ interface Saved {
   towns?: Record<string, TownState>;
   /** Crown PR4: the Reckoning (server/warCrown.ts). Optional: read through cleanCrown; a save without it has had no Reckoning yet. Kept on a map change. */
   crown?: CrownSave;
+  /** War Councils (M3, server/warCouncil.ts): intents, pending remote orders, the council log, daily digests. Optional: read through cleanCouncil; intents dropped on a map change. */
+  council?: CouncilSave;
 }
 
 const KEY = "war";
@@ -163,6 +166,7 @@ export function migrateWar(saved: Saved, oldNames: readonly string[], names: rea
   const out: Saved = { ...saved, state, minds, log, names: [...names] };
   if (oldNames.length !== names.length || oldNames.some((n, i) => n !== names[i])) { delete out.ahead; delete out.cols; delete out.battles; } // (orders, columns and battles name territory ids: given afresh on load)
   if (oldNames.length !== names.length || oldNames.some((n, i) => n !== names[i])) delete out.towns; // (W6: each town takes its land's holder again)
+  if (oldNames.length !== names.length || oldNames.some((n, i) => n !== names[i])) { const c = councilOnNewMap(out.council); if (c) out.council = c; } // (M3: intents name ids)
   return out;
 }
 
@@ -232,6 +236,7 @@ export async function startWar(store?: Kv) {
   cleanBattles();
   cleanTowns(); // (W6)
   saved.crown = cleanCrown(saved.crown); // (Crown PR4)
+  saved.council = cleanCouncil(saved.council); // (M3)
   try { lookAhead(saved.next - WAR.tickMs); } catch (e) { console.error("War: the orders ahead could not be given:", e); } // (the next tick tries again)
   timer = setInterval(() => { step(Date.now()).catch((e) => console.error("War: tick failed:", e)); }, 15_000);
   timer.unref?.();
@@ -245,6 +250,9 @@ export async function step(now: number) {
   settleMeetings(now);
   try { battleClock(now); } catch (e) { console.error("War: battles failed:", e); } // (with no room open, the battles go on here)
   try { crownClock(now); } catch (e) { console.error("War: the Reckoning failed:", e); } // (Crown PR4: its warning, start, standings and close)
+  // War Councils (M3): the sessions for the war day of the next orders, before the ticks that give them
+  if (now >= saved.next) try { await councilClock(now); } catch (e) { console.error("War: the councils failed (the doctrine leads):", e); }
+  if (!saved) return;
   if (now < saved.next) { if (dirtyAt && now - lastSave >= COLUMN.saveMs) await save(now); return; }
   const late = Math.floor((now - saved.next) / WAR.tickMs);
   if (late >= CATCH_UP) saved.next = now - (CATCH_UP - 1) * WAR.tickMs;
@@ -257,6 +265,8 @@ export async function step(now: number) {
   relate();
   const rallyNow = rallyClan(saved.state);
   if (rallyNow !== rallyWas) news.rally = { clan: rallyNow, was: rallyWas };
+  const proclaim = takeProclamations();
+  if (proclaim.length) news.proclaim = proclaim;
   saved.log.push(...events);
   if (saved.log.length > LOG_MAX) saved.log.splice(0, saved.log.length - LOG_MAX);
   if (!process.env.NODE_TEST_CONTEXT) for (const e of events) console.log(`War: ${e.text}`);
@@ -278,7 +288,7 @@ async function save(now: number) {
 function tickOnce(at: number, news: WarNews): WarEvent[] {
   const s = saved!.state, before = { owner: [...s.owner], siege: s.siege.map((x) => x && { ...x }), fort: [...s.fort], control: [...s.control] };
   // the orders given one tick ahead (W4: their columns marched since), or given now when there are none (a first tick)
-  const orders = saved!.ahead ?? scriptedOrders(s, saved!.minds, rng(s.tick * 2654435761 + 1)), phase = warPhase(at);
+  const orders = saved!.ahead ?? leaderOrders(s, saved!.minds, rng(s.tick * 2654435761 + 1), saved!.council), phase = warPhase(at);
   lastStrikes = tunnelStrikes(s, orders); // (before warTick moves the owners: the strikes the rules fed)
   const raid = nightRaid(s, phase); // (likewise: the lands warTick strikes)
   lastRaided = raid?.ts ?? [];
@@ -291,7 +301,7 @@ function tickOnce(at: number, news: WarNews): WarEvent[] {
   try { crownTick(at); } catch (e) { console.error("War: the Reckoning's tick failed:", e); } // (Crown PR4: the Crown's land scores on the new owners)
   // the orders for the next tick, at once (same leaders, same seed as if given then): their columns march now
   saved!.cols = {};
-  try { saved!.ahead = scriptedOrders(s, saved!.minds, rng(s.tick * 2654435761 + 1)); lookAhead(at); }
+  try { saved!.ahead = leaderOrders(s, saved!.minds, rng(s.tick * 2654435761 + 1), saved!.council); noteOrders(s, saved!.ahead, saved!.council); lookAhead(at); }
   catch (e) { delete saved!.ahead; marches = []; console.error("War: the orders ahead could not be given (the next tick gives them):", e); }
   try { planBattles(at); } catch (e) { console.error("War: battles could not be planned:", e); }
   const out: WarEvent[] = [];
@@ -363,7 +373,7 @@ export function relate(last?: readonly unknown[]) {
 function lookAhead(at: number) {
   if (!saved) return;
   const s = saved.state;
-  saved.ahead ??= scriptedOrders(s, saved.minds, rng(s.tick * 2654435761 + 1)); // (an old save, or a first tick: as the tick would have given them)
+  saved.ahead ??= leaderOrders(s, saved.minds, rng(s.tick * 2654435761 + 1), saved.council); // (an old save, or a first tick: as the tick would have given them)
   lastPlans = plansOf(s, saved.ahead, tunnelStrikes(s, saved.ahead), s.tick); // (the view after the last tick carries s.tick)
   marches = marchesOf(lastPlans, deployments(s, saved.ahead, warPhase(at + WAR.tickMs)).attack, s.tick, at);
   const cols = (saved.cols ??= {});
@@ -773,6 +783,7 @@ export function _resetWar(s?: Saved, store?: Kv) {
   pendingLive.clear(); fielded.clear(); captainRoom.clear(); bannerReports.clear(); scoredWin.clear(); heroCaps.clear(); clanCaps.clear(); battleNews.length = 0; cleanBattles(); battleVer++;
   heldGate.clear(); cleanTowns(); townVer++; // (W6)
   saved.crown = cleanCrown(saved.crown); // (Crown PR4)
+  saved.council = cleanCouncil(saved.council); // (M3)
   if (saved.ahead) lookAhead(saved.next - WAR.tickMs); // (no orders ahead: given at the first tick, as before W4)
 }
 /** Tests: set the last tick's orders; they are the orders ahead too (the plan and the columns follow them). */
@@ -809,6 +820,7 @@ export function attachWar(room: { broadcast(type: string, msg: unknown): void })
       room.broadcast("warraid", news.raid); // a notice in the struck lands (client/src/warNotice.ts)
     }
     if (news.rally) room.broadcast("chat", { id: "", name: "Herald", text: rallyLine(news.rally.clan, news.rally.was) });
+    for (const p of news.proclaim ?? []) room.broadcast("chat", { id: "", name: "Herald", text: proclaimLine(p.clan, p.text) }); // (M3: lead councils only)
   });
 }
 
@@ -950,7 +962,7 @@ export const warCrownSave = (): CrownSave | undefined => (saved ? (saved.crown ?
 /** The Reckoning changed the save: written with the next step's save, or at once when `now` is set (a result, a payout). */
 export function warCrownChanged(now: number, atOnce = false) {
   if (!saved) return;
-  if (atOnce) { kv?.set(KEY, saved).catch((e) => console.error("War: could not save:", e)); return; }
+  if (atOnce) { void save(now); return; } // through the save chain: never two war writes in flight
   dirtyAt ||= now;
 }
 /**
@@ -970,3 +982,16 @@ export function crownKeep(t: number, k: ClanKey, text: string, now = Date.now())
   const view = viewOf(saved);
   listeners.forEach((f) => { try { f(view, [e], {}); } catch (err) { console.error("War listener:", err); } });
 }
+
+// ---- War Councils (M3: shared/war/council.ts has the rules, server/warCouncil.ts the sessions and the remote routes) -----
+
+/** The war save's council part (created on first use), or undefined before the war is loaded. */
+export const warCouncilSave = (): CouncilSave | undefined => (saved ? (saved.council ??= cleanCouncil(undefined)) : undefined);
+/** The councils changed the save: written with the next step's save, or at once (`atOnce`: a remote submission). */
+export function warCouncilChanged(now: number, atOnce = false) {
+  if (!saved) return;
+  if (atOnce) { void save(now); return; } // through the save chain: never two war writes in flight
+  dirtyAt ||= now;
+}
+/** When the next war tick is due (ms), or undefined before the war is loaded. */
+export const warNextTick = (): number | undefined => saved?.next;

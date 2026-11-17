@@ -25,7 +25,7 @@ export interface Dress3D {
   boots: number; bootStyle: NonNullable<Look["bootStyle"]>; bootTrim?: number; wings?: number;
   sleeve: number; arms: Look["arms"]; glove?: number; armour?: { col: number; trim: number };
   belt?: number; buckle?: number;
-  cape?: { col: number; collar?: number; short?: boolean };
+  cape?: { col: number; collar?: number; short?: boolean; fur?: boolean };
 }
 
 /** The rig as body.ts computed it (screen positions in rig units) plus the pose bits the cloth needs. */
@@ -40,10 +40,14 @@ export interface Rig3 {
 // ---- materials: ramps built from a single colour with the house hue shift (cool shadows, warm lights) ---------
 interface Mat { ramp: number[]; spec: number; grain: number; glow?: boolean }
 const rampCache = new Map<string, number[]>();
+/** How far a dark colour's ramp may be stretched up (heroes 2.8 so black cloth still reads; monsters stay dark and weathered). */
+let rampCap = 2.8, monster = false;
+/** Monster mode (paint/mobs.ts): darker ramps, and the monster-only gear (masks, beards, tabards...) is built. */
+export function setMonster3D(on: boolean) { monster = on; rampCap = on ? 1.7 : 2.8; }
 function ramp(col: number, n = 7, lo = 0.34, hi = 1.32): number[] {
   // very dark cloth still needs a readable light side: stretch the top of the ramp
   const mx = Math.max((col >> 16) & 255, (col >> 8) & 255, col & 255) / 255;
-  hi = Math.max(hi, Math.min(2.8, 0.62 / Math.max(mx, 0.05)));
+  hi = Math.max(hi, Math.min(rampCap, 0.62 / Math.max(mx, 0.05)));
   const key = `${col}:${n}:${lo}:${hi}`;
   let r = rampCache.get(key);
   if (!r) {
@@ -63,7 +67,7 @@ const mat = (col: number, o: Partial<Mat> & { lo?: number; hi?: number; n?: numb
   ({ ramp: ramp(col, o.n ?? 7, o.lo ?? 0.34, o.hi ?? 1.32), spec: o.spec ?? 0, grain: o.grain ?? 0, glow: o.glow });
 
 // ---- signed distance primitives (world space) -----------------------------------------------------------------
-interface Prim { d: (x: number, y: number, z: number) => number; m: Mat; k: number; tag: number; lo: V3; hi: V3 }
+interface Prim { d: (x: number, y: number, z: number) => number; m: Mat; k: number; tag: number; lo: V3; hi: V3; /** carved out of what came before */ cut?: boolean }
 export const TAG_BODY = 1, TAG_HAND = 2, TAG_EYE = 3;
 
 function bounds(c: V3, r: number): [V3, V3] { return [[c[0] - r, c[1] - r, c[2] - r], [c[0] + r, c[1] + r, c[2] + r]]; }
@@ -147,6 +151,8 @@ export function build3D(L: Look, w: Dress3D, r: Rig3): Built {
   const handM = w.glove !== undefined ? mat(w.glove, { lo: 0.4, hi: 1.5 }) : skin;
   const linen = mat(LINEN, { lo: 0.45, hi: 1.12 });
 
+  if (L.bones) bones3D(L, w, r, P, f, s, { nearS, farS, nearE, farE, nearH, farH, hips, knees, feet, chest, pelvis, waist, head });
+  else {
   // ---- legs
   const covered = w.torso === "jerkin" || w.torso === "robe";
   for (const i of [0, 1]) {
@@ -230,13 +236,17 @@ export function build3D(L: Look, w: Dress3D, r: Rig3): Built {
     P.push(sphere(H, 0.92, handM, 0.4, near ? TAG_HAND : TAG_BODY));
   }
 
+  }
   // ---- neck, head, hair, face
+  const headStart = P.length;
   const neckTop: V3 = [head[0], head[1], head[2] - 2.0];
+  const eyes: V3[] = [], hg = w.head;
+  if (L.skull) skull3D(L, r, P, f, s, head, chest, eyes);
+  else {
   P.push(cap([chest[0], chest[1], chest[2] + 2.6], neckTop, 1.05, 0.95, skin, 0.6));
   P.push(ell(head, f, [2.2, 2.1, 2.5], skin, 0.7));
   P.push(ell([head[0] + f[0] * 0.55, head[1] + f[1] * 0.55, head[2] - 1.4], f, [1.65, 1.6, 1.35], skin, 0.8)); // jaw
   P.push(ell([head[0] + f[0] * 2.1, head[1] + f[1] * 2.1, head[2] - 0.2], f, [0.55, 0.38, 0.75], skin, 0.3)); // nose
-  const hg = w.head;
   const hairM = L.hair !== undefined ? mat(L.hair, { lo: 0.5, hi: 1.9, grain: 0.06 }) : null;
   if (hairM && L.hairStyle !== "bald" && L.hairStyle !== "none" && hg !== "helm" && hg !== "greathelm") {
     // swept back: a cap over the crown and down the back of the head
@@ -244,8 +254,8 @@ export function build3D(L: Look, w: Dress3D, r: Rig3): Built {
     P.push(ell([head[0] - f[0] * 1.15, head[1] - f[1] * 1.15, head[2] - 0.5], f, [1.4, 2.0, 2.0], hairM, 0.6));
     if (L.hairStyle === "long") P.push(ell([head[0] - f[0] * 1.6, head[1] - f[1] * 1.6, head[2] - 3.2], f, [1.0, 2.3, 2.8], hairM, 0.8));
   }
-  const eyes: V3[] = [];
   if (!r.blink) for (const sg of [-1, 1]) eyes.push([head[0] + f[0] * 2.05 + s[0] * sg * 0.95, head[1] + f[1] * 2.05 + s[1] * sg * 0.95, head[2] + 0.15]);
+  }
 
   // ---- head gear
   const metalM = (c: number) => mat(c, { spec: 0.8, lo: 0.3, hi: 1.22 });
@@ -267,6 +277,53 @@ export function build3D(L: Look, w: Dress3D, r: Rig3): Built {
     P.push(ell([head[0], head[1], head[2] + 0.75], f, [2.75, 2.75, 2.75], hm, 0.3));
     P.push(ell([head[0], head[1], head[2] - 0.25], f, [2.95, 2.95, 0.42], mat(w.headTrim, { spec: 0.8, lo: 0.35, hi: 1.4 }), 0.1));
     P.push(cap([head[0] + f[0] * 2.65, head[1] + f[1] * 2.65, head[2] + 0.2], [head[0] + f[0] * 2.75, head[1] + f[1] * 2.75, head[2] - 1.8], 0.38, 0.3, hm, 0.1));
+    if (monster && w.plume !== undefined) { // a horsehair crest from brow to nape
+      const pm = mat(w.plume, { lo: 0.4, hi: 1.35, grain: 0.25 });
+      const at = (a: number, z: number): V3 => [head[0] + f[0] * a, head[1] + f[1] * a, head[2] + z];
+      P.push(cap(at(1.6, 3.3), at(-0.6, 4.1), 0.75, 0.85, pm, 0.4), cap(at(-0.6, 4.1), at(-2.9, 2.2 - r.moving * 0.4), 0.85, 0.45, pm, 0.4));
+    }
+  } else if ((hg === "hood" || hg === "horned") && L.skull) {
+    // a deep cowl: the skull sits back in its shadow, only the burning eyes and teeth show
+    const cm = mat(w.headCol, { lo: 0.32, hi: 1.35, grain: 0.1 }), inside = mat(0x0c080c, { lo: 0.7, hi: 1.3, n: 3 });
+    const at = (a: number, si: number, z: number): V3 => [head[0] + f[0] * a + s[0] * si, head[1] + f[1] * a + s[1] * si, head[2] + z];
+    P.push(ell(at(-0.35, 0, 0.55), f, [2.95, 2.75, 3.0], cm, 0.5));
+    P.push(cap(at(-1.6, 0, 2.2), at(-3.2, 0, 1.2), 1.2, 0.2, cm, 0.6)); // the cowl's point falling back
+    P.push(ell(at(-0.4, 0, -2.6), f, [2.4, 3.3, 1.3], cm, 0.9)); // folds over the shoulders
+    P.push({ ...ell(at(2.0, 0, -0.35), f, [1.55, 1.9, 2.25], inside, 0.35), cut: true }); // the opening round the face
+    if (hg === "horned") {
+      const hm = mat(w.headTrim, { lo: 0.38, hi: 1.25, grain: 0.12, spec: 0.2 });
+      for (const sg of [-1, 1]) {
+        const pts: V3[] = [at(0.3, sg * 2.0, 1.6), at(0.0, sg * 3.1, 2.6), at(-0.9, sg * 3.6, 3.9), at(-1.4, sg * 3.2, 5.0)];
+        for (let k = 1; k < pts.length; k++) P.push(cap(pts[k - 1], pts[k], 0.85 - k * 0.22, 0.85 - (k + 1) * 0.22 + 0.05, hm, 0.2));
+      }
+    }
+  } else if (hg === "hood" && monster) {
+    // a hood: put in before the head so the face opening carves the hood, not the face
+    const cm = mat(w.headCol, { lo: 0.32, hi: 1.35, grain: 0.1 }), inside = mat(shade(w.headCol, 0.35), { lo: 0.7, hi: 1.2, n: 3 });
+    const at = (a: number, si: number, z: number): V3 => [head[0] + f[0] * a + s[0] * si, head[1] + f[1] * a + s[1] * si, head[2] + z];
+    P.splice(headStart, 0,
+      ell(at(-0.45, 0, 0.45), f, [2.85, 2.7, 2.95], cm, 0.5),
+      cap(at(-1.6, 0, 2.1), at(-3.0, 0, 0.9), 1.1, 0.2, cm, 0.6),
+      ell(at(-0.4, 0, -2.5), f, [2.3, 3.2, 1.25], cm, 0.9),
+      { ...ell(at(2.0, 0, -0.45), f, [1.5, 1.75, 2.1], inside, 0.35), cut: true });
+  } else if (hg === "bandana" && monster) {
+    const cm = mat(w.headCol, { lo: 0.36, hi: 1.35, grain: 0.08 });
+    const at = (a: number, si: number, z: number): V3 => [head[0] + f[0] * a + s[0] * si, head[1] + f[1] * a + s[1] * si, head[2] + z];
+    P.push(ell(at(-0.25, 0, 0.75), f, [2.4, 2.3, 1.95], cm, 0.3));
+    P.push(cap(at(-2.3, 0, 0.6), at(-3.4, 0.5, -1.4), 0.45, 0.25, cm, 0.2), cap(at(-2.3, 0, 0.6), at(-3.2, -0.6, -1.2), 0.42, 0.22, cm, 0.2)); // knot tails
+  } else if (hg === "kettle" && monster) {
+    const hm = mat(w.headCol, { spec: 0.6, lo: 0.3, hi: 1.25, grain: 0.15 });
+    P.push(ell([head[0], head[1], head[2] + 1.0], f, [2.55, 2.55, 2.4], hm, 0.3));
+    P.push(ell([head[0], head[1], head[2] + 0.55], f, [3.7, 3.7, 0.38], hm, 0.15)); // the wide brim
+  } else if (hg === "horned" && monster) {
+    const hm = mat(w.headCol, { spec: 0.7, lo: 0.3, hi: 1.25, grain: 0.12 }), horn = mat(w.headTrim, { lo: 0.38, hi: 1.25, grain: 0.12, spec: 0.2 });
+    const at = (a: number, si: number, z: number): V3 => [head[0] + f[0] * a + s[0] * si, head[1] + f[1] * a + s[1] * si, head[2] + z];
+    P.push(ell(at(0, 0, 0.8), f, [2.6, 2.6, 2.55], hm, 0.3));
+    P.push(cap(at(2.4, 0, 1.0), at(2.6, 0, -1.4), 0.4, 0.3, hm, 0.1)); // nasal
+    for (const sg of [-1, 1]) {
+      const pts: V3[] = [at(0.2, sg * 2.2, 1.3), at(0.4, sg * 3.6, 2.0), at(0.6, sg * 4.3, 3.5), at(0.9, sg * 4.0, 4.9)];
+      for (let k = 1; k < pts.length; k++) P.push(cap(pts[k - 1], pts[k], 0.95 - k * 0.24, 0.95 - (k + 1) * 0.24 + 0.06, horn, 0.2));
+    }
   } else if (hg === "cap" || hg === "hood" || hg === "wide" || hg === "bandana") {
     const cm = mat(w.headCol, { lo: 0.38, hi: 1.35, grain: 0.04 });
     P.push(ell([head[0] - f[0] * 0.3, head[1] - f[1] * 0.3, head[2] + 1.35], f, [2.75, 2.6, 1.75], cm, 0.3));
@@ -278,9 +335,11 @@ export function build3D(L: Look, w: Dress3D, r: Rig3): Built {
     }
   }
 
+  if (monster && !L.skull) face3D(L, P, f, s, head);
+  if (monster && !L.bones) extras3D(L, w, r, P, f, s, { nearS, farS, nearE, farE, nearH, farH, hips, knees, feet, chest, pelvis, waist, head });
   // ---- cape and collar
   if (w.cape) {
-    const cm = mat(w.cape.col, { lo: 0.4, hi: 2.6, n: 8 });
+    const cm = mat(w.cape.col, { lo: 0.4, hi: Math.min(2.6, rampCap - 0.2), n: 8, grain: w.cape.fur ? 0.35 : 0 });
     const lin = w.cape.collar !== undefined ? mat(w.cape.collar, { lo: 0.36, hi: 1.3 }) : cm;
     const top = chest[2] + 3.1, bot = w.cape.short ? pelvis[2] - 1 : 1.8 + r.crouch * 0.4;
     const len = top - bot;
@@ -322,6 +381,213 @@ export function build3D(L: Look, w: Dress3D, r: Rig3): Built {
   return { prims: P, eyes, eyeCol: L.eyeGlow ?? L.eye ?? 0x1a1418, handNear: nearH, handFar: farH };
 }
 
+
+// ---- human monsters (bandits, raiders, soldiers): masks, beards, tabards, fur kilts, straps, quivers -----------------
+function face3D(L: Look, P: Prim[], f: P, s: P, head: V3) {
+  const at = (a: number, si: number, z: number): V3 => [head[0] + f[0] * a + s[0] * si, head[1] + f[1] * a + s[1] * si, head[2] + z];
+  if (L.beard !== undefined && L.beardStyle !== "stubble") {
+    const bm = mat(L.beard, { lo: 0.45, hi: 1.7, grain: 0.22 });
+    P.push(ell(at(1.15, 0, -1.75), f, [1.35, 1.85, 1.5], bm, 0.5));
+    if (L.beardStyle === "long") P.push(cap(at(1.4, 0, -2.4), at(1.9, 0, -5.4), 1.3, 0.45, bm, 0.6));
+  }
+  if (L.mask !== undefined) { // a cloth tied over nose and mouth
+    const mm = mat(L.mask, { lo: 0.4, hi: 1.35, grain: 0.1 });
+    P.push(ell(at(0.75, 0, -1.25), f, [1.75, 2.25, 1.25], mm, 0.3));
+  }
+  if (L.faceMask !== undefined) P.push(ell(at(1.35, 0, -0.4), f, [0.9, 1.9, 2.2], mat(L.faceMask, { spec: 0.9, lo: 0.4, hi: 1.4 }), 0.2));
+}
+
+/** Monster-only gear over a living body (heroes never wear these, so the vampire stays as it was). */
+function extras3D(L: Look, w: Dress3D, r: Rig3, P: Prim[], f: P, s: P, J: Joints) {
+  const b = r.b, { chest, pelvis } = J;
+  const off = (p: V3, a: number, si: number, z = 0): V3 => [p[0] + f[0] * a + s[0] * si, p[1] + f[1] * a + s[1] * si, p[2] + z];
+  if (L.tabard) { // a long cloth panel front and back over the armour, the clan's sign on the chest
+    const tm = mat(L.tabard.col, { lo: 0.36, hi: 1.38, grain: 0.1 }), trm = mat(L.tabard.trim, { lo: 0.4, hi: 1.3, n: 5 });
+    const sway = Math.sin(r.wave) * r.moving * 0.5;
+    for (const side of [1, -1]) {
+      const top = off(chest, side * 2.05 * b, 0, 2.2), bot = off(pelvis, side * (2.15 * b + 0.6 + (side > 0 ? sway : -sway)), 0, -4.2);
+      const mid: V3 = [(top[0] + bot[0]) / 2, (top[1] + bot[1]) / 2, (top[2] + bot[2]) / 2], half = (top[2] - bot[2]) / 2;
+      P.push(custom([mid[0] - 6, mid[1] - 6, bot[2] - 1], [mid[0] + 6, mid[1] + 6, top[2] + 1], (x, y, z) => {
+        const t = clamp((top[2] - z) / (top[2] - bot[2]));
+        const cx = top[0] + (bot[0] - top[0]) * t, cy = top[1] + (bot[1] - top[1]) * t;
+        const qx = x - cx, qy = y - cy, a = qx * f[0] + qy * f[1], si = qx * s[0] + qy * s[1];
+        return Math.max(Math.abs(a) - 0.3, Math.abs(si) - (1.55 * b + t * 0.25), Math.abs(z - mid[2]) - half);
+      }, tm, 0.3));
+      if (side > 0) {
+        P.push(ell(off(chest, 2.4 * b, 0, -0.2), f, [0.3, 0.75, 1.15], mat(L.tabard.emblem, { lo: 0.5, hi: 1.4, n: 5 }), 0.05));
+        P.push(ell(off(pelvis, 2.3 * b + 0.6, 0, -4.0), f, [0.4, 1.65 * b, 0.3], trm, 0.1)); // hem
+      }
+    }
+  }
+  if (L.legs === "fur") { // a shaggy fur kilt to the knees
+    const fm = mat(L.legCol, { lo: 0.36, hi: 1.5, grain: 0.4 });
+    const top = pelvis[2] + 1.5, bot = Math.max(J.knees[0][2], J.knees[1][2]) - 0.5, len = top - bot;
+    P.push(custom([pelvis[0] - 7, pelvis[1] - 7, bot - 1], [pelvis[0] + 7, pelvis[1] + 7, top + 1], (x, y, z) => {
+      const qx = x - pelvis[0], qy = y - pelvis[1], a = qx * f[0] + qy * f[1], si = qx * s[0] + qy * s[1];
+      const down = clamp((top - z) / len), ang = Math.atan2(si, a);
+      const R = 2.45 * b + down * 1.1 + Math.sin(ang * 7) * 0.2 * down;
+      const hem = bot + (Math.sin(ang * 11 + 0.7) * 0.5 + 0.5) * 0.9;
+      return Math.max(Math.hypot(a * 1.1, si) - R, Math.max(z - top, hem - z));
+    }, fm, 0.4));
+  }
+  if (L.harness) P.push(cap(off(J.nearS, 0.6, 0.2, -0.6), off(J.farH === J.farH ? pelvis : pelvis, 2.0 * b, -1.6 * b, 1.4), 0.38, 0.38, mat(0x2a1c14, { lo: 0.4, hi: 1.4, n: 5 }), 0.15));
+  if (L.bracer !== undefined) {
+    const bm = mat(L.bracer, { lo: 0.38, hi: 1.4, grain: 0.1, spec: 0.2 });
+    for (const [E, H] of [[J.nearE, J.nearH], [J.farE, J.farH]] as [V3, V3][]) P.push(cap(lerp3(E, H, 0.3), lerp3(E, H, 0.78), 1.12, 1.05, bm, 0.2));
+  }
+  if (L.back === "quiver") { // a quiver slung across the back, fletchings over the shoulder
+    const qm = mat(L.capeCol ?? 0x3a2a1e, { lo: 0.36, hi: 1.38, grain: 0.1 }), fl = mat(0xd8d0b8, { lo: 0.5, hi: 1.2, n: 4 });
+    const top = off(chest, -2.4 * b, 1.1, 3.2), bot = off(pelvis, -2.3 * b, -0.9, 0.2);
+    P.push(cap(top, bot, 0.95, 0.85, qm, 0.3));
+    for (let k = 0; k < 3; k++) P.push(cap(top, off(top, -0.2 + k * 0.25, -0.5 + k * 0.5, 1.6 + (k % 2) * 0.3), 0.18, 0.3, fl, 0.05));
+  }
+  if (L.scarf) { // wound round the neck, the ends hanging
+    const sm = mat(L.scarf.col, { lo: 0.38, hi: 1.38, grain: 0.1 });
+    const n = off(chest, 0, 0, 3.2);
+    P.push(ell(n, f, [1.85, 2.15, 0.85], sm, 0.3));
+    const sw = Math.sin(r.wave) * (0.4 + r.moving);
+    P.push(cap(off(n, -1.4, 0.6), off(n, -2.4 - r.moving * 1.5, 1.0 + sw * 0.3, -3.6 + r.moving * 1.2), 0.5, 0.35, sm, 0.2));
+  }
+}
+
+// ---- the dead (Look.bones / skull / rags): skeletal limbs, ribcage and spine, a bare skull, tattered rags ---------
+interface Joints { nearS: V3; farS: V3; nearE: V3; farE: V3; nearH: V3; farH: V3; hips: V3[]; knees: V3[]; feet: V3[]; chest: V3; pelvis: V3; waist: V3; head: V3 }
+const lerp3 = (a: V3, b: V3, t: number): V3 => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+/** Old bone: yellowed, pitted, darker in the cracks. */
+const boneMat = (c: number) => mat(c, { lo: 0.36, hi: 1.22, grain: 0.16, spec: 0.12 });
+
+function bones3D(L: Look, w: Dress3D, r: Rig3, P: Prim[], f: P, s: P, J: Joints) {
+  const bm = boneMat(L.skin), dark = mat(shade(L.skin, 0.3), { lo: 0.5, hi: 1, n: 3 });
+  const off = (p: V3, a: number, si: number, z = 0): V3 => [p[0] + f[0] * a + s[0] * si, p[1] + f[1] * a + s[1] * si, p[2] + z];
+  // legs: thigh and shin bones with knobbed joints, splayed bony feet
+  for (const i of [0, 1]) {
+    const hip = J.hips[i], kn = J.knees[i], ft = J.feet[i];
+    P.push(cap(hip, kn, 0.55, 0.45, bm, 0.2));
+    P.push(sphere(kn, 0.72, bm, 0.25));
+    P.push(cap(kn, ft, 0.45, 0.38, bm, 0.2));
+    P.push(sphere([ft[0], ft[1], ft[2] + 0.1], 0.6, bm, 0.2));
+    const toe = off([ft[0], ft[1], Math.max(0.45, ft[2] - 0.45)], 1.4, 0);
+    P.push(ell(toe, f, [1.35, 0.8, 0.4], bm, 0.3));
+  }
+  // pelvis: a bony saddle, the spine rising from it in knuckled vertebrae
+  const pv = J.pelvis;
+  P.push(ell([pv[0], pv[1], pv[2] + 0.3], f, [1.2, 2.25 * r.b, 1.05], bm, 0.5));
+  P.push(ell(off(pv, 0.5, 0, 0.1), f, [0.9, 1.0, 0.7], dark, 0.2)); // the hollow at its front, in shadow
+  const neck: V3 = [J.head[0], J.head[1], J.head[2] - 2.1];
+  const spineTop: V3 = [J.chest[0], J.chest[1], J.chest[2] + 2.4];
+  for (let k = 0; k <= 8; k++) {
+    const t = k / 8, c = lerp3(off(pv, -0.6, 0, 0.6), spineTop, t);
+    P.push(sphere(off(c, -0.25 * Math.sin(t * Math.PI), 0), 0.5 - t * 0.08, bm, 0.3));
+  }
+  P.push(cap(spineTop, neck, 0.42, 0.38, bm, 0.2));
+  // ribcage: hooped ribs round the chest, open at the belly, a sternum down the front (hidden under a robe or armour)
+  const rc = J.chest;
+  if (w.torso === "bare") {
+  P.push(ell([rc[0] - f[0] * 0.35, rc[1] - f[1] * 0.35, rc[2] + 0.4], f, [1.25, 1.95 * r.b, 2.2], mat(0x16100f, { lo: 0.6, hi: 1.4, n: 3 }), 0.3)); // the hollow inside, dark between the ribs
+  for (let k = 0; k < 3; k++) {
+    const z = rc[2] + 2.0 - k * 1.45, ra = 1.8 - k * 0.15, rs = (2.6 - k * 0.2) * r.b, sag = 0.35;
+    P.push(custom([rc[0] - 5, rc[1] - 5, z - 2], [rc[0] + 5, rc[1] + 5, z + 1.5], (x, y, zz) => {
+      const qx = x - rc[0], qy = y - rc[1], a = qx * f[0] + qy * f[1], si = qx * s[0] + qy * s[1];
+      const ang = Math.atan2(si, a); // 0 = straight ahead
+      const zc = z - sag * (1 - Math.cos(ang)) * 0.5 - Math.max(0, Math.cos(ang)) * 0.45; // ribs dip toward the front
+      const ring = Math.hypot(Math.hypot(a / ra, si / rs) - 1, (zz - zc) / 1.6) * 1.6;
+      const gap = Math.cos(ang) > 0.93 ? (Math.cos(ang) - 0.93) * 12 : 0; // they meet the sternum, not each other
+      return ring - 0.3 + gap;
+    }, bm, 0.15));
+  }
+  P.push(cap(off(rc, 1.65, 0, 2.2), off(rc, 1.75, 0, -0.9), 0.36, 0.3, bm, 0.2)); // sternum
+  }
+  // collarbones, then arm bones
+  for (const [S, E, H] of [[J.nearS, J.nearE, J.nearH], [J.farS, J.farE, J.farH]] as [V3, V3, V3][]) {
+    P.push(cap(off(spineTop, 0.9, 0, 0.1), S, 0.33, 0.33, bm, 0.15));
+    P.push(sphere(S, 0.78, bm, 0.3));
+    P.push(cap(S, E, 0.48, 0.4, bm, 0.2));
+    P.push(sphere(E, 0.58, bm, 0.2));
+    P.push(cap(E, H, 0.4, 0.36, bm, 0.2));
+    P.push(sphere(H, 0.68, bm, 0.3, TAG_HAND));
+  }
+  if (L.rags !== undefined) rags3D(L.rags, r, P, f, s, J);
+  garb3D(L, w, r, P, f, s, J);
+}
+
+/** What the dead wear over their bones: a robe (body and a long skirt to the ground), sleeves, a sash. */
+function garb3D(L: Look, w: Dress3D, r: Rig3, P: Prim[], f: P, s: P, J: Joints) {
+  const robe = w.torso === "robe" || w.legs === "robe";
+  if (!robe && w.torso === "bare") return;
+  const tm = mat(w.torsoCol, { grain: 0.1, lo: 0.36, hi: 1.38 }), lm = mat(w.legCol, { grain: 0.1, lo: 0.36, hi: 1.38 });
+  const trimM = w.trim !== undefined ? mat(w.trim, { spec: 0.5, lo: 0.45, hi: 1.45, n: 5 }) : null;
+  const b = r.b, { chest, waist, pelvis } = J;
+  if (w.torso !== "bare") {
+    P.push(ell(chest, f, [1.95 * b, 2.9 * b, 2.9], tm, 1.2));
+    P.push(ell(waist, f, [1.6 * b, 2.3 * b, 2.5], tm, 1.2));
+    P.push(ell([chest[0] - f[0] * 0.2, chest[1] - f[1] * 0.2, chest[2] + 3.0], f, [1.5, 1.85, 0.9], tm, 0.5)); // collar
+  }
+  if (robe) {
+    // a long robe hanging from the hips to the ground, swinging with the stride, its hem frayed and dragged in the dirt
+    const top = pelvis[2] + 1.8, len = top - 0.25, sw = r.moving * Math.sin(r.wave) * 0.5;
+    const skirt = (x: number, y: number, z: number, grow: number) => {
+      const qx = x - pelvis[0], qy = y - pelvis[1], a = qx * f[0] + qy * f[1], si = qx * s[0] + qy * s[1];
+      const down = clamp((top - z) / len);
+      const ang = Math.atan2(si, a);
+      const R = 2.35 * b + down * 1.55 + Math.sin(ang * 6 + r.wave * 0.4) * 0.16 * down + grow;
+      const ac = a - down * down * (0.3 + r.moving * 0.6) * (1 + sw);
+      const hem = 0.25 + (Math.sin(ang * 9 + 1.7) * 0.5 + 0.5) * 0.7 * down;
+      return Math.max(Math.hypot(ac * 1.15, si) - R, Math.max(z - top, hem - z));
+    };
+    const box: [V3, V3] = [[pelvis[0] - 8, pelvis[1] - 8, -1], [pelvis[0] + 8, pelvis[1] + 8, top + 1]];
+    P.push(custom(box[0], box[1], (x, y, z) => skirt(x, y, z, 0), lm, 0.6));
+    if (trimM) P.push(custom(box[0], box[1], (x, y, z) => Math.max(skirt(x, y, z, 0.12), z - 1.15), trimM, 0.1)); // a band at the hem
+  }
+  // sash or belt round the waist
+  const beltCol = L.sash ?? w.belt;
+  if (beltCol !== undefined) P.push(ell([pelvis[0], pelvis[1], pelvis[2] + 1.6], f, [2.05 * b, 2.85 * b, 0.6], mat(beltCol, { lo: 0.4, hi: 1.4, n: 5 }), 0.2));
+  // sleeves over the arm bones, wide at the wrist
+  if (w.arms === "cloth" || w.arms === "plate" || w.arms === "wrap") {
+    const sm = w.arms === "plate" ? mat(w.sleeve, { spec: 0.7, lo: 0.3, hi: 1.4 }) : mat(w.sleeve, { grain: 0.1, lo: 0.36, hi: 1.38 });
+    for (const [S, E, H] of [[J.nearS, J.nearE, J.nearH], [J.farS, J.farE, J.farH]] as [V3, V3, V3][]) {
+      P.push(sphere(S, 1.4 * b, sm, 0.8));
+      P.push(cap(S, E, 1.05, 0.95, sm, 0.6));
+      const cuff = lerp3(E, H, 0.72);
+      P.push(cap(E, cuff, 0.95, w.arms === "cloth" ? 1.3 : 0.9, sm, 0.5));
+    }
+  }
+}
+
+/** Tattered cloth: a loincloth hanging front and back in torn strips. */
+function rags3D(col: number, r: Rig3, P: Prim[], f: P, s: P, J: Joints) {
+  const rm = mat(col, { lo: 0.42, hi: 1.5, grain: 0.14 });
+  const pv = J.pelvis, sway = Math.sin(r.wave) * r.moving;
+  for (const side of [1, -1]) { // front, back
+    for (let k = -2; k <= 2; k++) {
+      const len = 3.2 + ((k * 7 + side * 3 + 11) % 5) * 0.55, top: V3 = [pv[0] + f[0] * side * 1.25 + s[0] * k * 0.62, pv[1] + f[1] * side * 1.25 + s[1] * k * 0.62, pv[2] + 1.2];
+      const lean = side * (0.4 + r.moving * 0.3) - sway * 0.4;
+      const bot: V3 = [top[0] + f[0] * lean, top[1] + f[1] * lean, top[2] - len];
+      P.push(cap(top, bot, 0.42, 0.26, rm, 0.25));
+    }
+  }
+  P.push(ell([pv[0], pv[1], pv[2] + 1.25], f, [1.45, 2.5 * r.b, 0.55], rm, 0.3)); // the knotted band
+}
+
+/** A bare skull: domed cranium, deep sockets with a burning light in each, a gaping nasal hole, a loose jaw of teeth. */
+function skull3D(L: Look, r: Rig3, P: Prim[], f: P, s: P, head: V3, chest: V3, eyes: V3[]) {
+  const bm = boneMat(L.skin), hole = mat(0x120d10, { lo: 0.7, hi: 1.2, n: 3 }), tooth = mat(shade(L.skin, 1.1), { lo: 0.5, hi: 1.1, n: 4 });
+  const off = (a: number, si: number, z: number): V3 => [head[0] + f[0] * a + s[0] * si, head[1] + f[1] * a + s[1] * si, head[2] + z];
+  P.push(cap([chest[0], chest[1], chest[2] + 2.4], off(-0.3, 0, -1.9), 0.42, 0.4, bm, 0.2)); // neck vertebrae
+  P.push(ell(off(-0.35, 0, 0.5), f, [2.35, 2.0, 2.15], bm, 0.6)); // cranium, long to the back
+  P.push(ell(off(0.9, 0, -0.9), f, [1.55, 1.6, 1.15], bm, 0.7)); // cheekbones and upper teeth
+  const open = r.attack >= 0 ? 0.55 : 0.15;
+  P.push(ell(off(0.85, 0, -2.0 - open), f, [1.2, 1.25, 0.55], bm, 0.25)); // jaw, hanging a little open
+  P.push(ell(off(1.55, 0, -1.45 - open * 0.5), f, [0.6, 1.0, 0.25 + open * 0.5], hole, 0.15)); // the dark between the teeth
+  for (let k = -2; k <= 2; k++) P.push(sphere(off(2.0 - Math.abs(k) * 0.12, k * 0.38, -1.42), 0.26, tooth, 0.05));
+  for (const sg of [-1, 1]) {
+    const c = off(1.55, sg * 0.85, 0.05);
+    P.push({ ...sphere(c, 0.78, hole, 0.3), cut: true });
+    if (!r.blink) eyes.push(off(1.9, sg * 0.8, -0.05));
+  }
+  P.push({ ...ell(off(2.1, 0, -0.75), f, [0.6, 0.32, 0.45], hole, 0.15), cut: true }); // nose hole
+  P.push({ ...ell(off(0.1, 0.4, 2.55), f, [1.5, 0.16, 0.6], mat(shade(L.skin, 0.4), { lo: 0.6, hi: 1, n: 3 }), 0.1), cut: true }); // a crack across the crown
+}
+
 // ---- ray casting ------------------------------------------------------------------------------------------------
 const LIGHT: V3 = (() => { const v: V3 = [-0.55, -0.45, 0.72]; const l = Math.hypot(...v); return [v[0] / l, v[1] / l, v[2] / l]; })();
 const VIEW: V3 = [0, -COS, SIN]; // toward the camera
@@ -337,6 +603,13 @@ function scene(ps: Prim[], x: number, y: number, z: number, want: { m: Mat | nul
     const ox = Math.max(p.lo[0] - x, 0, x - p.hi[0]), oy = Math.max(p.lo[1] - y, 0, y - p.hi[1]), oz = Math.max(p.lo[2] - z, 0, z - p.hi[2]);
     const out = Math.hypot(ox, oy, oz);
     const di = out > 2 ? out : p.d(x, y, z);
+    if (p.cut) {
+      if (d === Infinity) continue;
+      const kk = p.k, h = clamp(0.5 - 0.5 * (d + di) / kk), nd = d * (1 - h) - di * h + kk * h * (1 - h);
+      if (want && Math.abs(di) < 0.3 && d < 0.3) { want.m = p.m; want.tag = p.tag; best = Math.abs(di); }
+      d = nd;
+      continue;
+    }
     if (want && di < best) { best = di; want.m = p.m; want.tag = p.tag; }
     if (d === Infinity) d = di;
     else if (di - d > p.k) { /* no blend */ }
@@ -348,10 +621,18 @@ function scene(ps: Prim[], x: number, y: number, z: number, want: { m: Mat | nul
 
 export interface Ray3Out { rgba: Uint8ClampedArray; tag: Uint8Array; depth: Float32Array; handNear: P; handFar: P }
 
-/** Ray-casts the model into a W x W frame (W = 32 * texels per rig unit). Hand points come back in rig units on screen. */
-export function render3D(model: Built, W: number): Ray3Out {
-  const k = W / 32, ps = model.prims;
-  const rgba = new Uint8ClampedArray(W * W * 4), tag = new Uint8Array(W * W), depth = new Float32Array(W * W).fill(Infinity);
+/**
+ * Where a frame sits on the rig: tw x th texels, k texels per rig unit, its top-left at rig (x0, y0). Heroes use the
+ * whole 32x32 rig square (Frame3.hero); monsters (paint/mobs.ts) put the rig's feet where their sheet wants them.
+ */
+export interface Frame3 { tw: number; th: number; k: number; x0: number; y0: number }
+export const heroFrame3 = (W: number): Frame3 => ({ tw: W, th: W, k: W / 32, x0: 0, y0: 0 });
+
+/** Ray-casts the model into a frame (a number W = the hero's W x W square). Hand points come back in rig units on screen. */
+export function render3D(model: Built, fr: number | Frame3): Ray3Out {
+  const F = typeof fr === "number" ? heroFrame3(fr) : fr, W = F.tw, TH = F.th;
+  const k = F.k, ps = model.prims;
+  const rgba = new Uint8ClampedArray(W * TH * 4), tag = new Uint8Array(W * TH), depth = new Float32Array(W * TH).fill(Infinity);
   // screen bounds of the model (skip empty texels)
   let x0 = Infinity, x1 = -Infinity, v0 = Infinity, v1 = -Infinity;
   for (const p of ps) {
@@ -367,11 +648,11 @@ export function render3D(model: Built, W: number): Ray3Out {
     return [p.lo[0] - m, p.hi[0] + m, a - m, bb + m];
   });
   const local: Prim[] = [];
-  for (let j = 0; j < W; j++) {
-    const V = 29 - (j + 0.5) / k;
+  for (let j = 0; j < TH; j++) {
+    const V = 29 - (F.y0 + (j + 0.5) / k);
     if (V < v0 || V > v1) continue;
     for (let i = 0; i < W; i++) {
-      const X = (i + 0.5) / k;
+      const X = F.x0 + (i + 0.5) / k;
       if (X < x0 || X > x1) continue;
       local.length = 0;
       for (let q = 0; q < ps.length; q++) { const B = sb[q]; if (X >= B[0] && X <= B[1] && V >= B[2] && V <= B[3]) local.push(ps[q]); }
@@ -412,18 +693,18 @@ export function render3D(model: Built, W: number): Ray3Out {
   }
   // inner lines: a part seen behind a nearer one (an arm before the body) gets a darker edge
   const out = new Uint8ClampedArray(rgba);
-  for (let j = 0; j < W; j++) for (let i = 0; i < W; i++) {
+  for (let j = 0; j < TH; j++) for (let i = 0; i < W; i++) {
     const a = j * W + i; if (depth[a] === Infinity) continue;
     for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const ii = i + di, jj = j + dj; if (ii < 0 || jj < 0 || ii >= W || jj >= W) continue;
+      const ii = i + di, jj = j + dj; if (ii < 0 || jj < 0 || ii >= W || jj >= TH) continue;
       const bb = jj * W + ii;
       if (depth[bb] !== Infinity && depth[a] - depth[bb] > 2.2) { for (let c = 0; c < 3; c++) out[a * 4 + c] = Math.round(out[a * 4 + c] * 0.5 + [0x1a, 0x14, 0x20][c] * 0.5); break; }
     }
   }
   // eyes: one burning texel each where it can be seen
   for (const ew of model.eyes) {
-    const V = ew[1] * SIN + ew[2] * COS, i = Math.floor(ew[0] * k), j = Math.floor((29 - V) * k);
-    if (i < 0 || j < 0 || i >= W || j >= W) continue;
+    const V = ew[1] * SIN + ew[2] * COS, i = Math.floor((ew[0] - F.x0) * k), j = Math.floor((29 - V - F.y0) * k);
+    if (i < 0 || j < 0 || i >= W || j >= TH) continue;
     const a = j * W + i, tt = (ew[1] + 16) / COS; // t of the eye along its ray
     if (depth[a] === Infinity || tt > depth[a] + 0.9) continue;
     out[a * 4] = (model.eyeCol >> 16) & 255; out[a * 4 + 1] = (model.eyeCol >> 8) & 255; out[a * 4 + 2] = model.eyeCol & 255; tag[a] = TAG_EYE;

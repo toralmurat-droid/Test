@@ -4,7 +4,7 @@ import {
   C2, P, blobPath, canvas, clipTo, css, curve, ellipseP, fillShape, glow, grain, hashStr, ik, limb, line, metal, mix, poly, rad, rng, sh, Shape, vol,
 } from "./brush";
 import { drawFormWeapon, formOf } from "./weaponArt";
-import { build3D, Dress3D, render3D, TAG_HAND } from "./body3d";
+import { build3D, Dress3D, render3D, setMonster3D, TAG_HAND, type Frame3 } from "./body3d";
 import { BOOKS, paintBook } from "./books";
 import { HeadGear, HERO_BODIES, LINEN, Look, LOOKS, MOB_LOOKS, TorsoKind } from "./look";
 
@@ -2154,6 +2154,7 @@ export function paintFrame(name: string, p: PoseLike, info: FrameInfo, withShado
   c.scale(S, S);
   const r = alt ? blendRig(rig(name, p, info), rig(name, alt.p, alt.info), alt.diag) : rig(name, p, info), L = r.L, dir = r.dir;
   lastRig = { nearH: r.nearH, farH: r.farH, nearS: r.nearS, farS: r.farS, head: r.head, chest: [r.cx, r.sy + 3] };
+  if (mob3D && is3D(name)) { lastMob3D = paint3DPix(r, p, 8, flash, true, mob3D); return new HiCanvas(32, 32, 1); }
   if (PIX && RAY3D.has(name) && ray3d) return paint3D(r, p, K, S, flash, withShadow);
   const under = scratch("under", N, N), uc = under.getContext("2d"); uc.scale(S, S);
 
@@ -2338,19 +2339,39 @@ function dress3D(r: Rig): Dress3D {
   return {
     torso: tk.kind, torsoCol: tk.col, trim: tk.trim,
     head: hg, headCol: hat ? hat.color : L.headCol ?? 0x888888, headTrim: hat ? hat.accent : L.headTrim ?? 0xd9a93a,
-    plume: hg === "cap" ? (hat ? hat.accent : L.plume ?? L.headTrim) : undefined,
+    plume: hg === "cap" ? (hat ? hat.accent : L.plume ?? L.headTrim) : hg === "helm" && mob3D ? L.plume : undefined,
     legs: L.legs, legCol: L.legCol,
     boots: shoes ? shoes.color : L.boots, bootStyle: shoes ? "leather" : L.bootStyle ?? "leather",
     wings: shoes?.style === "wings" ? shoes.accent : undefined,
     sleeve: L.sleeve, arms: L.arms, glove: L.glove,
     armour: gear?.slot === "armour" && gear.style === "trim" ? { col: gear.color, trim: gear.accent } : undefined,
     belt: L.belt, buckle: L.buckle,
-    cape: L.back === "cape" ? { col: L.capeCol ?? 0x2a2a2a, collar: L.collar, short: L.capeShort } : undefined,
+    cape: L.back === "cape" ? { col: L.capeCol ?? 0x2a2a2a, collar: L.collar, short: L.capeShort } : L.back === "pelt" && mob3D ? { col: L.capeCol ?? 0x3a2a1e, short: true, fur: true } : undefined,
   };
 }
 
 function paint3D(r: Rig, p: PoseLike, K: number, S: number, flash: number, withShadow: boolean): HiCanvas {
-  const W = Math.round(32 * K), N = Math.round(32 * S);
+  const W = Math.round(32 * K), hc = new HiCanvas(32, 32, K);
+  hc.data.set(paint3DPix(r, p, S, flash, withShadow, { tw: W, th: W, k: W / 32, x0: 0, y0: 0 }));
+  return hc;
+}
+
+/**
+ * Monsters built in 3D the same way (paint/mobs.ts, Murat 2026-11-17): while a frame is set, paintFrame renders bodies
+ * that is3D() names straight onto the monster sheet's texel grid and leaves the finished pixels in lastMob3D.
+ */
+let mob3D: Frame3 | null = null;
+export let lastMob3D: Uint8ClampedArray | null = null;
+export function setMob3D(fr: Frame3 | null) { mob3D = fr; lastMob3D = null; setMonster3D(!!fr); }
+/** Monster bodies modelled in 3D (base kind before any _variant / _champ). */
+export const MOB3D = new Set<string>(["skeleton", "skeletonmage", "necromancer", "bandit", "bandit_brute", "bandit_archer", "banditchief", "outrider", "crossbowman", "firebrand", "redcaptain", "rourke"]);
+const is3D = (name: string) => MOB3D.has(name) || MOB3D.has(name.replace(/_(axe|spear|bow|champ)$/, "")) || MOB3D.has(name.replace(/_champ$/, ""));
+
+/** The 3D body plus its painted weapons, effects and shadow, finished pixels in frame `F` (rig units -> texels). */
+function paint3DPix(r: Rig, p: PoseLike, S: number, flash: number, withShadow: boolean, F: Frame3): Uint8ClampedArray {
+  const W = F.tw, TH = F.th, PS = S * Math.max(1, F.k / 1.5); // canvas px per rig unit for the painted layers
+  const NW = Math.ceil(W / F.k * PS), NH = Math.ceil(TH / F.k * PS);
+  const toCanvas = (c: C2) => c.setTransform(PS, 0, 0, PS, -F.x0 * PS, -F.y0 * PS);
   const model = build3D(r.L, dress3D(r), {
     dir: r.dir, diag: r.diag, b: r.b, cx: r.cx, sy: r.sy, hipY: r.hipY,
     head: r.head, nearS: r.nearS, farS: r.farS, nearE: r.nearE, farE: r.farE, nearH: r.nearH, farH: r.farH,
@@ -2358,16 +2379,16 @@ function paint3D(r: Rig, p: PoseLike, K: number, S: number, flash: number, withS
     stride: p.stride, phase: p.phase, run: p.run, t: p.t, attack: p.attack, crouch: p.crouch, headDx: p.headDx ?? 0,
     moving: motion(r), wave: wavePh(r), blink: p.expr === "blink" || p.expr === "x",
   });
-  const m = render3D(model, W);
+  const m = render3D(model, F);
   const b = m.rgba;
-  pixelize(b, W, W, true, { y0: Math.round((r.hipY + 3) / 32 * W), y1: Math.round(29.5 / 32 * W), mud: 0.28 });
+  pixelize(b, W, TH, true, { y0: Math.round((r.hipY + 3 - F.y0) * F.k), y1: Math.round((29.5 - F.y0) * F.k), mud: r.L.bones ? 0.2 : 0.28 });
   // held items keep their painted look, moved onto where the 3D hands ended up on screen
   const dn: P = [m.handNear[0] - r.nearH[0], m.handNear[1] - r.nearH[1]], df: P = [m.handFar[0] - r.farH[0], m.handFar[1] - r.farH[1]];
   const layer = (id: string, fn: (c: C2) => void) => {
-    const cv = scratch(id, N, N), c = cv.getContext("2d");
-    c.setTransform(S, 0, 0, S, 0, 0); fn(c);
-    const d = shrink(cv, id + "s", W, W);
-    pixelize(d, W, W, true);
+    const cv = scratch(id, NW, NH), c = cv.getContext("2d");
+    toCanvas(c); fn(c);
+    const d = shrink(cv, id + "s", W, TH);
+    pixelize(d, W, TH, true);
     return d;
   };
   const at = (c: C2, d: P, fn: () => void) => { c.save(); c.translate(d[0], d[1]); fn(); c.restore(); };
@@ -2376,18 +2397,18 @@ function paint3D(r: Rig, p: PoseLike, K: number, S: number, flash: number, withS
   const back = layer("w3b", (c) => { if (behind) weaponNow(c); });
   const front = layer("w3f", (c) => { rangedGear(c, r); at(c, df, () => shield(c, r)); if (!behind) weaponNow(c); });
   // effects in front, and behind (smears, circles, the ground shadow)
-  const under = scratch("under", N, N);
-  const fx = scratch("fx", N, N), fc = fx.getContext("2d");
-  fc.scale(S, S); heroFx(fc, r); moveFx(fc, r, under.getContext("2d"));
-  const f = shrink(fx, "pxf", W, W); pixelAlpha(f);
+  const under = scratch("under", NW, NH), uc0 = under.getContext("2d"); toCanvas(uc0);
+  const fx = scratch("fx", NW, NH), fc = fx.getContext("2d");
+  toCanvas(fc); heroFx(fc, r); moveFx(fc, r, uc0);
+  const f = shrink(fx, "pxf", W, TH); pixelAlpha(f);
   if (withShadow) {
     const uc = under.getContext("2d");
-    uc.save(); uc.setTransform(S, 0, 0, S, 0, 0); uc.translate(16 + r.lx, 29); uc.scale(1, 0.28);
+    uc.save(); toCanvas(uc); uc.translate(16 + r.lx, 29); uc.scale(1, 0.28);
     uc.fillStyle = "rgba(0,0,0,0.38)"; uc.beginPath(); uc.arc(0, 0, 6.6, 0, Math.PI * 2); uc.fill(); uc.restore();
   }
-  const u = shrink(under, "pxu", W, W); pixelAlpha(u);
+  const u = shrink(under, "pxu", W, TH); pixelAlpha(u);
   if (flash) for (let i = 0; i < b.length; i += 4) if (b[i + 3]) for (let k = 0; k < 3; k++) b[i + k] += (255 - b[i + k]) * flash;
-  const hc = new HiCanvas(32, 32, K), o = hc.data;
+  const o = new Uint8ClampedArray(W * TH * 4);
   const over = (src: Uint8ClampedArray, i: number) => {
     const a = src[i + 3] / 255; if (!a) return;
     const oa = o[i + 3] / 255, na = a + oa * (1 - a);
@@ -2400,7 +2421,7 @@ function paint3D(r: Rig, p: PoseLike, K: number, S: number, flash: number, withS
     if (handOnTop && m.tag[i / 4] === TAG_HAND && b[i + 3]) over(b, i);
     over(f, i);
   }
-  return hc;
+  return o;
 }
 
 function pixelFrame(body: ReturnType<typeof canvas>, under: ReturnType<typeof canvas>, r: Rig, K: number, S: number, flash: number, withShadow: boolean): HiCanvas {

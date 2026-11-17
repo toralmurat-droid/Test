@@ -45,6 +45,10 @@
  * the Keep (a tie: the holder keeps it). No players, so no valor unless `--reckon-valor=<clan>:<valor a tick>` adds that
  * clan's heroes fighting in the Crown. Reports who won, how often the holder kept the Keep and how often one clan won
  * twice running (the snowball to watch: with five clans about 20% is chance).
+ *
+ * `--council=shadow|lead` (War Councils M3, shared/war/council.ts): every clan's scripted council sits once a war day
+ * (briefing, scriptedCouncil, validateCouncil). `shadow`: the doctrine still leads, the sim reports how often its main
+ * target matched the council's; `lead`: the councils' intents lead (councilOrders). Judged on the no-player goal too.
  */
 import { CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
 import { newMinds, scriptedOrders } from "../../shared/war/doctrine";
@@ -61,6 +65,7 @@ import { TERRITORIES } from "../../shared/war/territories";
 import { regionByKey } from "../../shared/war/regions";
 import { keepOf, landPoints, RECKONING, reckonWinner, scoresOf, type ReckonTally } from "../../shared/war/crown";
 import { TOWNS, townCounts, townPatron, townStep, type TownState } from "../../shared/war/towns";
+import { agrees, buildBriefing, councilOrders, intentOf, scriptedCouncil, validateCouncil, type CouncilIntent } from "../../shared/war/council";
 
 const args = process.argv.slice(2);
 const num = (i: number, d: number) => (args[i] && !args[i].startsWith("--") ? Number(args[i]) : d);
@@ -103,6 +108,8 @@ const RV_V = Number(rvV || 10);
 /** The war ticks of the Reckoning's window in its day (war tick 0 at midnight UTC). */
 const RECKON_FROM = Math.round((RECKONING.hour * 3600_000) / WAR.tickMs), RECKON_TO = RECKON_FROM + Math.round((RECKONING.hours * 3600_000) / WAR.tickMs);
 const KEEP = keepOf(TERRITORIES);
+const COUNCIL_MODE = flag("council");
+if (COUNCIL_MODE !== undefined && COUNCIL_MODE !== "shadow" && COUNCIL_MODE !== "lead") { console.error("--council must be shadow or lead"); process.exit(2); }
 
 function mulberry(a: number) {
   return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
@@ -128,6 +135,8 @@ interface Result {
   crownAvg: Record<ClanKey, number>; crownHalf: number; crownFlips: number;
   /** Reckonings held, won by each clan, kept by the holder, won by the clan that won the one before. */
   reckonings: number; reckonWins: Record<ClanKey, number>; reckonKept: number; reckonRepeat: number;
+  /** --council: sessions held, order sets rejected, ticks the doctrine's main target matched the council's / ticks compared. */
+  councils: number; councilRejected: number; agree: number; compared: number;
 }
 /** Territories of the neutral lands (the Crown of the Marches): reported apart, so a snowball there shows. */
 const NEUTRAL = TERRITORIES.filter((t) => regionByKey(t.region)?.wards).map((t) => t.id);
@@ -149,6 +158,7 @@ function play(clever?: ClanKey): Result {
   const crownAvg = Object.fromEntries(CLAN_KEYS.map((k) => [k, 0])) as Record<ClanKey, number>;
   let crownHalf = 0, crownFlips = 0, reckonings = 0, reckonKept = 0, reckonRepeat = 0;
   const reckonWins = Object.fromEntries(CLAN_KEYS.map((k) => [k, 0])) as Record<ClanKey, number>;
+  let councils = 0, councilRejected = 0, agree = 0, compared = 0;
   const slots = pitchedTicks();
   for (let r = 0; r < RUNS; r++) {
     const rnd = mulberry(SEED * 7919 + r), s = newWar(), minds = newMinds();
@@ -160,8 +170,15 @@ function play(clever?: ClanKey): Result {
     for (let d = 0; d < DAYS; d++) {
       let today = 0, meetsToday = 0;
       announced.clear();
+      const intents: Partial<Record<ClanKey, CouncilIntent>> = {};
+      if (COUNCIL_MODE) for (const k of CLAN_KEYS) { // the councils sit at the start of the war day
+        const v = validateCouncil(scriptedCouncil(buildBriefing(s, k, { seed: SEED * 7919 + r })), s, k, d);
+        councils++;
+        if (v.ok) intents[k] = intentOf(v.orders, d); else councilRejected++;
+      }
       for (let i = 0; i < WAR.ticksPerDay; i++) {
-        const orders = scriptedOrders(s, minds, rnd, clever), extra: TickExtra = {};
+        const orders = COUNCIL_MODE === "lead" ? councilOrders(s, minds, rnd, intents, clever) : scriptedOrders(s, minds, rnd, clever), extra: TickExtra = {};
+        if (COUNCIL_MODE === "shadow") for (const k of CLAN_KEYS) if (intents[k]) { compared++; if (agrees(s, k, orders[k], intents[k]!)) agree++; }
         if (ZEAL.length) {
           extra.valor = TERRITORIES.map(() => ({}));
           for (const k of ZEAL) { const t = orders[k].attack[0]?.t; if (t !== undefined) extra.valor[t][k] = ZEAL_V; }
@@ -294,7 +311,7 @@ function play(clever?: ClanKey): Result {
     men: menSum / Math.max(1, 2 * (battles.pitched + battles.storm + battles.meet)), mins: minSum / Math.max(1, battles.pitched + battles.storm + battles.meet),
     townFlips: townFlips / Math.max(1, RUNS * (DAYS - SETTLE_DAYS)), townContests: townContests / Math.max(1, RUNS * (DAYS - SETTLE_DAYS)), townOff: townOff / Math.max(1, RUNS * (DAYS - SETTLE_DAYS)), townsHeld,
     crownAvg, crownHalf: crownHalf / Math.max(1, samples), crownFlips: crownFlips / (RUNS * DAYS),
-    reckonings, reckonWins, reckonKept, reckonRepeat };
+    reckonings, reckonWins, reckonKept, reckonRepeat, councils, councilRejected, agree, compared };
 }
 
 const t0 = Date.now();
@@ -317,6 +334,10 @@ if (RECKON && base.reckonings) {
   console.log(`  the holder kept the Keep ${pct(base.reckonKept / n)}; the last winner won again ${runsWithTwo > 0 ? pct(base.reckonRepeat / Math.max(1, n - RUNS)) : "n/a (one Reckoning a run)"}`);
 }
 if (SACK.length) console.log(`Holds sacked: ${base.sacks.toFixed(2)} per war day, calling ${base.sackSieges.toFixed(2)} sieges`);
+if (COUNCIL_MODE) {
+  console.log(`war councils (${COUNCIL_MODE}, scripted): ${base.councils} sessions, ${base.councilRejected} order sets rejected`);
+  if (COUNCIL_MODE === "shadow") console.log(`  the doctrine's main target matched the council's on ${pct(base.agree / Math.max(1, base.compared))} of ${base.compared} clan-ticks`);
+}
 console.log(`runs where one clan held > ${pct(WAR.leaderShare)} for over ${STREAK_DAYS} days in a row: ${pct(base.dominated)} (goal: under 5%)`);
 {
   const n = base.sizes.reduce((a, b) => a + b, 0) || 1;
