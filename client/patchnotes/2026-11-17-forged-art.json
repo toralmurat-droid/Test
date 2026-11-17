@@ -1,5 +1,6 @@
 {
   "date": "2026-11-17",
+  "patch": 297,
   "title": "Forged weapons and monsters",
   "changes": [
     "When clans forge, their weapons and monsters can now appear in recoloured looks, with the clan's name on the tooltip.",
