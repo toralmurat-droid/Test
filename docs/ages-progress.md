@@ -55,3 +55,6 @@ Also makes today's single server safer: a deploy's overlap no longer has two ser
 - A follower Age's Gloam Tide meter is its own (memory only); merging kill counts is for a later PR.
 - `war-pre-<build>` and `war-valor:<holder>` rows stay one per build; prune them once the Ages run for real.
 - Accounts are not versioned yet: two Ages must not both write one account (next PR).
+
+## Part 3 (in progress): one account, one server
+Account leases `acct:<name>`, fresh account reads and a write fence, on with `ACCOUNT_LEASES=1` or `AGE_SLOT` (Postgres only). Off: exactly today.
