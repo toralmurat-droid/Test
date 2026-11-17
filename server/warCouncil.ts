@@ -5,15 +5,16 @@
  * decision, rejection and fallback goes to an append-only log in the war save (capped), and a plain-text digest of each
  * war day is kept there too (admin route /admin/war-digest).
  *
- * Providers: `scripted` (the doctrine's own answer, deterministic) and `remote` (orders a scheduled Claude routine
- * POSTs to /api/war/council/orders before the day's session: docs/war-council-routine.md). No AI call runs in this
- * process and nothing here needs a dependency. A provider that throws, times out or hands in illegal orders leaves the
- * doctrine leading that clan for the day (logged).
+ * Providers: `scripted` (the doctrine's own answer, deterministic), `remote` (orders a scheduled Claude routine
+ * POSTs to /api/war/council/orders before the day's session: docs/war-council-routine.md) and `plugin` (the clan's own
+ * code from shared/clans/<clan>/, run sandboxed only when Murat pinned its hash: server/clanPlugins.ts; logged as
+ * `plugin:<clan>@<version>#<sha8>`). No AI call runs in this process and nothing here needs a dependency. A provider
+ * that throws, times out or hands in illegal orders leaves the doctrine leading that clan for the day (logged).
  *
  * Config (env, read by configureCouncils at start; setters for tests and admins):
  * - WAR_COUNCIL: `off` (default), `shadow` or `lead` for every clan, or per clan `wardens:lead,host:shadow` (a bare
  *   mode first sets every clan: `shadow,redfang:lead`).
- * - WAR_COUNCIL_PROVIDER: `scripted` (default) or `remote`, same format.
+ * - WAR_COUNCIL_PROVIDER: `scripted` (default), `remote` or `plugin`, same format (`plugin` also needs CLAN_PLUGINS).
  * - WAR_COUNCIL_KILL=1: the kill switch (also killCouncils()): every clan reverts to the doctrine at once.
  * - WAR_COUNCIL_TOKEN: the bearer token of the remote routes (unset or shorter than 16 characters: routes off).
  *
@@ -32,6 +33,7 @@ import {
   type BriefingCtx, type CouncilBriefing, type CouncilIntent, type CouncilLogEntry, type CouncilMode, type CouncilOrders, type ForgeNote,
 } from "../shared/war/council";
 import { validateRecipe } from "../shared/forge";
+import { pluginCouncil, pluginLabel } from "./clanPlugins";
 import { commission, forgeBrief, forgeClock, forgeDayLines, forgeKilled, forgeTicking } from "./forge";
 import type { Mind } from "../shared/war/doctrine";
 import { warPairs } from "../shared/war/feuds";
@@ -41,8 +43,11 @@ import { TERRITORIES } from "../shared/war/territories";
 import { KeyedLimiter, clientIp } from "./ratelimit";
 import { warBattles, warCouncilChanged, warCouncilSave, warCrownSave, warLog, warNextTick, warState } from "./war";
 
-/** A council: hears a briefing, hands in orders (never trusted: validateCouncil checks them). */
-export interface CouncilProvider { name: string; decide(b: CouncilBriefing): Promise<unknown> }
+/**
+ * A council: hears a briefing, hands in orders (never trusted: validateCouncil checks them). `label`: the provider id
+ * the council log shows for clan k (default: the name).
+ */
+export interface CouncilProvider { name: string; decide(b: CouncilBriefing): Promise<unknown>; label?(k: ClanKey): string }
 
 /** The day's intent as saved: the mode it was decided in, and (shadow) ticks the doctrine agreed / ticks counted. */
 export interface SavedIntent extends CouncilIntent { mode: CouncilMode; agree?: [number, number] }
@@ -196,6 +201,11 @@ registerProvider({
     return p.orders;
   },
 });
+registerProvider({
+  name: "plugin",
+  label: (k) => pluginLabel(k),
+  decide: (b) => pluginCouncil(b, (raw) => { const s = warState(); return s ? validateCouncil(raw, s, b.clan, b.day).errors : ["the war is not loaded"]; }),
+});
 configureCouncils();
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
@@ -265,16 +275,19 @@ async function session(cs: CouncilSave, k: ClanKey, day: number, now: number) {
   delete cs.intents[k];
   if (!s) return;
   const base = { at: now, day, k, mode, provider: pname };
+  const label = () => { try { base.provider = prov?.label?.(k) ?? pname; } catch { /* (the name stays) */ } };
   let raw: unknown;
   try {
     if (!prov) throw new Error(`no provider "${pname}"`);
     raw = await withTimeout(prov.decide(briefFor(s, k, briefCtx(now), day)), COUNCIL.timeoutMs);
   } catch (e) {
+    label();
     logCouncil(cs, { ...base, status: "fallback", reason: `provider failed: ${String((e as Error)?.message ?? e).slice(0, 160)}` });
     return;
   } finally {
     if (pname === "remote") delete cs.pending[k];
   }
+  label();
   const v = validateCouncil(raw, warState() ?? s, k, day), now2 = councilMode(k);
   // the forge order on its own: whatever comes of it, the targets below are judged as if it were not there
   const f = sessionForge(cs, k, day, raw, now2, now), orders = f?.recipe ? { ...v.orders, forge: f.recipe } : v.orders, fx = f ? { forge: f.note } : {};

@@ -378,3 +378,27 @@ test("remote: briefing, a rejected then fixed submission, the session leads with
     assert.equal(submitCouncilOrders({ clan: K, day: 1, orders: { targets: [] } }).status, 409, "the kill switch closes the door");
   } finally { await srv.close(); killCouncils(false); }
 });
+
+// ---- Clan plug-ins (Living Code M6): the `plugin` provider ------------------------------------------------------------------
+
+test("plugin provider: chosen from the env, logged as plugin:<clan>..., unpinned falls back; the default env never picks it", async () => {
+  const { _resetClanPlugins } = await import("../server/clanPlugins");
+  fresh(); _resetClanPlugins();
+  configureCouncils({ NODE_TEST_CONTEXT: "1" });
+  const { councilAdmin } = await import("../server/warCouncil");
+  assert.ok(Object.values(councilAdmin().modes).every((m) => m.provider === "scripted"));
+  configureCouncils({ WAR_COUNCIL: "lead", WAR_COUNCIL_PROVIDER: "scripted,host:plugin", NODE_TEST_CONTEXT: "1" });
+  assert.equal(councilAdmin().modes.host.provider, "plugin");
+  assert.equal(councilAdmin().modes.wardens.provider, "scripted");
+  const sv = fresh();
+  configureCouncils({ WAR_COUNCIL: "host:lead", WAR_COUNCIL_PROVIDER: "host:plugin", NODE_TEST_CONTEXT: "1" });
+  await councilClock(T0);
+  const e = cs(sv).log.find((x) => x.k === "host")!;
+  assert.equal(e.status, "fallback");
+  assert.match(e.provider, /^plugin:host(@[\w.-]+#[0-9a-f]{8})?$/);
+  assert.match(e.reason!, /no hash pinned/);
+  // the longest provider id fits the saved log
+  const long = "plugin:hidekin@12345678#0123abcd";
+  assert.equal(long.length, 32);
+  assert.equal(cleanCouncil({ log: [{ at: 1, day: 0, k: "hidekin", mode: "lead", provider: long, status: "led" }] }).log[0].provider, long);
+});

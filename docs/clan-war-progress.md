@@ -10,6 +10,8 @@ Design: https://play.fmtpa.ch/design/riven-marches/ · Plan: https://play.fmtpa.
 - Murat 2026-11-14: no approval step for AI leaders, forged items or AI code; everything logged, significant items and
   a daily digest emailed to Murat. AI code stays sandboxed with automatic rollback.
 - Murat 2026-11-14: saves moved to Postgres on Railway (5 accounts imported).
+- Murat 2026-11-17: no AI-written code goes live without his OK (hash pin). This replaces the 2026-11-14 "no approval
+  step" for AI code only (it still holds for AI leaders and forged items): see docs/living-code-progress.md.
 
 ## M0 Foundations (2026-11-14)
 Built, not yet wired into the game (nothing players see):
