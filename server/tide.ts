@@ -144,6 +144,8 @@ export class Tide {
     else if (w.marchAt !== undefined && now >= w.marchAt && w.marchAt !== marched) {
       if (now - w.marchAt <= TIDE.lateMs) this.start(now);
       else if (!this.h.follows?.()) { w.marchAt = marchTime(now, this.h.dayFrac(now)); this.h.changed(); } // missed (server down at dusk)
+    } else if (w.marchAt !== undefined && w.marchAt === marched && !this.h.follows?.() && now > w.marchAt + TIDE.limitMs) {
+      w.tide = 0; w.marchAt = undefined; w.marches++; this.h.changed(); // marched here as a follower, then took the world over: that march is over
     } else if (w.marchAt === undefined && w.tide >= TIDE.goal && !this.h.follows?.()) this.full(now, false); // full with no march called (a restart mid-march)
     if (now >= this.sendAt) { this.sendAt = now + TIDE.sendMs; this.sendAll(); }
   }

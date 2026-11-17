@@ -394,3 +394,29 @@ test("handoff (shared store): a join that fails after login keeps the spot; the 
   const src = fs.readFileSync(path.join(__dirname, "../server/TownRoom.ts"), "utf8");
   assert.match(src, /const spot = p && handoffWritten\(p\.name, p\.cls\);\s*if \(spot\) void spot\.then\(\(\) => leaveAccount\(acct\)\); else void leaveAccount\(acct\);/, "onLeave gives the account back after the spot's write");
 });
+
+test("tide (takeover): a follower that marched and then took the world over empties that march's meter once its time is up", async () => {
+  const { Tide, _resetTideMarched } = await import("../server/tide");
+  _resetTideMarched();
+  const now = Date.now(), at = now - 1000;
+  let follows = true;
+  let w = { v: 1 as const, tide: TIDE.goal, marches: 0, marchAt: at } as { v: 1; tide: number; marches: number; marchAt?: number };
+  const host = {
+    heroes: () => [], hero: () => undefined, mob: () => undefined, spawn: () => undefined, removeMob: () => {}, send: () => {},
+    act1: () => true, dayFrac: () => 0.5, pay: () => {}, world: () => w, changed: () => {}, follows: () => follows, queueKill: () => {},
+  };
+  const t = new Tide(host);
+  try {
+    t.tick(now);
+    (t as any).end(false);
+    w = { v: 1, tide: TIDE.goal, marches: 0, marchAt: at }; // (the old owner's row, reloaded on takeover)
+    follows = false;
+    t.tick(now + 2000);
+    assert.equal(t.marching, false, "no second march");
+    assert.equal(w.marchAt, at, "still within the march's time: left as it is");
+    t.tick(at + TIDE.limitMs + 1);
+    assert.equal(w.tide, 0, "the meter empties");
+    assert.equal(w.marchAt, undefined);
+    assert.equal(w.marches, 1);
+  } finally { t.release(); _resetTideMarched(); }
+});
