@@ -137,3 +137,6 @@ body #reconnectnote h2 { margin: 2px 0 6px; font: 22px var(--title-font); color:
 body #reconnectnote.lost h2 { color: #e8a890; }
 body #reconnectnote p { margin: 4px 0 8px; }
 body #reconnectnote small { display: block; font-size: 18px; font-family: var(--pixel-font); color: #a8977a; min-height: 1.3em; }
+body #reconnectnote .takenback { margin: 8px 0 6px; padding: 2px 12px; border: 6px solid transparent; border-image: var(--wf-btn) 4 fill / 6px / 0 repeat; image-rendering: pixelated;
+  background: none; color: #eadfc8; font: 18px var(--pixel-font); text-shadow: 2px 2px #050302; cursor: pointer; }
+body #reconnectnote .takenback:hover { color: #ffd98a; filter: brightness(1.25); }

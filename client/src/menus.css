@@ -12,12 +12,12 @@ small .pxi, .help .pxi, #slotpick small .pxi { width: 14px; height: 14px; vertic
 button > .pxi:only-child { margin: 0; }
 
 /* ---------- Shared frame ---------- */
-body #hero, body #tree, body #gear, body #slotpick, body #npcdialog, body #questlog, body #portalmenu, body #ferrymenu,
+body #hero, body #tree, body #gear, body #slotpick, body #npcdialog, body #questlog, body #portalmenu, body #ferrymenu, body #agemenu,
 body #tradepanel, body #stashpanel, body #tradeask, body #shrineprompt, body #portalprompt, body #gateprompt, body #ferryprompt, body #stashprompt, body #bountypanel, body #warpanel, body #boardprompt , body #warprompt, body #sackprompt, body #cityprompt, body #townprompt {
   border: 18px solid transparent; border-image: var(--wf-bronze) 9 fill / 18px / 0 repeat; image-rendering: pixelated;
   background: none; border-radius: 0; box-shadow: none; color: #eadfc8; text-shadow: 2px 2px #050302;
   font-family: var(--pixel-font); -webkit-font-smoothing: none; -moz-osx-font-smoothing: grayscale; }
-body #hero, body #tree, body #gear, body #questlog, body #portalmenu, body #ferrymenu, body #tradepanel, body #stashpanel, body #bountypanel , body #warpanel { padding: 2px 8px 4px; }
+body #hero, body #tree, body #gear, body #questlog, body #portalmenu, body #ferrymenu, body #agemenu, body #tradepanel, body #stashpanel, body #bountypanel , body #warpanel { padding: 2px 8px 4px; }
 body #npcdialog { padding: 2px 8px 4px; font-size: 18px; font-family: var(--pixel-font); }
 body #slotpick { padding: 0 4px 2px; width: 270px; }
 body #tradeask { border-image-source: var(--wf-gold); padding: 0 8px 2px; }
@@ -28,8 +28,8 @@ body #stashprompt, body #boardprompt , body #warprompt, body #sackprompt, body #
 body #hero h2, body #tree h2, body #gear h2, body #tradepanel h2, body #stashpanel h2, body #partypanel h2, body #bountypanel h2 , body #warpanel h2 {
   margin: 0 0 6px; font-size: 22px; font-family: var(--title-font); font-weight: normal; color: #e3bf6a; letter-spacing: 2px; text-align: center;
   border-bottom: 2px solid #45331e; padding-bottom: 4px; text-shadow: 2px 2px #050302; }
-body #portalmenu .pt-head, body #ferrymenu .pt-head { border-bottom: 2px solid #45331e; padding-bottom: 4px; margin-bottom: 8px; }
-body #portalmenu h2, body #ferrymenu h2 { font: 22px var(--title-font); color: #e3bf6a; letter-spacing: 2px; }
+body #portalmenu .pt-head, body #ferrymenu .pt-head , body #agemenu .pt-head { border-bottom: 2px solid #45331e; padding-bottom: 4px; margin-bottom: 8px; }
+body #portalmenu h2, body #ferrymenu h2 , body #agemenu h2 { font: 22px var(--title-font); color: #e3bf6a; letter-spacing: 2px; }
 body #hero h3, body #gear h3, body #tradepanel h3, body #stashpanel h3, body #npcdialog h4, body #bountypanel h3 , body #warpanel h3 {
   color: #c9a45a; font-weight: normal; letter-spacing: 2px; }
 body #hero .help, body #tree .help, body #gear .help, body #tradepanel .help, body #stashpanel .help, body #bountypanel .help , body #warpanel .help { color: #a8977a; }
@@ -37,12 +37,12 @@ body #hero b, body #gear b, body #tree b { font-weight: normal; }
 
 /* ---------- Buttons: dark leather with a bronze lip ---------- */
 body #menubtns button, body #questbtn, body #gamemenubtn, body #statreset, body #treereset, body #npcdialog button, body #questlog .ql-close,
-body #portalmenu .pt-close, body #ferrymenu .pt-close, body #tradepanel button:not(.gcell), body #stashpanel button:not(.gcell), body #tradeask button,
+body #portalmenu .pt-close, body #ferrymenu .pt-close, body #agemenu .pt-close, body #tradepanel button:not(.gcell), body #stashpanel button:not(.gcell), body #tradeask button,
 body #musicpanel #musicclose, body #bountypanel button:not(.gcell) , body #warpanel button:not(.gcell) {
   border: 6px solid transparent; border-image: var(--wf-btn) 4 fill / 6px / 0 repeat; image-rendering: pixelated; border-radius: 0;
   background: none; color: #eadfc8; font: 18px var(--pixel-font); text-shadow: 2px 2px #050302; cursor: pointer; box-shadow: none; }
 body #menubtns button:hover, body #questbtn:hover, body #gamemenubtn:hover, body #statreset:hover, body #treereset:hover, body #npcdialog button:hover:not(:disabled),
-body #questlog .ql-close:hover, body #portalmenu .pt-close:hover, body #ferrymenu .pt-close:hover, body #tradepanel button:not(.gcell):hover, body #stashpanel button:not(.gcell):hover,
+body #questlog .ql-close:hover, body #portalmenu .pt-close:hover, body #ferrymenu .pt-close:hover, body #agemenu .pt-close:hover, body #tradepanel button:not(.gcell):hover, body #stashpanel button:not(.gcell):hover,
 body #tradeask button:hover, body #bountypanel button:not(.gcell):hover , body #warpanel button:not(.gcell):hover { color: #ffd98a; filter: brightness(1.25); border-color: transparent; }
 
 /* HUD menu bar (bottom right) */
@@ -152,13 +152,13 @@ body #questtracker .qt-bar { background: #0f0a06; border-radius: 0; box-shadow: 
 body #questtracker .qt-bar div { background: #6f9f3a; }
 
 /* ---------- Portal stones ---------- */
-body #portalmenu .pt-close, body #ferrymenu .pt-close { padding: 0 2px; line-height: 0; }
-body #portalmenu .pt-row, body #ferrymenu .pt-row { border: 2px solid #45331e; border-radius: 0; background: #0f0a06; color: #eadfc8; font-weight: normal; }
-body #portalmenu button.pt-row:hover:not([disabled]), body #ferrymenu button.pt-row:hover:not([disabled]) { background: #2a1f14; border-color: #a8823a; color: #ffd98a; }
-body #portalmenu .pt-row span, body #ferrymenu .pt-row span { color: #a8977a; }
-body #portalmenu .pt-row.here, body #ferrymenu .pt-row.here { background: none; border-style: dashed; color: #a8977a; }
-body #portalmenu .pt-note, body #ferrymenu .pt-note { color: #a8977a; }
-body #portalmenu .pt-note.warn, body #ferrymenu .pt-note.warn { color: #ff9d7a; }
+body #portalmenu .pt-close, body #ferrymenu .pt-close , body #agemenu .pt-close { padding: 0 2px; line-height: 0; }
+body #portalmenu .pt-row, body #ferrymenu .pt-row , body #agemenu .pt-row { border: 2px solid #45331e; border-radius: 0; background: #0f0a06; color: #eadfc8; font-weight: normal; }
+body #portalmenu button.pt-row:hover:not([disabled]), body #ferrymenu button.pt-row:hover:not([disabled]) , body #agemenu button.pt-row:hover:not([disabled]) { background: #2a1f14; border-color: #a8823a; color: #ffd98a; }
+body #portalmenu .pt-row span, body #ferrymenu .pt-row span , body #agemenu .pt-row span { color: #a8977a; }
+body #portalmenu .pt-row.here, body #ferrymenu .pt-row.here , body #agemenu .pt-row.here { background: none; border-style: dashed; color: #a8977a; }
+body #portalmenu .pt-note, body #ferrymenu .pt-note , body #agemenu .pt-note { color: #a8977a; }
+body #portalmenu .pt-note.warn, body #ferrymenu .pt-note.warn , body #agemenu .pt-note.warn { color: #ff9d7a; }
 body #portalprompt .why, body #gateprompt .why, body #ferryprompt .why, body #shrineprompt .why { color: #e3bf6a; }
 body #shrineprompt.spent { color: #a8977a; }
 

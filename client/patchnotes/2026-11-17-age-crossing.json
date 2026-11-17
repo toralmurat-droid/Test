@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-17",
+  "title": "Crossing between Ages",
+  "pr": 520,
+  "changes": [
+    "Where several Ages are open, you can cross to another one from the Esc menu (Cross to another Age) or by typing /age in chat.",
+    "Your hero is saved and comes with you. You can cross again after 5 minutes, and not right after a fight."
+  ]
+}

@@ -64,6 +64,12 @@ export class GameMenu {
     if (b) b.innerHTML = html;
   }
 
+  /** Show or hide an entry (the Age crossing item exists only where several Ages are open). */
+  setHidden(id: string, hidden: boolean) {
+    const b = this.el.querySelector<HTMLElement>(`[data-item="${id}"]`);
+    if (b) b.style.display = hidden ? "none" : "";
+  }
+
   private drop?: HTMLElement;
   private toggleDrop(it: GameMenuItem, b: HTMLElement) {
     const was = this.drop?.dataset.for;
