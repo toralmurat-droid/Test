@@ -16,7 +16,9 @@
  *   --garrison: a Hold's whole garrison at Control 100, 3 / 6 / 8 guards for an outpost / camp / fortress, at Lv 20 and 45,
  *   and a contested town's gate guard (shared/war/towns.ts: a captain and 4 soldiers) at Lv 17 / 25 / 33; the garrison's
  *   guards stand in their roles, shared/war/troops.ts roleOf: archers and pikes).
- * --roles: the hero alone vs one soldier of each role (foot, archer, pike: shared/war/troops.ts TROOP_ROLE, clans that field it in turn) at Lv 8 / 20 / 45.
+ * --roles: the hero alone vs one soldier of each role (foot, archer, pike, rider: shared/war/troops.ts TROOP_ROLE, clans that field it in turn) at Lv 8 / 20 / 45.
+ *   A rider charges as the server's (server/troopRoles.ts riderFight, shared/war/troopRoles.ts chargeStep); the hero bot rolls out
+ *   of about half the wind-ups (as out of a boss's telegraph), and a roll during the wind-up takes it out of the lane (2D: a step aside).
  * --champions: one fight against each champion (shared/champions.ts, a 1D version of its affixes) beside the same plain monster.
  *
  * It reuses the PvP simulator (tools/balance/duel.ts): the same hero bot, skill engine, builds (rushing one branch),
@@ -46,7 +48,7 @@ import { AFFIX_FX as CF, CHAMPION, type AffixKey } from "../../shared/champions"
 import { addHeat } from "../../shared/overload";
 import { CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
 import { CLAN_ROLES, roleOf, TROOP_OFFICER, TROOP_ROLE, troopStats, WAR_TROOPS, type TroopRole } from "../../shared/war/troops";
-import { bowOf, kiteStep, shotReady, type Bow } from "../../shared/war/troopRoles";
+import { bowOf, chargeEnd, chargeStep, kiteStep, newCharge, shotReady, type Bow } from "../../shared/war/troopRoles";
 import type { HoldTier } from "../../shared/war/holdTiers";
 import { TROOP } from "../../shared/war/patrols";
 import { FEUD, WANTED_TIERS } from "../../shared/war/feuds";
@@ -666,11 +668,44 @@ function bossRun(cls: ClassKind, b: BossDef, build: Build, potions = 5): RunResu
 }
 
 /** A clan soldier of `role` in the sim: its role's numbers (troopStats), and an archer's bow (shared/war/troopRoles.ts). */
-class RoleF extends MobF { bow: Bow = { nextShot: 0, aimUntil: 0 }; shot = 0; constructor(spec: MobSpec, id: string, public role: TroopRole) { super(spec, id); } }
+class RoleF extends MobF { bow: Bow = { nextShot: 0, aimUntil: 0 }; shot = 0; charge = newCharge(); windAt = 0; constructor(spec: MobSpec, id: string, public role: TroopRole) { super(spec, id); } }
 const ARENA_W = 480;
-/** PveDuel whose archers move and shoot like the server's (server/troopRoles.ts archerFight: kiteStep, shotReady); the others as before. */
+const RC = TROOP_ROLE.rider.charge;
+/** The rider's wind-up as the hero bot sees a telegraph (heroBrain: it rolls out of about half of them). */
+const CHARGE_TELL: Special = { name: "Charge", every: RC.everyMs, windup: RC.windupMs, min: RC.min, max: RC.max, radius: 12, mult: RC.dmgMult, at: "target" };
+/** PveDuel whose archers move and shoot like the server's (server/troopRoles.ts archerFight: kiteStep, shotReady) and whose riders charge like the server's (riderFight); the others as before. */
 class RoleDuel extends PveDuel {
+  speedOf(f: F): number {
+    const v = super.speedOf(f);
+    return f instanceof RoleF && f.role === "rider" && f.charge.phase === 2 && !f.broken ? v * RC.speedMult : v;
+  }
+  /** server/troopRoles.ts riderFight in 1D: wheel away, wind up (the lane fixed), gallop; a hero who rolled during the wind-up is out of the lane. */
+  riderBrain(m: RoleF): number {
+    const now = this.now, h = this.mobTarget(m), S = m.spec, d = Math.abs(h.x - m.x), toward = Math.sign(h.x - m.x) || 1, c = m.charge;
+    const off = () => { if (c.phase === 1 || c.phase === 2) chargeEnd(c, now, false); if (m.windKind) { m.windKind = undefined; m.windUntil = 0; } };
+    if (now < m.stunUntil || m.broken) { off(); return super.mobBrain(m); }
+    if (m.windUntil && !m.windKind && c.phase === 0) return super.mobBrain(m); // a blow on foot lands first
+    const st = chargeStep(c, now, d, RC);
+    if (st.act === "fight") { if (m.windKind) { m.windKind = undefined; m.windUntil = 0; } return super.mobBrain(m); }
+    if (st.act === "wheel") {
+      if ((m.x <= 1 && toward > 0) || (m.x >= ARENA_W - 1 && toward < 0)) { c.phase = 0; c.until = 0; return super.mobBrain(m); } // no room: on foot
+      return -toward;
+    }
+    if (st.act === "wind") {
+      if (st.start) { c.dx = toward; m.windAt = now; m.windKind = CHARGE_TELL; m.windX = h.x; m.windUntil = c.until; this.teles++; }
+      return 0;
+    }
+    m.windKind = undefined; m.windUntil = 0;
+    if (h.lastDodge < m.windAt && d <= S.reach + WAR_TROOPS.rushSlack) { // (a hero who rolled is out of the lane: it rides past)
+      chargeEnd(c, now, true, RC); m.lastAtk = now;
+      this.mobHit(m, RC.dmgMult, { kb: RC.kb, stunMs: RC.stunMs }, h);
+      return 0;
+    }
+    if ((m.x <= 1 && c.dx < 0) || (m.x >= ARENA_W - 1 && c.dx > 0)) { chargeEnd(c, now, false, RC); return 0; } // the arena's wall: missed
+    return c.dx;
+  }
   mobBrain(m: MobF): number {
+    if (m instanceof RoleF && m.role === "rider") return this.riderBrain(m);
     if (!(m instanceof RoleF) || m.role !== "archer") return super.mobBrain(m);
     const now = this.now, h = this.mobTarget(m), S = m.spec, d = Math.abs(h.x - m.x), toward = Math.sign(h.x - m.x) || 1, R = TROOP_ROLE.ranged;
     if (now < m.stunUntil) { m.windUntil = 0; m.bow.aimUntil = 0; return 0; }
@@ -690,7 +725,7 @@ class RoleDuel extends PveDuel {
   }
 }
 
-/** A clan soldier of `role` at `level` as a sim monster (rush and javelin like the server's foot soldier; an archer's bow, a pike's reach). */
+/** A clan soldier of `role` at `level` as a sim monster (rush and javelin like the server's foot soldier; an archer's bow, a pike's reach, a rider's charge). */
 function trooperF(clan: ClanKey, level: number, officer: boolean, role: TroopRole, id: string): RoleF {
   const sp = mobSpec("trooper", level), st = troopStats(clan, level, officer, role), R = WAR_TROOPS.rush, J = WAR_TROOPS.javelin;
   Object.assign(sp, { hp: st.hp, dmg: st.dmg, speed: st.speed, cd: st.cd });
@@ -698,6 +733,8 @@ function trooperF(clan: ClanKey, level: number, officer: boolean, role: TroopRol
     const bow = bowOf(clan), A = TROOP_ROLE.ranged;
     sp.ranged = { range: A.range, keepAway: A.keepAway, speed: bow.speed, radius: A.radius, mult: 1 };
     sp.label = CLAN_ROLES[clan].archer?.name ?? "archer";
+  } else if (role === "rider") {
+    sp.label = CLAN_ROLES[clan].rider?.name ?? "rider"; // (no rush, no javelin: it charges, RoleDuel.riderBrain)
   } else {
     sp.lunge = { min: R.min, max: R.max, every: R.everyMs, mult: R.dmgMult };
     sp.specials.push({ name: "Javelin", every: J.everyMs, windup: J.windupMs, min: J.min, max: J.max, radius: J.radius + 4, mult: J.dmgMult, at: "target", shot: { speed: J.speed, radius: J.radius } });
@@ -992,8 +1029,8 @@ if (process.argv[1]?.includes("pve")) {
     // (each guard in its role by its place, shared/war/troops.ts roleOf; the first one is not an officer here, as before the roles)
     if (process.argv.includes("--garrison")) for (const L of [20, 45]) TROOP.garrison.forEach(([, top], tier) => row(`Lv${L} ${["outpost", "camp", "fort"][tier]} x${top}`, L, top, false, undefined, (c, k) => roleOf(c, "guard", tier as HoldTier, k)));
     // --roles: one soldier of each role, clans that field it in turn (Wardens, Host and the others: CLAN_ROLES)
-    if (process.argv.includes("--roles")) for (const L of [8, 20, 45]) for (const role of ["foot", "archer", "pike"] as TroopRole[]) {
-      const clans = role === "foot" ? CLAN_KEYS : CLAN_KEYS.filter((k) => CLAN_ROLES[k][role as "archer" | "pike"]);
+    if (process.argv.includes("--roles")) for (const L of [8, 20, 45]) for (const role of ["foot", "archer", "pike", "rider"] as TroopRole[]) {
+      const clans = role === "foot" ? CLAN_KEYS : CLAN_KEYS.filter((k) => CLAN_ROLES[k][role as "archer" | "pike" | "rider"]);
       for (const k of clans) row(`Lv${L} ${k} ${role}`, L, 1, false, k, () => role);
     }
     // --garrison (W6): a contested town's gate guard (shared/war/towns.ts TOWN: a captain and his soldiers), at the patron lands' levels
