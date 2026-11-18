@@ -24,7 +24,7 @@ import type { HoldTier } from "../shared/war/holdTiers";
 import { RENOWN_RANKS, rankOf } from "../shared/war/renown";
 import { TERRITORIES } from "../shared/war/territories";
 import { columnLead, parseTroop, roleOf, TROOP_ROLE, troopLevel, troopStats, troopName, troopStance, troopWeapon, WAR_TROOPS, type TroopRole, type TroopStance } from "../shared/war/troops";
-import { bowRange, chargeBreak, giveUpStep, newCharge, roleVs, shotClear, shunned, wallPost, type Charge, type GiveUp } from "../shared/war/troopRoles";
+import { bowRange, called, chargeBreak, giveUpStep, newCharge, roleVs, shotClear, shunned, wallPost, type Call, type Charge, type GiveUp } from "../shared/war/troopRoles";
 import type { WarView } from "../shared/war/view";
 import { rallyRenown, targetsOf } from "../shared/war/rules";
 import { atWar, FEUD, wantedTier, type FeudState } from "../shared/war/feuds";
@@ -33,7 +33,7 @@ import { territoryAt } from "../shared/war/view";
 import { inSackReach } from "../shared/war/holdSack";
 import { addValor, warNow, warState } from "./war";
 import { boonRenown, keyOf } from "./warCrown";
-import { archerFight, offLimits, pikeBrace, pikeHolds, pikeTether, riderFight, TroopArrows, type RoleCtx } from "./troopRoles";
+import { archerFight, offLimits, pikeBrace, pikeCall, pikeHolds, pikeTether, riderFight, TroopArrows, type RoleCtx } from "./troopRoles";
 
 /** The parts of a hero this module reads (TownRoom's Player). */
 /** `cls`: the hero's class (a Reckoning keys its heroes by account and class: server/warCrown.ts keyOf). */
@@ -83,9 +83,10 @@ interface Land { t: number; clan?: ClanKey; tier: HoldTier; lastHero: number; sl
 /**
  * A soldier's fighting state: a patrol trooper's, or one of the other modules' (caravans, sieges, columns, battles,
  * manhunters...). `role`: archers, pikes and riders (nextShot / aimUntil: an archer's bow; charge: a rider's; braceUntil:
- * a pike braced against one; GiveUp: a courtyard archer's or guard pike's target out of its reach, TROOP_ROLE.giveUp).
+ * a pike braced against one; GiveUp: a courtyard archer's or guard pike's target out of its reach, TROOP_ROLE.giveUp;
+ * Call: a foe a tethered pike called it onto, or its own sally, TROOP_ROLE.pike.call).
  */
-export interface Fighter extends GiveUp { clan: ClanKey; officer: boolean; role: TroopRole; /** A role soldier's squad multipliers (TROOP_ROLE.squad: columns, escorts, manhunters, the ram crew, tunnel waves, gate guards). */ mod?: { hp: number; dmg: number }; nextPick: number; near: boolean; nextRush: number; rushUntil: number; rushHit: boolean; nextThrow: number; throwing: boolean; nextShot: number; aimUntil: number; charge: Charge; braceUntil: number }
+export interface Fighter extends GiveUp, Call { clan: ClanKey; officer: boolean; role: TroopRole; /** A role soldier's squad multipliers (TROOP_ROLE.squad: columns, escorts, manhunters, the ram crew, tunnel waves, gate guards). */ mod?: { hp: number; dmg: number }; nextPick: number; near: boolean; nextRush: number; rushUntil: number; rushHit: boolean; nextThrow: number; throwing: boolean; nextShot: number; aimUntil: number; charge: Charge; braceUntil: number }
 /**
  * Where a soldier fights: `leash` holds every foe and chase, `hunt` the wild monsters it goes for unprovoked, `far` (when
  * given) the wider leash for a hero its clan wants (shared/war/feuds.ts FEUD.leashTiles).
@@ -100,7 +101,7 @@ export interface FightGround {
 }
 export const newFighter = (clan: ClanKey, officer: boolean, role: TroopRole = "foot", mod?: { hp: number; dmg: number }): Fighter =>
   ({ clan, officer, role: officer ? "foot" : role, ...(mod && !officer && role !== "foot" ? { mod } : {}), nextPick: 0, near: false, nextRush: 0, rushUntil: 0, rushHit: false, nextThrow: 0, throwing: false, nextShot: 0, aimUntil: 0, charge: newCharge(), braceUntil: 0,
-    outOf: "", outSince: 0, shun: "", shunUntil: 0 });
+    outOf: "", outSince: 0, shun: "", shunUntil: 0, call: "", callUntil: 0, nextCall: 0 });
 interface Troop extends Fighter { t: number; slot: Slot; g: FightGround }
 
 const SLEEPING = -Infinity;
@@ -121,14 +122,15 @@ export class WarTroops {
   private arrows = new TroopArrows();
   private roleCtx: RoleCtx;
   /**
-   * The other modules' riders, pikes and archers (sieges, columns, battles, caravans, manhunters: they fight through
-   * think / fight), by mob id, so a pike braces against any rival rider's charge and stops it (troopRoles.ts bracer).
-   * Each enlists on its turn (think); the fallen and the gone are swept once a second (tick).
+   * The other modules' soldiers (sieges, columns, battles, caravans, manhunters...: they fight through think / fight),
+   * by mob id, with their ground: a pike braces against any rival rider's charge and stops it (troopRoles.ts bracer), and
+   * a tethered pike calls its squad mates onto a hero it can't reach (pikeCall). Each enlists on its turn (think); the
+   * fallen and the gone are swept once a second (tick).
    */
-  private others = new Map<string, Fighter>();
+  private others = new Map<string, { f: Fighter; g: FightGround }>();
 
   constructor(private h: WarTroopsHost) {
-    this.roleCtx = { h, arrows: this.arrows, walk: (m, gx, gy, dt, pace) => this.walk(m, gx, gy, dt, pace), fighter: (id) => this.troops.get(id) ?? this.others.get(id) };
+    this.roleCtx = { h, arrows: this.arrows, walk: (m, gx, gy, dt, pace) => this.walk(m, gx, gy, dt, pace), fighter: (id) => this.troops.get(id) ?? this.others.get(id)?.f, ground: (id) => this.troops.get(id)?.g ?? this.others.get(id)?.g };
   }
 
   /** Troopers alive now (tests, the bench). */
@@ -151,10 +153,16 @@ export class WarTroops {
     return this.stance(tr.clan, heroId) === "enemy" && !isSafeZone(m.x, m.y);
   }
 
-  /** A hero's blow landed on a trooper (only an enemy's can, canHurt): it turns on them. */
-  hit(heroId: string, m: TroopMob) {
+  /**
+   * A hero's blow landed on trooper `id` (only an enemy's can, canHurt): it turns on them; a tethered pike that can't
+   * reach them from its tether calls its squad mates onto them, or sallies (TROOP_ROLE.pike.call, troopRoles.ts pikeCall).
+   */
+  hit(heroId: string, m: TroopMob, id?: string, now = Date.now()) {
     const tr = parseTroop(m.weapon);
-    if (tr && this.stance(tr.clan, heroId) === "enemy") m.target = heroId;
+    if (!tr || this.stance(tr.clan, heroId) !== "enemy") return;
+    m.target = heroId;
+    const f = id && tr.role === "pike" ? this.roleCtx.fighter!(id) : undefined, g = f && this.roleCtx.ground!(id!), p = this.h.hero(heroId);
+    if (f && g && p) pikeCall(this.roleCtx, m, id!, f, g, heroId, p.x, p.y, now);
   }
 
   /** Is this one of the patrol troopers (a land's column or guards)? */
@@ -428,17 +436,17 @@ export class WarTroops {
    */
   private pick(m: TroopMob, id: string, tr: Fighter, g: FightGround, now: number): string {
     const W = WAR_TROOPS, R = tr.role === "archer" ? bowRange(g.perch).sightPx : W.aggroPx; // (an archer sees farther, from a wall farther still)
-    const tether = tr.role === "pike" && !!g.post; // (a pike with a post or a column place: only foes it can reach from its tether)
+    const tether = tr.role === "pike" && !!g.post, C = TROOP_ROLE.pike.call; // (a pike with a post or a column place: only foes it can reach from its tether, or one it sallies at)
     let best = "", bs = 0;
     const consider = (tid: string, x: number, y: number, bonus: number, wanted = false) => {
-      const d = Math.hypot(x - m.x, y - m.y), hated = tid === m.hateId ? m.hate : 0;
-      if (d >= (hated > 0 ? R * 2 : R) * (wanted ? FEUD.sight : 1) || offLimits(x, y) || !(wanted && g.far ? g.far(x, y) : g.leash(x, y))) return;
-      if (shunned(tr, tid, now) || (tether && !pikeHolds(g, x, y, now))) return; // (a target it gave up on: TROOP_ROLE.giveUp)
-      const s = Math.max(0.05, 1 - d / R) + bonus + hated + (tid === m.target ? W.stick : 0);
+      const d = Math.hypot(x - m.x, y - m.y), hated = tid === m.hateId ? m.hate : 0, call = called(tr, tid, now); // (a hero a pike called it onto)
+      if (d >= Math.max((hated > 0 ? R * 2 : R) * (wanted ? FEUD.sight : 1), call ? C.sightPx : 0) || offLimits(x, y) || !(wanted && g.far ? g.far(x, y) : g.leash(x, y))) return;
+      if (shunned(tr, tid, now) || (tether && !call && !pikeHolds(g, x, y, now))) return; // (a target it gave up on: TROOP_ROLE.giveUp)
+      const s = Math.max(0.05, 1 - d / R) + bonus + hated + (call ? C.bonus : 0) + (tid === m.target ? W.stick : 0);
       if (s > bs) { bs = s; best = tid; }
     };
     for (const [pid, p] of this.h.heroes()) {
-      const wanted = wantedTier(p.feud, tr.clan, now) > 0, far = R * 2 * (wanted ? FEUD.sight : 1); // a Wanted hero is seen from farther
+      const wanted = wantedTier(p.feud, tr.clan, now) > 0, far = Math.max(R * 2 * (wanted ? FEUD.sight : 1), called(tr, pid, now) ? C.sightPx : 0); // a Wanted hero (or one it was called onto) is seen from farther
       if (p.dead || Math.abs(p.x - m.x) > far || Math.abs(p.y - m.y) > far) continue;
       if (troopStance(tr.clan, p, now) !== "enemy" || this.h.hidden(pid, now) || (g.foe && !g.foe(p))) continue;
       consider(pid, p.x, p.y, W.heroBonus, wanted); // a soldier goes for the enemy hero first
@@ -486,7 +494,7 @@ export class WarTroops {
    * pickMs it looks whether a hero is near (`f.near`) and picks a foe on `g`. True when the turn is over (stunned).
    */
   think(m: TroopMob, id: string, f: Fighter, g: FightGround, now: number): boolean {
-    if (f.role !== "foot" && !this.troops.has(id) && this.others.get(id) !== f) this.others.set(id, f); // (another module's soldier: a pike's brace finds it)
+    if (!this.troops.has(id)) { const o = this.others.get(id); if (o?.f === f) o.g = g; else this.others.set(id, { f, g }); } // (another module's soldier: a pike's brace and call find it)
     m.stunned = now < m.stunUntil; m.slowed = now < m.slowUntil;
     if (m.stunned || m.broken) { m.winding = false; m.windUntil = 0; f.throwing = false; f.rushHit = false; f.aimUntil = 0; f.braceUntil = 0; chargeBreak(f.charge, now); } // (a stun breaks a charge off)
     if (m.stunned) { m.moving = false; return true; }
@@ -509,8 +517,9 @@ export class WarTroops {
     const far = !!tp && !!g.far && wantedTier(tp.feud, tr.clan, now) > 0; // a Wanted hero is chased past the usual leash
     if (m.target && (!t || (tp && (tp.dead || this.stance(tr.clan, m.target) !== "enemy" || this.h.hidden(m.target, now) || (g.foe && !g.foe(tp))))
       || (tm && (tm.dead || tm.hidden)) || offLimits(t.x, t.y) || !(far ? g.far!(t.x, t.y) : g.leash(t.x, t.y)))) { m.target = ""; m.windUntil = 0; m.winding = false; }
-    if (tr.role === "pike" && m.target && t && !pikeHolds(g, t.x, t.y, now)) { m.target = ""; m.windUntil = 0; m.winding = false; } // a pike keeps its place
-    if (m.target && t && (g.perch || (g.guard && tr.role === "pike")) && giveUpStep(tr, m.target, this.outOfReach(m, tr, g, tm, t), now)) { m.target = ""; m.windUntil = 0; m.winding = false; } // (TROOP_ROLE.giveUp)
+    const sally = tr.role === "pike" && called(tr, m.target, now); // (a pike with no one to call runs its foe down: TROOP_ROLE.pike.call)
+    if (tr.role === "pike" && m.target && t && !sally && !pikeHolds(g, t.x, t.y, now)) { m.target = ""; m.windUntil = 0; m.winding = false; } // a pike keeps its place
+    if (m.target && t && !sally && (g.perch || (g.guard && tr.role === "pike")) && giveUpStep(tr, m.target, this.outOfReach(m, tr, g, tm, t), now)) { m.target = ""; m.windUntil = 0; m.winding = false; } // (TROOP_ROLE.giveUp)
     if (!m.target || !t) {
       tr.throwing = false; tr.rushHit = false; if (tr.aimUntil) { tr.aimUntil = 0; m.winding = false; }
       if (tr.charge.phase === 1 || tr.charge.phase === 2) { chargeBreak(tr.charge, now); m.winding = false; } // (its foe is gone: the charge is off)
@@ -556,7 +565,7 @@ export class WarTroops {
       } else if (now - m.lastAttack >= st.cd) { m.windUntil = now + MOB_COMBAT.trooper.windupMs; m.winding = true; }
       return true;
     }
-    if (tr.role === "pike") { const ox = m.x, oy = m.y; this.walk(m, t.x, t.y, dt, speed * (now < tr.rushUntil ? R.speedMult : 1)); pikeTether(m, ox, oy, g, now); return true; }
+    if (tr.role === "pike") { const ox = m.x, oy = m.y; this.walk(m, t.x, t.y, dt, speed * (now < tr.rushUntil ? R.speedMult : 1)); if (!sally) pikeTether(m, ox, oy, g, now); return true; }
     this.walk(m, t.x, t.y, dt, speed * (now < tr.rushUntil ? R.speedMult : 1));
     return true;
   }

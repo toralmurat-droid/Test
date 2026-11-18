@@ -46,8 +46,8 @@ export class TroopArrows {
   clear() { this.q = []; }
 }
 
-/** What a role's turn needs from WarTroops (`fighter`: a patrol trooper's fighting state, for a pike's brace). */
-export interface RoleCtx { h: WarTroopsHost; arrows: TroopArrows; walk(m: TroopMob, gx: number, gy: number, dt: number, pace: number): void; fighter?(id: string): Fighter | undefined }
+/** What a role's turn needs from WarTroops (`fighter`: any soldier's fighting state, for a pike's brace; `ground`: its ground, for a pike's call). */
+export interface RoleCtx { h: WarTroopsHost; arrows: TroopArrows; walk(m: TroopMob, gx: number, gy: number, dt: number, pace: number): void; fighter?(id: string): Fighter | undefined; ground?(id: string): FightGround | undefined }
 
 const face = (m: TroopMob, x: number, y: number) => { m.dir = Math.abs(x - m.x) > Math.abs(y - m.y) ? (x > m.x ? "right" : "left") : (y > m.y ? "down" : "up"); };
 
@@ -74,6 +74,32 @@ export function pikeHolds(g: FightGround, x: number, y: number, now: number): bo
   if (!g.post) return true;
   const p = g.post(now), P = TROOP_ROLE.pike;
   return Math.hypot(x - p.x, y - p.y) <= P.tetherTiles * TILE + MOB_ATTACK_RANGE + P.reach + WAR_TROOPS.heroBody;
+}
+
+/**
+ * A tethered pike `m` struck by hero `heroId` at (hx, hy) that it cannot reach from its tether (pikeHolds) calls for help
+ * (TROOP_ROLE.pike.call) instead of standing there as a free target: the nearest soldiers of its clan within call.px that
+ * can answer (alive, not broken, the hero within their leash, not tethered pikes themselves) are called onto that hero (Fighter.call: WarTroops.pick
+ * sees them from farther and favours them); with no one to call, the pike sallies at them itself (its own Fighter.call:
+ * its tether doesn't hold it back from them). A shun on that hero is lifted (it struck again). Returns who was called
+ * (the pike's own id: a sally); none when the pike can reach the hero, has no post, or called within call.everyMs.
+ */
+export function pikeCall(c: RoleCtx, m: TroopMob, id: string, f: Fighter, g: FightGround, heroId: string, hx: number, hy: number, now: number): string[] {
+  const C = TROOP_ROLE.pike.call;
+  if (!g.post || now < f.nextCall || pikeHolds(g, hx, hy, now)) return [];
+  f.nextCall = now + C.everyMs;
+  const mates: [number, string, Fighter][] = [];
+  for (const [oid, o] of c.h.mobsInBox(m.x, m.y, C.px)) {
+    if (oid === id || o.kind !== "trooper" || o.dead || o.hidden || o.broken) continue;
+    const k = parseTroop(o.weapon), of = c.fighter?.(oid), og = c.ground?.(oid), d = Math.hypot(o.x - m.x, o.y - m.y);
+    if (!k || k.clan !== f.clan || k.object || !of || !og || d > C.px || !og.leash(hx, hy) || (of.role === "pike" && og.post) || og.perch) continue; // (one that may not go there, another tethered pike or a wall archer, which can't leave its wall, can't answer)
+    mates.push([d, oid, of]);
+  }
+  mates.sort((a, b) => a[0] - b[0]);
+  const answer = mates.slice(0, C.mates).map(([, oid, of]) => [oid, of] as [string, Fighter]);
+  if (!answer.length) answer.push([id, f]); // no one to call: it sallies
+  for (const [, of] of answer) { of.call = heroId; of.callUntil = now + C.ms; of.nextPick = 0; if (of.shun === heroId) of.shunUntil = 0; }
+  return answer.map(([oid]) => oid);
 }
 
 /** After a pike's step: back where it was if the step took it past its tether and farther from its post. */

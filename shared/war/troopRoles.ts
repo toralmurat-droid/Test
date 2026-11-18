@@ -34,6 +34,10 @@ export function giveUpStep(f: GiveUp, target: string, out: boolean, now: number,
   f.shun = target; f.shunUntil = now + G.shunMs; f.outOf = ""; f.outSince = 0;
   return true;
 }
+/** A soldier called onto a foe (a tethered pike's call for help, or its own sally: server/troopRoles.ts pikeCall). */
+export interface Call { call: string; callUntil: number; nextCall: number }
+/** Is `id` the foe this soldier was called onto (or a pike sallies at), still within TROOP_ROLE.pike.call.ms? */
+export const called = (f: Pick<Call, "call" | "callUntil">, id: string, now: number): boolean => !!id && f.call === id && now < f.callUntil;
 /** Is `id` shunned now (a target given up as out of reach: giveUpStep)? */
 export const shunned = (f: Pick<GiveUp, "shun" | "shunUntil">, id: string, now: number): boolean => !!id && f.shun === id && now < f.shunUntil;
 
