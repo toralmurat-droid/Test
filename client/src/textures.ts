@@ -291,6 +291,9 @@ const BLOBLING_A = blobFrame(BLOBLING_W, BLOBLING_H, 6, false, false), BLOBLING_
 /** Crawling skeleton: only this top fraction of the skeleton frame is drawn, resting on the ground. */
 export const CRAWL_CROP = 0.6;
 /** Per-kind size info for the scene: head height (labels/bubbles) and HP bar width. */
+/** The five clan rider sheets, and their look entry (48x48 frames, texel scale 1.5, feet at 44, per the art agent). */
+const WAR_RIDER_KEYS = ["war_warden_rider", "war_redfang_rider", "war_host_rider", "war_hidekin_rider", "war_veiled_rider"];
+const WAR_RIDER_LOOK = { top: 33, bar: 20, oy: 44 / 48 };
 export const MOB_LOOK: Record<string, { top: number; bar: number; oy: number; scale?: number }> = {
   skeletonmage: { top: 19, bar: 12, oy: 0.975 },
   necromancer: { top: 32, bar: 24, oy: 0.975, scale: 1.6 }, // elite: drawn big
@@ -363,8 +366,9 @@ const PAINTED_LOOK: Record<string, { top: number; bar: number; oy: number; scale
   // the clan war's soldiers (tools/art/paint/warLooks.ts): art-only keys, not MobKinds; line soldiers 36x32 frames, officers 36x34
   ...Object.fromEntries(["war_warden", "war_redfang", "war_host", "war_hidekin", "war_veiled",
     // role soldiers (shared/war/patrols.ts TROOP_LOOK roles): same frame size as the line soldier
-    "war_warden_bow", "war_warden_pike", "war_warden_rider", "war_redfang_sling", "war_redfang_rider", "war_host_bow", "war_host_pike", "war_host_rider",
-    "war_hidekin_spear", "war_hidekin_rider", "war_veiled_caster", "war_veiled_rider"].map((k) => [k, { top: 27, bar: 14, oy: 30 / 32 }])),
+    "war_warden_bow", "war_warden_pike", "war_redfang_sling", "war_host_bow", "war_host_pike", "war_hidekin_spear", "war_veiled_caster"].map((k) => [k, { top: 27, bar: 14, oy: 30 / 32 }])),
+  // mounted clan riders (war_<clan>_rider): a larger frame than the foot soldier. bar is the art agent's estimate.
+  ...Object.fromEntries(WAR_RIDER_KEYS.map((k) => [k, WAR_RIDER_LOOK])),
   ...Object.fromEntries(["war_warden_cap", "war_redfang_chief", "war_host_cap", "war_hidekin_chief", "war_veiled_adept"].map((k) => [k, { top: 30, bar: 16, oy: 32 / 34 }])),
   // the clan war's supply carts (tools/art/paint/warCarts.ts): 72x44 frames, a cart and its beast about 2 tiles long; the ground line is at 40/44
   ...Object.fromEntries(WAR_CART_CLANS.map((c) => [`war_cart_${c}`, { top: 36, bar: 30, oy: 40 / 44 }])),

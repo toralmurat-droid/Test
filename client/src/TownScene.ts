@@ -73,7 +73,7 @@ import { SHRINE, SHRINE_RANGE } from "../../shared/shrine";
 import { PORTALS, PORTAL_RANGE } from "../../shared/portals";
 import { PointerControls, type ClickEnemy, type ClickSpot } from "./pointer";
 import { refreshWalk, warmPaths } from "./pathfind";
-import { holdTiles, setHoldOwners } from "../../shared/war/holdWalls";
+import { holdTiles, liveHoldWall, setHoldOwners } from "../../shared/war/holdWalls";
 import { pixelText } from "./pixeltext";
 import { speechBubble } from "./weathered";
 import { hasTrait, TITLES, unpackCosmetics } from "../../shared/cosmetics";
@@ -154,6 +154,8 @@ import { addWorldProps, preloadBakedProps } from "./worldProps";
 import { addSiegeWorks } from "./siegeArt";
 import { SiegeWork } from "./siegeWork";
 import { PERCH_LIFT } from "../../shared/bandits";
+/** How far (px) a courtyard archer is drawn above its wall tile, and the depth added so it shows over the wall piece. */
+const WALL_LIFT = 22, WALL_DEPTH = 24;
 import { icon, fillIcons } from "./pixelicons";
 import { ResourceBars } from "./resourceBars";
 import { OverloadGauge } from "./overloadGauge";
@@ -202,6 +204,7 @@ function blobPartsLayout(id: string, parts: string[]): BlobPart[] {
 }
 
 interface Entity {
+  wall?: boolean; troopRole?: string; // a courtyard archer standing on a live Hold wall tile (drawn raised); its role mark, read once
   merged?: number; // blobs fused into this monster (MERGE)
   base?: number; // a monster's resting scale (kind size x merge growth): every squash/stretch starts and ends there
   parts?: Phaser.GameObjects.Graphics; // merged blob: colour patches, extra eyes and mouths of the blobs inside
@@ -2157,9 +2160,18 @@ export class TownScene extends Phaser.Scene {
   /** Redfang lookouts stand up on their watchtower's platform: drawn lifted, label and HP bar above them. */
   private perch(e: Entity, p: any) {
     const look = mobLook(p.kind, p.weapon), base = look?.oy ?? 0.85, top = look?.top ?? 14;
-    const up = p.weapon === "lookout"; // a camp's lookout (shared/bandits.ts): a Hollow bandit or a badlands crossbowman
-    e.sprite.setOrigin(0.5, base + (up ? PERCH_LIFT / e.sprite.frame.height : 0));
-    e.top = top + (up ? PERCH_LIFT : 0);
+    const lift = p.weapon === "lookout" ? PERCH_LIFT : e.wall ? WALL_LIFT : 0; // a camp's lookout (shared/bandits.ts): a Hollow bandit or a badlands crossbowman; a courtyard archer on a Hold wall
+    e.sprite.setOrigin(0.5, base + lift / e.sprite.frame.height);
+    e.top = top + lift;
+  }
+
+  /** A clan archer (weapon mark `)`) on a live Hold wall tile is drawn up on the wall; checked each frame (the wall can fall). */
+  private wallPerch(e: Entity, p: any) {
+    if (p.kind !== "trooper") return;
+    const r = (e.troopRole ??= parseTroop(p.weapon)?.role ?? "-");
+    if (r !== "archer") return;
+    const on = !p.dead && liveHoldWall(Math.floor(e.sprite.x / TILE), Math.floor(e.sprite.y / TILE));
+    if (on !== !!e.wall) { e.wall = on; this.perch(e, p); }
   }
 
   private addEntity(id: string, p: any, mob = false) {
@@ -3137,6 +3149,42 @@ export class TownScene extends Phaser.Scene {
       onComplete: () => { g.destroy(); this.fx.removeShot(id); this.fx.impact(tx, ty, kind, 0); } });
   }
 
+  /** A rider's charge (shared/war/troopRoles.ts): during the wind-up (`ms`) a pulsing lane with arrow chevrons lies on the ground from (x, y) to (tx, ty), then dust follows the gallop (`gallop`). Cosmetic. */
+  private troopCharge(ev: any) {
+    const [x, y, tx, ty, ms, gallop] = [ev.x, ev.y, ev.tx, ev.ty, ev.ms, ev.gallop].map(Number);
+    if (![x, y, tx, ty, ms].every(Number.isFinite) || ms <= 0) return;
+    const len = Math.hypot(tx - x, ty - y) || 1, ux = (tx - x) / len, uy = (ty - y) / len, nx = -uy, ny = ux, half = 11;
+    const g = this.add.graphics().setDepth(2), t0 = this.time.now;
+    const draw = () => {
+      const f = Math.min(1, (this.time.now - t0) / ms), pulse = 0.5 + 0.5 * Math.sin((this.time.now - t0) / 70);
+      g.clear().fillStyle(0xd84315, 0.1 + 0.14 * f).fillPoints([{ x: x + nx * half, y: y + ny * half }, { x: tx + nx * half, y: ty + ny * half }, { x: tx - nx * half, y: ty - ny * half }, { x: x - nx * half, y: y - ny * half }], true);
+      g.lineStyle(1, 0xff8a50, 0.45 + 0.4 * pulse).lineBetween(x + nx * half, y + ny * half, tx + nx * half, ty + ny * half).lineBetween(x - nx * half, y - ny * half, tx - nx * half, ty - ny * half);
+      const n = Math.max(1, Math.floor(len / 28)); // chevrons that run down the lane toward the target
+      for (let i = 0; i < n; i++) {
+        const d = ((i + (this.time.now - t0) / 140) % n) / n * len, cx = x + ux * d, cy = y + uy * d;
+        g.lineStyle(2, 0xffcc80, 0.3 + 0.5 * f).lineBetween(cx - ux * 5 + nx * 6, cy - uy * 5 + ny * 6, cx + ux * 3, cy + uy * 3).lineBetween(cx - ux * 5 - nx * 6, cy - uy * 5 - ny * 6, cx + ux * 3, cy + uy * 3);
+      }
+    };
+    draw();
+    const tick = this.time.addEvent({ delay: 30, loop: true, callback: draw });
+    this.time.delayedCall(ms, () => { // the gallop starts: the lane fades, hooves kick dust along it
+      tick.remove();
+      this.tweens.add({ targets: g, alpha: 0, duration: 250, onComplete: () => g.destroy() });
+      const steps = Math.max(1, Math.floor((Number.isFinite(gallop) ? Math.min(gallop, 1200) : 600) / 70));
+      for (let i = 0; i < steps; i++) this.time.delayedCall(i * 70, () => { const d = Math.min(len, (i / steps) * len); this.burst(x + ux * d, y + uy * d + 2, 3, 0xd7ccc8, 320); });
+    });
+  }
+
+  /** A braced pike stops a charging rider: a spark ring and a "BRACED!" tag at the clash. */
+  private troopBrace(ev: any) {
+    const [x, y] = [ev.x, ev.y].map(Number);
+    if (![x, y].every(Number.isFinite)) return;
+    const ring = isoAnchor(this.add.circle(x, y, 5).setStrokeStyle(2, 0xffe0b2, 0.9).setDepth(20000), { x, y });
+    this.tweens.add({ targets: ring, radius: 26, alpha: 0, duration: 380, onComplete: () => ring.destroy() });
+    this.burst(x, y - 10, 6, 0xffcc80, 300);
+    this.floatText(x, y - 34, "BRACED!", "#ffcc80", PIXEL_FONT);
+  }
+
   /** Skill visual event from the server (shared/skillEngine.ts): drawn by SkillFx, plus the hero's cast animation. */
   private onSkillFx(ev: any) {
     if (typeof ev.ev === "string" && ev.ev.startsWith("tide")) { this.tideFx(ev); return; }
@@ -3150,6 +3198,8 @@ export class TownScene extends Phaser.Scene {
       }
     }
     if (ev.ev === "troop_shot") { this.troopShot(ev); return; } // a clan archer's shot (sound: sfx.ts)
+    if (ev.ev === "troop_charge") { this.troopCharge(ev); return; } // a rider's wind-up: the lane on the ground (sound: sfx.ts)
+    if (ev.ev === "troop_brace") { this.troopBrace(ev); return; } // a pike stops a rider (sound: sfx.ts)
     if (DI_EVENTS.has(ev.ev)) this.diEvent(ev); // newsong, matpick, lutefit, break
     if (ev.ev === "cast") {
       const e = this.entities.get(ev.id);
@@ -3580,7 +3630,8 @@ export class TownScene extends Phaser.Scene {
         if (e.mob) e.sprite.setVisible((!p.dead || (p.kind === "trooper" && !!e.artOn)) && !p.hidden);
         else e.sprite.setAlpha(p.dead ? 0.35 : 1).setAngle(p.dead ? 90 : 0);
       }
-      setBaseDepth(e.sprite, e.sprite.y);
+      if (e.mob) this.wallPerch(e, p);
+      setBaseDepth(e.sprite, e.sprite.y + (e.wall ? WALL_DEPTH : 0)); // on a wall: sorts above the wall piece (its depth is its foot line)
       if (e.mob && p.kind === "nightraider" && !p.dead && e.sprite.visible) raiderTrail(this.fx, e as any, moving, now);
       // Status effects: yellow flicker for stunned, blue for slowed, red pulse for raging. A monster winding up shows
       // it in its pose; only sheets without attack frames (?pixel=1) still flash red.

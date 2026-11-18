@@ -18,7 +18,8 @@ import { blobModel, blobRadius, type BlobOpts, type BlobPal } from "./blobs3d";
 import { RAIDERS } from "../../../shared/raiders";
 import { AFFIX_KEYS, AFFIXES, type AffixKey } from "../../../shared/champions";
 import { CHAMP_WEAPONS } from "./look";
-import { WAR_SOLDIERS } from "./warLooks";
+import { WAR_RIDERS, WAR_SOLDIERS, type WarRider } from "./warLooks";
+import { mountModel, RIDER_GROUND, RIDER_H, RIDER_SEAT, RIDER_W } from "./warRiders";
 import { CART_FRAMES, CART_H, CART_W, G, WAR_CARTS } from "./warCarts";
 import { WAR_RAMS } from "./warRam";
 import { TUNNEL_FRAMES, TUNNEL_H, TUNNEL_W, WAR_TUNNELS } from "./warTunnel";
@@ -146,6 +147,42 @@ function humanoidFrame(kind: string, f: number, fall = false) {
     if (pose === "strike") return posed(MOB_POSES[kind], { dir, t: f, attack: 2, bob: 1 }, false);
     return posed(MOB_POSES[kind], { dir, t: f, stride: pose === "step" ? (dir === "right" ? -1 : 1) : 0, bob: pose === "step" ? -1 : 0 }, false);
   }
+}
+
+
+// ---------------------------------------------------------------- the clan war's riders (warLooks.ts WAR_RIDERS, warRiders.ts mounts)
+/** A rider sheet frame: the 3D mount pixelized, the humanoid rider (body.ts, same grid) laid over it. 12 / 13 topple the pair like the soldiers' fall. */
+function riderFrame(key: WarRider, f: number): MobFrame {
+  const w = RIDER_W, h = RIDER_H, oy = RIDER_GROUND, tw = Math.round(w * TX), th = Math.round(h * TX), SC = 0.9;
+  const fall = f >= FRAMES, { dir, pose } = frameOf(fall ? 4 : f);
+  const p = pose === "step" ? 1 : pose === "stand" ? 2 : pose === "strike" ? 1 : 0; // the gallop: the two strides on the walk frames
+  const m = renderMob(mountModel(key, p, pose === "wind" ? 1.6 : 0), YAW[dir as "down" | "up" | "right"], w, h, oy, TX);
+  pixelize(m.body, tw, th, true, { y0: Math.round(th * 0.7), y1: th, mud: 0.12, sat: 0.95 }); pixelAlpha(m.under);
+  const seat = RIDER_SEAT[key], yaw = YAW[dir as "down" | "up" | "right"];
+  const fx = w / 2 + seat.x * Math.cos(yaw), fy = oy - (seat.x * Math.sin(yaw) * SIN + seat.z * Math.sqrt(3) / 2) - (p === 1 ? 0.7 : 0);
+  setMob3D({ tw, th, k: SC * TX, x0: 16 - fx / SC, y0: 29 - fy / SC, lift: 0, noShadow: true });
+  const hero = MOB_POSES[key], d = dir as Dir;
+  if (pose === "wind") posed(hero, { dir: d, t: f, attack: 0, crouch: 1, lean: 1, expr: "squint" }, false);
+  else if (pose === "strike") posed(hero, { dir: d, t: f, attack: 2, bob: 1 }, false);
+  else posed(hero, { dir: d, t: f, stride: 0, bob: 0 }, false);
+  const rider = lastMob3D!;
+  setMob3D(null);
+  const body = m.body, front = dir === "down" ? Math.round((fy - 4) * TX) : th; // seen head-on the mount's chest and head stand in front of the rider's legs
+  const mount = body.slice();
+  for (let i = 0; i < body.length; i += 4) if (rider[i + 3]) for (let q = 0; q < 4; q++) body[i + q] = rider[i + q];
+  for (let y = front; y < th; y++) for (let x = 0; x < tw; x++) { const i = (y * tw + x) * 4; if (mount[i + 3]) for (let q = 0; q < 4; q++) body[i + q] = mount[i + q]; }
+  if (!fall) return { body, under: m.under, done: true };
+  const k = f - FRAMES, a = (k ? -86 : -24) * Math.PI / 180, ca = Math.cos(a), sa = Math.sin(a);
+  const cx = w / 2 * TX, cy = oy * TX, px = cx + (k ? 7 : 1.5) * TX, py = cy + (k ? -1.4 : 0) * TX, out = new Uint8ClampedArray(body.length), under = new Uint8ClampedArray(body.length);
+  for (let y = 0; y < th; y++) for (let x = 0; x < tw; x++) {
+    const dx = x + 0.5 - px, dy = y + 0.5 - py, sx = Math.floor(cx + dx * ca + dy * sa), sy = Math.floor(cy - dx * sa + dy * ca);
+    if (sx < 0 || sy < 0 || sx >= tw || sy >= th) continue;
+    const i = (y * tw + x) * 4, j = (sy * tw + sx) * 4;
+    for (let q = 0; q < 4; q++) out[i + q] = body[j + q];
+  }
+  const sx0 = px - (k ? 12 : 3) * TX, rx = 14 * TX, ry = 2.6 * TX;
+  for (let y = 0; y < th; y++) for (let x = 0; x < tw; x++) { const i = (y * tw + x) * 4; if (!out[i + 3] && ((x + 0.5 - sx0) / rx) ** 2 + ((y + 0.5 - py) / ry) ** 2 < 1) under[i + 3] = 105; }
+  return { body: out, under, done: true };
 }
 
 // ---------------------------------------------------------------- blobs (3D-built: blobs3d.ts)
@@ -297,6 +334,8 @@ export function buildMobs(out: string, ONLY?: string[]) {
     beast3D("mob_crowncrow", VULTURE_W, VULTURE_H, 31, (pose, f) => bird(CROWNCROW_PAL, pose, f)),
     // the clan war's soldiers (warLooks.ts): 36 px wide so the fallen body fits; officers are taller
     ...WAR_SOLDIERS.map((k) => k.endsWith("_cap") || k.endsWith("_chief") || k.endsWith("_adept") ? humanoid(`mob_${k}`, k, 36, 34, 32 / 34, 0.95, false, 0, true) : humanoid(`mob_${k}`, k, 36, 32, 30 / 32, 0.9, false, 0, true)),
+    // the clan war's riders (warRiders.ts): 48 x 48, the soldiers' 14-frame layout
+    ...WAR_RIDERS.map((k) => ({ key: `mob_${k}`, w: RIDER_W, h: RIDER_H, frames: FRAMES + FALL_FRAMES, draw: () => {}, pix: (f: number) => riderFrame(k, f) })),
     // the clan war's supply carts (warCarts.ts): 14 frames, 12 = staggering, 13 = wrecked
     ...WAR_CARTS.map((k) => ({ key: `mob_${k}`, w: CART_W, h: CART_H, frames: CART_FRAMES, draw: () => {}, pix: (f: number) => siegeFrame(cartModel(k, f), CART_W, CART_H, G, TX) })),
     // the Ossuary Host's bone siege ram (warRam.ts): same frame size and 14-frame layout

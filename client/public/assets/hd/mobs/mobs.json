@@ -1520,5 +1520,35 @@
   "h": 32,
   "scale": 1.5,
   "frames": 14
+ },
+ "mob_war_warden_rider": {
+  "w": 48,
+  "h": 48,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_redfang_rider": {
+  "w": 48,
+  "h": 48,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_host_rider": {
+  "w": 48,
+  "h": 48,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_hidekin_rider": {
+  "w": 48,
+  "h": 48,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_veiled_rider": {
+  "w": 48,
+  "h": 48,
+  "scale": 1.5,
+  "frames": 14
  }
 }

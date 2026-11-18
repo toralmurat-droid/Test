@@ -1121,6 +1121,8 @@ export const MOB_POSES: Record<string, Hero> = {
   war_veiled: mobPose("war_veiled", "axe"), war_veiled_adept: mobPose("war_veiled_adept", "staff"),
   war_warden_bow: mobPose("war_warden_bow", "bow"), war_warden_pike: mobPose("war_warden_pike", "spear"), war_redfang_sling: mobPose("war_redfang_sling", "dagger"),
   war_host_bow: mobPose("war_host_bow", "bow"), war_host_pike: mobPose("war_host_pike", "spear"), war_hidekin_spear: mobPose("war_hidekin_spear", "spear"), war_veiled_caster: mobPose("war_veiled_caster", "staff"),
+  war_warden_rider: mobPose("war_warden_rider", "spear"), war_redfang_rider: mobPose("war_redfang_rider", "axe"), war_host_rider: mobPose("war_host_rider", "spear"),
+  war_hidekin_rider: mobPose("war_hidekin_rider", "spear"), war_veiled_rider: mobPose("war_veiled_rider", "axe"),
   wight: mobPose("wight", "axe"), boghag: mobPose("boghag", "staff"), legionary: mobPose("legionary", "spear"), cairnlord: mobPose("cairnlord", "axe"), barrowking: mobPose("barrowking", "hammer"),
   outrider: mobPose("outrider", "dagger"), crossbowman: mobPose("crossbowman", "bow"), firebrand: mobPose("firebrand", "none"), redcaptain: mobPose("redcaptain", "axe"), rourke: mobPose("rourke", "axe"),
   delver: mobPose("delver", "none"), cackler: mobPose("cackler", "dagger"), stagkin: mobPose("stagkin", "spear"), quillback: mobPose("quillback", "dagger"),

@@ -155,3 +155,34 @@ export const WAR_LOOKS: Record<WarSoldier, Look> = {
   },
 };
 Object.assign(MOB_LOOKS, WAR_LOOKS);
+
+/**
+ * Clan-war riders (shared/war/patrols.ts TROOP_LOOK[clan].roles.rider): the same rider on a mount (paint/warRiders.ts builds the
+ * mount in 3D, paint/mobs.ts lays the rider on it). Frames 48 x 48, the 14-frame soldier layout. Art-only keys.
+ */
+export const WAR_RIDERS = ["war_warden_rider", "war_redfang_rider", "war_host_rider", "war_hidekin_rider", "war_veiled_rider"] as const;
+export type WarRider = (typeof WAR_RIDERS)[number];
+
+export const RIDER_LOOKS: Record<WarRider, Look> = {
+  // Warden lancer: kettle helm, amber tabard, a long lance and a kite shield in the clan's green and amber
+  war_warden_rider: {
+    ...WAR_LOOKS.war_warden, weapon: "spear", bladeLen: 1.5, plume: 0xd9822b,
+    shield: { col: 0x3b4a2c, trim: 0xd9822b, emblem: 0xf0b44a, style: "kite" },
+  },
+  // Redfang raider: a red hood, scrap-iron and leather, a hand axe
+  war_redfang_rider: {
+    ...WAR_LOOKS.war_redfang, head: "hood", headCol: 0x8e1f1a, headTrim: 0x5a1410, weapon: "axe", bladeLen: 1.1,
+  },
+  // Ossuary Host bone rider: a skeleton in teal rags, a long lance
+  war_host_rider: {
+    ...WAR_LOOKS.war_host, head: "none", rags: 0x2f8f78, weapon: "spear", bladeLen: 1.5, shield: undefined,
+    tabard: { col: 0x1f3a34, trim: 0x4f7d6a, emblem: 0xd8cfb2 }, back: "cape", capeCol: 0x2a6a58,
+  },
+  // Hide-Kin boar rider: the rat-hooded spearman with a barbed bone spear
+  war_hidekin_rider: { ...WAR_LOOKS.war_hidekin_spear, bladeLen: 1.5 },
+  // Veiled dune rider: saffron and indigo robes, a curved blade
+  war_veiled_rider: {
+    ...WAR_LOOKS.war_veiled_caster, weapon: "sword", orb: undefined, bladeLen: 1.25, bladeCol: 0xd8d4c8, fx: 0xffe8a0,
+  },
+};
+Object.assign(MOB_LOOKS, RIDER_LOOKS);
