@@ -15,14 +15,18 @@ import { moveStep } from "../shared/movement";
 import { SLOW_MOB } from "../shared/powers";
 import { noMobsAt } from "../shared/spawns";
 import { inVillage } from "../shared/wrath";
-import { bowOf, chargeEnd, chargeStep, charging, flightMs, kiteStep, roleVs, shotClear, shotReady } from "../shared/war/troopRoles";
+import { bowOf, bowRange, chargeEnd, chargeStep, charging, flightMs, kiteStep, roleVs, shotClear, shotReady } from "../shared/war/troopRoles";
 import { parseTroop, TROOP_ROLE, troopName, troopStats, WAR_TROOPS } from "../shared/war/troops";
 import type { Fighter, FightGround, TroopHero, TroopMob, WarTroopsHost } from "./warTroops";
 
 /** A point (px) where a trooper may never stand or chase into: the safe squares, the stockade, monster-free ground. */
 export const offLimits = (x: number, y: number) => isSafeZone(x, y) || inVillage(x, y) || noMobsAt(x, y);
 
-/** Shots in flight at monsters and troopers: each lands (or not, if its target is gone) after its flight time. */
+/**
+ * Shots in flight at monsters and troopers: each lands after its flight time, unless its target is gone or safe, or its
+ * archer fell meanwhile (decided in phase 3: a dead archer's shot is lost, as a dead soldier's wound-up blow is; the
+ * clients' troop_shot is cosmetic and simply misses). Shots at heroes are room projectiles and fly on regardless.
+ */
 export class TroopArrows {
   private q: { from: string; to: string; dmg: number; at: number }[] = [];
   get size(): number { return this.q.length; }
@@ -33,7 +37,8 @@ export class TroopArrows {
     const keep: typeof this.q = [];
     for (const a of this.q) {
       if (now < a.at) { keep.push(a); continue; }
-      const o = h.mob(a.to);
+      const o = h.mob(a.to), by = h.mob(a.from);
+      if (!by || by.dead) continue; // (its archer fell: the shot is lost)
       if (o && !o.dead && !o.hidden && !offLimits(o.x, o.y)) h.strikeMob(a.from, a.to, a.dmg, true); // (not on a foe that got to the safe squares)
     }
     this.q = keep;
@@ -83,7 +88,7 @@ export function pikeTether(m: TroopMob, ox: number, oy: number, g: FightGround, 
  * (a pinned archer strikes in melee at its weaker blow, or shoots), shoot from range, close in when out of it. Always true.
  */
 export function archerFight(c: RoleCtx, m: TroopMob, id: string, f: Fighter, g: FightGround, tp: TroopHero | undefined, tm: TroopMob | undefined, dt: number, now: number): boolean {
-  const t = (tp ?? tm)!, R = TROOP_ROLE.ranged, W = WAR_TROOPS, st = troopStats(f.clan, m.level, f.officer, "archer");
+  const t = (tp ?? tm)!, R = bowRange(g.perch), W = WAR_TROOPS, st = troopStats(f.clan, m.level, f.officer, "archer", f.mod); // (a courtyard archer's longer bow)
   const dist = Math.hypot(t.x - m.x, t.y - m.y), reach = MOB_ATTACK_RANGE + (tm ? mobBody(tm.kind as MobKind) : W.heroBody);
   const by = troopName(f.clan, f.officer, false, false, false, "archer"), target = m.target;
   const vs = tm && tm.kind === "trooper" ? roleVs("archer", parseTroop(tm.weapon)?.role ?? "foot") : 1;
@@ -100,7 +105,7 @@ export function archerFight(c: RoleCtx, m: TroopMob, id: string, f: Fighter, g: 
   // an aimed shot: it stands still until it leaves
   if (f.aimUntil) {
     m.moving = false; face(m, t.x, t.y);
-    if (!shotReady(f, now, dist)) return true;
+    if (!shotReady(f, now, dist, R)) return true;
     m.winding = false; m.lastAttack = now;
     const bow = bowOf(f.clan), dmg = st.shot ?? st.dmg;
     if (tp) c.h.shoot(id, f.clan, t.x, t.y, dmg, by, { kind: bow.shot, speed: bow.speed, range: R.range, radius: R.radius });
@@ -171,7 +176,7 @@ export function pikeBrace(c: RoleCtx, m: TroopMob, f: Fighter, tm: TroopMob | un
 export function riderFight(c: RoleCtx, m: TroopMob, id: string, f: Fighter, g: FightGround, tp: TroopHero | undefined, tm: TroopMob | undefined, dt: number, now: number): boolean {
   const t = (tp ?? tm)!, C = TROOP_ROLE.rider.charge, W = WAR_TROOPS, ch = f.charge;
   if (m.broken || (m.windUntil && ch.phase === 0)) return false; // (a blow on foot is under way: it lands first)
-  const dist = Math.hypot(t.x - m.x, t.y - m.y), st = troopStats(f.clan, m.level, f.officer, "rider"), pace = st.speed * (m.slowed ? SLOW_MOB : 1);
+  const dist = Math.hypot(t.x - m.x, t.y - m.y), st = troopStats(f.clan, m.level, f.officer, "rider", f.mod), pace = st.speed * (m.slowed ? SLOW_MOB : 1);
   const step = chargeStep(ch, now, dist, C);
   if (step.act === "fight") return false;
   if (step.act === "wheel") {
@@ -199,7 +204,7 @@ export function riderFight(c: RoleCtx, m: TroopMob, id: string, f: Fighter, g: F
     chargeEnd(ch, now, false, C); m.moving = false;
     m.stunUntil = Math.max(m.stunUntil, now + B.stunMs); m.stunned = true;
     c.h.sfx?.({ ev: "troop_brace", id: pid, to: id, x: Math.round(p.x), y: Math.round(p.y) });
-    c.h.strikeMob(pid, id, Math.round(troopStats(pc.clan, p.level, false, "pike").dmg * roleVs("pike", "rider") * B.dmgMult));
+    c.h.strikeMob(pid, id, Math.round(troopStats(pc.clan, p.level, false, "pike", pf?.mod).dmg * roleVs("pike", "rider") * B.dmgMult));
     return true;
   }
   const reach = MOB_ATTACK_RANGE + (tm ? mobBody(tm.kind as MobKind) : W.heroBody);

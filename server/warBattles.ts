@@ -17,7 +17,8 @@ import { TILE, type Dir } from "../shared/constants";
 import { underground } from "../shared/dungeon";
 import { blocked } from "../shared/movement";
 import { CLANS, type ClanKey } from "../shared/war/clans";
-import { BATTLE, battleField, battleGold, battleView, type Battle, type BattleMsg } from "../shared/war/battles";
+import { BATTLE, battleField, battleGold, battleLine, battleView, type Battle, type BattleMsg } from "../shared/war/battles";
+import { battleRole, rolePlace } from "../shared/war/troopRoles";
 import { captainName, hashStr, leaderLine, type WarMoment } from "../shared/war/heralds";
 import { RENOWN_RANKS, rankOf } from "../shared/war/renown";
 import { roadOffLimits } from "../shared/war/roads";
@@ -49,8 +50,11 @@ export interface BattleHost {
   pay(heroId: string, gold: number): void;
 }
 
-/** One place in a side's lines: who stands there ("" empty), the fighter state; a captain's place that `fallen` stays empty. */
-interface Place { id: string; f: Fighter; captain: boolean; fallen?: true }
+/**
+ * One place in a side's lines: who stands there ("" empty), the fighter state (its role by place: battleRole); a captain's
+ * place that `fallen` stays empty; `g` a role soldier's own ground (the field's, and its place: a pike's tether).
+ */
+interface Place { id: string; f: Fighter; captain: boolean; fallen?: true; g?: FightGround; /** Its spot, once worked out (the field's lines never move). */ at?: { x: number; y: number } }
 /** The battle this room has live: its places per side, the axis and centre, the ground. */
 interface Live { b: Battle; places: [Place[], Place[]]; ax: { x: number; y: number }; c: { x: number; y: number }; long: number; g: FightGround; lastSeen: number; nextReserve: number; nextScore: number }
 
@@ -214,7 +218,10 @@ export class WarBattles {
     const c = { x: b.x, y: b.y }, long = (f ? Math.max(f.w, f.h) : BATTLE.fieldLong) * TILE;
     const l: Live = { b, places: [[], []], ax, c, long, lastSeen: now, nextReserve: 0, nextScore: now + BATTLE.scoreMs, g: { leash: () => false, hunt: () => false } };
     l.g = { leash: (x, y) => Math.hypot(x - c.x, y - c.y) <= long, hunt: () => false }; // (wild monsters only when they strike first)
-    for (const side of SIDES) for (let i = 0; i < BATTLE.perSide; i++) l.places[side].push({ id: "", f: newFighter(side ? b.b : b.a, i < BATTLE.captains), captain: i < BATTLE.captains });
+    for (const side of SIDES) for (let i = 0; i < BATTLE.perSide; i++) {
+      const clan = side ? b.b : b.a, f = newFighter(clan, i < BATTLE.captains, battleRole(clan, i)); // (front line foot and pikes, riders on its wings, archers behind)
+      l.places[side].push({ id: "", f, captain: i < BATTLE.captains, g: f.role === "foot" ? undefined : { leash: l.g.leash, hunt: l.g.hunt, post: () => this.postOf(l, side, i) } });
+    }
     this.live = l;
     this.fill(l, now, true);
   }
@@ -240,11 +247,11 @@ export class WarBattles {
         if (p.id || (p.captain && (p.fallen || caps <= 0))) continue;
         if (p.captain) caps--;
         const at = first ? this.postOf(l, side, i) : this.rearOf(l, side, i), clan = side ? l.b.b : l.b.a;
-        const id = `wb${++this.seq}`, level = troopLevel(l.b.t, p.captain), mob = this.h.spawn(id, level, at.x, at.y, troopWeapon(clan, p.captain));
+        const role = p.f.role, id = `wb${++this.seq}`, level = troopLevel(l.b.t, p.captain), mob = this.h.spawn(id, level, at.x, at.y, troopWeapon(clan, p.captain, false, false, false, role));
         if (!mob) continue;
-        mob.hp = mob.maxHp = troopStats(clan, level, p.captain).hp * (p.captain ? BATTLE.captainHp : 1);
+        mob.hp = mob.maxHp = troopStats(clan, level, p.captain, role).hp * (p.captain ? BATTLE.captainHp : 1);
         if (p.captain) mob.title = `${captainName(clan, l.b.id, side * BATTLE.captains + i)}, captain`;
-        p.id = id; p.f = newFighter(clan, p.captain);
+        p.id = id; p.f = newFighter(clan, p.captain, role);
         this.mobs.set(id, { side, i });
         room--;
       }
@@ -277,10 +284,19 @@ export class WarBattles {
 
   /** Place i of a side: two lines across the axis, the attackers on the near side, captains in the middle of the rear line. */
   private postOf(l: Live, side: 0 | 1, i: number): { x: number; y: number } {
-    const per = Math.ceil(BATTLE.perSide / 2), sgn = side ? 1 : -1, px = -l.ax.y, py = l.ax.x;
-    const line = i < BATTLE.captains ? 1 : Math.floor((i - BATTLE.captains) / per) % 2, k = i < BATTLE.captains ? (i ? 2 : -2) : ((i - BATTLE.captains) % per) - (per - 1) / 2;
-    const gap = Math.min(l.long / per, 20), d = (BATTLE.lineGapTiles + line * 1.2) * TILE * sgn, along = i < BATTLE.captains ? k * TILE : k * gap;
+    const pl = l.places[side][i];
+    return pl ? (pl.at ??= this.spotOf(l, side, i)) : this.spotOf(l, side, i); // (cached: a pike's tether asks every turn)
+  }
+  /** postOf worked out: its role shifts an archer behind and a rider out on the wing (ROLE_FORM). */
+  private spotOf(l: Live, side: 0 | 1, i: number): { x: number; y: number } {
+    const { line, k, per, captain } = battleLine(i), sgn = side ? 1 : -1, px = -l.ax.y, py = l.ax.x;
+    const gap = Math.min(l.long / per, 20), d = (BATTLE.lineGapTiles + line * 1.2) * TILE * sgn, along = captain ? k * TILE : k * gap;
     const x = l.c.x + l.ax.x * d + px * along, y = l.c.y + l.ax.y * d + py * along;
+    const role = l.places[side][i]?.f.role ?? "foot";
+    if (role !== "foot") { // archers a step behind the line, riders out on its wing (ROLE_FORM)
+      const out = Math.sign(k), q = rolePlace(role, x, y, [l.ax.x * sgn, l.ax.y * sgn], [px * out, py * out]);
+      if (!roadOffLimits(q.x, q.y) && !blocked(q.x, q.y)) return q;
+    }
     if (!roadOffLimits(x, y) && !blocked(x, y)) return { x, y };
     const bx = l.c.x + l.ax.x * d, by = l.c.y + l.ax.y * d; // (a tree or a rock there: on the axis behind the line)
     return !roadOffLimits(bx, by) && !blocked(bx, by) ? { x: bx, y: by } : { ...l.c };
@@ -304,15 +320,15 @@ export class WarBattles {
   step(m: TroopMob, id: string, dt: number, now: number) {
     const s = this.mobs.get(id), l = this.live;
     if (!s || !l) { this.mobs.delete(id); this.h.remove(id); return; }
-    const pl = l.places[s.side][s.i], f = pl.f;
-    if (this.soldiers.think(m, id, f, l.g, now)) return;
+    const pl = l.places[s.side][s.i], f = pl.f, g = pl.g ?? l.g;
+    if (this.soldiers.think(m, id, f, g, now)) return;
     const post = this.postOf(l, s.side, s.i), face = dirOf(l.ax.x * (s.side ? -1 : 1), l.ax.y * (s.side ? -1 : 1));
     if (!f.near) { // nobody to see it: it keeps its place in the line (cheap)
       if (!roadOffLimits(post.x, post.y)) { m.x = m.homeX = post.x; m.y = m.homeY = post.y; }
       m.moving = false; m.windUntil = 0; m.winding = false; m.dir = face;
       return;
     }
-    if (this.soldiers.fight(m, id, f, l.g, dt, now)) return;
+    if (this.soldiers.fight(m, id, f, g, dt, now)) return;
     const d = Math.hypot(post.x - m.x, post.y - m.y);
     if (d > BATTLE.leashPx && !this.soldiers.seen(m, WAR_TROOPS.warpUnseenPx) && !roadOffLimits(post.x, post.y)) { m.x = post.x; m.y = post.y; m.moving = false; return; }
     if (d < 2) { m.moving = false; m.dir = face; return; }

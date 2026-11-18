@@ -7,9 +7,56 @@ import { isSolidAt, isSolidTile } from "../map";
 import type { ClanKey } from "./clans";
 import { fortOf, holdWallPx, type FortKind } from "./holdWalls";
 import type { HoldTier } from "./holdTiers";
-import { CLAN_ROLES, ROLE_PLAN, roleOf, TROOP_ROLE, type TroopRole } from "./troops";
+import { battleLine } from "./battles";
+import { CLAN_ROLES, fieldRole, ROLE_FORM, ROLE_PLAN, roleOf, TROOP_ROLE, type TroopRole } from "./troops";
 
-type Ranged = typeof TROOP_ROLE.ranged;
+type Ranged = Omit<typeof TROOP_ROLE.ranged, "wall">;
+
+/** The bow an archer draws: a courtyard archer on its wall (`perch`) shoots and sees farther (TROOP_ROLE.ranged.wall). */
+export function bowRange(perch = false): Ranged {
+  const R = TROOP_ROLE.ranged;
+  return perch ? { ...R, range: R.wall.range, sightPx: R.wall.sightPx } : R;
+}
+
+/** A soldier's give-up state (part of the server's Fighter): the target out of reach since when, the one given up on and until when. */
+export interface GiveUp { outOf: string; outSince: number; shun: string; shunUntil: number }
+/**
+ * The give-up rule (TROOP_ROLE.giveUp) for a courtyard archer or a guard pike (mutates `f`): its target `target` is
+ * `out` of its reach now; once it has been out for giveUp.ms straight it is dropped (true) and shunned for shunMs
+ * (`f.shun`, `f.shunUntil`: WarTroops.pick skips it). A new target, or one back in reach, starts the clock over.
+ */
+export function giveUpStep(f: GiveUp, target: string, out: boolean, now: number, G = TROOP_ROLE.giveUp): boolean {
+  if (!out || f.outOf !== target) { f.outOf = out ? target : ""; f.outSince = now; return false; }
+  if (now - f.outSince < G.ms) return false;
+  f.shun = target; f.shunUntil = now + G.shunMs; f.outOf = ""; f.outSince = 0;
+  return true;
+}
+/** Is `id` shunned now (a target given up as out of reach: giveUpStep)? */
+export const shunned = (f: Pick<GiveUp, "shun" | "shunUntil">, id: string, now: number): boolean => !!id && f.shun === id && now < f.shunUntil;
+
+/**
+ * The role of place i of clan `k`'s side in a field battle (ROLE_PLAN.battle; where it stands: shared/war/battles.ts
+ * battleLine): captains are foot; the front line's `wings` places at each end ride, its others cycle through `front`
+ * from the left end; the rear line's cycle through `rear`. A role the clan lacks is foot (fieldRole).
+ */
+export function battleRole(k: ClanKey, i: number): TroopRole {
+  const { line, k: at, per, captain } = battleLine(i), P = ROLE_PLAN.battle;
+  if (captain) return "foot";
+  const n = Math.round(at + (per - 1) / 2); // 0 .. per-1 from the left end
+  if (line === 0 && (n < P.wings || n >= per - P.wings)) return fieldRole(k, "rider");
+  const plan = line === 0 ? P.front : P.rear;
+  return fieldRole(k, plan[n % plan.length]);
+}
+
+/**
+ * A soldier's place in a line shifted by its role (ROLE_FORM): an archer `archerBack` px along `back` (the unit vector
+ * away from the foe), a rider `riderWide` px along `out` (the unit vector toward its end of the line; 0 in the middle).
+ * The caller keeps the plain place when the shifted one is blocked.
+ */
+export function rolePlace(role: TroopRole, x: number, y: number, back: [number, number], out: [number, number]): { x: number; y: number } {
+  const b = role === "archer" ? ROLE_FORM.archerBack : 0, w = role === "rider" ? ROLE_FORM.riderWide : 0;
+  return { x: x + back[0] * b + out[0] * w, y: y + back[1] * b + out[1] * w };
+}
 
 /** An archer's move against a foe `dist` px away: -1 step back (inside keepAway), 1 close in (out of range), 0 stand and shoot. */
 export function kiteStep(dist: number, R: Ranged = TROOP_ROLE.ranged): -1 | 0 | 1 {

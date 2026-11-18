@@ -18,7 +18,7 @@ import { RENOWN_RANKS, rankOf } from "../shared/war/renown";
 import type { Side } from "../shared/war/siege";
 import { STANDARD } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
-import { parseTroop, troopLevel, troopStance, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
+import { parseTroop, planRole, squadMod, TROOP_ROLE, troopLevel, troopStance, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
 import { ramBlocked, ramHp, ramPos, ramSpeed, ramStep, SIEGE_WORKS, type RamView } from "../shared/war/works";
 import { warNow } from "./war";
 import type { SiegeHero } from "./warSieges";
@@ -97,7 +97,7 @@ export class WarWorks {
       r = { t: s.t, atk: s.atk, def: s.def, start: s.approach.arc, goal: gate.arc, level, maxHp, hp: maxHp, d: s.approach.arc, dir: 0, arrived: false, fallen: new Set(),
         id: "", crew: [], fighters: [], held: false, nextHeld: 0, x: 0, y: 0, wreckTick: -1, sent: "", g };
       const rr = r;
-      r.g = { leash: (x, y) => Math.hypot(x - rr.x, y - rr.y) <= SIEGE_WORKS.leashPx, hunt: () => false }; // wild monsters only when one strikes first
+      r.g = { leash: (x, y) => Math.hypot(x - rr.x, y - rr.y) <= SIEGE_WORKS.leashPx, hunt: () => false, post: () => ({ x: rr.x, y: rr.y }) }; // wild monsters only when one strikes first; a pike of the crew keeps within its tether of the ram
       this.rams.set(s.t, r);
     }
     if (r.id) { const k = this.stateKey(r); if (k !== r.sent) { r.sent = k; return true; } return false; }
@@ -113,10 +113,12 @@ export class WarWorks {
     this.mobs.set(id, { r, i: -1 });
     r.crew = []; r.fighters = [];
     for (let i = 0; i < SIEGE_WORKS.crew; i++) {
-      r.fighters.push(newFighter(r.atk, false)); r.crew.push("");
+      const role = planRole(r.atk, "ram", i), mod = squadMod("ram", role); // (a pike on guard by the ram: ROLE_PLAN.ram; TROOP_ROLE.squad)
+      r.fighters.push(newFighter(r.atk, false, role, mod)); r.crew.push("");
       if (r.fallen.has(i)) continue; // fell beside this ram earlier: no new man
-      const post = this.postOf(r, i), cid = `${id}c${i}`, c = this.h.spawn(cid, r.level, post.x, post.y, troopWeapon(r.atk));
+      const post = this.postOf(r, i), cid = `${id}c${i}`, c = this.h.spawn(cid, r.level, post.x, post.y, troopWeapon(r.atk, false, false, false, false, role));
       if (!c) continue;
+      if (role !== "foot") c.hp = c.maxHp = Math.max(1, Math.round(c.maxHp * TROOP_ROLE.mult[role].hp * (mod?.hp ?? 1))); // (the crewman's plain trooper HP, as before the roles, times its role's)
       r.crew[i] = cid;
       this.mobs.set(cid, { r, i });
     }

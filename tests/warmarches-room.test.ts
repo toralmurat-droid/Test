@@ -9,7 +9,7 @@ import { atWar } from "../shared/war/feuds";
 import { COLUMN, columnPos, columnTrip, marchMult, type ColumnsMsg, type March } from "../shared/war/marches";
 import { warPath, type RoadEntry } from "../shared/war/roads";
 import { newWar, targetsOf, WAR, type Orders } from "../shared/war/rules";
-import { parseTroop, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
+import { parseTroop, planRole, squadMod, troopStats, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
 import { TERRITORIES } from "../shared/war/territories";
 import { _marchMults, _resetWar, _setWarOrders, _valorOf, columnHalting, columnJoined, columnLost, marchCol, warMarches } from "../server/war";
 
@@ -70,7 +70,7 @@ test("columns (room): a column wakes near a hero, officer first, in its clan's c
     wild();
     assert.equal(lv.men.filter(Boolean).length, m.size, "every man");
     const men = lv.men.map((x: string) => room.state.mobs.get(x));
-    men.forEach((x: any, i: number) => { assert.equal(x.kind, "trooper"); assert.equal(x.weapon, troopWeapon(PICK.k, i === 0)); assert.equal(parseTroop(x.weapon)!.officer, i === 0); });
+    men.forEach((x: any, i: number) => { assert.equal(x.kind, "trooper"); const role = i === 0 ? "foot" : planRole(PICK.k, "column", i); assert.equal(x.weapon, troopWeapon(PICK.k, i === 0, false, false, false, role)); assert.equal(x.maxHp, troopStats(PICK.k, x.level, i === 0, role, squadMod("column", role)).hp); assert.equal(parseTroop(x.weapon)!.officer, i === 0); });
     assert.ok(men.every((x: any) => Math.hypot(x.x - q.x, x.y - q.y) < 5 * TILE), "in formation round the anchor");
     assert.ok(sent.some(([t, msg]) => t === "sfx" && msg.ev === "column_march" && msg.clan === PICK.k), "drums");
     // allies and unsworn heroes can't touch it

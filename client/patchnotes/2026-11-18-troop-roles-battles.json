@@ -1,0 +1,11 @@
+{
+  "date": "2026-11-18",
+  "title": "Archers, pikes and riders go to war",
+  "pr": 535,
+  "changes": [
+    "Clan archers, pikes and riders now march in columns, guard caravans, crew rams, hunt marked heroes and fight in sieges and field battles, not only in fort garrisons.",
+    "In battles and sieges the pikes hold the front line and the archers shoot from behind it.",
+    "Squads that hunt a lone hero are slightly lighter than garrison troops, so a column or escort stays about as hard to beat as before.",
+    "Archers on fort walls now shoot farther (230 instead of 150) and see farther, so picking them off from outside their range is harder. An archer that cannot reach its target gives up after a few seconds and picks another."
+  ]
+}

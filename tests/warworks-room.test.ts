@@ -9,7 +9,7 @@ import { patrolOf } from "../shared/war/patrols";
 import { newWar, targetsOf } from "../shared/war/rules";
 import { SIEGE_BATTLE, siegeFronts } from "../shared/war/siege";
 import { TERRITORIES } from "../shared/war/territories";
-import { parseTroop, troopLevel, WAR_TROOPS } from "../shared/war/troops";
+import { parseTroop, planRole, troopLevel, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
 import { ramHp, SIEGE_WORKS } from "../shared/war/works";
 import { _resetWar, _valorOf, warState } from "../server/war";
 
@@ -90,7 +90,7 @@ test("works (room): only a Host-led siege brings a bone ram, at the approach, wi
     assert.ok(Math.hypot(m.x - s.approach.x, m.y - s.approach.y) < SIEGE_WORKS.daySpeed, "it starts at the approach");
     const crew = r.crew.filter(Boolean).map((cid: string) => room.state.mobs.get(cid));
     assert.equal(crew.length, SIEGE_WORKS.crew);
-    assert.ok(crew.every((x: any) => x.weapon === "host"), "plain Host soldiers");
+    assert.ok(crew.every((x: any, i: number) => x.weapon === troopWeapon(HOST, false, false, false, false, planRole(HOST, "ram", i))), "Host soldiers in their roles (pikes: ROLE_PLAN.ram)");
     assert.ok(sent.some(([t, v]) => t === "siege" && v.t === LAND.id && v.ram && v.ram.maxHp === m.maxHp), "the clients hear of it");
     // it rolls toward the gate when nobody stands in its way, and stops near a defender
     for (const cid of r.crew) room.state.mobs.delete(cid);

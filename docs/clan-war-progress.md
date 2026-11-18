@@ -1160,8 +1160,43 @@ orders over HTTPS, not by an in-server API call. Routine prompt and setup: [war-
     garrison rows within a few points of phase 1.
   - Client and art in the same PR: 48x48 rider sheets, charge lane and brace effects with sounds, wall archers drawn
     raised (a trooper archer standing on a live wall tile).
-- **Phase 3:** roles in sieges, columns, battles, caravans, feuds (all foot today).
-- **Known follow-ups:** ranged heroes can farm guard pikes beyond the tether and wall archers (bow 150 px) from beyond
-  their range (a longer bow on the wall, or dropping an unreachable target); a real sling draw; riders and pikes in the
-  other modules (sieges, columns, battles, caravans, feuds: phase 3).
+- **Phase 3 (server/shared, branch `claude/troop-roles-battles`):** roles in the other troop modules, same head counts,
+  by place (`ROLE_PLAN` in `shared/war/troops.ts`; `planRole(clan, kind, i)`, battles `battleRole` in
+  `shared/war/troopRoles.ts`; a role the clan lacks is foot: `fieldRole`; officers, captains, carts, rams and tunnel mouths never carry one):
+  - **Columns** (`ROLE_PLAN.column`, server/warMarches.ts): as the patrol column (rider at place 1, pikes 2-3, archers 5 and 7, so at the rear).
+  - **Sieges** (`ROLE_PLAN.siege`, server/warSieges.ts): per front, attackers foot / archer / pike / rider, defenders
+    foot / pike / archer / archer (a smaller force drops the last places). `ROLE_FORM`: archers stand 20 px behind the
+    line, riders 18 px out on its flank (`rolePlace`; blocked ground: the plain place). **Ram crew** (`ROLE_PLAN.ram`,
+    server/warWorks.ts): a pike tethered to the ram and a foot soldier (two pikes cost a lone Songweaver ~20 points in `pve.ts --siege`).
+  - **Battles** (`ROLE_PLAN.battle`, server/warBattles.ts, `battleLine` in shared/war/battles.ts is the lines' old index
+    maths): front line foot / pike alternating with 3 riders on each wing, rear line archer / archer / foot; archers
+    stand behind the rear line's place, riders out on the wing. Captains foot.
+  - **Caravans** (`ROLE_PLAN.escort`): a rider ahead of the cart, foot behind. **Manhunters** (`ROLE_PLAN.hunt`): captain,
+    rider, archer, pike, foot (the Marked squad's 5th).
+  - HP: troopStats with the role where the module already used troopStats; caravan escorts and ram crew keep the plain
+    trooper HP they had (pre-existing: not troopStats) times the role's `mult.hp`. Pikes get their module's place as
+    `FightGround.post` (their tether; caravans have none planned); manhunter pikes chase untethered.
+  - Cross-module brace: `WarTroops.others` (each role soldier enlists in `think`, swept each tick) so a pike of any
+    module braces against any rival rider's charge.
+  - **Give-up** (follow-up a, `TROOP_ROLE.giveUp`, `giveUpStep`): a courtyard archer (target beyond its wall bow, or a
+    monster/trooper without a clear shot) or a Hold guard pike (target beyond its blow) whose target stays out of reach
+    for 4 s drops it and shuns it for 8 s (`Fighter.shun`), so it picks another foe. Any tethered pike also never picks a
+    foe beyond its tether (`pikeHolds` in `pick`; before it picked, dropped and walked home every 400 ms). Courtyard
+    archers draw a longer bow (`TROOP_ROLE.ranged.wall`: 230 px, sight 260; Summoner 220, Wizard 170, Songweaver 145).
+    This does not stop a hero farming a guard pike from beyond its tether: the pike now turns to another foe (or home)
+    instead of flickering, but still can't answer a ranged hero out there.
+  - **Shots of a fallen archer** (follow-up b, decided): a shot in flight at a monster or trooper is lost when its archer
+    has fallen by the time it lands (`TroopArrows.fly`), as a dead soldier's wound-up blow is; before it depended on the
+    500 ms corpse removal. Shots at heroes are room projectiles and fly on.
+  - **Squad multipliers** (`TROOP_ROLE.squad`, `squadMod`, `troopStats(..., mod)`, `Fighter.mod`): role soldiers in the
+    squads that fight a lone hero are trimmed on HP and damage (column 0.9/0.9, escort 0.8/0.8, manhunters 0.92/0.92,
+    ram crew 0.85 HP), never foot; patrols, guards, sieges and battles fight at full strength. Untrimmed, the roles cost
+    a lone Songweaver up to 14 points (manhunters Lv30, caravan Lv45) and a Vampire 12 (column).
+  - Balance (`pve.ts 200`, rule: every hero row within ~10 of before): --troops / --garrison / --roles / --clans within
+    noise (max 9, the Lv17 gate row whose code is unchanged). With the multipliers: column, caravan, manhunters and ram
+    rows all within 8 of before (largest: manhunters wizard Lv15 Hunted 60 -> 68, ram summoner Lv15 99 -> 93); siege
+    fronts in the sim stay foot. `war.ts` unchanged (strategic).
+- **Known follow-ups:** a real sling draw; tunnels, rituals and town gates still field foot only; caravan escorts and the
+  ram crew use the plain trooper HP (not troopStats, unlike every other module and the sims); `pve.ts --siege` fronts
+  don't model roles; a guard pike still can't answer a ranged hero beyond its tether.
 - Plan: /mnt/project-files/clan-war/troop-roles-plan.md.

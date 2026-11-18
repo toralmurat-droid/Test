@@ -24,7 +24,7 @@ import { RENOWN_RANKS, rankOf } from "../shared/war/renown";
 import { rallyRenown } from "../shared/war/rules";
 import { HOLDS, STANDARD } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
-import { parseTroop, TROOP_SHORT, troopStance, troopStats, troopWeapon, type TroopPart } from "../shared/war/troops";
+import { parseTroop, planRole, squadMod, TROOP_SHORT, troopStance, troopStats, troopWeapon, type TroopPart } from "../shared/war/troops";
 import { territoryAt } from "../shared/war/view";
 import { addValor, warNow, warState } from "./war";
 import { boonRenown, keyOf } from "./warCrown";
@@ -274,12 +274,14 @@ export class WarFeuds {
     const level = Math.max(1, Math.min(MAX_LEVEL, p.level + H.levelUp[tier]));
     for (let i = 0; i < n; i++) {
       const hid = `wh${++this.seq}`, officer = i === 0, x = from.x + ((i % 3) - 1) * 14, y = from.y + Math.floor(i / 3) * 14;
-      const m = this.h.spawn(hid, level, x, y, troopWeapon(clan, officer));
+      const role = officer ? "foot" : planRole(clan, "hunt", i); // (a mixed squad: ROLE_PLAN.hunt)
+      const m = this.h.spawn(hid, level, x, y, troopWeapon(clan, officer, false, false, false, role));
       if (!m) continue;
-      m.hp = m.maxHp = troopStats(clan, level, officer).hp;
+      const mod = squadMod("hunt", role); // (TROOP_ROLE.squad)
+      m.hp = m.maxHp = troopStats(clan, level, officer, role, mod).hp;
       m.title = `${TROOP_SHORT[clan]} manhunter${officer ? " captain" : ""}`;
       const g: FightGround = { leash: (x2, y2) => { const q = this.h.hero(s.quarry); return !!q && Math.hypot(q.x - x2, q.y - y2) <= H.leashTiles * TILE; }, hunt: () => false };
-      this.hunters.set(hid, { ...newFighter(clan, officer), squad: s, i, g });
+      this.hunters.set(hid, { ...newFighter(clan, officer, role, mod), squad: s, i, g });
       s.ids.push(hid);
     }
     if (!s.ids.length) return;
