@@ -174,7 +174,7 @@ export function pikeBrace(c: RoleCtx, m: TroopMob, f: Fighter, tm: TroopMob | un
  * foot soldier's blow, without the rush or the javelin: server/warTroops.ts fight).
  */
 export function riderFight(c: RoleCtx, m: TroopMob, id: string, f: Fighter, g: FightGround, tp: TroopHero | undefined, tm: TroopMob | undefined, dt: number, now: number): boolean {
-  const t = (tp ?? tm)!, C = TROOP_ROLE.rider.charge, W = WAR_TROOPS, ch = f.charge;
+  const t = (tp ?? tm)!, C = TROOP_ROLE.rider.charge, ch = f.charge;
   if (m.broken || (m.windUntil && ch.phase === 0)) return false; // (a blow on foot is under way: it lands first)
   const dist = Math.hypot(t.x - m.x, t.y - m.y), st = troopStats(f.clan, m.level, f.officer, "rider", f.mod), pace = st.speed * (m.slowed ? SLOW_MOB : 1);
   const step = chargeStep(ch, now, dist, C);
@@ -194,8 +194,16 @@ export function riderFight(c: RoleCtx, m: TroopMob, id: string, f: Fighter, g: F
     m.moving = false; m.winding = true; face(m, m.x + ch.dx, m.y + ch.dy);
     return true;
   }
-  // the gallop: a braced pike first, then its target, then a stride along the lane
+  // the gallop, in strides of at most C.stridePx (a long tick never carries it through a pike or past its target; never more than one gallop's length)
   m.winding = false;
+  const gdt = Math.min(dt, C.gallopMs / 1000), n = Math.max(1, Math.ceil((pace * C.speedMult * gdt) / C.stridePx));
+  for (let i = 0; i < n; i++) if (gallopStride(c, m, id, f, g, tp, tm, t, st.dmg, pace, gdt / n, now)) break;
+  return true;
+}
+
+/** One stride of a rider's gallop: a braced pike first, then its target, then a stride along the lane. True: the charge ended. */
+function gallopStride(c: RoleCtx, m: TroopMob, id: string, f: Fighter, g: FightGround, tp: TroopHero | undefined, tm: TroopMob | undefined, t: { x: number; y: number }, base: number, pace: number, dt: number, now: number): boolean {
+  const C = TROOP_ROLE.rider.charge, W = WAR_TROOPS, ch = f.charge, dist = Math.hypot(t.x - m.x, t.y - m.y);
   const pk = bracer(c, m, id, f.clan, ch.dx, ch.dy, now);
   if (pk) {
     const [pid, p] = pk, pc = parseTroop(p.weapon)!, B = TROOP_ROLE.pike.brace, pf = c.fighter?.(pid);
@@ -210,7 +218,7 @@ export function riderFight(c: RoleCtx, m: TroopMob, id: string, f: Fighter, g: F
   const reach = MOB_ATTACK_RANGE + (tm ? mobBody(tm.kind as MobKind) : W.heroBody);
   if (dist <= reach + W.rushSlack) {
     chargeEnd(ch, now, true, C); m.lastAttack = now; m.moving = false;
-    const dmg = Math.round(st.dmg * C.dmgMult), by = troopName(f.clan, f.officer, false, false, false, "rider");
+    const dmg = Math.round(base * C.dmgMult), by = troopName(f.clan, f.officer, false, false, false, "rider");
     if (tp) c.h.strikeHero(id, m.target, dmg, by, { push: [ch.dx, ch.dy], kb: C.kb, stunMs: C.stunMs });
     else {
       const vs = tm!.kind === "trooper" ? roleVs("rider", parseTroop(tm!.weapon)?.role ?? "foot") : 1, tid = m.target;
@@ -222,5 +230,5 @@ export function riderFight(c: RoleCtx, m: TroopMob, id: string, f: Fighter, g: F
   const want = pace * C.speedMult * dt, r = moveStep(m.x, m.y, dirInput(ch.dx, ch.dy), dt, pace * C.speedMult);
   if (Math.hypot(r.x - m.x, r.y - m.y) < want * 0.5 || offLimits(r.x, r.y) || !g.leash(r.x, r.y)) { chargeEnd(ch, now, false, C); m.moving = false; return true; } // ran into a wall or the leash: missed
   m.x = m.homeX = r.x; m.y = m.homeY = r.y; m.moving = true; face(m, m.x + ch.dx, m.y + ch.dy);
-  return true;
+  return false;
 }

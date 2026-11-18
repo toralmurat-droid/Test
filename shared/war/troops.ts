@@ -137,9 +137,11 @@ export const TROOP_ROLE = {
    * dmgMult x its blow, a knockback (`kb`, x a blow's) and a `stunMs` stagger; then the charge cools for `everyMs` from
    * the gallop's end (a charge broken off before it struck or missed, by a stun or a lost foe: `breakMs`). With its charge
    * ready and its foe closer than `min` it wheels away for up to `wheelMs` to get a run-up (once per cooldown: after a
-   * wheel that found no room it fights on foot and tries again `everyMs` / 2 later).
+   * wheel that found no room it fights on foot and tries again `everyMs` / 2 later). The gallop moves in strides of at
+   * most `stridePx` (several per tick when the server's ticks run long), each checked for a braced pike and its target:
+   * below the brace reach (32 px) and the blow's (24 px), so a slow tick never carries the rider through either.
    */
-  rider: { fielded: true as boolean, charge: { min: 80, max: 200, windupMs: 550, gallopMs: 1000, speedMult: 2.2, dmgMult: 1.7, kb: 2.5, stunMs: 250, everyMs: 6000, breakMs: 2000, wheelMs: 1200 } },
+  rider: { fielded: true as boolean, charge: { min: 80, max: 200, windupMs: 550, gallopMs: 1000, speedMult: 2.2, dmgMult: 1.7, kb: 2.5, stunMs: 250, everyMs: 6000, breakMs: 2000, wheelMs: 1200, stridePx: 12 } },
   vs: { archer: { pike: 1.25 }, pike: { rider: 2 }, rider: { archer: 1.5 } } as Partial<Record<TroopRole, Partial<Record<TroopRole, number>>>>,
 };
 
