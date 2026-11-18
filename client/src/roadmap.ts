@@ -127,7 +127,7 @@ export const MILESTONES: Milestone[] = [
     exit: "Ten AI changes shipped with no incident; every one logged and emailed.",
     items: [
       { name: "Clan plug-in folders behind a fixed interface", owner: "Gameplay Engineers", status: "done", note: "shared/clans/<clan>/: sandboxed council code, off until Murat pins its hash; kill switch on the admin route", pr: 525 },
-      { name: "AI PR bot with sandbox rules and a sim gate", owner: "AI Engineer + Tech Lead", status: "done", note: "Five nightly clan routines (one clan a night) each open at most one PR to their own folder; the verify tool and the reviewer gate it", pr: 528 },
+      { name: "AI PR bot with sandbox rules and a sim gate", owner: "AI Engineer + Tech Lead", status: "done", note: "Five weekly clan routines (Monday to Friday, one clan a night) each open at most one PR to their own folder; the verify tool and the reviewer gate it", pr: 528 },
       { name: "First clan code pinned in the live game", owner: "Game Director", status: "next", note: "Murat's call: pin a clan's sha256 in CLAN_PLUGINS" },
     ],
   },
