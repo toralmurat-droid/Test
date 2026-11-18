@@ -68,6 +68,9 @@ export const MILESTONES: Milestone[] = [
       { name: "War table map (world map overlay)", owner: "Client & UI", status: "done" },
       { name: "Night Raiders hunt the leading clan; Rally for the weakest", owner: "Gameplay Engineers", status: "done", note: "Raiders strike the leader's borders by night; the weakest clan's heroes rally" },
       { name: "Clan troops and holds for all five clans", owner: "Art Director", status: "done", note: "Troops fight on the server; painted soldiers, carts and Holds live" },
+      { name: "Forts kept clear of wild monsters", owner: "Gameplay Engineers", status: "done", note: "Wild monsters walk round clan forts; the clan's troops guard them", pr: 531 },
+      { name: "Archers, pikes and riders for every clan", owner: "Gameplay + Art", status: "done", note: "Wall archers, bracing pikes and charging riders in Holds, patrols, columns, caravans, sieges and battles (#532, #534)", pr: 535 },
+      { name: "Troop roles in tunnels, rituals and town gates", owner: "Gameplay Engineers", status: "doing" },
     ],
   },
   {
@@ -113,7 +116,7 @@ export const MILESTONES: Milestone[] = [
       { name: "War state as its own service with a versioned API", owner: "Server & Live Ops", status: "done", note: "War, world and Forge leases on one Postgres: one Age owns them, the others follow and queue their changes; versioned war, Forge and save APIs", pr: 510 },
       { name: "One hero on one server at a time (account leases, save versions)", owner: "Server & Live Ops", status: "done", pr: 508 },
       { name: "Gateway, Vanguard canary, crossing offer, safe-moment move", owner: "Server + Client", status: "done", note: "Gateway with an Age split and cookie (#507), status page (#509), crossing from the Esc menu or /age, out of combat, hero and spot kept", pr: 520 },
-      { name: "Drill: two Ages and the gateway on one Postgres, crossing and role handover", owner: "Server & Live Ops", status: "doing", pr: 522 },
+      { name: "Drill: two Ages and the gateway on one Postgres, crossing and role handover", owner: "Server & Live Ops", status: "done", note: "Passes 9 of 9", pr: 522 },
       { name: "Switch production to the gateway and two game servers on Railway", owner: "Game Director", status: "next", note: "Murat's call: three always-on services instead of one (docs/ages-setup.md)" },
       { name: "Automatic rollback on error spikes", owner: "Server & Live Ops", status: "later" },
     ],
@@ -123,8 +126,9 @@ export const MILESTONES: Milestone[] = [
     goal: "Clan AIs write small code changes for their own clan, shipped as Ages.",
     exit: "Ten AI changes shipped with no incident; every one logged and emailed.",
     items: [
-      { name: "Clan plug-in folders behind a fixed interface", owner: "Gameplay Engineers", status: "later" },
-      { name: "AI PR bot with sandbox rules and auto-merge", owner: "AI Engineer + Tech Lead", status: "later" },
+      { name: "Clan plug-in folders behind a fixed interface", owner: "Gameplay Engineers", status: "done", note: "shared/clans/<clan>/: sandboxed council code, off until Murat pins its hash; kill switch on the admin route", pr: 525 },
+      { name: "AI PR bot with sandbox rules and a sim gate", owner: "AI Engineer + Tech Lead", status: "done", note: "Five nightly clan routines (one clan a night) each open at most one PR to their own folder; the verify tool and the reviewer gate it", pr: 528 },
+      { name: "First clan code pinned in the live game", owner: "Game Director", status: "next", note: "Murat's call: pin a clan's sha256 in CLAN_PLUGINS" },
     ],
   },
   {
