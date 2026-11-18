@@ -19,7 +19,7 @@ import { RENOWN_RANKS, rankOf } from "../shared/war/renown";
 import { targetsOf } from "../shared/war/rules";
 import { STANDARD } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
-import { troopLevel, troopStance, troopStats, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
+import { planRole, squadMod, troopLevel, troopStance, troopStats, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
 import { mouthHp, TUNNEL, tunnelMouth, type TunnelsView } from "../shared/war/tunnels";
 import { addValor, warNow, warState, warStrikes } from "./war";
 import type { SiegeHero } from "./warSieges";
@@ -61,7 +61,8 @@ interface Tunnel {
   /** Opened in this wake (tunnel_open heard, first wave out): a mouth back after a budget drop keeps the wave clock and makes no sound. */
   opened: boolean;
 }
-interface Soldier { tn: Tunnel; f?: Fighter; i: number }
+/** A tunnel monster: the mouth (no `f`) or a soldier, its ring place `i`, its own ground when it has a role (ROLE_PLAN.tunnel: the tunnel's, and its place: a pike's tether). */
+interface Soldier { tn: Tunnel; f?: Fighter; i: number; g?: FightGround }
 
 const offLimits = (x: number, y: number) => isSafeZone(x, y) || inVillage(x, y) || noMobsAt(x, y);
 const the = (name: string) => name.replace(/^The /, "the ");
@@ -160,11 +161,14 @@ export class WarTunnels {
     if (now >= tn.nextWave) {
       tn.nextWave = now + TUNNEL.waveMs;
       for (let n = 0; n < TUNNEL.perWave && this.count < room; n++) {
-        const id = `${tn.mouth}s${++this.seq}`, m = this.h.spawn(id, tn.level, tn.x, tn.y, troopWeapon(tn.clan));
+        const role = planRole(tn.clan, "tunnel", n), mod = squadMod("tunnel", role); // (each wave in its roles by place: ROLE_PLAN.tunnel; TROOP_ROLE.squad)
+        const id = `${tn.mouth}s${++this.seq}`, m = this.h.spawn(id, tn.level, tn.x, tn.y, troopWeapon(tn.clan, false, false, false, false, role));
         if (!m) break;
-        m.hp = m.maxHp = troopStats(tn.clan, tn.level).hp;
+        m.hp = m.maxHp = troopStats(tn.clan, tn.level, false, role, mod).hp;
         tn.soldiers.add(id);
-        this.mobs.set(id, { tn, f: newFighter(tn.clan, false), i: this.seq });
+        const o: Soldier = { tn, f: newFighter(tn.clan, false, role, mod), i: this.seq };
+        if (role !== "foot") o.g = { leash: tn.g.leash, hunt: tn.g.hunt, post: () => this.postOf(tn, o.i) }; // (a pike's tether: its place by the mouth)
+        this.mobs.set(id, o);
       }
     }
     // holding: an active Hide-Kin-sworn hero by the standing mouth
@@ -238,14 +242,15 @@ export class WarTunnels {
       m.moving = false; m.target = ""; m.windUntil = 0; m.winding = false; m.dir = "down";
       return;
     }
-    if (this.soldiers.think(m, id, f, tn.g, now)) return;
+    const g = o.g ?? tn.g;
+    if (this.soldiers.think(m, id, f, g, now)) return;
     const post = this.postOf(tn, o.i);
     if (!f.near) { // nobody to see it: it keeps its place (cheap)
       if (!offLimits(post.x, post.y)) { m.x = m.homeX = post.x; m.y = m.homeY = post.y; }
       m.moving = false; m.windUntil = 0; m.winding = false;
       return;
     }
-    if (this.soldiers.fight(m, id, f, tn.g, dt, now)) return;
+    if (this.soldiers.fight(m, id, f, g, dt, now)) return;
     const d = Math.hypot(post.x - m.x, post.y - m.y);
     if (d > WAR_TROOPS.warpPx && !this.soldiers.seen(m, WAR_TROOPS.warpUnseenPx) && !offLimits(post.x, post.y)) { m.x = post.x; m.y = post.y; m.moving = false; return; }
     if (d < 2) { m.moving = false; m.dir = dirOf(post.x - tn.x, post.y - tn.y); return; } // looking out from the mouth

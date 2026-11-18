@@ -17,14 +17,16 @@ import { TILE } from "../shared/constants";
 import { underground } from "../shared/dungeon";
 import { isSafeZone } from "../shared/map";
 import { noMobsAt } from "../shared/spawns";
+import { blocked } from "../shared/movement";
 import { inVillage } from "../shared/wrath";
 import { CLANS, type ClanKey } from "../shared/war/clans";
 import { sackStep, type SackRaise } from "../shared/war/holdSack";
 import { RENOWN_RANKS, rankOf } from "../shared/war/renown";
 import { rallyRenown } from "../shared/war/rules";
 import { STANDARD } from "../shared/war/standards";
-import { gatePosts, gatePx, inGateReach, onTownGround, TOWN, TOWNS, townById, townPatron, type Town } from "../shared/war/towns";
-import { troopLevel, troopStats, troopStance, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
+import { gatePx, inGateReach, onTownGround, TOWN, TOWNS, townById, townPatron, type Town } from "../shared/war/towns";
+import { gateGuardPosts } from "../shared/war/troopRoles";
+import { planRole, squadMod, troopLevel, troopStats, troopStance, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
 import { ACT_FATE_MS, claimAct, townClaim, townHeld, townsNow, townsVersion, warActFate, warNow, warRole, warState, warTowns } from "./war";
 import { boonRenown } from "./warCrown";
 import type { SiegeHero, Soldiers } from "./warSieges";
@@ -57,13 +59,21 @@ export function _resetTowns() { raisingIn.clear(); }
 interface Raise extends SackRaise { hero: string; id: string; lastStep: number; hurtAt: number }
 /** A follower's claim waiting for the war's owner (Ages): the claimer and the heroes who share its renown. */
 interface Waiting { act: string; pid: string; town: string; k: ClanKey; heroes: string[]; at: number }
-/** A gate guard: its town, its post (0 the captain), the contest it stands for. */
+/** A gate guard: its town, its post (0 the captain; its role by post: ROLE_PLAN.gate), the contest it stands for. */
 interface Guard extends Fighter { town: Town; post: number; key: string; g: FightGround }
 /** A gate awake in this room: its contest key ("<town>:<holder>:<by>"), the guards' slots, the last time a hero was near. */
 interface Gate { key: string; town: Town; k: ClanKey; lastHero: number; slots: string[] }
 
 /** No town guard stands or chases where blood is never spilled, nor on any town's ground. */
 const offLimits = (x: number, y: number) => isSafeZone(x, y) || inVillage(x, y) || noMobsAt(x, y) || onTownGround(x, y);
+/** A gate guard's spot for clan `k` (pikes on the road side, archers behind: gateGuardPosts), never off limits or blocked. */
+const postCache = new Map<string, { x: number; y: number }[]>();
+function postsOf(t: Town, k: ClanKey): { x: number; y: number }[] {
+  const key = `${t.id}|${k}`;
+  let p = postCache.get(key);
+  if (!p) postCache.set(key, (p = gateGuardPosts(t, k, (x, y) => !offLimits(x, y) && !blocked(x, y))));
+  return p;
+}
 
 export class WarTowns {
   private raises = new Map<string, Raise>();
@@ -242,7 +252,7 @@ export class WarTowns {
 
   /** A gate's guard: the posts not fallen this war tick, by the room's budget (the captain first). */
   private field(gt: Gate) {
-    const fell = this.fellNow(gt.key), posts = gatePosts(gt.town), patron = townPatron(gt.town.id);
+    const fell = this.fellNow(gt.key), posts = postsOf(gt.town, gt.k), patron = townPatron(gt.town.id);
     let room = Math.max(0, this.h.budget());
     for (let i = 0; i < posts.length; i++) {
       const id = gt.slots[i], alive = !!id && this.guards.has(id);
@@ -250,13 +260,15 @@ export class WarTowns {
       gt.slots[i] = "";
       if (fell.has(i) || room <= 0) continue;
       const officer = i === 0, level = Math.max(TOWN.minGuardLevel, troopLevel(patron, officer)), at = posts[i];
-      const gid = `wg${++this.seq}`, m = this.h.spawn(gid, level, at.x, at.y, troopWeapon(gt.k, officer));
+      const role = officer ? "foot" : planRole(gt.k, "gate", i), mod = squadMod("gate", role); // (pikes at the gate, archers behind: ROLE_PLAN.gate; TROOP_ROLE.squad)
+      const gid = `wg${++this.seq}`, m = this.h.spawn(gid, level, at.x, at.y, troopWeapon(gt.k, officer, false, false, false, role));
       if (!m) continue;
-      m.hp = m.maxHp = troopStats(gt.k, level, officer).hp;
+      m.hp = m.maxHp = troopStats(gt.k, level, officer, role, mod).hp;
       gt.slots[i] = gid; room--;
       const t = gt.town, g = gatePx(t);
-      this.guards.set(gid, { ...newFighter(gt.k, officer), town: t, post: i, key: gt.key,
-        g: { leash: (x, y) => Math.hypot(x - g.x, y - g.y) <= TOWN.leashPx && !offLimits(x, y), hunt: () => false, foe: (h) => h.level >= TOWN.minFoeLevel } }); // wild monsters only when they strike first
+      const ground: FightGround = { leash: (x, y) => Math.hypot(x - g.x, y - g.y) <= TOWN.leashPx && !offLimits(x, y), hunt: () => false, foe: (h) => h.level >= TOWN.minFoeLevel }; // wild monsters only when they strike first
+      if (role !== "foot") ground.post = () => at; // (a pike's tether: its post at the gate)
+      this.guards.set(gid, { ...newFighter(gt.k, officer, role, mod), town: t, post: i, key: gt.key, g: ground });
       this.mobs.add(m);
     }
   }
@@ -318,7 +330,7 @@ export class WarTowns {
   step(m: TroopMob, id: string, dt: number, now: number) {
     const gd = this.guards.get(id);
     if (!gd) { this.h.remove(id); return; }
-    const post = gatePosts(gd.town)[gd.post] ?? gatePx(gd.town);
+    const post = postsOf(gd.town, gd.clan)[gd.post] ?? gatePx(gd.town);
     if (this.soldiers.think(m, id, gd, gd.g, now)) return;
     if (!gd.near) { m.x = m.homeX = post.x; m.y = m.homeY = post.y; m.moving = false; m.windUntil = 0; m.winding = false; return; }
     if (this.soldiers.fight(m, id, gd, gd.g, dt, now)) return;

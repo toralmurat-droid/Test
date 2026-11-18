@@ -85,7 +85,7 @@ interface Land { t: number; clan?: ClanKey; tier: HoldTier; lastHero: number; sl
  * manhunters...). `role`: archers, pikes and riders (nextShot / aimUntil: an archer's bow; charge: a rider's; braceUntil:
  * a pike braced against one; GiveUp: a courtyard archer's or guard pike's target out of its reach, TROOP_ROLE.giveUp).
  */
-export interface Fighter extends GiveUp { clan: ClanKey; officer: boolean; role: TroopRole; /** A role soldier's squad multipliers (TROOP_ROLE.squad: escorts, manhunters, the ram crew). */ mod?: { hp: number; dmg: number }; nextPick: number; near: boolean; nextRush: number; rushUntil: number; rushHit: boolean; nextThrow: number; throwing: boolean; nextShot: number; aimUntil: number; charge: Charge; braceUntil: number }
+export interface Fighter extends GiveUp { clan: ClanKey; officer: boolean; role: TroopRole; /** A role soldier's squad multipliers (TROOP_ROLE.squad: columns, escorts, manhunters, the ram crew, tunnel waves, gate guards). */ mod?: { hp: number; dmg: number }; nextPick: number; near: boolean; nextRush: number; rushUntil: number; rushHit: boolean; nextThrow: number; throwing: boolean; nextShot: number; aimUntil: number; charge: Charge; braceUntil: number }
 /**
  * Where a soldier fights: `leash` holds every foe and chase, `hunt` the wild monsters it goes for unprovoked, `far` (when
  * given) the wider leash for a hero its clan wants (shared/war/feuds.ts FEUD.leashTiles).
