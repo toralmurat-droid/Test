@@ -384,6 +384,17 @@ export function battleOutcome(b: Battle): BattleOutcome | undefined {
 /** Gold a winning hero takes: base + perLevel x the land's soldier level. */
 export const battleGold = (level: number) => Math.round(BATTLE.gold.base + BATTLE.gold.perLevel * level);
 
+/**
+ * Where place i of a side stands in the live lines (server/warBattles.ts postOf; its role: shared/war/troopRoles.ts
+ * battleRole): the captains (the first BATTLE.captains) in the middle of the rear line, the others along the front line
+ * (`line` 0), then the rear line (1), `k` places from the line's middle (negative: the left end), `per` places a line.
+ */
+export function battleLine(i: number): { line: 0 | 1; k: number; per: number; captain: boolean } {
+  const per = Math.ceil(BATTLE.perSide / 2), C = BATTLE.captains;
+  if (i < C) return { line: 1, k: i ? 2 : -2, per, captain: true };
+  return { line: (Math.floor((i - C) / per) % 2) as 0 | 1, k: ((i - C) % per) - (per - 1) / 2, per, captain: false };
+}
+
 // ---- the message -------------------------------------------------------------------------------------------------
 
 /**

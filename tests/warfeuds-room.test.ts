@@ -11,7 +11,7 @@ import { newWar } from "../shared/war/rules";
 import { HOLDS } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
 import { territoryAt } from "../shared/war/view";
-import { parseTroop, WAR_TROOPS } from "../shared/war/troops";
+import { parseTroop, planRole, squadMod, troopStats, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
 import { _resetWar, _valorOf, warState } from "../server/war";
 import { swear } from "../server/warHeroes";
 
@@ -168,6 +168,12 @@ test("feuds (room): kills raise Wanted (marks for everyone, wanted_up), a Wanted
     const hunters = sq.ids.map((h: string) => room.state.mobs.get(h));
     assert.ok(hunters.every((h: any) => h && h.kind === "trooper" && parseTroop(h.weapon)!.clan === owner && /manhunter/.test(h.title)));
     assert.ok(parseTroop(hunters[0].weapon)!.officer, "led by a captain");
+    hunters.forEach((h: any, i: number) => { // a mixed squad (ROLE_PLAN.hunt): its roles by place, each with its role's HP
+      const role = i === 0 ? "foot" : planRole(owner, "hunt", i);
+      assert.equal(h.weapon, troopWeapon(owner, i === 0, false, false, false, role), `hunter ${i}: ${role}`);
+      assert.equal(h.maxHp, troopStats(owner, h.level, i === 0, role, squadMod("hunt", role)).hp, "with the squad's multipliers (TROOP_ROLE.squad)");
+      assert.equal(room.feuds.hunters.get(sq.ids[i]).role, role);
+    });
     room.feuds.tick(Date.now());
     assert.equal(room.feuds._squads.length, 1, "no second squad for the same hero");
     assert.ok(sent.some(([t, v]) => t === "chat" && /manhunters march/.test(v.text)));

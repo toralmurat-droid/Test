@@ -19,7 +19,7 @@ import { leaderLine, type WarMoment } from "../shared/war/heralds";
 import { RENOWN_RANKS, rankOf } from "../shared/war/renown";
 import { pathKnown, roadEntry, roadOffLimits, roadPairs, routePos, warPath, type RoadEntry, type WarPath } from "../shared/war/roads";
 import { TERRITORIES } from "../shared/war/territories";
-import { troopLevel, troopStance, troopStats, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
+import { planRole, squadMod, troopLevel, troopStance, troopStats, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
 import { addValor, inMeetBattle, columnHalt, columnHalting, columnJoined, columnLost, columnSeen, columnsVersion, marchCol, marchPath, meetingFor, warMarches, warMeetings, warNow } from "./war";
 import type { Soldiers } from "./warCaravans";
 import { newFighter, type FightGround, type Fighter, type TroopHero, type TroopMob } from "./warTroops";
@@ -68,8 +68,11 @@ function warmOne(ms: readonly March[]): boolean {
 /** Tests: forget the "warroads" message built so far. */
 export function _resetRoadsMsg() { roadsAll = undefined; }
 
-/** One column as this room has it: its men (index 0 the officer; "" fallen or not spawned) round the anchor. */
-interface Live { m: March; p: WarPath; men: string[]; fighters: Fighter[]; lastSeen: number; g: FightGround; pos: ColumnPos; posAt: number; haltAt: number }
+/**
+ * One column as this room has it: its men (index 0 the officer; "" fallen or not spawned) round the anchor, each in its
+ * role by place (ROLE_PLAN.column); `grounds`: a role soldier's own ground (the column's, and its place: a pike's tether).
+ */
+interface Live { m: March; p: WarPath; men: string[]; fighters: Fighter[]; grounds: (FightGround | undefined)[]; lastSeen: number; g: FightGround; pos: ColumnPos; posAt: number; haltAt: number }
 
 export class WarMarches {
   private live = new Map<string, Live>();
@@ -199,17 +202,18 @@ export class WarMarches {
     const alive = m.size - marchCol(m.id).fallen;
     if (alive <= 0) return;
     const pos = this.posOf(m, p, now);
-    const l: Live = { m, p, men: [], fighters: [], lastSeen: now, g: { leash: () => false, hunt: () => false }, pos, posAt: now, haltAt: 0 };
+    const l: Live = { m, p, men: [], fighters: [], grounds: [], lastSeen: now, g: { leash: () => false, hunt: () => false }, pos, posAt: now, haltAt: 0 };
     l.g = { leash: (x, y) => Math.hypot(x - l.pos.x, y - l.pos.y) <= COLUMN.leashPx, hunt: () => false }; // (wild monsters only when they strike first)
     this.live.set(m.id, l);
     for (let i = 0; i < alive; i++) {
-      const officer = i === 0;
-      l.fighters.push(newFighter(m.clan, officer));
+      const officer = i === 0, role = officer ? "foot" : planRole(m.clan, "column", i), mod = squadMod("column", role); // (as the patrol column: archers at the rear; TROOP_ROLE.squad)
+      l.fighters.push(newFighter(m.clan, officer, role, mod));
+      l.grounds.push(role === "foot" ? undefined : { leash: l.g.leash, hunt: l.g.hunt, post: () => this.postOf(l, i) });
       l.men.push("");
       if (this.h.budget() < 1) continue; // no slot: this one marches on virtually (it cannot fall, and still counts as alive)
-      const id = `wm${++this.seq}`, level = troopLevel(m.to, officer), at = this.postOf(l, i), mob = this.h.spawn(id, level, at.x, at.y, troopWeapon(m.clan, officer));
+      const id = `wm${++this.seq}`, level = troopLevel(m.to, officer), at = this.postOf(l, i), mob = this.h.spawn(id, level, at.x, at.y, troopWeapon(m.clan, officer, false, false, false, role));
       if (!mob) continue;
-      mob.hp = mob.maxHp = troopStats(m.clan, level, officer).hp;
+      mob.hp = mob.maxHp = troopStats(m.clan, level, officer, role, mod).hp;
       l.men[i] = id;
       this.mobs.set(id, { live: l, i });
     }
@@ -237,16 +241,16 @@ export class WarMarches {
   step(m: TroopMob, id: string, dt: number, now: number) {
     const s = this.mobs.get(id);
     if (!s) { this.h.remove(id); return; }
-    const l = s.live, f = l.fighters[s.i];
+    const l = s.live, f = l.fighters[s.i], g = l.grounds[s.i] ?? l.g;
     this.posOf(l.m, l.p, now);
-    if (this.soldiers.think(m, id, f, l.g, now)) return;
+    if (this.soldiers.think(m, id, f, g, now)) return;
     const post = this.postOf(l, s.i), marching = l.pos.state === 1;
     if (!f.near) { // nobody to see it: it keeps its place in the column (cheap)
       if (!roadOffLimits(post.x, post.y)) { m.x = m.homeX = post.x; m.y = m.homeY = post.y; }
       m.moving = marching; m.windUntil = 0; m.winding = false; m.dir = dirOf(l.pos.dx, l.pos.dy);
       return;
     }
-    if (this.soldiers.fight(m, id, f, l.g, dt, now)) return;
+    if (this.soldiers.fight(m, id, f, g, dt, now)) return;
     const d = Math.hypot(post.x - m.x, post.y - m.y);
     if (d > WAR_TROOPS.warpPx && !this.soldiers.seen(m, WAR_TROOPS.warpUnseenPx) && !roadOffLimits(post.x, post.y)) { m.x = post.x; m.y = post.y; m.moving = false; return; }
     if (d < 2) { m.moving = false; m.dir = dirOf(l.pos.dx, l.pos.dy); return; }

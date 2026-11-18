@@ -6,7 +6,7 @@ import { CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import { newMinds } from "../shared/war/doctrine";
 import { CARAVAN, caravanGold, caravanHp, caravanLand, caravanLevel, caravanLines, caravanRoute, caravansOnRoad, caravanTripMs, routePos, type CaravanRoute } from "../shared/war/caravans";
 import { newWar, targetsOf } from "../shared/war/rules";
-import { parseTroop, WAR_TROOPS } from "../shared/war/troops";
+import { parseTroop, planRole, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
 import { _resetWar } from "../server/war";
 import { _resetCaravans, caravanOutcome } from "../server/warCaravans";
 
@@ -71,7 +71,7 @@ test("caravans (room): a cart wakes near a hero with its escorts; only rival-swo
     assert.equal(cart.maxHp, caravanHp(LINE.clan, level));
     const escorts = lv.escorts.map((e: string) => room.state.mobs.get(e));
     assert.equal(escorts.length, CARAVAN.escorts);
-    assert.ok(escorts.every((e: any) => e && e.weapon === LINE.clan && Math.hypot(e.x - cart.x, e.y - cart.y) < 3 * TILE), "escorts in formation round it");
+    assert.ok(escorts.every((e: any, i: number) => e && e.weapon === troopWeapon(LINE.clan, false, false, false, false, planRole(LINE.clan, "escort", i)) && Math.hypot(e.x - cart.x, e.y - cart.y) < 3 * TILE), "escorts in formation round it");
     // it rolls where the clock says
     await wait(600);
     const q = routePos(ROAD, caravansOnRoad(ROAD, Date.now()).find((x) => x.id === cur.id)!.d);

@@ -16,7 +16,7 @@ import { RENOWN_RANKS, rankOf } from "../shared/war/renown";
 import { targetsOf } from "../shared/war/rules";
 import { STANDARD } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
-import { troopStance, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
+import { planRole, squadMod, TROOP_ROLE, troopStance, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
 import { clanOfIndex } from "../shared/war/view";
 import { addValor, warNow, warState } from "./war";
 import { boonRenown, crownCredit, keyOf } from "./warCrown";
@@ -154,11 +154,13 @@ export class WarCaravans {
     this.live.set(id, l);
     this.mobs.set(cart, { live: l, i: -1 });
     for (let i = 0; i < CARAVAN.escorts; i++) {
-      l.fighters.push(newFighter(line.clan, false));
+      const role = planRole(line.clan, "escort", i), mod = squadMod("escort", role); // (a rider ahead of the cart, foot behind it: ROLE_PLAN.escort; TROOP_ROLE.squad)
+      l.fighters.push(newFighter(line.clan, false, role, mod));
       l.escorts.push("");
       if (tr.fallen.has(i)) continue; // fell earlier on this trip: no new man on the road
-      const eid = `${cart}e${i}`, post = this.postOf(l, i, now), e = this.h.spawn(eid, level, post.x, post.y, troopWeapon(line.clan));
+      const eid = `${cart}e${i}`, post = this.postOf(l, i, now), e = this.h.spawn(eid, level, post.x, post.y, troopWeapon(line.clan, false, false, false, false, role));
       if (!e) continue;
+      if (role !== "foot") e.hp = e.maxHp = Math.max(1, Math.round(e.maxHp * TROOP_ROLE.mult[role].hp * (mod?.hp ?? 1))); // (the escort's plain trooper HP, as before the roles, times its role's)
       l.escorts[i] = eid;
       this.mobs.set(eid, { live: l, i });
     }

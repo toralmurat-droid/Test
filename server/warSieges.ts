@@ -21,7 +21,8 @@ import { targetsOf } from "../shared/war/rules";
 import { attackAxis, frontPay, frontStep, SIEGE_BATTLE, siegeApproach, siegeForce, siegeFronts, type Front, type FrontHold, type Side, type SiegeView } from "../shared/war/siege";
 import { STANDARD } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
-import { parseTroop, troopLevel, troopStance, troopStats, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
+import { parseTroop, planRole, troopLevel, type TroopRole, troopStance, troopStats, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
+import { rolePlace } from "../shared/war/troopRoles";
 import { addValor, stormingAt, warNow, warState } from "./war";
 import { newFighter, type FightGround, type Fighter, type TroopHero, type TroopMob, type WarTroops } from "./warTroops";
 import { WarWorks } from "./warWorks";
@@ -56,6 +57,8 @@ interface Troop extends Fighter { s: Siege; slot: Slot; d: number; arrived: bool
 
 const offLimits = (x: number, y: number) => isSafeZone(x, y) || inVillage(x, y) || noMobsAt(x, y);
 const sideClan = (s: Siege, side: Side) => (side === "atk" ? s.atk : s.def);
+/** The role of a place at a front (ROLE_PLAN.siege by side and place; the gate front's place 0 is its officer, on foot). */
+const roleAt = (s: Siege, sl: Slot): TroopRole => (s.fronts[sl.front].gate && sl.i === 0 ? "foot" : planRole(sideClan(s, sl.side), sl.side === "atk" ? "siegeAtk" : "siegeDef", sl.i));
 
 export class WarSieges {
   private sieges = new Map<number, Siege>();
@@ -145,12 +148,14 @@ export class WarSieges {
     const clan = sideClan(s, sl.side), fr = s.fronts[sl.front], officer = fr.gate && sl.i === 0, level = troopLevel(s.t, officer), p = patrolOf(s.t)!;
     const at = sl.side === "def" && fresh ? this.postOf(s, sl) : sl.side === "atk" ? s.approach : { x: p.pts[0].x, y: p.pts[0].y, arc: 0 };
     const d = sl.side === "atk" ? s.approach.arc : 0, arrived = sl.side === "def" && (fresh || fr.gate);
-    const id = `ws${++this.seq}`, m = this.h.spawn(id, level, at.x, at.y, troopWeapon(clan, officer));
+    const role = roleAt(s, sl); // (archers behind the line, riders on the flank: postOf)
+    const id = `ws${++this.seq}`, m = this.h.spawn(id, level, at.x, at.y, troopWeapon(clan, officer, false, false, false, role));
     if (!m) return;
-    m.hp = m.maxHp = troopStats(clan, level, officer).hp;
+    m.hp = m.maxHp = troopStats(clan, level, officer, role).hp;
     sl.id = id;
-    const tr: Troop = { ...newFighter(clan, officer), s, slot: sl, d: arrived ? fr.arc : d, arrived, px: at.x, py: at.y, g: { leash: () => false, hunt: () => false } };
+    const tr: Troop = { ...newFighter(clan, officer, role), s, slot: sl, d: arrived ? fr.arc : d, arrived, px: at.x, py: at.y, g: { leash: () => false, hunt: () => false } };
     tr.g = { leash: (x, y) => Math.hypot(x - tr.px, y - tr.py) <= SIEGE_BATTLE.leashPx, hunt: () => false }; // wild monsters only when they strike first
+    if (role !== "foot") tr.g.post = () => ({ x: tr.px, y: tr.py }); // (a pike's tether: its place at the front, or on the march)
     this.troops.set(id, tr);
   }
 
@@ -184,7 +189,9 @@ export class WarSieges {
     if (!sl.post) {
       const S = SIEGE_BATTLE, sd = sl.side === "atk" ? 1 : -1, ax = s.axis, n = S.perFront;
       const lat = (sl.i - (n - 1) / 2) * S.spacingPx, x = fr.x + ax.x * sd * S.depthPx - ax.y * lat, y = fr.y + ax.y * sd * S.depthPx + ax.x * lat;
-      sl.post = offLimits(x, y) || blocked(x, y) ? { x: fr.x, y: fr.y } : { x, y };
+      const role = roleAt(s, sl), out = Math.sign(lat);
+      const q = role === "foot" ? undefined : rolePlace(role, x, y, [ax.x * sd, ax.y * sd], [-ax.y * out, ax.x * out]); // archers a step behind the line, riders out on its flank (ROLE_FORM)
+      sl.post = q && !offLimits(q.x, q.y) && !blocked(q.x, q.y) ? q : offLimits(x, y) || blocked(x, y) ? { x: fr.x, y: fr.y } : { x, y };
     }
     return { ...sl.post, arc: fr.arc };
   }

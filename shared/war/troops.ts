@@ -105,7 +105,22 @@ export const TROOP_ROLE = {
     pike: { hp: 1.2, dmg: 1, speed: 0.85 },
   } as Record<TroopRole, { hp: number; dmg: number; speed: number }>,
   // (the plan's 0.8 / 170 px / 80 px / 1.6 s cost a lone wizard 10-25 points against a Hold's garrison: pve.ts --garrison keeps it within 10)
-  ranged: { shotMult: 0.6, range: 150, keepAway: 64, everyMs: 2000, windupMs: 500, sightPx: 200, radius: 3, guardTetherTiles: 2 },
+  ranged: { shotMult: 0.6, range: 150, keepAway: 64, everyMs: 2000, windupMs: 500, sightPx: 200, radius: 3, guardTetherTiles: 2,
+    /** A courtyard archer on its wall or tower shoots farther (range, sight: px), so a ranged hero (Summoner 220 px, Wizard 170) can't
+     *  shoot it from just outside its bow without being shot back. */
+    wall: { range: 230, sightPx: 260 } },
+  /**
+   * A courtyard archer (ROLE_PLAN.wall) or a Hold's guard pike whose target stays out of its reach (out of the archer's
+   * bow or clear line, beyond the pike's blow) for `ms` drops it and won't pick it again for `shunMs`: it turns to another foe.
+   */
+  giveUp: { ms: 4000, shunMs: 8000 },
+  /**
+   * Role soldiers in the squads that fight a lone hero (planRole kinds: war road columns, caravan escorts, manhunters, the
+   * ram crew) on top of their role's numbers (HP, damage: troopStats `mod`): at full strength the roles cost a lone
+   * Songweaver up to 14 points and a Vampire 12 (tools/balance/pve.ts --column --caravan --hunters --siege; the rule: every
+   * hero row within about 10 of the all-foot squads). Patrols, guards, sieges and battles fight at full strength.
+   */
+  squad: { column: { hp: 0.9, dmg: 0.9 }, escort: { hp: 0.8, dmg: 0.8 }, hunt: { hp: 0.92, dmg: 0.92 }, ram: { hp: 0.85, dmg: 1 } } as Partial<Record<RolePlace, { hp: number; dmg: number }>>,
   /**
    * `brace`: a pike facing a rival rider's charge (winding up or galloping at it, or galloping into its front) braces for
    * `ms` (Mob.winding, so the clients see it) and stops the charge on its point: its blow (x vs.pike.rider, x dmgMult)
@@ -147,8 +162,20 @@ export const CLAN_ROLES: Record<ClanKey, Partial<Record<Exclude<TroopRole, "foot
  * fortress); `wall`: the guard places (by index) whose archer stands on the fort's walls or towers instead of a post
  * outside (courtyard archers: shared/war/troopRoles.ts wallPost; a clan whose fort has no wall cell there, or that has
  * no archers, keeps the post outside).
+ * The other troop modules (phase 3; planRole, battleRole): `column` a war road column (server/warMarches.ts, the officer
+ * at the anchor and the men two abreast behind him, so archers march at the rear); `siege` the places at one siege front
+ * per side (server/warSieges.ts; place 0 the gate front's officer, the last places on the line's flank: ROLE_FORM puts
+ * archers behind the line and riders out on the flank; a smaller force drops the last places first); `ram` the bone ram's
+ * crew (server/warWorks.ts: a pike tethered to the ram beside a foot soldier; two pikes cost a lone Songweaver 20 points in pve.ts --siege); `battle` the field battles' lines (server/warBattles.ts,
+ * battleRole: the front line's places cycle through `front` with `wings` riders at each end, the rear line's through
+ * `rear`; captains are foot); `escort` a caravan's escorts (server/warCaravans.ts: place 0 rides ahead of the cart);
+ * `hunt` a manhunter squad (server/warFeuds.ts, place 0 the captain). Head counts never change: only who is what.
  */
-export const ROLE_PLAN: { march: TroopRole[]; guard: Record<HoldTier, TroopRole[]>; wall: Record<HoldTier, number[]> } = {
+export const ROLE_PLAN: {
+  march: TroopRole[]; guard: Record<HoldTier, TroopRole[]>; wall: Record<HoldTier, number[]>;
+  column: TroopRole[]; siege: { atk: TroopRole[]; def: TroopRole[] }; ram: TroopRole[];
+  battle: { front: TroopRole[]; rear: TroopRole[]; wings: number }; escort: TroopRole[]; hunt: TroopRole[];
+} = {
   march: ["foot", "rider", "pike", "pike", "foot", "archer", "foot", "archer"],
   guard: {
     0: ["foot", "archer", "pike"],
@@ -156,7 +183,21 @@ export const ROLE_PLAN: { march: TroopRole[]; guard: Record<HoldTier, TroopRole[
     2: ["foot", "archer", "pike", "archer", "pike", "archer", "rider", "foot"],
   },
   wall: { 0: [], 1: [3], 2: [3, 5] },
+  column: ["foot", "rider", "pike", "pike", "foot", "archer", "foot", "archer"],
+  siege: { atk: ["foot", "archer", "pike", "rider"], def: ["foot", "pike", "archer", "archer"] },
+  ram: ["pike", "foot"],
+  battle: { front: ["foot", "pike"], rear: ["archer", "archer", "foot"], wings: 3 },
+  escort: ["rider", "foot", "foot"],
+  hunt: ["foot", "rider", "archer", "pike", "foot"],
 };
+/** Formation shifts by role (px) where a module stands its men in a line (sieges, battles: shared/war/troopRoles.ts rolePlace): archers this far behind their place, riders this far out on their flank. */
+export const ROLE_FORM = { archerBack: 20, riderWide: 18 };
+
+/** Clan `k`'s soldier for a planned role: a role the clan lacks (CLAN_ROLES), or riders while not fielded, is foot. */
+export function fieldRole(k: ClanKey, r: TroopRole | undefined): TroopRole {
+  if (!r || r === "foot" || !CLAN_ROLES[k]?.[r] || (r === "rider" && !TROOP_ROLE.rider.fielded)) return "foot";
+  return r;
+}
 
 /**
  * The role of place `i` in clan `k`'s patrol column (`march`) or its Hold's guard (`guard`, at Hold `tier`): pure and
@@ -164,19 +205,36 @@ export const ROLE_PLAN: { march: TroopRole[]; guard: Record<HoldTier, TroopRole[
  */
 export function roleOf(k: ClanKey, kind: "march" | "guard", tier: HoldTier, i: number): TroopRole {
   const r = (kind === "march" ? ROLE_PLAN.march : ROLE_PLAN.guard[tier] ?? ROLE_PLAN.guard[1])[i] ?? "foot";
-  if (r === "foot" || i === 0 || !CLAN_ROLES[k]?.[r] || (r === "rider" && !TROOP_ROLE.rider.fielded)) return "foot";
-  return r;
+  return i === 0 ? "foot" : fieldRole(k, r);
 }
 
-/** A trooper's fighting numbers at `level` (server/warTroops.ts and the PvE sim read the same); `shot` only for an archer (its bow's damage). */
-export function troopStats(k: ClanKey, level: number, officer = false, role: TroopRole = "foot"): { hp: number; dmg: number; speed: number; cd: number; shot?: number } {
+/** The squad multipliers (TROOP_ROLE.squad) of a `role` soldier in a `kind` of squad: undefined for foot, or a kind with none. */
+export const squadMod = (kind: RolePlace, role: TroopRole): { hp: number; dmg: number } | undefined => (role === "foot" ? undefined : TROOP_ROLE.squad[kind]);
+
+/** The places the other troop modules plan by index (ROLE_PLAN): a war road column, a siege front's attackers or defenders, a ram's crew, a caravan's escorts, a manhunter squad. */
+export type RolePlace = "column" | "siegeAtk" | "siegeDef" | "ram" | "escort" | "hunt";
+/**
+ * The role of place `i` of clan `k` in one of those (ROLE_PLAN; battles: shared/war/troopRoles.ts battleRole). Pure and
+ * by index; places past the plan are foot. Officers stay foot whatever the plan (the caller passes the officer's place).
+ */
+export function planRole(k: ClanKey, kind: RolePlace, i: number): TroopRole {
+  const P = ROLE_PLAN, plan = kind === "siegeAtk" ? P.siege.atk : kind === "siegeDef" ? P.siege.def : P[kind];
+  return fieldRole(k, plan[i]);
+}
+
+/**
+ * A trooper's fighting numbers at `level` (server/warTroops.ts and the PvE sim read the same); `shot` only for an archer
+ * (its bow's damage). `mod`: a role soldier's squad multipliers (TROOP_ROLE.squad, squadMod); never on foot.
+ */
+export function troopStats(k: ClanKey, level: number, officer = false, role: TroopRole = "foot", mod?: { hp: number; dmg: number }): { hp: number; dmg: number; speed: number; cd: number; shot?: number } {
   const d = MOBS.trooper, c = TROOP_COMBAT[k], o = officer ? TROOP_OFFICER : { hp: 1, dmg: 1 }, V = TROOP_VETERAN, up = Math.max(0, level - V.from);
-  const r = TROOP_ROLE.mult[role] ?? TROOP_ROLE.mult.foot, base = d.damage * mobScale(level, "damage") * c.dmg * o.dmg;
+  const q = role !== "foot" && mod ? mod : { hp: 1, dmg: 1 };
+  const r0 = TROOP_ROLE.mult[role] ?? TROOP_ROLE.mult.foot, r = { hp: r0.hp * q.hp, dmg: r0.dmg * q.dmg, speed: r0.speed }, base = d.damage * mobScale(level, "damage") * c.dmg * o.dmg;
   const st: { hp: number; dmg: number; speed: number; cd: number; shot?: number } = {
     hp: Math.max(1, Math.round(d.maxHp * mobScale(level, "hp") * c.hp * o.hp * r.hp * (1 + V.hp * up))),
     dmg: Math.max(1, Math.round(base * r.dmg * (1 + V.dmg * up))),
     speed: d.speed * c.speed * r.speed, cd: d.attackCooldownMs * c.cd };
-  if (role === "archer") st.shot = Math.max(1, Math.round(base * TROOP_ROLE.ranged.shotMult * (1 + V.dmg * up)));
+  if (role === "archer") st.shot = Math.max(1, Math.round(base * TROOP_ROLE.ranged.shotMult * q.dmg * (1 + V.dmg * up)));
   return st;
 }
 

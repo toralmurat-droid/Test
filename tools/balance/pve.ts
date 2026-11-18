@@ -6,12 +6,13 @@
  * --sinkholes: zone runs against Act 5's monsters (the Mawdeep Sinkholes, Lv 30-43) instead of Act 1's, heroes Lv 30-44.
  * --crown: zone runs against Act 6's monsters (the Crown of the Marches, Lv 40-48) instead of Act 1's, heroes Lv 40-50.
  * --siege: a siege front (shared/war/siege.ts): the hero and SIEGE_BATTLE.perFront allied soldiers vs as many attackers, Lv 15 / 30 / 45 (and the soldiers alone);
- *   then the Host's siege ram (shared/war/works.ts): the hero alone vs the ram and its crew.
+ *   then the Host's siege ram (shared/war/works.ts): the hero alone vs the ram and its crew (in their roles: ROLE_PLAN.ram). The front's soldiers stay foot
+ *   here (the 1D sim's allies don't model archers' and riders' moves among themselves).
  * --tunnel: the hero alone collapses a Hide-Kin tunnel mouth (shared/war/tunnels.ts) while its waves come out: win = the mouth falls.
- * --caravan: the hero alone raids a supply cart (shared/war/caravans.ts) with its 3 escorts at Lv 15 / 30 / 45: win = the cart falls.
- * --column: the hero alone ambushes a full marching column (shared/war/marches.ts: an officer and COLUMN.max soldiers of its level) at Lv 15 / 30 / 45:
+ * --caravan: the hero alone raids a supply cart (shared/war/caravans.ts) with its 3 escorts (in their roles: ROLE_PLAN.escort) at Lv 15 / 30 / 45: win = the cart falls.
+ * --column: the hero alone ambushes a full marching column (shared/war/marches.ts: an officer and COLUMN.max soldiers of its level, in their roles: ROLE_PLAN.column) at Lv 15 / 30 / 45:
  *   win = every man down; also how often the hero cut at least half of it (the most an ambush takes off the attack, COLUMN.floor).
- * --hunters: the hero alone against a manhunter squad (shared/war/feuds.ts FEUD.hunt) at each tier that sends one, Lv 15 / 30 / 45.
+ * --hunters: the hero alone against a manhunter squad (shared/war/feuds.ts FEUD.hunt, in their roles: ROLE_PLAN.hunt) at each tier that sends one, Lv 15 / 30 / 45.
  * --troops: the hero alone against a clan soldier, a captain and 3 soldiers of its level (shared/war/troops.ts), at Lv 8 / 20 / 45 (--clans: each clan at Lv 20;
  *   --garrison: a Hold's whole garrison at Control 100, 3 / 6 / 8 guards for an outpost / camp / fortress, at Lv 20 and 45,
  *   and a contested town's gate guard (shared/war/towns.ts: a captain and 4 soldiers) at Lv 17 / 25 / 33; the garrison's
@@ -47,7 +48,7 @@ import { SUMMON } from "../../shared/summons";
 import { AFFIX_FX as CF, CHAMPION, type AffixKey } from "../../shared/champions";
 import { addHeat } from "../../shared/overload";
 import { CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
-import { CLAN_ROLES, roleOf, TROOP_OFFICER, TROOP_ROLE, troopStats, WAR_TROOPS, type TroopRole } from "../../shared/war/troops";
+import { CLAN_ROLES, planRole, roleOf, squadMod, TROOP_OFFICER, TROOP_ROLE, troopStats, WAR_TROOPS, type TroopRole } from "../../shared/war/troops";
 import { bowOf, chargeBreak, chargeEnd, chargeStep, kiteStep, newCharge, shotReady, type Bow } from "../../shared/war/troopRoles";
 import type { HoldTier } from "../../shared/war/holdTiers";
 import { TROOP } from "../../shared/war/patrols";
@@ -726,8 +727,8 @@ class RoleDuel extends PveDuel {
 }
 
 /** A clan soldier of `role` at `level` as a sim monster (rush and javelin like the server's foot soldier; an archer's bow, a pike's reach, a rider's charge). */
-function trooperF(clan: ClanKey, level: number, officer: boolean, role: TroopRole, id: string): RoleF {
-  const sp = mobSpec("trooper", level), st = troopStats(clan, level, officer, role), R = WAR_TROOPS.rush, J = WAR_TROOPS.javelin;
+function trooperF(clan: ClanKey, level: number, officer: boolean, role: TroopRole, id: string, mod?: { hp: number; dmg: number }): RoleF {
+  const sp = mobSpec("trooper", level), st = troopStats(clan, level, officer, role, mod), R = WAR_TROOPS.rush, J = WAR_TROOPS.javelin;
   Object.assign(sp, { hp: st.hp, dmg: st.dmg, speed: st.speed, cd: st.cd });
   if (role === "archer") {
     const bow = bowOf(clan), A = TROOP_ROLE.ranged;
@@ -766,14 +767,8 @@ function troopRun(cls: ClassKind, level: number, n: number, build: Build, seed: 
 function hunterRun(cls: ClassKind, level: number, tier: number, build: Build, seed: number, potions = 5): RunResult {
   const h = make("h", cls, level, build), clan = CLAN_KEYS[seed % CLAN_KEYS.length], H = FEUD.hunt, L = Math.min(MAX_LEVEL, level + H.levelUp[tier]);
   const pack: Pack = { heal: potions, mana: potions, healUsed: 0, manaUsed: 0, size: potionSize(level), lastDrink: -1e9 };
-  const ms = Array.from({ length: 1 + H.soldiers[tier] }, (_, k) => {
-    const officer = k === 0, sp = mobSpec("trooper", L), st = troopStats(clan, L, officer), R = WAR_TROOPS.rush, J = WAR_TROOPS.javelin;
-    Object.assign(sp, { hp: st.hp, dmg: st.dmg, speed: st.speed, cd: st.cd, lunge: { min: R.min, max: R.max, every: R.everyMs, mult: R.dmgMult } });
-    sp.specials.push({ name: "Javelin", every: J.everyMs, windup: J.windupMs, min: J.min, max: J.max, radius: J.radius + 4, mult: J.dmgMult, at: "target", shot: { speed: J.speed, radius: J.radius } });
-    if (officer) sp.poise *= TROOP_OFFICER.hp;
-    return new MobF(sp, "hu" + k);
-  });
-  const d = new PveDuel(h, ms, pack, 0), hp0 = h.hp;
+  const ms = Array.from({ length: 1 + H.soldiers[tier] }, (_, k) => trooperF(clan, L, k === 0, k === 0 ? "foot" : planRole(clan, "hunt", k), "hu" + k, squadMod("hunt", planRole(clan, "hunt", k)))); // (a mixed squad: ROLE_PLAN.hunt)
+  const d = new RoleDuel(h, ms, pack, 0), hp0 = h.hp;
   let w: F | null | undefined;
   while (d.now < 120000 && (w = d.step()) === undefined) { /* fight */ }
   return { won: w === h, kills: ms.filter((m) => m.dead).length, hpLostPerKill: Math.max(0, hp0 - h.hp) / h.maxHp, secPerKill: d.now / 1000, heals: pack.healUsed, manas: pack.manaUsed };
@@ -783,14 +778,8 @@ function hunterRun(cls: ClassKind, level: number, tier: number, build: Build, se
 function columnRun(cls: ClassKind, level: number, build: Build, seed: number, potions = 5): RunResult & { half: boolean } {
   const h = make("h", cls, level, build), clan = CLAN_KEYS[seed % CLAN_KEYS.length];
   const pack: Pack = { heal: potions, mana: potions, healUsed: 0, manaUsed: 0, size: potionSize(level), lastDrink: -1e9 };
-  const ms = Array.from({ length: 1 + COLUMN.max }, (_, k) => {
-    const officer = k === 0, sp = mobSpec("trooper", level), st = troopStats(clan, level, officer), R = WAR_TROOPS.rush, J = WAR_TROOPS.javelin;
-    Object.assign(sp, { hp: st.hp, dmg: st.dmg, speed: st.speed, cd: st.cd, lunge: { min: R.min, max: R.max, every: R.everyMs, mult: R.dmgMult } });
-    sp.specials.push({ name: "Javelin", every: J.everyMs, windup: J.windupMs, min: J.min, max: J.max, radius: J.radius + 4, mult: J.dmgMult, at: "target", shot: { speed: J.speed, radius: J.radius } });
-    if (officer) sp.poise *= TROOP_OFFICER.hp;
-    return new MobF(sp, "col" + k);
-  });
-  const d = new PveDuel(h, ms, pack, 0), hp0 = h.hp;
+  const ms = Array.from({ length: 1 + COLUMN.max }, (_, k) => trooperF(clan, level, k === 0, k === 0 ? "foot" : planRole(clan, "column", k), "col" + k, squadMod("column", planRole(clan, "column", k)))); // (in their roles: ROLE_PLAN.column)
+  const d = new RoleDuel(h, ms, pack, 0), hp0 = h.hp;
   let w: F | null | undefined;
   while (d.now < 180000 && (w = d.step()) === undefined) { /* fight */ }
   const kills = ms.filter((m) => m.dead).length;
@@ -798,7 +787,7 @@ function columnRun(cls: ClassKind, level: number, build: Build, seed: number, po
 }
 
 /** A caravan raid (shared/war/caravans.ts): the cart stands still and never strikes; the fight is won when it falls. */
-class CaravanDuel extends PveDuel {
+class CaravanDuel extends RoleDuel {
   constructor(hero: F, mobs: MobF[], pack: Pack, public cart: MobF) { super(hero, mobs, pack, 0); }
   mobBrain(m: MobF): number { return m === this.cart ? 0 : super.mobBrain(m); }
   outcome(): F | null | undefined { return this.hero.dead ? this.mobs[0] : this.cart.dead ? this.hero : undefined; }
@@ -807,13 +796,7 @@ class CaravanDuel extends PveDuel {
 function caravanRun(cls: ClassKind, level: number, build: Build, seed: number, potions = 5): RunResult {
   const h = make("h", cls, level, build), clan = CLAN_KEYS[seed % CLAN_KEYS.length];
   const pack: Pack = { heal: potions, mana: potions, healUsed: 0, manaUsed: 0, size: potionSize(level), lastDrink: -1e9 };
-  const R = WAR_TROOPS.rush, J = WAR_TROOPS.javelin;
-  const escorts = Array.from({ length: CARAVAN.escorts }, (_, k) => {
-    const sp = mobSpec("trooper", level), st = troopStats(clan, level);
-    Object.assign(sp, { hp: st.hp, dmg: st.dmg, speed: st.speed, cd: st.cd, lunge: { min: R.min, max: R.max, every: R.everyMs, mult: R.dmgMult } });
-    sp.specials.push({ name: "Javelin", every: J.everyMs, windup: J.windupMs, min: J.min, max: J.max, radius: J.radius + 4, mult: J.dmgMult, at: "target", shot: { speed: J.speed, radius: J.radius } });
-    return new MobF(sp, "e" + k);
-  });
+  const escorts = Array.from({ length: CARAVAN.escorts }, (_, k) => trooperF(clan, level, false, planRole(clan, "escort", k), "e" + k, squadMod("escort", planRole(clan, "escort", k)))); // (a rider ahead, foot behind: ROLE_PLAN.escort)
   const cs = mobSpec("trooper", level);
   Object.assign(cs, { hp: caravanHp(clan, level), dmg: 0, speed: 0, cd: 1e12, label: "cart" });
   cs.poise *= CARAVAN.hpMult;
@@ -868,7 +851,7 @@ function siegeRun(cls: ClassKind, level: number, build: Build, seed: number, sol
 function ramRun(cls: ClassKind, level: number, build: Build, potions = 5): RunResult {
   const h = make("h", cls, level, build), clan = SIEGE_WORKS.clan;
   const pack: Pack = { heal: potions, mana: potions, healUsed: 0, manaUsed: 0, size: potionSize(level), lastDrink: -1e9 };
-  const crew = Array.from({ length: SIEGE_WORKS.crew }, (_, k) => soldierF(clan, level, "c" + k));
+  const crew = Array.from({ length: SIEGE_WORKS.crew }, (_, k) => trooperF(clan, level, false, planRole(clan, "ram", k), "c" + k, squadMod("ram", planRole(clan, "ram", k)))); // (pikes: ROLE_PLAN.ram; the tether to the ram is not modelled)
   const rs = mobSpec("trooper", level);
   Object.assign(rs, { hp: ramHp(clan, level), dmg: 0, speed: 0, cd: 1e12, label: "ram" });
   rs.poise *= SIEGE_WORKS.ramHp;
