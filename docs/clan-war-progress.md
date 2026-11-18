@@ -1157,10 +1157,11 @@ orders over HTTPS, not by an in-server API call. Routine prompt and setup: [war-
     walls; a courtyard archer's own wall does not count), no hit on a target that reached the safe squares, and
     `TroopArrows.fly` runs once per room tick (`WarTroops.frame`).
   - Balance: `pve.ts --roles` has rider rows (`RoleDuel.riderBrain`, the bot rolls out of about half the wind-ups);
-    - Client and art done in the same PR (#534): 48x48 rider sheets, charge lane and brace effects with sounds, wall archers drawn raised.
-    - Follow-up: wall archers (bow 150 px) and guard pikes (tether) can be farmed by ranged heroes out of reach; a longer bow on the wall or dropping an unreachable target would answer it.
-    the wind-up lane and the brace, archers drawn on the wall (a trooper archer standing on a live wall tile).
+    garrison rows within a few points of phase 1.
+  - Client and art in the same PR: 48x48 rider sheets, charge lane and brace effects with sounds, wall archers drawn
+    raised (a trooper archer standing on a live wall tile).
 - **Phase 3:** roles in sieges, columns, battles, caravans, feuds (all foot today).
-- **Known follow-ups:** ranged heroes can farm guard pikes beyond the tether; a real sling draw; riders and pikes in the
+- **Known follow-ups:** ranged heroes can farm guard pikes beyond the tether and wall archers (bow 150 px) from beyond
+  their range (a longer bow on the wall, or dropping an unreachable target); a real sling draw; riders and pikes in the
   other modules (sieges, columns, battles, caravans, feuds: phase 3).
 - Plan: /mnt/project-files/clan-war/troop-roles-plan.md.
