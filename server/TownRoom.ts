@@ -864,7 +864,7 @@ export class TownRoom extends Room<TownState> {
   });
 
   /** Hold walls (server/holdWalls.ts): the forts follow the war's holders; nobody is left standing in a wall. */
-  private holdWalls = new HoldWalls({ heroes: () => this.state.players.entries(), mobs: () => this.state.mobs.entries(), wild: (m) => this.wildMob(m as Mob) });
+  private holdWalls = new HoldWalls({ heroes: () => this.state.players.entries(), mobs: () => this.state.mobs.entries(), wild: (m) => !(m as Mob).target && !(m as Mob).foe && this.wildMob(m as Mob) }); // (one in a fight keeps its home, and its leash, till the fight ends)
 
   /** Tabards (server/warOaths.ts): every hero's clan and Renown rank, by message (the Player schema is full). */
   private oaths = new WarOaths({ heroes: () => this.state.players.entries(), broadcast: (msg) => this.broadcast("oaths", msg) });
