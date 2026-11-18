@@ -1,13 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { TILE } from "../shared/constants";
+import { MOB_ATTACK_RANGE, TILE } from "../shared/constants";
 import { CLAN_KEYS } from "../shared/war/clans";
 import { fortOf, liveHoldWall, setHoldOwners } from "../shared/war/holdWalls";
 import { TROOP_LOOK } from "../shared/war/patrols";
 import { HOLDS } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
 import { chargeBreak, chargeEnd, chargeStep, charging, newCharge, shotClear, wallPost, wallPosts } from "../shared/war/troopRoles";
-import { CLAN_ROLES, parseTroop, ROLE_PLAN, roleOf, TROOP_ROLE, troopName, troopStats, troopWeapon } from "../shared/war/troops";
+import { CLAN_ROLES, parseTroop, ROLE_PLAN, roleOf, TROOP_ROLE, troopName, troopStats, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
 
 test("troop riders: every clan fields its rider (one per column, one at a fortress), it round-trips and has a look", () => {
   assert.equal(TROOP_ROLE.rider.fielded, true);
@@ -111,4 +111,41 @@ test("shotClear: no shot through a live Hold wall; a courtyard archer's own wall
     setHoldOwners([]);
     assert.equal(shotClear(mid.x, mid.y, out.x, out.y), true, "no fort, no wall");
   } finally { setHoldOwners([]); }
+});
+
+test("troop riders: a long server tick never carries a gallop through a braced pike or past its target (strides of stridePx)", async () => {
+  const { riderFight, offLimits } = await import("../server/troopRoles");
+  const { newFighter } = await import("../server/warTroops");
+  const { blocked } = await import("../shared/movement");
+  const C = TROOP_ROLE.rider.charge, now = 1_000_000, dt = 0.5; // a 500 ms tick: one stride would be ~110 px
+  assert.ok(C.stridePx < MOB_ATTACK_RANGE + WAR_TROOPS.heroBody + WAR_TROOPS.rushSlack && C.stridePx < MOB_ATTACK_RANGE + TROOP_ROLE.pike.reach + WAR_TROOPS.heroBody, "a stride is shorter than the blow's and the brace's reach");
+  // an open lane 200 px east, off the safe squares
+  let at: { x: number; y: number } | undefined;
+  for (let ty = 20; ty < 300 && !at; ty++) for (let tx = 20; tx < 300 && !at; tx++) {
+    const x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE;
+    if (Array.from({ length: 51 }, (_, k) => x + k * 4).every((px) => !blocked(px, y) && !offLimits(px, y))) at = { x, y };
+  }
+  assert.ok(at, "an open lane");
+  const mk = (weapon: string, x: number, dir: any): any => ({ kind: "trooper", weapon, level: 10, x, y: at!.y, homeX: x, homeY: at!.y, dir, hp: 1e6, maxHp: 1e6, dead: false, hidden: false, owner: "", target: "", hateId: "", hate: 0, foe: "",
+    summonFor: "", qwave: false, servant: false, title: "", tide: false, moving: false, stunned: false, slowed: false, broken: false, winding: false, windUntil: 0, lastAttack: 0, stunUntil: 0, slowUntil: 0 });
+  const run = (target: "pike" | "hero") => {
+    const r = mk("wardens>", at!.x, "right"), pk = mk("host|", at!.x + 60, "left"), hero = { name: "H", level: 10, x: at!.x + 60, y: at!.y, dead: false, renown: 0 };
+    const mobs = new Map<string, any>([["r", r], ["pk", pk]]), ev: any[] = [], blows: any[] = [];
+    const h: any = { mob: (id: string) => mobs.get(id), mobsInBox: () => mobs.entries(), sfx: (m: any) => ev.push(m),
+      strikeMob: (from: string, to: string, dmg: number) => blows.push({ from, to, dmg }), strikeHero: (from: string, to: string, dmg: number, _b: string, o: any) => blows.push({ from, to, dmg, o }) };
+    if (target === "hero") mobs.delete("pk");
+    const f = newFighter("wardens", false, "rider");
+    f.charge = { phase: 2, until: now + C.gallopMs, next: 0, wheeled: false, dx: 1, dy: 0 };
+    r.target = target === "pike" ? "pk" : "hero1";
+    const g = { leash: () => true, hunt: () => true };
+    assert.equal(riderFight({ h, arrows: undefined as any, walk: () => {} }, r, "r", f, g, target === "hero" ? hero : undefined, target === "pike" ? pk : undefined, dt, now), true);
+    return { r, ev, blows, f };
+  };
+  const a = run("pike");
+  assert.deepEqual(a.ev.map((e) => [e.ev, e.id, e.to]), [["troop_brace", "pk", "r"]], "the pike braces in the same long tick");
+  assert.ok(a.r.x < at.x + 60 && a.r.stunned && a.f.charge.phase === 0, "the rider is stopped in front of it, staggered");
+  assert.deepEqual(a.blows.map((b) => [b.from, b.to]), [["pk", "r"]], "only the pike's counter blow");
+  const b = run("hero");
+  assert.deepEqual(b.blows.map((x) => [x.from, x.to, x.o?.kb]), [["r", "hero1", C.kb]], "the charge's blow lands on the hero it would have galloped past");
+  assert.ok(b.r.x < at.x + 60 && b.f.charge.phase === 3, "struck from in front, then it rides on");
 });
