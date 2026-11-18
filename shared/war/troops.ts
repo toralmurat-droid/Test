@@ -174,7 +174,7 @@ export const CLAN_ROLES: Record<ClanKey, Partial<Record<Exclude<TroopRole, "foot
  * `hunt` a manhunter squad (server/warFeuds.ts, place 0 the captain). Phase 4: `tunnel` the places of each wave out of a
  * Hide-Kin tunnel mouth (server/warTunnels.ts; by place in the wave); `ritual` a Veiled circle's acolytes
  * (server/warRituals.ts: archers stand inside the circle, the others on it); `gate` a contested town's gate guard
- * (server/warTowns.ts, place 0 the captain on the gate: shared/war/towns.ts gateGuardPosts puts the pikes on the ring's
+ * (server/warTowns.ts, place 0 the captain on the gate: shared/war/troopRoles.ts gateGuardPosts puts the pikes on the ring's
  * outer side and the archers behind them, toward the town). Head counts never change: only who is what.
  */
 export const ROLE_PLAN: {
