@@ -5,7 +5,7 @@ import { TILE } from "../shared/constants";
 import { isSafeZone, isSolidAt } from "../shared/map";
 import { clearWalk } from "../shared/bandits";
 import { noMobsAt } from "../shared/spawns";
-import { fortGroundAt, isWildMob, nearestOffFort } from "../shared/war/fortGround";
+import { crossesFort, fortGroundAt, isWildMob, nearestOffFort } from "../shared/war/fortGround";
 import { fortOf, setHoldOwners } from "../shared/war/holdWalls";
 import { HOLDS } from "../shared/war/standards";
 import { newMinds } from "../shared/war/doctrine";
@@ -98,5 +98,57 @@ test("fort ground (room): a wild monster left inside a walled fort (it chased a 
     // it lost its target in the courtyard
     wild.hp = wild.maxHp = 1_000_000; wild.x = HOLD.x; wild.y = HOLD.y; wild.homeX = BACK.x; wild.homeY = BACK.y; wild.target = ""; wild.foe = "";
     assert.ok(await until(() => !fortGroundAt(wild.x, wild.y), 30000), `it walked out round the walls (at ${(wild.x / TILE).toFixed(1)}, ${(wild.y / TILE).toFixed(1)})`);
+    // and it stays out (it walks on round the walls toward home, never back onto fort ground)
+    let back = false;
+    // (unless it chases something: the holder's troopers come for it, and it may follow one in)
+    let wasOutIdle = true;
+    await until(() => {
+      const idle = !wild.target && !wild.foe, on = fortGroundAt(wild.x, wild.y);
+      if (on && idle && wasOutIdle) back = true;
+      wasOutIdle = !on && idle;
+      return false;
+    }, 5000);
+    assert.equal(back, false, "it never wandered back onto fort ground");
+    assert.ok(!fortGroundAt(wild.homeX, wild.homeY));
   } finally { _resetWar(); setHoldOwners([]); await srv.stop(); }
+});
+
+test("fort ground (room): a wild monster outside a fort, its home round the corner, walks round the fort, not through it", async () => {
+  const srv = await startRoom();
+  try {
+    const c = await srv.join({ cls: "wizard" });
+    await wait(150);
+    const room = srv.room, p = room.state.players.get(c.sessionId);
+    // just off fort ground to the north and to the south of the Hold
+    // (the first open tile past fort ground east and south of the Hold, a quarter of the way round; the line the Hold
+    // stands on may have rocks just outside, so look a tile or two to the side)
+    const past = (ux: number, uy: number) => {
+      let j = 0; while (fortGroundAt(HOLD.x + ux * j * TILE, HOLD.y + uy * j * TILE)) j++;
+      for (; j < 40; j++) for (const d of [0, -1, 1, -2, 2]) {
+        const x = HOLD.x + (ux * j + uy * d) * TILE, y = HOLD.y + (uy * j + ux * d) * TILE;
+        if (!fortGroundAt(x, y) && !isSolidAt(x, y) && !crossesFort(x, y, x + ux * TILE, y + uy * TILE)) return { x, y };
+      }
+      return undefined;
+    };
+    const A = past(1, 0)!, B = past(0, 1)!;
+    assert.ok(crossesFort(A.x, A.y, B.x, B.y), "the straight walk home crosses the fort");
+    assert.ok(!isSolidAt(A.x, A.y) && !isSolidAt(B.x, B.y) && !fortGroundAt(A.x, A.y) && !fortGroundAt(B.x, B.y));
+    let wild: any;
+    room.state.mobs.forEach((m: any) => { if (!wild && !m.dead && m.kind === "slime" && !m.owner && !m.summonFor && !m.camp && !m.guard) wild = m; });
+    assert.ok(wild, "a wild slime");
+    p.hp = p.maxHp = 100_000; p.x = B.x; p.y = B.y + 9 * TILE; // a hero near enough to keep it awake, out of its sight
+    room.state.mobs.forEach((m: any, id: string) => { if (m !== wild && Math.hypot(m.x - HOLD.x, m.y - HOLD.y) < 25 * TILE) room.state.mobs.delete(id); });
+    wild.hp = wild.maxHp = 1_000_000; wild.x = A.x; wild.y = A.y; wild.homeX = B.x; wild.homeY = B.y; wild.target = ""; wild.foe = "";
+    let inside = false;
+    // (a chase may take it in: it may go for the hero or a trooper on the way; walking home it never steps on)
+    let wasOutIdle = true;
+    const ok = await until(() => {
+      const idle = !wild.target && !wild.foe, on = fortGroundAt(wild.x, wild.y);
+      if (on && idle && wasOutIdle) inside = true;
+      wasOutIdle = !on && idle;
+      return idle && Math.hypot(wild.x - wild.homeX, wild.y - wild.homeY) < 3 * TILE; // (home lies among rocks: near it is home)
+    }, 120000);
+    assert.equal(inside, false, "walking home it never set foot on fort ground");
+    assert.ok(ok, `it got home or settled (at ${(wild.x / TILE).toFixed(1)}, ${(wild.y / TILE).toFixed(1)}; home ${(wild.homeX / TILE).toFixed(1)}, ${(wild.homeY / TILE).toFixed(1)})`);
+  } finally { await srv.stop(); }
 });

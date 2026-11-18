@@ -119,7 +119,7 @@ import { addValor, attachWar, onWar, rallyTell, relate, warNow, warState, warTow
 import { boonGold, boonGoldMult, WarCrown } from "./warCrown";
 import { HoldWalls } from "./holdWalls";
 import { holdWallPx, liveHoldWall } from "../shared/war/holdWalls";
-import { fortGroundAt, isWildMob, nearestOffFort, wildSpawnPoint } from "../shared/war/fortGround";
+import { crossesFort, FORT_PATH_MARGIN, fortGroundAt, fortGroundTile, isWildMob, nearestOffFort, wildSpawnPoint } from "../shared/war/fortGround";
 import { routeFrame } from "../shared/war/holdRoutes";
 import { clanView, cleanOath, Presence, swear } from "./warHeroes";
 import { WarTroops } from "./warTroops";
@@ -215,6 +215,7 @@ export class Mob extends Schema {
   lurk = ""; // a Mawdeep ambush room it lurks in (shared/dungeon.ts AMBUSH_ROOMS), until a hero walks in
   path: [number, number][] = []; pathAt = 0; pathTX = 0; pathTY = 0; // the way round walls (gates), see seek
   pathFail = false; // the last findPath found no way: wait for the goal to move or the normal re-path time (see go)
+  homeStuck = 0; pathUntil = 0; // walking home: since when it has made no headway, and until when it finds its way (see go)
   @type("float32") x = 0;
   @type("float32") y = 0;
   @type("string") dir: Dir = "down";
@@ -3905,7 +3906,13 @@ export class TownRoom extends Room<TownState> {
         m.wander = { right: Math.cos(a) > 0.3, left: Math.cos(a) < -0.3, down: Math.sin(a) > 0.3, up: Math.sin(a) < -0.3 };
       }
     }
+    const x0 = m.x, y0 = m.y;
     if (this.canStep(m, r.x, r.y)) { m.x = r.x; m.y = r.y; }
+    // walking home and stuck on a rock or a fort's corner: it finds its way round for a while (go) instead of pressing on
+    if (!t && !foe && !m.camp && r.moving && Math.hypot(m.x - m.homeX, m.y - m.homeY) > 40) {
+      if (Math.hypot(m.x - x0, m.y - y0) < speed * dt * 0.25) { m.homeStuck ||= now; if (now - m.homeStuck > 700) { m.pathUntil = now + 8000; m.homeStuck = 0; } }
+      else m.homeStuck = 0;
+    } else m.homeStuck = 0;
     m.moving = r.moving;
     m.dir = dirFromInput(input, m.dir);
   }
@@ -4164,18 +4171,28 @@ export class TownRoom extends Room<TownState> {
     return this.go(m, x, y, now);
   }
 
-  /** Walk toward (x,y): camp bandits, Gloam Tide marchers and a wild monster finding its way out of a fort (it followed a
-   *  target in through the gate) go round walls; others go straight. */
+  /** Walk toward (x,y): camp bandits, Gloam Tide marchers and wild monsters near a fort find their way round walls, others
+   *  go straight. A wild monster in a fort (it followed its prey in) finds the gate out; one outside with no prey walks
+   *  round the fort, never through it (canStep would refuse every step); with no way at all, it settles where it stands. */
   private go(m: Mob, x: number, y: number, now: number): InputState {
-    const findWay = m.camp || m.tide || (fortGroundAt(m.x, m.y) && this.wildMob(m));
-    if (!findWay || clearWalk(m.x, m.y, x, y, holdWallPx)) { m.path = []; m.pathFail = false; return toward(m.x, m.y, x, y); }
+    const wild = !m.camp && !m.tide && this.wildMob(m), inFort = wild && fortGroundAt(m.x, m.y);
+    const keepOut = wild && !inFort && !m.target && !m.foe && crossesFort(m.x, m.y, x, y); // fort ground is a wall to it
+    // a wild walker by a fort checks its whole body (blocked: map, props, live Hold walls), so it never snags on a corner
+    const wallPx = keepOut ? (px: number, py: number) => blocked(px, py) || fortGroundAt(px, py) : inFort ? blocked : holdWallPx;
+    const findWay = m.camp || m.tide || inFort || keepOut || now < m.pathUntil;
+    // (a wild walker by a fort keeps to the tile path all the way: an 8-way straight walk snags on rocks by the gate)
+    if (!findWay || (!wild && now >= m.pathUntil && clearWalk(m.x, m.y, x, y, wallPx))) { m.path = []; m.pathFail = false; return toward(m.x, m.y, x, y); }
     const moved = Math.hypot(x - m.pathTX, y - m.pathTY) > TILE;
     // (no way found last time: the BFS would only fail again until the goal moves or the usual re-path time comes)
     if ((!m.path.length && !m.pathFail) || moved || now > m.pathAt + 1500) {
-      m.path = findPath(m.x, m.y, x, y, 10, liveHoldWall); m.pathAt = now; m.pathTX = x; m.pathTY = y; m.pathFail = !m.path.length;
+      const wall = keepOut ? (tx: number, ty: number) => liveHoldWall(tx, ty) || fortGroundTile(tx, ty) : liveHoldWall;
+      m.path = findPath(m.x, m.y, x, y, wild ? FORT_PATH_MARGIN : 10, wall); m.pathAt = now; m.pathTX = x; m.pathTY = y; m.pathFail = !m.path.length;
+      // no way home round (or out of) the fort: a wild monster outside makes its home where it stands rather than freeze
+      if (m.pathFail && keepOut && (x === m.homeX && y === m.homeY)) { m.homeX = m.x; m.homeY = m.y; m.pathFail = false; return STILL; }
     }
-    // skip the points already reached, and any we can see past
-    while (m.path.length > 1 && (Math.hypot(m.path[0][0] - m.x, m.path[0][1] - m.y) < 8 || clearWalk(m.x, m.y, m.path[1][0], m.path[1][1], holdWallPx))) m.path.shift();
+    // skip the points already reached, and any we can see past (a wild monster near a fort keeps to the tile path: past a
+    // gate post or round a fort corner a seen-past shortcut snags its body on the corner)
+    while (m.path.length > 1 && (Math.hypot(m.path[0][0] - m.x, m.path[0][1] - m.y) < 8 || (!wild && clearWalk(m.x, m.y, m.path[1][0], m.path[1][1], wallPx)))) m.path.shift();
     const p = m.path[0];
     return p ? toward(m.x, m.y, p[0], p[1]) : toward(m.x, m.y, x, y);
   }
