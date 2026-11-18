@@ -279,7 +279,7 @@ test("WarTroops: a javelin for an enemy hero a few steps off, a rush blow on arr
   const foe = CLAN_KEYS.find((k) => k !== owner)!;
   heroes.set("n", hero(gate.x, gate.y));
   wt.tick(1000);
-  const [id, m] = [...mobs].find(([, x]) => parseTroop(x.weapon)?.clan === owner && !parseTroop(x.weapon)!.officer)!;
+  const [id, m] = [...mobs].find(([, x]) => parseTroop(x.weapon)?.clan === owner && !parseTroop(x.weapon)!.officer && !parseTroop(x.weapon)!.role)!; // (a foot soldier: archers and pikes fight their own way)
   const { x, y } = m;
   for (const [oid] of mobs) if (oid !== id) mobs.delete(oid); // alone with the heroes
   // open ground on some side of it (no wall in the way of the rush)

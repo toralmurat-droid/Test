@@ -14,7 +14,9 @@
  * --hunters: the hero alone against a manhunter squad (shared/war/feuds.ts FEUD.hunt) at each tier that sends one, Lv 15 / 30 / 45.
  * --troops: the hero alone against a clan soldier, a captain and 3 soldiers of its level (shared/war/troops.ts), at Lv 8 / 20 / 45 (--clans: each clan at Lv 20;
  *   --garrison: a Hold's whole garrison at Control 100, 3 / 6 / 8 guards for an outpost / camp / fortress, at Lv 20 and 45,
- *   and a contested town's gate guard (shared/war/towns.ts: a captain and 4 soldiers) at Lv 17 / 25 / 33).
+ *   and a contested town's gate guard (shared/war/towns.ts: a captain and 4 soldiers) at Lv 17 / 25 / 33; the garrison's
+ *   guards stand in their roles, shared/war/troops.ts roleOf: archers and pikes).
+ * --roles: the hero alone vs one soldier of each role (foot, archer, pike: shared/war/troops.ts TROOP_ROLE, clans that field it in turn) at Lv 8 / 20 / 45.
  * --champions: one fight against each champion (shared/champions.ts, a 1D version of its affixes) beside the same plain monster.
  *
  * It reuses the PvP simulator (tools/balance/duel.ts): the same hero bot, skill engine, builds (rushing one branch),
@@ -43,7 +45,9 @@ import { SUMMON } from "../../shared/summons";
 import { AFFIX_FX as CF, CHAMPION, type AffixKey } from "../../shared/champions";
 import { addHeat } from "../../shared/overload";
 import { CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
-import { TROOP_OFFICER, troopStats, WAR_TROOPS } from "../../shared/war/troops";
+import { CLAN_ROLES, roleOf, TROOP_OFFICER, TROOP_ROLE, troopStats, WAR_TROOPS, type TroopRole } from "../../shared/war/troops";
+import { bowOf, kiteStep, shotReady, type Bow } from "../../shared/war/troopRoles";
+import type { HoldTier } from "../../shared/war/holdTiers";
 import { TROOP } from "../../shared/war/patrols";
 import { FEUD, WANTED_TIERS } from "../../shared/war/feuds";
 import { MAX_LEVEL } from "../../shared/classes";
@@ -661,22 +665,60 @@ function bossRun(cls: ClassKind, b: BossDef, build: Build, potions = 5): RunResu
   return { won, kills: won ? 1 : 0, hpLostPerKill: 0, secPerKill: d.now / 1000, heals: pack.healUsed, manas: pack.manaUsed, bossLeft: m.hp / m.maxHp };
 }
 
+/** A clan soldier of `role` in the sim: its role's numbers (troopStats), and an archer's bow (shared/war/troopRoles.ts). */
+class RoleF extends MobF { bow: Bow = { nextShot: 0, aimUntil: 0 }; shot = 0; constructor(spec: MobSpec, id: string, public role: TroopRole) { super(spec, id); } }
+const ARENA_W = 480;
+/** PveDuel whose archers move and shoot like the server's (server/troopRoles.ts archerFight: kiteStep, shotReady); the others as before. */
+class RoleDuel extends PveDuel {
+  mobBrain(m: MobF): number {
+    if (!(m instanceof RoleF) || m.role !== "archer") return super.mobBrain(m);
+    const now = this.now, h = this.mobTarget(m), S = m.spec, d = Math.abs(h.x - m.x), toward = Math.sign(h.x - m.x) || 1, R = TROOP_ROLE.ranged;
+    if (now < m.stunUntil) { m.windUntil = 0; m.bow.aimUntil = 0; return 0; }
+    if (m.broken) { m.windUntil = 0; m.bow.aimUntil = 0; return -toward; }
+    if (m.windUntil) { // a pinned archer's knife
+      if (now < m.windUntil) return 0;
+      m.windUntil = 0; m.lastAtk = now;
+      if (d <= S.reach + 6) this.mobHit(m, 1);
+      return 0;
+    }
+    if (m.bow.aimUntil) { if (shotReady(m.bow, now, d, R)) { m.lastAtk = now; this.mobShot(m, S.ranged!.speed, S.ranged!.radius, m.shot / S.dmg); } return 0; }
+    const k = kiteStep(d, R), pinned = (m.x <= 1 && toward > 0) || (m.x >= ARENA_W - 1 && toward < 0);
+    if (k < 0 && !pinned) return -toward;
+    if (k < 0 && d <= S.reach) { if (now - m.lastAtk >= S.cd) m.windUntil = now + S.windup; return 0; }
+    if (k <= 0) { shotReady(m.bow, now, d, R); return 0; }
+    return toward;
+  }
+}
+
+/** A clan soldier of `role` at `level` as a sim monster (rush and javelin like the server's foot soldier; an archer's bow, a pike's reach). */
+function trooperF(clan: ClanKey, level: number, officer: boolean, role: TroopRole, id: string): RoleF {
+  const sp = mobSpec("trooper", level), st = troopStats(clan, level, officer, role), R = WAR_TROOPS.rush, J = WAR_TROOPS.javelin;
+  Object.assign(sp, { hp: st.hp, dmg: st.dmg, speed: st.speed, cd: st.cd });
+  if (role === "archer") {
+    const bow = bowOf(clan), A = TROOP_ROLE.ranged;
+    sp.ranged = { range: A.range, keepAway: A.keepAway, speed: bow.speed, radius: A.radius, mult: 1 };
+    sp.label = CLAN_ROLES[clan].archer?.name ?? "archer";
+  } else {
+    sp.lunge = { min: R.min, max: R.max, every: R.everyMs, mult: R.dmgMult };
+    sp.specials.push({ name: "Javelin", every: J.everyMs, windup: J.windupMs, min: J.min, max: J.max, radius: J.radius + 4, mult: J.dmgMult, at: "target", shot: { speed: J.speed, radius: J.radius } });
+  }
+  if (role === "pike") sp.reach += TROOP_ROLE.pike.reach; // (its tether to its post is not modelled: the 1D arena has no post)
+  if (officer) sp.poise *= TROOP_OFFICER.hp;
+  const f = new RoleF(sp, id, role);
+  f.shot = st.shot ?? st.dmg;
+  return f;
+}
+
 /** Clan troopers (shared/war/troops.ts): the hero alone against `n` of its level (clans in turn), 5 heal + 5 mana potions. */
-/** `officer`: every trooper an officer, or "lead": only the first (a gate guard: a captain and his soldiers). */
-function troopRun(cls: ClassKind, level: number, n: number, build: Build, seed: number, officer: boolean | "lead" = false, clan?: ClanKey, potions = 5): RunResult {
+/** `officer`: every trooper an officer, or "lead": only the first (a gate guard: a captain and his soldiers). `role`: trooper k's role (default foot). */
+function troopRun(cls: ClassKind, level: number, n: number, build: Build, seed: number, officer: boolean | "lead" = false, clan?: ClanKey, potions = 5, role?: (clan: ClanKey, k: number) => TroopRole): RunResult {
   const h = make("h", cls, level, build);
   const pack: Pack = { heal: potions, mana: potions, healUsed: 0, manaUsed: 0, size: potionSize(level), lastDrink: -1e9 };
   const ms = Array.from({ length: n }, (_, k) => {
-    const off = officer === true || (officer === "lead" && k === 0);
-    const sp = mobSpec("trooper", level), st = troopStats(clan ?? CLAN_KEYS[(seed + k) % CLAN_KEYS.length], level, off);
-    const R = WAR_TROOPS.rush;
-    const J = WAR_TROOPS.javelin;
-    Object.assign(sp, { hp: st.hp, dmg: st.dmg, speed: st.speed, cd: st.cd, lunge: { min: R.min, max: R.max, every: R.everyMs, mult: R.dmgMult } });
-    sp.specials.push({ name: "Javelin", every: J.everyMs, windup: J.windupMs, min: J.min, max: J.max, radius: J.radius + 4, mult: J.dmgMult, at: "target", shot: { speed: J.speed, radius: J.radius } });
-    if (off) sp.poise *= TROOP_OFFICER.hp;
-    return new MobF(sp, "t" + k);
+    const off = officer === true || (officer === "lead" && k === 0), c = clan ?? CLAN_KEYS[(seed + k) % CLAN_KEYS.length];
+    return trooperF(c, level, off, off ? "foot" : role?.(c, k) ?? "foot", "t" + k);
   });
-  const d = new PveDuel(h, ms, pack, 0), hp0 = h.hp;
+  const d = new RoleDuel(h, ms, pack, 0), hp0 = h.hp;
   let w: F | null | undefined;
   while (d.now < 120000 && (w = d.step()) === undefined) { /* fight */ }
   const kills = ms.filter((m) => m.dead).length;
@@ -935,11 +977,11 @@ if (process.argv[1]?.includes("pve")) {
   if (TROOPS) {
     console.log("Clan troopers: the hero alone vs N troopers of its level (clans in turn), 5 heal + 5 mana potions. Cell = win% / HP lost (whole fight) / fight s");
     console.log("".padEnd(18) + CLASSES.map((c) => c.padEnd(20)).join(""));
-    const row = (label: string, L: number, k: number, officer: boolean | "lead", clan?: ClanKey) => {
+    const row = (label: string, L: number, k: number, officer: boolean | "lead", clan?: ClanKey, role?: (clan: ClanKey, k: number) => TroopRole) => {
       let line = label.padEnd(18);
       for (const c of CLASSES) {
         let won = 0, hp = 0, sec = 0;
-        for (let i = 0; i < n; i++) { const r = troopRun(c, L, k, buildOf(i), i, officer, clan); won += r.won ? 1 : 0; hp += r.hpLostPerKill * Math.max(1, r.kills); sec += r.secPerKill * Math.max(1, r.kills); }
+        for (let i = 0; i < n; i++) { const r = troopRun(c, L, k, buildOf(i), i, officer, clan, 5, role); won += r.won ? 1 : 0; hp += r.hpLostPerKill * Math.max(1, r.kills); sec += r.secPerKill * Math.max(1, r.kills); }
         line += `${pct(won / n)}/${pct(hp / n)}/${(sec / n).toFixed(1)}s`.padEnd(20);
       }
       console.log(line);
@@ -947,7 +989,13 @@ if (process.argv[1]?.includes("pve")) {
     for (const L of [8, 20, 45]) { row(`Lv${L} soldier`, L, 1, false); row(`Lv${L} captain`, L, 1, true); row(`Lv${L} x3`, L, 3, false); }
     if (process.argv.includes("--clans")) for (const k of CLAN_KEYS) row(`Lv20 ${k}`, 20, 1, false, k);
     // --garrison (W3): a whole Hold garrison at full Control, outpost / camp / fortress (patrols.ts TROOP.garrison), all at once
-    if (process.argv.includes("--garrison")) for (const L of [20, 45]) TROOP.garrison.forEach(([, top], tier) => row(`Lv${L} ${["outpost", "camp", "fort"][tier]} x${top}`, L, top, false));
+    // (each guard in its role by its place, shared/war/troops.ts roleOf; the first one is not an officer here, as before the roles)
+    if (process.argv.includes("--garrison")) for (const L of [20, 45]) TROOP.garrison.forEach(([, top], tier) => row(`Lv${L} ${["outpost", "camp", "fort"][tier]} x${top}`, L, top, false, undefined, (c, k) => roleOf(c, "guard", tier as HoldTier, k)));
+    // --roles: one soldier of each role, clans that field it in turn (Wardens, Host and the others: CLAN_ROLES)
+    if (process.argv.includes("--roles")) for (const L of [8, 20, 45]) for (const role of ["foot", "archer", "pike"] as TroopRole[]) {
+      const clans = role === "foot" ? CLAN_KEYS : CLAN_KEYS.filter((k) => CLAN_ROLES[k][role as "archer" | "pike"]);
+      for (const k of clans) row(`Lv${L} ${k} ${role}`, L, 1, false, k, () => role);
+    }
     // --garrison (W6): a contested town's gate guard (shared/war/towns.ts TOWN: a captain and his soldiers), at the patron lands' levels
     if (process.argv.includes("--garrison")) for (const L of [17, 25, 33]) row(`Lv${L} gate 1+${TOWN.guards}`, L, TOWN.captain + TOWN.guards, "lead");
   }

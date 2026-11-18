@@ -1444,6 +1444,7 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
       case "chain": { const p = ev.pts?.[0]; play("chain", p?.[0] ?? p?.x, p?.[1] ?? p?.y); break; }
       case "zap": play("zap", ev.x2, ev.y2, 0.7, undefined, { key: "zap", minGap: 90 }); break;
       case "turret": pos("turret"); break;
+      case "troop_shot": play(ev.kind === "stone" ? "shotStone" : ev.kind === "sunbolt" ? "shotFire" : "shotBow", ev.x, ev.y, 0.7, undefined, { key: "ts", minGap: 60 }); break; // a clan archer looses
       case "enchanthit": pos("enchanthit", 0.8, undefined, { key: "eh", minGap: 80 }); break;
       case "thorns": pos("thorns", 0.8, undefined, { key: "th", minGap: 80 }); break;
       // the Summoner's Void (client/src/skillfx.ts draws them)
