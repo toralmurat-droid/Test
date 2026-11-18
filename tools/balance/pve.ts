@@ -48,7 +48,7 @@ import { AFFIX_FX as CF, CHAMPION, type AffixKey } from "../../shared/champions"
 import { addHeat } from "../../shared/overload";
 import { CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
 import { CLAN_ROLES, roleOf, TROOP_OFFICER, TROOP_ROLE, troopStats, WAR_TROOPS, type TroopRole } from "../../shared/war/troops";
-import { bowOf, chargeEnd, chargeStep, kiteStep, newCharge, shotReady, type Bow } from "../../shared/war/troopRoles";
+import { bowOf, chargeBreak, chargeEnd, chargeStep, kiteStep, newCharge, shotReady, type Bow } from "../../shared/war/troopRoles";
 import type { HoldTier } from "../../shared/war/holdTiers";
 import { TROOP } from "../../shared/war/patrols";
 import { FEUD, WANTED_TIERS } from "../../shared/war/feuds";
@@ -682,7 +682,7 @@ class RoleDuel extends PveDuel {
   /** server/troopRoles.ts riderFight in 1D: wheel away, wind up (the lane fixed), gallop; a hero who rolled during the wind-up is out of the lane. */
   riderBrain(m: RoleF): number {
     const now = this.now, h = this.mobTarget(m), S = m.spec, d = Math.abs(h.x - m.x), toward = Math.sign(h.x - m.x) || 1, c = m.charge;
-    const off = () => { if (c.phase === 1 || c.phase === 2) chargeEnd(c, now, false); if (m.windKind) { m.windKind = undefined; m.windUntil = 0; } };
+    const off = () => { chargeBreak(c, now, RC); if (m.windKind) { m.windKind = undefined; m.windUntil = 0; } };
     if (now < m.stunUntil || m.broken) { off(); return super.mobBrain(m); }
     if (m.windUntil && !m.windKind && c.phase === 0) return super.mobBrain(m); // a blow on foot lands first
     const st = chargeStep(c, now, d, RC);

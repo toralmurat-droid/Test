@@ -6,7 +6,7 @@ import { fortOf, liveHoldWall, setHoldOwners } from "../shared/war/holdWalls";
 import { TROOP_LOOK } from "../shared/war/patrols";
 import { HOLDS } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
-import { chargeEnd, chargeStep, charging, newCharge, shotClear, wallPost, wallPosts } from "../shared/war/troopRoles";
+import { chargeBreak, chargeEnd, chargeStep, charging, newCharge, shotClear, wallPost, wallPosts } from "../shared/war/troopRoles";
 import { CLAN_ROLES, parseTroop, ROLE_PLAN, roleOf, TROOP_ROLE, troopName, troopStats, troopWeapon } from "../shared/war/troops";
 
 test("troop riders: every clan fields its rider (one per column, one at a fortress), it round-trips and has a look", () => {
@@ -50,6 +50,11 @@ test("troop riders: the charge steps (wind-up, gallop, blow, wheel, cooldown)", 
   assert.deepEqual(chargeStep(w, C.wheelMs, 20), { act: "fight" }, "no room found: on foot");
   assert.equal(w.next, C.wheelMs + C.everyMs / 2);
   assert.deepEqual(chargeStep(w, C.wheelMs + 10, C.min), { act: "fight" });
+  // a charge broken off (a stun, a lost foe) is ready again after breakMs; one not under way is left alone
+  const b = newCharge();
+  chargeStep(b, 0, C.min);
+  chargeBreak(b, 100); assert.equal(b.phase, 0); assert.equal(b.next, 100 + C.breakMs);
+  chargeBreak(b, 5000); assert.equal(b.next, 100 + C.breakMs, "not under way: unchanged");
   const x = newCharge();
   chargeStep(x, 0, 20);
   assert.equal(chargeStep(x, 300, C.min).act, "wind", "the wheel found its run-up");

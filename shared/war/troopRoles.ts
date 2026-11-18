@@ -83,6 +83,12 @@ export function chargeEnd(c: Charge, now: number, hit: boolean, C: ChargeNums = 
   if (hit) { c.phase = 3; c.until = now + C.wheelMs; } else { c.phase = 0; c.until = 0; }
 }
 
+/** A charge broken off before it struck or missed (the rider stunned or broken, its foe gone): ready again breakMs later. */
+export function chargeBreak(c: Charge, now: number, C: ChargeNums = TROOP_ROLE.rider.charge) {
+  if (c.phase !== 1 && c.phase !== 2) return;
+  c.phase = 0; c.until = 0; c.wheeled = false; c.next = now + C.breakMs;
+}
+
 /** Is a charge under way (wound up or galloping): what a rival pike braces against. */
 export const charging = (c: Charge | undefined): boolean => !!c && (c.phase === 1 || c.phase === 2);
 

@@ -24,7 +24,7 @@ import type { HoldTier } from "../shared/war/holdTiers";
 import { RENOWN_RANKS, rankOf } from "../shared/war/renown";
 import { TERRITORIES } from "../shared/war/territories";
 import { columnLead, parseTroop, roleOf, TROOP_ROLE, troopLevel, troopStats, troopName, troopStance, troopWeapon, WAR_TROOPS, type TroopRole, type TroopStance } from "../shared/war/troops";
-import { chargeEnd, newCharge, roleVs, shotClear, wallPost, type Charge } from "../shared/war/troopRoles";
+import { chargeBreak, newCharge, roleVs, shotClear, wallPost, type Charge } from "../shared/war/troopRoles";
 import type { WarView } from "../shared/war/view";
 import { rallyRenown, targetsOf } from "../shared/war/rules";
 import { atWar, FEUD, wantedTier, type FeudState } from "../shared/war/feuds";
@@ -456,7 +456,7 @@ export class WarTroops {
       const post = this.postOf(tr.t, tr.slot, now);
       if ((Math.abs(post.x - m.x) > 1 || Math.abs(post.y - m.y) > 1) && !offLimits(post.x, post.y)) { m.x = m.homeX = post.x; m.y = m.homeY = post.y; }
       m.moving = false; m.windUntil = 0; m.winding = false; tr.aimUntil = 0; tr.braceUntil = 0;
-      if (tr.charge.phase === 1 || tr.charge.phase === 2) chargeEnd(tr.charge, now, false);
+      chargeBreak(tr.charge, now);
       return;
     }
     if (this.fight(m, id, tr, tr.g, dt, now)) return;
@@ -476,7 +476,7 @@ export class WarTroops {
    */
   think(m: TroopMob, id: string, f: Fighter, g: FightGround, now: number): boolean {
     m.stunned = now < m.stunUntil; m.slowed = now < m.slowUntil;
-    if (m.stunned || m.broken) { m.winding = false; m.windUntil = 0; f.throwing = false; f.rushHit = false; f.aimUntil = 0; f.braceUntil = 0; if (f.charge.phase === 1 || f.charge.phase === 2) chargeEnd(f.charge, now, false); } // (a stun breaks a charge: it cools)
+    if (m.stunned || m.broken) { m.winding = false; m.windUntil = 0; f.throwing = false; f.rushHit = false; f.aimUntil = 0; f.braceUntil = 0; chargeBreak(f.charge, now); } // (a stun breaks a charge off)
     if (m.stunned) { m.moving = false; return true; }
     if (now >= f.nextPick) {
       f.nextPick = now + WAR_TROOPS.pickMs;
@@ -500,7 +500,7 @@ export class WarTroops {
     if (tr.role === "pike" && m.target && t && !pikeHolds(g, t.x, t.y, now)) { m.target = ""; m.windUntil = 0; m.winding = false; } // a pike keeps its place
     if (!m.target || !t) {
       tr.throwing = false; tr.rushHit = false; if (tr.aimUntil) { tr.aimUntil = 0; m.winding = false; }
-      if (tr.charge.phase === 1 || tr.charge.phase === 2) { chargeEnd(tr.charge, now, false); m.winding = false; } // (its foe is gone: the charge is off)
+      if (tr.charge.phase === 1 || tr.charge.phase === 2) { chargeBreak(tr.charge, now); m.winding = false; } // (its foe is gone: the charge is off)
       if (tr.braceUntil) { tr.braceUntil = 0; m.winding = false; }
       return false;
     }

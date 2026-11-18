@@ -118,10 +118,11 @@ export const TROOP_ROLE = {
    * fixed when the wind-up starts, so a hero who steps out of it is missed), then gallops that lane at speedMult x its
    * speed for at most `gallopMs`. The first foe it reaches (its target, within its reach + WAR_TROOPS.rushSlack) takes
    * dmgMult x its blow, a knockback (`kb`, x a blow's) and a `stunMs` stagger; then the charge cools for `everyMs` from
-   * the gallop's end. With its charge ready and its foe closer than `min` it wheels away for up to `wheelMs` to get a
-   * run-up (once per cooldown: after a wheel that found no room it fights on foot and tries again `everyMs` / 2 later).
+   * the gallop's end (a charge broken off before it struck or missed, by a stun or a lost foe: `breakMs`). With its charge
+   * ready and its foe closer than `min` it wheels away for up to `wheelMs` to get a run-up (once per cooldown: after a
+   * wheel that found no room it fights on foot and tries again `everyMs` / 2 later).
    */
-  rider: { fielded: true as boolean, charge: { min: 80, max: 200, windupMs: 550, gallopMs: 1000, speedMult: 2.2, dmgMult: 1.7, kb: 2.5, stunMs: 250, everyMs: 6000, wheelMs: 1200 } },
+  rider: { fielded: true as boolean, charge: { min: 80, max: 200, windupMs: 550, gallopMs: 1000, speedMult: 2.2, dmgMult: 1.7, kb: 2.5, stunMs: 250, everyMs: 6000, breakMs: 2000, wheelMs: 1200 } },
   vs: { archer: { pike: 1.25 }, pike: { rider: 2 }, rider: { archer: 1.5 } } as Partial<Record<TroopRole, Partial<Record<TroopRole, number>>>>,
 };
 
