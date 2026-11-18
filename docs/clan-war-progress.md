@@ -1130,3 +1130,14 @@ orders over HTTPS, not by an in-server API call. Routine prompt and setup: [war-
   retargeting. Watch this when a Claude council leads.
 - **Open:** the Claude routine itself (owner's subscription, token on Railway), a mid-day re-think for lead councils if
   the tempo stays low, the war chronicle page, email for the digest (owner approval), undo of a council's day.
+
+## Troop roles (Murat 2026-11-17: "archers, cavalry, spikemen ... some variety")
+- **Phase 1 (PR #532):** archers and pikes per clan (`CLAN_ROLES`, `TROOP_ROLE`, `roleOf` in `shared/war/troops.ts`; AI in
+  `shared/war/troopRoles.ts`, `server/troopRoles.ts`). Role mark in `Mob.weapon` (`)` archer, `>` rider, `|` pike). Wardens
+  longbow + pike, Redfang sling, Host bone bow + pike, Hide-Kin burrow-spear, Veiled sun-caster. Patrols and Hold guards only.
+- **Phase 2 (next):** riders (`TROOP_ROLE.rider.fielded` is false; art keys `war_*_rider` named in `TROOP_LOOK`, sheets not
+  made; client `MOB_LOOK` uses line-soldier size), charge and brace, courtyard archers on fort walls, a real sling draw.
+- **Phase 3:** roles in sieges, columns, battles, caravans, feuds (all foot today).
+- **Known follow-ups:** archer hits on monsters/troopers land with no wall or safe-zone check (`server/troopRoles.ts`);
+  `TroopArrows.fly` runs per patrol trooper step (move to once per tick); ranged heroes can farm guard pikes beyond the tether.
+- Plan: /mnt/project-files/clan-war/troop-roles-plan.md.
