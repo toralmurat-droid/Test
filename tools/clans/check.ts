@@ -3,8 +3,9 @@
  * TypeScript syntax tree. One of the fences around plug-in code (with the sandbox, the hash pin and review): a plug-in
  * is a pure function of its briefing, so anything that reaches outside it is refused before it is ever built.
  *
- * Refused: files other than .ts (.d.ts too), subfolders, files over CLAN_PLUGIN.maxFileBytes; imports other than
- * "../api" (import, export from, import(), import = require); the names in DENIED anywhere (as identifiers, property
+ * Refused: files other than .ts (.d.ts too), subfolders, files over CLAN_PLUGIN.maxFileBytes, file names other than
+ * HELPER_NAME; imports other than "../api" and "./<file>" of a .ts file in the same folder (part 2: helper files; no
+ * `..`, no subpath, no extension; import, export from, import(), import = require); the names in DENIED anywhere (as identifiers, property
  * names or string literals: `x.constructor` and `x["constructor"]` alike); Math.random and Math used as a value
  * (aliased, destructured); async functions, await, `with`, `import.meta`, `declare` and namespaces. Computed keys
  * built at run time are not chased: what slips past this still meets the sandbox, review and the hash pin.
@@ -26,11 +27,26 @@ export const DENIED = [
   "__defineSetter__", "__lookupGetter__", "__lookupSetter__",
 ] as const;
 const DENY = new Set<string>(DENIED);
-/** The one module a plug-in may import. */
+/** The one module outside its folder a plug-in may import. */
 export const ALLOWED_IMPORT = "../api";
+/** A helper file's name in a clan folder (without .ts), and so the only `./<name>` a plug-in may import. */
+export const HELPER_NAME = /^[A-Za-z][A-Za-z0-9_-]{0,39}$/;
 
-/** Every problem in one plug-in source file (`file` for the messages). Pure. */
-export function checkSource(file: string, text: string): string[] {
+/**
+ * Whether `spec` is an import a plug-in may make: "../api", or "./<name>" with a HELPER_NAME (and, when `files` lists
+ * the folder's helper names, one of them). Pure.
+ */
+export function importAllowed(spec: string, files?: ReadonlySet<string>): boolean {
+  if (spec === ALLOWED_IMPORT) return true;
+  const m = /^\.\/(.+)$/.exec(spec);
+  return !!m && HELPER_NAME.test(m[1]) && (!files || files.has(m[1]));
+}
+
+/**
+ * Every problem in one plug-in source file (`file` for the messages). Pure. `files`: the names (without .ts) of the
+ * .ts files in its folder, so a `./<name>` import must name one of them (unchecked when not given).
+ */
+export function checkSource(file: string, text: string, files?: ReadonlySet<string>): string[] {
   const out: string[] = [];
   if (Buffer.byteLength(text) > CLAN_PLUGIN.maxFileBytes) out.push(`${file}: larger than ${CLAN_PLUGIN.maxFileBytes} bytes`);
   const sf = ts.createSourceFile(file, text, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
@@ -38,7 +54,7 @@ export function checkSource(file: string, text: string): string[] {
   const bad = (n: ts.Node, what: string) => out.push(`${at(n)}: ${what}`);
   const spec = (n: ts.Node, s: ts.Expression | undefined) => {
     if (!s || !ts.isStringLiteral(s)) bad(n, "import: only a plain string path");
-    else if (s.text !== ALLOWED_IMPORT) bad(n, `import "${s.text}": a plug-in may import only "${ALLOWED_IMPORT}"`);
+    else if (!importAllowed(s.text, files)) bad(n, `import "${s.text}": a plug-in may import only "${ALLOWED_IMPORT}" and "./<file>" of its own folder${/^\.\/[A-Za-z][\w-]*$/.test(s.text) && files ? " (no such .ts file there)" : ""}`);
   };
   const visit = (n: ts.Node) => {
     if (ts.isImportDeclaration(n)) spec(n, n.moduleSpecifier);
@@ -79,13 +95,16 @@ export function checkClan(clan: string, dir = CLANS_DIR): string[] {
   if (!/^[a-z]+$/.test(clan)) return [`${clan}: not a clan folder name`];
   if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) return [`${clan}: no folder shared/clans/${clan}/`];
   if (!fs.existsSync(path.join(root, "index.ts"))) out.push(`${clan}/index.ts: missing (it must export plugin)`);
-  for (const e of fs.readdirSync(root, { withFileTypes: true })) {
+  const entries = fs.readdirSync(root, { withFileTypes: true });
+  const files = new Set(entries.filter((e) => e.isFile() && e.name.endsWith(".ts") && !e.name.endsWith(".d.ts")).map((e) => e.name.slice(0, -3)).filter((n) => HELPER_NAME.test(n)));
+  for (const e of entries) {
     const rel = `${clan}/${e.name}`;
     if (!e.isFile()) { out.push(`${rel}: only .ts files, no folders or links`); continue; }
     if (!e.name.endsWith(".ts") || e.name.endsWith(".d.ts")) { out.push(`${rel}: only .ts files`); continue; }
+    if (!HELPER_NAME.test(e.name.slice(0, -3))) { out.push(`${rel}: file names are a letter, then letters, digits, - or _ (at most 40)`); continue; }
     const st = fs.statSync(path.join(root, e.name));
     if (st.size > CLAN_PLUGIN.maxFileBytes * 4) { out.push(`${rel}: larger than ${CLAN_PLUGIN.maxFileBytes} bytes`); continue; }
-    out.push(...checkSource(rel, fs.readFileSync(path.join(root, e.name), "utf8")));
+    out.push(...checkSource(rel, fs.readFileSync(path.join(root, e.name), "utf8"), files));
   }
   return out;
 }

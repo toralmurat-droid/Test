@@ -110,6 +110,33 @@ const BASIC_SHOTS = new Set(["fireball", "arrow", "bolt", "knife", "stone", "sli
 const lift = (h: number): [number, number] => (ISO ? [-h, -h] : [0, -h]);
 /** Screen-space vector between two world points (for drawing lightning and blades in a block). */
 const screenDelta = (dx: number, dy: number): [number, number] => (ISO ? [dx - dy, (dx + dy) / 2] : [dx, dy]);
+
+/**
+ * Shots modelled in 3D and baked (tools/art/bake-fx.ts -> assets/hd/fx/fx3_<look>.png, 1.5 texels per world px):
+ * [frame w, h, headings]. Headings > 1: frame k points along world heading k * 360/headings deg, picked at spawn
+ * instead of rotating the pixel art. Missing sheets fall back to the drawn shot.
+ */
+export const SHOT3D: Record<string, [number, number, number]> = {
+  arrow: [26, 22, 16], bolt: [22, 20, 16], bloodlance: [34, 26, 16], voidlance: [34, 26, 16], iceshard: [20, 18, 16],
+  knife: [18, 14, 1], stone: [12, 12, 1], fireball: [14, 14, 1], bloodbolt: [12, 12, 1], slimeball: [12, 12, 1], magicbolt: [10, 10, 1],
+  sunbolt: [12, 12, 1], shadowbolt: [14, 14, 1], frozenorb: [22, 20, 1], rat: [20, 14, 1], bat: [20, 14, 1],
+};
+/**
+ * Solid objects of area spells, baked the same way (tools/art/paint/areafx3.ts): [frame w, h, frames, origin x, y]
+ * with the origin at the ground point (or centre) the effect is placed at. Missing sheets fall back to the drawn look.
+ */
+export const AREA3D: Record<string, [number, number, number, number, number]> = {
+  spike_blood: [26, 34, 3, 13, 28], spike_earth: [26, 34, 3, 13, 28], spike_frost: [26, 34, 3, 13, 28], spike_steel: [26, 34, 3, 13, 28],
+  voidblade: [22, 16, 16, 11, 8], gravesoil: [130, 72, 1, 65, 36], judgement: [60, 132, 1, 30, 128], boulder: [26, 26, 1, 13, 13], rainarrow: [10, 24, 1, 5, 21],
+};
+export function preloadShotSheets(scene: Phaser.Scene) {
+  for (const [k, [w, h]] of [...Object.entries(SHOT3D), ...Object.entries(AREA3D)]) if (!scene.textures.exists(`fx3_${k}`)) scene.load.spritesheet(`fx3_${k}`, `assets/hd/fx/fx3_${k}.png`, { frameWidth: w, frameHeight: h });
+}
+/** Heading frame of a world velocity (ISO: world axes; top-down: the screen direction turned back into world axes). */
+const headingFrame = (vx: number, vy: number, n: number) => {
+  const [u, v] = ISO ? [vx, vy] : [vy + vx / 2, vy - vx / 2];
+  return ((Math.round(Math.atan2(v, u) / (Math.PI * 2 / n)) % n) + n) % n;
+};
 /** World offset that shows as `sx` px to the right on screen. */
 const side = (sx: number): [number, number] => (ISO ? [sx / 2, -sx / 2] : [sx, 0]);
 
@@ -272,9 +299,11 @@ export class SkillFx {
   private fall(x: number, y: number, style: FxStyle, ms: number, size: number, land: () => void, kind: "rock" | "orb" = "orb") {
     const pal = PALETTE[style];
     const h0 = 150, dx0 = -40;
-    const head = this.scene.add.image(0, 0, kind === "rock" ? "fx_px" : "fx_glow").setDepth(DEPTH + 3)
+    const baked = kind === "rock" ? this.area3d("boulder", 0, 0, DEPTH + 3) : undefined;
+    const head = baked?.setScale(size / 14 / 1.5) ?? this.scene.add.image(0, 0, kind === "rock" ? "fx_px" : "fx_glow").setDepth(DEPTH + 3)
       .setTint(kind === "rock" ? pal[3] : pal[1]).setBlendMode(kind === "rock" ? Phaser.BlendModes.NORMAL : Phaser.BlendModes.ADD);
-    if (kind === "rock") head.setDisplaySize(size, size); else head.setScale(size / 12);
+    if (baked) this.scene.tweens.add({ targets: baked, angle: 360 * (Math.random() < 0.5 ? -1 : 1), duration: ms });
+    else if (kind === "rock") head.setDisplaySize(size, size); else head.setScale(size / 12);
     const start = this.t;
     this.emit(ms, 16, () => {
       const k = Math.min(1, (this.t - start) / ms), kk = k * k;
@@ -1121,8 +1150,24 @@ export class SkillFx {
     this.scene.tweens.add({ targets: g, alpha: 0, delay: 900, duration: 900, onComplete: () => g.destroy() });
   }
 
+  /** A baked area object (AREA3D) at (x, y), anchored at its ground point, or undefined when the sheet isn't loaded. */
+  private area3d(key: string, x: number, y: number, depth: number, frame = 0): Phaser.GameObjects.Image | undefined {
+    const a = AREA3D[key];
+    if (!a || !this.scene.textures.exists(`fx3_${key}`)) return undefined;
+    return this.scene.add.image(x, y, `fx3_${key}`, frame).setOrigin(a[3] / a[0], a[4] / a[1]).setScale(1 / 1.5).setDepth(depth);
+  }
+
   /** A stone (or ice) spike bursting out of the ground and sinking back. */
   private spike(x: number, y: number, style: FxStyle, h: number) {
+    const im = this.area3d(`spike_${style}`, x, y, y, Math.floor(Math.random() * 3));
+    if (im) {
+      // the baked spike stands 12 px; it bursts up from its foot and sinks back
+      const k = h / 12 / 1.5;
+      im.setScale(k * (Math.random() < 0.5 ? -1 : 1), k * 0.1);
+      this.scene.tweens.add({ targets: im, scaleY: k, duration: 90, yoyo: true, hold: 260, onComplete: () => im.destroy() });
+      this.burst(x, y, 1, "earth", 4, 40, 300);
+      return;
+    }
     const pal = PALETTE[style === "earth" ? "earth" : style];
     const g = this.scene.add.graphics().setDepth(DEPTH).setPosition(x + 0.01, y + 0.01);
     g.fillStyle(pal[3], 1).fillTriangle(-3, 0, 3, 0, 0, -h);
@@ -1134,7 +1179,7 @@ export class SkillFx {
 
   private arrowDrop(x: number, y: number) {
     const [lx, ly] = lift(70);
-    const a = this.scene.add.image(x + lx, y + ly, "fx_px").setDisplaySize(1, 8).setTint(0xe8d8b0).setDepth(DEPTH);
+    const a = this.area3d("rainarrow", x + lx, y + ly, DEPTH) ?? this.scene.add.image(x + lx, y + ly, "fx_px").setDisplaySize(1, 8).setTint(0xe8d8b0).setDepth(DEPTH);
     const [gx, gy] = lift(4);
     this.scene.tweens.add({ targets: a, x: x + gx, y: y + gy, duration: ARROW_DROP_MS, ease: "Quad.easeIn", onComplete: () => {
       a.destroy();
@@ -1147,13 +1192,8 @@ export class SkillFx {
   /** Judgement Blade: a giant sword of light falls point first. */
   private blade(x: number, y: number, style: FxStyle, r: number, land: () => void) {
     const pal = PALETTE[style];
-    const g = this.scene.add.graphics().setDepth(DEPTH + 3).setBlendMode(Phaser.BlendModes.ADD);
     const L = 60, W = 7;
-    // blade, fuller, guard, grip, pommel (point at 0,0 = the ground)
-    g.fillStyle(pal[2], 0.9).fillTriangle(-W, -14, W, -14, 0, 0).fillRect(-W, -L, W * 2, L - 14);
-    g.fillStyle(0xffffff, 1).fillRect(-1, -L + 2, 2, L - 6);
-    g.fillStyle(pal[3], 1).fillRect(-W - 8, -L - 4, W * 2 + 16, 4);
-    g.fillStyle(pal[1], 1).fillRect(-2, -L - 18, 4, 14).fillRect(-4, -L - 22, 8, 5);
+    const g: Phaser.GameObjects.Graphics | Phaser.GameObjects.Image = this.area3d("judgement", 0, 0, DEPTH + 3) ?? this.swordGfx(pal, L, W);
     const [lx, ly] = lift(160), [gx, gy] = lift(0);
     g.setPosition(x + lx, y + ly).setAlpha(0);
     this.scene.tweens.add({ targets: g, alpha: 1, duration: 80 });
@@ -1163,6 +1203,17 @@ export class SkillFx {
     } });
     this.emit(SWORD_FALL_MS, 20, () => this.p(g.x - lx * 0 + rnd(-W, W), g.y, 0, pick(pal), { vz: 0, vy: rnd(-10, 10), life: 300, size: 2, size1: 0, depth: DEPTH + 2 }));
     void r;
+  }
+
+  /** The drawn Judgement sword (when its baked sheet isn't loaded): point at (0, 0). */
+  private swordGfx(pal: number[], L: number, W: number) {
+    const g = this.scene.add.graphics().setDepth(DEPTH + 3).setBlendMode(Phaser.BlendModes.ADD);
+    // blade, fuller, guard, grip, pommel (point at 0,0 = the ground)
+    g.fillStyle(pal[2], 0.9).fillTriangle(-W, -14, W, -14, 0, 0).fillRect(-W, -L, W * 2, L - 14);
+    g.fillStyle(0xffffff, 1).fillRect(-1, -L + 2, 2, L - 6);
+    g.fillStyle(pal[3], 1).fillRect(-W - 8, -L - 4, W * 2 + 16, 4);
+    g.fillStyle(pal[1], 1).fillRect(-2, -L - 18, 4, 14).fillRect(-4, -L - 22, 8, 5);
+    return g;
   }
 
   /** One soft puff of night mist that swirls round (cx, cy) as it drifts and swells. */
@@ -1436,7 +1487,9 @@ export class SkillFx {
       }
     } else if (k === "blackhole") this.addHole(f, objs);
     else if (k === "voidblades") this.addBlades(f, objs);
-    else if (k === "gravesoil") {
+    else if (k === "gravesoil" && this.scene.textures.exists("fx3_gravesoil")) {
+      objs.push(this.area3d("gravesoil", f.x, f.y, GROUND_DEPTH)!.setScale(f.r / 40 / 1.5).setFlipX(Math.random() < 0.5));
+    } else if (k === "gravesoil") {
       // Native Soil: a patch of dark grave earth spilled on the ground, clods and a few bone chips
       const g = this.scene.add.graphics().setPosition(f.x + 0.01, f.y + 0.01).setDepth(GROUND_DEPTH);
       const sq = ISO ? 0.5 : 0.7;
@@ -1886,8 +1939,10 @@ export class SkillFx {
   private addBlades(f: any, objs: Phaser.GameObjects.GameObject[]) {
     const n = f.skill === "su_arsenal" ? 1 : 3, edge = PALETTE[this.ownerEl(f.owner)][2];
     for (let i = 0; i < n; i++) {
-      const g = this.scene.add.graphics();
       const L = f.skill === "su_arsenal" ? 9 : 7;
+      const b = this.area3d("voidblade", f.x, f.y, f.y);
+      if (b) { objs.push(b.setScale(L / 8 / 1.5)); continue; } // baked 3D blade: tickBlades picks its heading frame
+      const g = this.scene.add.graphics();
       g.fillStyle(0x2a1446).fillTriangle(-L * 0.45, 0, L * 0.1, -1.8, L * 0.1, 1.8).fillTriangle(L * 0.1, -1.8, L, 0, L * 0.1, 1.8);
       g.fillStyle(0xb48cff).fillTriangle(-L * 0.3, 0, L * 0.1, -1.1, L * 0.9, 0);
       g.fillStyle(edge).fillTriangle(L * 0.1, -1.8, L, 0, L * 0.3, -1.2);
@@ -1899,9 +1954,11 @@ export class SkillFx {
   private tickBlades(f: any, objs: Phaser.GameObjects.GameObject[], x: number, y: number, dt: number) {
     const n = objs.length, R = f.r * 0.8, spin = f.skill === "su_arsenal" ? 0.006 : 0.0075, edge = PALETTE[this.ownerEl(f.owner)];
     objs.forEach((o, i) => {
-      const g = o as Phaser.GameObjects.Graphics, a = this.t * spin + i * Math.PI * 2 / n, z = 9;
+      const g = o as Phaser.GameObjects.Graphics | Phaser.GameObjects.Image, a = this.t * spin + i * Math.PI * 2 / n, z = 9;
       const px = x + Math.cos(a) * R, py = y + Math.sin(a) * R, [lx, ly] = lift(z);
-      g.setPosition(px + lx, py + ly).setDepth(py).setAngle(this.screenDeg(-Math.sin(a), Math.cos(a)));
+      g.setPosition(px + lx, py + ly).setDepth(py);
+      if (g instanceof Phaser.GameObjects.Image) g.setFrame(headingFrame(-Math.sin(a), Math.cos(a), 16));
+      else g.setAngle(this.screenDeg(-Math.sin(a), Math.cos(a)));
       if (Math.random() < 30 * dt) this.p(px, py, z, Math.random() < 0.5 ? pick(VOIDC) : edge[2], { life: 160, size: 1, size1: 0, depth: py - 1 });
     });
   }
@@ -2014,6 +2071,7 @@ export class SkillFx {
         if (!BASIC_SHOTS.has(look)) return undefined;
         g = this.basicShot(look, s, size);
     }
+    if (SHOT3D[look] && this.scene.textures.exists(`fx3_${look}`)) g = this.swap3d(g, look, s, size);
     // Enchanted (Fire Arrows + Volley...): the shot glows in the enchantment's colour; tickShots adds its flames
     const imb = PALETTE[s.imb as FxStyle];
     if (imb && g instanceof Phaser.GameObjects.Container) {
@@ -2022,6 +2080,27 @@ export class SkillFx {
     }
     this.shots.set(id, { s, g, look, born: this.t, tint: look === "wave" ? this.spawnTint : undefined }); // a note's colour is fixed here, for its whole flight and its impact
     return g;
+  }
+
+  /**
+   * Puts the baked 3D sprite where the drawn body was: the sprite sits in its own little container, so tickShots'
+   * moves on that child (wobble, scurry, wing beats) and spins on the shot still apply; heading shots stop rotating.
+   */
+  private swap3d(g: any, look: string, s: any, size: number) {
+    const [, , n] = SHOT3D[look], key = `fx3_${look}`;
+    const spr = this.scene.add.image(0, 0, key, n > 1 ? headingFrame(s.vx ?? 1, s.vy ?? 0, n) : 0).setScale(size / 1.5);
+    const body = this.scene.add.container(0, 0, [spr]);
+    if (g instanceof Phaser.GameObjects.Container) {
+      const i = g.list.findIndex((o) => o instanceof Phaser.GameObjects.Graphics);
+      if (i >= 0) { const old = g.list[i] as Phaser.GameObjects.Graphics; body.setScale(old.scaleX < 0 ? -1 : 1, 1); g.addAt(body, i); old.destroy(); }
+      else g.add(body);
+      if (n > 1) g.setAngle(0);
+      return g;
+    }
+    const c = this.scene.add.container(s.x, s.y, [body]).setDepth(DEPTH);
+    if (n === 1) c.setAngle(g.angle ?? 0);
+    g.destroy();
+    return c;
   }
 
   /** Screen angle (degrees) of a world direction: in the iso view a world heading turns on screen. */

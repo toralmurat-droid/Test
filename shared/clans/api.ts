@@ -1,6 +1,8 @@
 /**
  * The clan plug-in interface (Living Code, roadmap M6 part 1). Each clan may own a folder shared/clans/<clan>/ whose
- * index.ts exports `plugin: ClanPlugin`; that code may import only this file (tools/clans/check.ts enforces it). The
+ * index.ts exports `plugin: ClanPlugin`; that code may import only this file and helper files in its own folder
+ * (`./<name>`; part 2, so the clan code routine can grow it: docs/living-code-routine.md). tools/clans/check.ts and the
+ * bundler (tools/clans/build.mjs) enforce it. The
  * server never imports a plug-in: tools/clans/build.mjs bundles it, and server/clanPlugins.ts runs the bundle in a
  * sandboxed worker (server/clanPluginWorker.ts) only when Murat has pinned its hash (CLAN_PLUGINS). Anything wrong, and
  * the doctrine leads. The client never imports any of this.
@@ -69,4 +71,17 @@ export const CLAN_PLUGIN = {
   gateBriefings: 200, gateMs: 20,
   /** A plug-in source file's size cap (bytes), and the longest `version` (fits the council log's provider id). */
   maxFileBytes: 20_000, versionMax: 8,
+  /**
+   * `npm run clans:verify` (tools/clans/verify.ts, run by the clan code routine before it opens a PR): its war sim, the
+   * baseline `--council=lead` and the clan's `--plugin`, each this many wars of this many war days (short enough for a
+   * cloud session, long enough to show a snowball).
+   */
+  verifyWars: 60, verifyDays: 30,
+  /**
+   * The sim gate on a plug-in run. A war is dominated when one clan holds more than `domShare` of the land for more than
+   * `domDays` war days in a row (after the settling days); the plug-in fails when `domWars` or more of its wars are, or
+   * when its clan's average land is more than `landGainMax` (share points) above the baseline's: a clan's own code may
+   * play better, never run away with the war.
+   */
+  domShare: 0.3, domDays: 3, domWars: 0.05, landGainMax: 0.03,
 };

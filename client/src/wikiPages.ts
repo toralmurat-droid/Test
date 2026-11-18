@@ -11,6 +11,7 @@ export const WIKI: WikiShelf[] = [
     help: "How things work in the game today.",
     pages: [
       { title: "Skills of the Heroes", href: "/skills", img: "/skills/v_exsang.webp", blurb: "Every skill of every hero, filmed in the game. Refilmed on its own when a skill changes." },
+      { title: "The Clan War", href: "/guide/clan-war/", img: "/guide/clan-war/img/war-table.png", blurb: "How the five clans attack each other, how to join a battle step by step, scores, rewards and the monthly Reckoning." },
       { title: "Map Viewer", href: "/map.html", blurb: "The whole world map, with areas, collision and grid overlays." },
     ],
   },
