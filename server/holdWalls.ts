@@ -3,11 +3,13 @@
  * (shared/war/holdTiers.ts), and nobody stays inside one. Once a second (and right after a war tick or a sack) the room
  * passes the holders and tiers in; a land that changed hands raises its new holder's fort, a Hold that grew or shrank its
  * new tier's, and any hero or monster (troopers included) whose feet now overlap a wall is moved to the nearest free spot. The same sweep frees anyone a spawn, a blink or a knockback left in a wall. The movement check itself is
- * shared/movement.ts (server and client prediction alike).
+ * shared/movement.ts (server and client prediction alike). The same sweep gives a wild monster whose home lies on fort ground
+ * (shared/war/fortGround.ts) a home outside, so its leash walks it out of the fort.
  */
 import { PLAYER_RADIUS } from "../shared/constants";
 import { nearestFree } from "../shared/movement";
 import type { ClanKey } from "../shared/war/clans";
+import { fortGroundAt, nearestOffFort } from "../shared/war/fortGround";
 import { setHoldOwners, touchesHoldWall } from "../shared/war/holdWalls";
 import { holdTiers } from "../shared/war/holdTiers";
 import type { WarState } from "../shared/war/rules";
@@ -17,6 +19,8 @@ export interface WallBody { x: number; y: number; dead?: boolean; homeX?: number
 export interface HoldWallHost {
   heroes(): Iterable<[string, WallBody]>;
   mobs(): Iterable<[string, WallBody]>;
+  /** Is this monster wild (shared/war/fortGround.ts isWildMob)? A wild one whose home lies on fort ground gets a home outside. */
+  wild?(m: WallBody): boolean;
 }
 
 export class HoldWalls {
@@ -27,7 +31,14 @@ export class HoldWalls {
     setHoldOwners(owner ?? [], tier);
     let moved = 0;
     for (const [, b] of this.h.heroes()) if (this.free(b)) moved++;
-    for (const [, m] of this.h.mobs()) if (!m.dead && this.free(m)) moved++;
+    for (const [, m] of this.h.mobs()) {
+      if (m.dead) continue;
+      if (this.free(m)) moved++;
+      if (m.homeX !== undefined && m.homeY !== undefined && fortGroundAt(m.homeX, m.homeY) && this.h.wild?.(m)) {
+        const to = nearestOffFort(m.homeX, m.homeY);
+        if (to) { m.homeX = to.x; m.homeY = to.y; } // its leash walks it out of the fort
+      }
+    }
     return moved;
   }
 
