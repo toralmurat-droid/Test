@@ -92,7 +92,7 @@ export function pikeCall(c: RoleCtx, m: TroopMob, id: string, f: Fighter, g: Fig
   for (const [oid, o] of c.h.mobsInBox(m.x, m.y, C.px)) {
     if (oid === id || o.kind !== "trooper" || o.dead || o.hidden || o.broken) continue;
     const k = parseTroop(o.weapon), of = c.fighter?.(oid), og = c.ground?.(oid), d = Math.hypot(o.x - m.x, o.y - m.y);
-    if (!k || k.clan !== f.clan || k.object || !of || !og || d > C.px || !og.leash(hx, hy) || (of.role === "pike" && og.post)) continue; // (one that may not go there, or another tethered pike, can't answer)
+    if (!k || k.clan !== f.clan || k.object || !of || !og || d > C.px || !og.leash(hx, hy) || (of.role === "pike" && og.post) || og.perch) continue; // (one that may not go there, another tethered pike or a wall archer, which can't leave its wall, can't answer)
     mates.push([d, oid, of]);
   }
   mates.sort((a, b) => a[0] - b[0]);

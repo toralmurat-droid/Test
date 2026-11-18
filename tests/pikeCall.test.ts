@@ -36,6 +36,8 @@ test("pike call: the nearest mates of its clan that can answer are called onto a
   add("rival", mob(POST.x + 20, POST.y, "redfang"), newFighter("redfang", false));
   add("pike2", mob(POST.x + 10, POST.y + 10, troopWeapon("wardens", false, false, false, false, "pike")), newFighter("wardens", false, "pike"), true);
   add("broken", mob(POST.x + 5, POST.y, "wardens", { broken: true }), newFighter("wardens", false));
+  add("wall", mob(POST.x - 20, POST.y, troopWeapon("wardens", false, false, false, false, "archer")), newFighter("wardens", false, "archer"));
+  grounds.get("wall")!.perch = true; // a wall archer: its bow can't reach past the wall, and it may not leave it
   // within its tether: the pike answers itself, no call
   assert.deepEqual(pikeCall(c, pm, "pike", pf, grounds.get("pike")!, "hero", POST.x + HOLD - 5, POST.y, now), []);
   assert.equal(pf.nextCall, 0, "no call: no cooldown");
@@ -48,7 +50,7 @@ test("pike call: the nearest mates of its clan that can answer are called onto a
     assert.ok(called(f, "hero", now) && called(f, "hero", now + C.ms - 1) && !called(f, "hero", now + C.ms), `${id}: called for call.ms`);
     assert.equal(f.nextPick, 0, "it picks on its next turn");
   }
-  for (const id of ["far", "out", "rival", "pike2", "broken"]) assert.equal(fighters.get(id)!.call, "", `${id}: not called`);
+  for (const id of ["far", "out", "rival", "pike2", "broken", "wall"]) assert.equal(fighters.get(id)!.call, "", `${id}: not called`);
   assert.equal(pf.call, "", "mates answered: the pike holds its post");
   // at most once per call.everyMs
   assert.deepEqual(pikeCall(c, pm, "pike", pf, grounds.get("pike")!, "hero", hx, hy, now + C.everyMs - 1), []);

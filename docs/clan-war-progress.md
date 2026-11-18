@@ -1198,7 +1198,7 @@ orders over HTTPS, not by an in-server API call. Routine prompt and setup: [war-
     none. `WarTroops.others` now enlists every other module's soldier (foot too) with its ground, so a pike finds its
     mates; `WarTroops.hit` takes the mob id (TownRoom passes it). No synced fields, saves or sfx; `pve.ts` models no tether,
     so its rows are unchanged (`--troops --garrison` run before and after: identical code paths). A hero beyond every
-    guard's leash can still shoot one (any role, not only pikes): the modules' leashes are unchanged.
+    guard's leash can still shoot one (any role, not only pikes): the modules' leashes are unchanged. Wall archers are never called (they may not leave the wall and their bow would not reach). Open: a sally renewed by each hit can draw the last pike past a gate's or Hold's defend reach (`TOWN.reachPx`, `inSackReach`) while it lives.
   - **Shots of a fallen archer** (follow-up b, decided): a shot in flight at a monster or trooper is lost when its archer
     has fallen by the time it lands (`TroopArrows.fly`), as a dead soldier's wound-up blow is; before it depended on the
     500 ms corpse removal. Shots at heroes are room projectiles and fly on.
