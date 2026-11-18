@@ -1,6 +1,7 @@
 {
   "date": "2026-11-18",
   "title": "Riders no longer gallop through pikes",
+  "pr": 538,
   "changes": [
     "When the server lags, clan riders can no longer gallop straight through a braced pike or past the hero they charge."
   ]
