@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-18",
+  "title": "Pikes call for help against archers and mages",
+  "changes": [
+    "A clan pike shot by a hero it cannot reach from its post now calls the nearest soldiers of its squad onto that hero, so Hold and gate guards can no longer be picked off for free from just out of reach.",
+    "A pike with no one left to call leaves its post for a few seconds to run the shooter down, then goes back."
+  ]
+}

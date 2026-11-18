@@ -128,7 +128,13 @@ export const TROOP_ROLE = {
    * `ms` (Mob.winding, so the clients see it) and stops the charge on its point: its blow (x vs.pike.rider, x dmgMult)
    * lands at once and the rider is thrown off its stride for `stunMs`. Only a pike that is not stunned or broken braces.
    */
-  pike: { reach: 14, tetherTiles: 3, brace: { ms: 700, stunMs: 900, dmgMult: 1 } },
+  /**
+   * `call`: a tethered pike struck by a hero it cannot reach from its tether (a Wizard or Songweaver shooting from just
+   * beyond it) calls the `mates` nearest soldiers of its clan within `px` of it that can answer (not tethered pikes) onto
+   * that hero: for `ms` each sees them from up to `sightPx` and favours them by `bonus` when it picks a foe. With no one
+   * to call, the pike sallies itself: for `ms` its tether doesn't hold it back from that hero. At most once per `everyMs`.
+   */
+  pike: { reach: 14, tetherTiles: 3, brace: { ms: 700, stunMs: 900, dmgMult: 1 }, call: { px: 256, mates: 2, sightPx: 400, bonus: 0.5, ms: 6000, everyMs: 1000 } },
   /**
    * `fielded`: roleOf fields riders (false: foot in their place). The charge: a rider whose charge is ready and whose foe
    * is `min`..`max` px off winds up for `windupMs` (Mob.winding and an sfx "troop_charge" with the lane: the line is

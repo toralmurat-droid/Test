@@ -1183,8 +1183,22 @@ orders over HTTPS, not by an in-server API call. Routine prompt and setup: [war-
     for 4 s drops it and shuns it for 8 s (`Fighter.shun`), so it picks another foe. Any tethered pike also never picks a
     foe beyond its tether (`pikeHolds` in `pick`; before it picked, dropped and walked home every 400 ms). Courtyard
     archers draw a longer bow (`TROOP_ROLE.ranged.wall`: 230 px, sight 260; Summoner 220, Wizard 170, Songweaver 145).
-    This does not stop a hero farming a guard pike from beyond its tether: the pike now turns to another foe (or home)
-    instead of flickering, but still can't answer a ranged hero out there.
+    This alone did not stop a hero farming a guard pike from beyond its tether: see the pike call (follow-up c) below.
+  - **Pike call** (follow-up c, `TROOP_ROLE.pike.call`, `pikeCall` in server/troopRoles.ts, `called` in
+    shared/war/troopRoles.ts, `Fighter.call / callUntil / nextCall`): a tethered pike (any module) struck by a hero beyond
+    `pikeHolds` (a Wizard at 170 px, a Songweaver at 145 px, just past its tether) calls the 2 nearest soldiers of its clan
+    within 256 px that can answer (alive, not broken, the hero inside their leash, not tethered pikes) onto that hero for
+    6 s: their `pick` sees the hero from up to 400 px and favours them (+0.5). With no one to call, the pike sallies: for
+    6 s its tether (`pikeHolds`, `pikeTether`, the guard give-up) doesn't hold it back from that hero, and a shun on them is
+    lifted. At most one call per pike per second. Riders' charges are untouched (they come within reach), so a pike still
+    holds its post against them. Chosen over a ranged-damage shield (still free damage, only slower, and a new combat
+    number) and a step back out of sight (a pike on its post has nowhere to step and the hero simply follows): the squads
+    already share a struck soldier's foe (each module's `hit`), but only with mates that have no target and only until
+    their next pick drops a hero beyond their sight; the call makes it stick, and adds it for the Hold guards, which had
+    none. `WarTroops.others` now enlists every other module's soldier (foot too) with its ground, so a pike finds its
+    mates; `WarTroops.hit` takes the mob id (TownRoom passes it). No synced fields, saves or sfx; `pve.ts` models no tether,
+    so its rows are unchanged (`--troops --garrison` run before and after: identical code paths). A hero beyond every
+    guard's leash can still shoot one (any role, not only pikes): the modules' leashes are unchanged.
   - **Shots of a fallen archer** (follow-up b, decided): a shot in flight at a monster or trooper is lost when its archer
     has fallen by the time it lands (`TroopArrows.fly`), as a dead soldier's wound-up blow is; before it depended on the
     500 ms corpse removal. Shots at heroes are room projectiles and fly on.
@@ -1214,6 +1228,5 @@ orders over HTTPS, not by an in-server API call. Routine prompt and setup: [war-
     the gate rows now field one clan per run, as the server does, instead of clans in turn per man): every hero row
     within 9 of before (largest: gate Lv33 Songweaver 31 -> 22, ritual Lv45 Songweaver 73 -> 82).
 - **Known follow-ups:** a real sling draw; caravan escorts and the ram crew use the plain trooper HP (not troopStats,
-  unlike every other module and the sims); `pve.ts --siege` fronts don't model roles; a guard pike still can't answer a
-  ranged hero beyond its tether.
+  unlike every other module and the sims); `pve.ts --siege` fronts don't model roles.
 - Plan: /mnt/project-files/clan-war/troop-roles-plan.md.

@@ -5788,7 +5788,7 @@ export class TownRoom extends Room<TownState> {
     const m = this.state.mobs.get(targetId);
     if (!m || m.dead) return;
     if (a && !this.canHurtMob(attackerId, m)) return;
-    if (a && m.kind === "trooper") { this.warTroops.hit(attackerId, m); this.caravans.hit(attackerId, targetId); this.sieges.hit(attackerId, targetId); this.tunnels.hit(attackerId, targetId); this.rituals.hit(attackerId, targetId); this.marches.hit(attackerId, targetId); this.battles.hit(attackerId, targetId); this.towns.hit(attackerId, targetId); const tc = parseTroop(m.weapon)?.clan; if (tc) this.feuds.struck(attackerId, tc); } // an enemy hero's blow (a grudge with its clan starts over): the trooper (and a caravan's escort) turns on them
+    if (a && m.kind === "trooper") { this.warTroops.hit(attackerId, m, targetId); this.caravans.hit(attackerId, targetId); this.sieges.hit(attackerId, targetId); this.tunnels.hit(attackerId, targetId); this.rituals.hit(attackerId, targetId); this.marches.hit(attackerId, targetId); this.battles.hit(attackerId, targetId); this.towns.hit(attackerId, targetId); const tc = parseTroop(m.weapon)?.clan; if (tc) this.feuds.struck(attackerId, tc); } // an enemy hero's blow (a grudge with its clan starts over): the trooper (and a caravan's escort) turns on them
     if (m.owner && a) dmg = Math.max(1, Math.round(dmg / SUMMON.pvp.hp)); // a hero's blow on someone's creature (SUMMON.pvp)
     const def = mobDef(m);
     if (a && (m.camp || m.kind === "banditchief")) this.banditShout(m, targetId, attackerId, Date.now());
