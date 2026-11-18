@@ -70,7 +70,7 @@ export const MILESTONES: Milestone[] = [
       { name: "Clan troops and holds for all five clans", owner: "Art Director", status: "done", note: "Troops fight on the server; painted soldiers, carts and Holds live" },
       { name: "Forts kept clear of wild monsters", owner: "Gameplay Engineers", status: "done", note: "Wild monsters walk round clan forts; the clan's troops guard them", pr: 531 },
       { name: "Archers, pikes and riders for every clan", owner: "Gameplay + Art", status: "done", note: "Wall archers, bracing pikes and charging riders in Holds, patrols, columns, caravans, sieges and battles (#532, #534)", pr: 535 },
-      { name: "Troop roles in tunnels, rituals and town gates", owner: "Gameplay Engineers", status: "doing" },
+      { name: "Troop roles in tunnels, rituals and town gates", owner: "Gameplay Engineers", status: "doing", pr: 537 },
     ],
   },
   {
