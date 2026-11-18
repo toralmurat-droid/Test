@@ -143,11 +143,14 @@ test("fort ground (room): a wild monster outside a fort, its home round the corn
     // (a chase may take it in: it may go for the hero or a trooper on the way; walking home it never steps on)
     let wasOutIdle = true;
     const ok = await until(() => {
+      // (no clan troopers here: they would pick a fight with it that it can't finish, and it would never go home)
+      room.state.mobs.forEach((m: any, id: string) => { if (m.kind === "trooper" && Math.hypot(m.x - HOLD.x, m.y - HOLD.y) < 30 * TILE) room.state.mobs.delete(id); });
+      if (wild.foe && !room.state.mobs.get(wild.foe)) wild.foe = "";
       const idle = !wild.target && !wild.foe, on = fortGroundAt(wild.x, wild.y);
       if (on && idle && wasOutIdle) inside = true;
       wasOutIdle = !on && idle;
       return idle && Math.hypot(wild.x - wild.homeX, wild.y - wild.homeY) < 3 * TILE; // (home lies among rocks: near it is home)
-    }, 120000);
+    }, 75000);
     assert.equal(inside, false, "walking home it never set foot on fort ground");
     assert.ok(ok, `it got home or settled (at ${(wild.x / TILE).toFixed(1)}, ${(wild.y / TILE).toFixed(1)}; home ${(wild.homeX / TILE).toFixed(1)}, ${(wild.homeY / TILE).toFixed(1)})`);
   } finally { await srv.stop(); }

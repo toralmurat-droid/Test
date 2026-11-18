@@ -215,7 +215,7 @@ export class Mob extends Schema {
   lurk = ""; // a Mawdeep ambush room it lurks in (shared/dungeon.ts AMBUSH_ROOMS), until a hero walks in
   path: [number, number][] = []; pathAt = 0; pathTX = 0; pathTY = 0; // the way round walls (gates), see seek
   pathFail = false; // the last findPath found no way: wait for the goal to move or the normal re-path time (see go)
-  homeStuck = 0; pathUntil = 0; // walking home: since when it has made no headway, and until when it finds its way (see go)
+  homeStuck = 0; homeBest = 0; pathUntil = 0; // walking home: since when it has got no nearer (than homeBest), and until when it finds its way (see go)
   @type("float32") x = 0;
   @type("float32") y = 0;
   @type("string") dir: Dir = "down";
@@ -3910,8 +3910,10 @@ export class TownRoom extends Room<TownState> {
     if (this.canStep(m, r.x, r.y)) { m.x = r.x; m.y = r.y; }
     // walking home and stuck on a rock or a fort's corner: it finds its way round for a while (go) instead of pressing on
     if (!t && !foe && !m.camp && r.moving && Math.hypot(m.x - m.homeX, m.y - m.homeY) > 40) {
-      if (Math.hypot(m.x - x0, m.y - y0) < speed * dt * 0.25) { m.homeStuck ||= now; if (now - m.homeStuck > 700) { m.pathUntil = now + 8000; m.homeStuck = 0; } }
-      else m.homeStuck = 0;
+      // (headway = getting nearer home, not just moving: pressed on a rock it jitters sideways)
+      const d = Math.hypot(m.x - m.homeX, m.y - m.homeY);
+      if (!m.homeStuck || d < m.homeBest - TILE / 2) { m.homeBest = d; m.homeStuck = now; }
+      else if (now - m.homeStuck > 1500 && now >= m.pathUntil) { m.pathUntil = now + 8000; m.homeStuck = 0; }
     } else m.homeStuck = 0;
     m.moving = r.moving;
     m.dir = dirFromInput(input, m.dir);
@@ -4182,7 +4184,8 @@ export class TownRoom extends Room<TownState> {
     const findWay = m.camp || m.tide || inFort || keepOut || now < m.pathUntil;
     // (a wild walker by a fort keeps to the tile path all the way: an 8-way straight walk snags on rocks by the gate)
     if (!findWay || (!wild && now >= m.pathUntil && clearWalk(m.x, m.y, x, y, wallPx))) { m.path = []; m.pathFail = false; return toward(m.x, m.y, x, y); }
-    const moved = Math.hypot(x - m.pathTX, y - m.pathTY) > TILE;
+    // (a wild monster re-paths less eagerly: its box is bigger, so its search dearer)
+    const moved = Math.hypot(x - m.pathTX, y - m.pathTY) > (wild ? 3 : 1) * TILE;
     // (no way found last time: the BFS would only fail again until the goal moves or the usual re-path time comes)
     if ((!m.path.length && !m.pathFail) || moved || now > m.pathAt + 1500) {
       const wall = keepOut ? (tx: number, ty: number) => liveHoldWall(tx, ty) || fortGroundTile(tx, ty) : liveHoldWall;
