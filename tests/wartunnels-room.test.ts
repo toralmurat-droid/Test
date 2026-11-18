@@ -9,7 +9,7 @@ import { newWar, targetsOf, type Orders } from "../shared/war/rules";
 import { atWar } from "../shared/war/feuds";
 import { STANDARD } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
-import { parseTroop, troopLevel, WAR_TROOPS } from "../shared/war/troops";
+import { parseTroop, planRole, troopLevel, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
 import { mouthHp, TUNNEL, tunnelMouth, tunnelStrikes } from "../shared/war/tunnels";
 import { _resetWar, _setWarOrders, _valorOf, step, warOrders, warState, warStrikes } from "../server/war";
 import { _resetTunnels, WarTunnels } from "../server/warTunnels";
@@ -76,7 +76,8 @@ test("tunnels (room): a mouth and a wave open near a hero only while a tunnel st
     assert.equal(m.maxHp, mouthHp(HK, level));
     const wave = soldiers();
     assert.equal(wave.length, TUNNEL.perWave, "a wave comes out");
-    assert.ok(wave.every((s: any) => s.weapon === HK && Math.hypot(s.x - MOUTH.x, s.y - MOUTH.y) < 2 * TILE), "plain Hide-Kin soldiers at the mouth");
+    assert.ok(wave.every((s: any) => parseTroop(s.weapon)?.clan === HK && parseTroop(s.weapon)?.part === "soldier" && Math.hypot(s.x - MOUTH.x, s.y - MOUTH.y) < 2 * TILE), "Hide-Kin soldiers at the mouth");
+    assert.deepEqual(wave.map((s: any) => s.weapon), [0, 1, 2].map((n) => troopWeapon(HK, false, false, false, false, planRole(HK, "tunnel", n))), "in their roles by place in the wave (ROLE_PLAN.tunnel)");
     assert.ok(sent.some(([t, v]) => t === "sfx" && v.ev === "tunnel_open" && v.x === Math.round(MOUTH.x)), "tunnel_open");
     assert.ok(sent.some(([t, v]) => t === "tunnels" && v.mouths.some((x: any) => x.t === LAND.id && x.state === "open")), "the clients hear of it");
     // the mouth never moves, whatever pushes it

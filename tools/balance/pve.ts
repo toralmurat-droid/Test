@@ -8,15 +8,17 @@
  * --siege: a siege front (shared/war/siege.ts): the hero and SIEGE_BATTLE.perFront allied soldiers vs as many attackers, Lv 15 / 30 / 45 (and the soldiers alone);
  *   then the Host's siege ram (shared/war/works.ts): the hero alone vs the ram and its crew (in their roles: ROLE_PLAN.ram). The front's soldiers stay foot
  *   here (the 1D sim's allies don't model archers' and riders' moves among themselves).
- * --tunnel: the hero alone collapses a Hide-Kin tunnel mouth (shared/war/tunnels.ts) while its waves come out: win = the mouth falls.
+ * --tunnel: the hero alone collapses a Hide-Kin tunnel mouth (shared/war/tunnels.ts) while its waves come out (in their roles: ROLE_PLAN.tunnel): win = the mouth falls.
  * --caravan: the hero alone raids a supply cart (shared/war/caravans.ts) with its 3 escorts (in their roles: ROLE_PLAN.escort) at Lv 15 / 30 / 45: win = the cart falls.
  * --column: the hero alone ambushes a full marching column (shared/war/marches.ts: an officer and COLUMN.max soldiers of its level, in their roles: ROLE_PLAN.column) at Lv 15 / 30 / 45:
  *   win = every man down; also how often the hero cut at least half of it (the most an ambush takes off the attack, COLUMN.floor).
  * --hunters: the hero alone against a manhunter squad (shared/war/feuds.ts FEUD.hunt, in their roles: ROLE_PLAN.hunt) at each tier that sends one, Lv 15 / 30 / 45.
  * --troops: the hero alone against a clan soldier, a captain and 3 soldiers of its level (shared/war/troops.ts), at Lv 8 / 20 / 45 (--clans: each clan at Lv 20;
  *   --garrison: a Hold's whole garrison at Control 100, 3 / 6 / 8 guards for an outpost / camp / fortress, at Lv 20 and 45,
- *   and a contested town's gate guard (shared/war/towns.ts: a captain and 4 soldiers) at Lv 17 / 25 / 33; the garrison's
- *   guards stand in their roles, shared/war/troops.ts roleOf: archers and pikes).
+ *   and a contested town's gate guard (shared/war/towns.ts: a captain and 4 soldiers of one clan, in their roles: ROLE_PLAN.gate)
+ *   at Lv 17 / 25 / 33; the garrison's guards stand in their roles, shared/war/troops.ts roleOf: archers and pikes;
+ *   --ritual: a Veiled ritual circle's 3 acolytes, in their roles: ROLE_PLAN.ritual, at Lv 15 / 30 / 45).
+ * --foot: the tunnel, gate and ritual rows field foot only (as before the roles), to compare.
  * --roles: the hero alone vs one soldier of each role (foot, archer, pike, rider: shared/war/troops.ts TROOP_ROLE, clans that field it in turn) at Lv 8 / 20 / 45.
  *   A rider charges as the server's (server/troopRoles.ts riderFight, shared/war/troopRoles.ts chargeStep); the hero bot rolls out
  *   of about half the wind-ups (as out of a boss's telegraph), and a roll during the wind-up takes it out of the lane (2D: a step aside).
@@ -33,6 +35,7 @@
  * so boss win rates read a bit high.
  */
 import { TOWN } from "../../shared/war/towns";
+import { RITUAL } from "../../shared/war/rituals";
 import { NIGHT_RAID } from "../../shared/raiders";
 import { ACTIVE_CLASSES, ClassKind } from "../../shared/classes";
 import { BANDIT_AI, BANDIT_ROLES, CHIEF } from "../../shared/bandits";
@@ -48,7 +51,7 @@ import { SUMMON } from "../../shared/summons";
 import { AFFIX_FX as CF, CHAMPION, type AffixKey } from "../../shared/champions";
 import { addHeat } from "../../shared/overload";
 import { CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
-import { CLAN_ROLES, planRole, roleOf, squadMod, TROOP_OFFICER, TROOP_ROLE, troopStats, WAR_TROOPS, type TroopRole } from "../../shared/war/troops";
+import { CLAN_ROLES, planRole, roleOf, squadMod, TROOP_OFFICER, TROOP_ROLE, troopStats, WAR_TROOPS, type RolePlace, type TroopRole } from "../../shared/war/troops";
 import { bowOf, chargeBreak, chargeEnd, chargeStep, kiteStep, newCharge, shotReady, type Bow } from "../../shared/war/troopRoles";
 import type { HoldTier } from "../../shared/war/holdTiers";
 import { TROOP } from "../../shared/war/patrols";
@@ -748,13 +751,16 @@ function trooperF(clan: ClanKey, level: number, officer: boolean, role: TroopRol
 }
 
 /** Clan troopers (shared/war/troops.ts): the hero alone against `n` of its level (clans in turn), 5 heal + 5 mana potions. */
-/** `officer`: every trooper an officer, or "lead": only the first (a gate guard: a captain and his soldiers). `role`: trooper k's role (default foot). */
-function troopRun(cls: ClassKind, level: number, n: number, build: Build, seed: number, officer: boolean | "lead" = false, clan?: ClanKey, potions = 5, role?: (clan: ClanKey, k: number) => TroopRole): RunResult {
+/**
+ * `officer`: every trooper an officer, or "lead": only the first (a gate guard: a captain and his soldiers). `role`: trooper k's role (default foot);
+ * `squad`: its squad multipliers (TROOP_ROLE.squad); `oneClan`: every trooper of the run's clan (else clans in turn by trooper too).
+ */
+function troopRun(cls: ClassKind, level: number, n: number, build: Build, seed: number, officer: boolean | "lead" = false, clan?: ClanKey, potions = 5, role?: (clan: ClanKey, k: number) => TroopRole, squad?: RolePlace, oneClan = false): RunResult {
   const h = make("h", cls, level, build);
   const pack: Pack = { heal: potions, mana: potions, healUsed: 0, manaUsed: 0, size: potionSize(level), lastDrink: -1e9 };
   const ms = Array.from({ length: n }, (_, k) => {
-    const off = officer === true || (officer === "lead" && k === 0), c = clan ?? CLAN_KEYS[(seed + k) % CLAN_KEYS.length];
-    return trooperF(c, level, off, off ? "foot" : role?.(c, k) ?? "foot", "t" + k);
+    const off = officer === true || (officer === "lead" && k === 0), c = clan ?? CLAN_KEYS[(seed + (oneClan ? 0 : k)) % CLAN_KEYS.length], r = off ? "foot" : role?.(c, k) ?? "foot";
+    return trooperF(c, level, off, r, "t" + k, squad ? squadMod(squad, r) : undefined);
   });
   const d = new RoleDuel(h, ms, pack, 0), hp0 = h.hp;
   let w: F | null | undefined;
@@ -863,6 +869,11 @@ function ramRun(cls: ClassKind, level: number, build: Build, potions = 5): RunRe
   return { won: w === h, kills: ram.dead ? 1 : 0, hpLostPerKill: Math.max(0, hp0 - h.hp) / h.maxHp, secPerKill: d.now / 1000, heals: pack.healUsed, manas: pack.manaUsed };
 }
 
+/** --foot: the tunnel, gate and ritual rows field foot only (the squads before the roles), to compare. */
+const FOOT = process.argv.includes("--foot");
+/** A phase-4 place's role (ROLE_PLAN.tunnel / ritual / gate), or foot with --foot. */
+const phase4Role = (c: ClanKey, kind: "tunnel" | "ritual" | "gate", k: number): TroopRole => (FOOT ? "foot" : planRole(c, kind, k));
+
 /** A Hide-Kin tunnel (shared/war/tunnels.ts): the hero alone vs the mouth (no attack) and TUNNEL.perWave soldiers, a new wave every waveMs (up to maxTunnelTroops). */
 function tunnelRun(cls: ClassKind, level: number, build: Build, potions = 5): RunResult {
   const h = make("h", cls, level, build), clan: ClanKey = "hidekin", T = TUNNEL;
@@ -870,7 +881,7 @@ function tunnelRun(cls: ClassKind, level: number, build: Build, potions = 5): Ru
   const ms = mobSpec("trooper", level);
   Object.assign(ms, { hp: mouthHp(clan, level), dmg: 0, speed: 0, cd: 1e12, label: "mouth" });
   ms.poise *= T.mouthHp;
-  const mouth = new MobF(ms, "mouth"), wave = (n: number) => Array.from({ length: T.perWave }, (_, k) => soldierF(clan, level, `w${n}_${k}`));
+  const mouth = new MobF(ms, "mouth"), wave = (n: number) => Array.from({ length: T.perWave }, (_, k) => trooperF(clan, level, false, phase4Role(clan, "tunnel", k), `w${n}_${k}`, squadMod("tunnel", phase4Role(clan, "tunnel", k)))); // (each wave in its roles: ROLE_PLAN.tunnel)
   const d = new CaravanDuel(h, [...wave(0), mouth], pack, mouth), hp0 = h.hp;
   const out = (s: MobF) => { s.x = Math.max(0, Math.min(480, mouth.x + (Math.random() - 0.5) * 20)); };
   mouth.x = Math.max(0, Math.min(480, d.mobs[0].x + Math.sign(d.mobs[0].x - h.x) * 30));
@@ -997,11 +1008,11 @@ if (process.argv[1]?.includes("pve")) {
   if (TROOPS) {
     console.log("Clan troopers: the hero alone vs N troopers of its level (clans in turn), 5 heal + 5 mana potions. Cell = win% / HP lost (whole fight) / fight s");
     console.log("".padEnd(18) + CLASSES.map((c) => c.padEnd(20)).join(""));
-    const row = (label: string, L: number, k: number, officer: boolean | "lead", clan?: ClanKey, role?: (clan: ClanKey, k: number) => TroopRole) => {
+    const row = (label: string, L: number, k: number, officer: boolean | "lead", clan?: ClanKey, role?: (clan: ClanKey, k: number) => TroopRole, squad?: RolePlace, oneClan = false) => {
       let line = label.padEnd(18);
       for (const c of CLASSES) {
         let won = 0, hp = 0, sec = 0;
-        for (let i = 0; i < n; i++) { const r = troopRun(c, L, k, buildOf(i), i, officer, clan, 5, role); won += r.won ? 1 : 0; hp += r.hpLostPerKill * Math.max(1, r.kills); sec += r.secPerKill * Math.max(1, r.kills); }
+        for (let i = 0; i < n; i++) { const r = troopRun(c, L, k, buildOf(i), i, officer, clan, 5, role, squad, oneClan); won += r.won ? 1 : 0; hp += r.hpLostPerKill * Math.max(1, r.kills); sec += r.secPerKill * Math.max(1, r.kills); }
         line += `${pct(won / n)}/${pct(hp / n)}/${(sec / n).toFixed(1)}s`.padEnd(20);
       }
       console.log(line);
@@ -1016,8 +1027,10 @@ if (process.argv[1]?.includes("pve")) {
       const clans = role === "foot" ? CLAN_KEYS : CLAN_KEYS.filter((k) => CLAN_ROLES[k][role as "archer" | "pike" | "rider"]);
       for (const k of clans) row(`Lv${L} ${k} ${role}`, L, 1, false, k, () => role);
     }
-    // --garrison (W6): a contested town's gate guard (shared/war/towns.ts TOWN: a captain and his soldiers), at the patron lands' levels
-    if (process.argv.includes("--garrison")) for (const L of [17, 25, 33]) row(`Lv${L} gate 1+${TOWN.guards}`, L, TOWN.captain + TOWN.guards, "lead");
+    // --garrison (W6): a contested town's gate guard (shared/war/towns.ts TOWN: a captain and his soldiers of one clan, in their roles: ROLE_PLAN.gate), at the patron lands' levels
+    if (process.argv.includes("--garrison")) for (const L of [17, 25, 33]) row(`Lv${L} gate 1+${TOWN.guards}`, L, TOWN.captain + TOWN.guards, "lead", undefined, (c, k) => phase4Role(c, "gate", k), "gate", true);
+    // --ritual: a Veiled ritual circle's acolytes (shared/war/rituals.ts RITUAL.acolytes, in their roles: ROLE_PLAN.ritual), all at once
+    if (process.argv.includes("--ritual")) for (const L of [15, 30, 45]) row(`Lv${L} ritual x${RITUAL.acolytes}`, L, RITUAL.acolytes, false, RITUAL.clan, (c, k) => phase4Role(c, "ritual", k), "ritual");
   }
   if (CHAMPS) {
     console.log("Champions: the hero alone at the monster's level, 3 heal + 3 mana potions. Cell = win% / HP lost / fight s (plain -> champion)");

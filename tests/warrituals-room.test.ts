@@ -9,7 +9,7 @@ import { newWar, targetsOf } from "../shared/war/rules";
 import { atWar } from "../shared/war/feuds";
 import { STANDARD } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
-import { WAR_TROOPS } from "../shared/war/troops";
+import { parseTroop, planRole, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
 import { _resetWar, _valorOf, warState } from "../server/war";
 import { _resetRituals, WarRituals } from "../server/warRituals";
 
@@ -71,7 +71,8 @@ test("rituals (room): the circle and its acolytes appear only at noon with a her
     assert.equal(r().t, LAND.id);
     const a = acolytes();
     assert.equal(a.length, RITUAL.acolytes, "three acolytes");
-    assert.ok(a.every((m: any) => m.weapon === V && Math.hypot(m.x - SPOT.x, m.y - SPOT.y) <= RITUAL.postPx + 1), "plain Veiled troopers on the circle");
+    assert.ok(a.every((m: any) => parseTroop(m.weapon)?.clan === V && Math.hypot(m.x - SPOT.x, m.y - SPOT.y) <= RITUAL.postPx + 1), "Veiled troopers on the circle");
+    assert.deepEqual(a.map((m: any) => m.weapon), [0, 1, 2].map((i) => troopWeapon(V, false, false, false, false, planRole(V, "ritual", i))), "in their roles by place (ROLE_PLAN.ritual)");
     assert.ok(sent.some(([t, v]) => t === "rituals" && v.t === LAND.id && v.x === SPOT.x && v.state === "channel"), "the clients hear of it");
     // noon ends: the circle goes
     tick(NIGHT);

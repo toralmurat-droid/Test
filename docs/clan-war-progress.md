@@ -1196,7 +1196,24 @@ orders over HTTPS, not by an in-server API call. Routine prompt and setup: [war-
     noise (max 9, the Lv17 gate row whose code is unchanged). With the multipliers: column, caravan, manhunters and ram
     rows all within 8 of before (largest: manhunters wizard Lv15 Hunted 60 -> 68, ram summoner Lv15 99 -> 93); siege
     fronts in the sim stay foot. `war.ts` unchanged (strategic).
-- **Known follow-ups:** a real sling draw; tunnels, rituals and town gates still field foot only; caravan escorts and the
-  ram crew use the plain trooper HP (not troopStats, unlike every other module and the sims); `pve.ts --siege` fronts
-  don't model roles; a guard pike still can't answer a ranged hero beyond its tether.
+- **Phase 4 (server/shared, branch `claude/troop-roles-raids`):** roles in the last three modules that fielded foot only,
+  same head counts, by place (`ROLE_PLAN.tunnel / ritual / gate`, `planRole`; a role the clan lacks is foot; officers and
+  tunnel mouths never carry one). HP from troopStats with the role (and squad multiplier); a role soldier gets its own
+  `FightGround` with its place as `post` (a pike's tether), as in phase 3. No new save fields, Mob fields, art or sfx.
+  - **Tunnels** (server/warTunnels.ts): each wave by its place in the wave: pike, foot, rider (Hide-Kin: a burrow-spear,
+    a soldier, a boar rider). Squad multiplier `TROOP_ROLE.squad.tunnel` 0.8 / 0.8 (untrimmed: Songweaver Lv45 72 -> 41).
+  - **Rituals** (server/warRituals.ts): acolytes pike, archer, rider (Veiled: foot, sun-caster, dune rider); the archer
+    stands `ROLE_FORM.archerBack` inside the circle, the others on it (`ritualPlace` in shared/war/troopRoles.ts). No squad
+    multiplier (within 10 at full strength; a little easier than all-foot: the archer is lighter).
+  - **Town gates** (server/warTowns.ts): captain (post 0, foot) on the gate, then pike, archer, pike, archer.
+    `gateGuardPosts` (shared/war/troopRoles.ts, cached per town and clan in the room) hands the ring's spots out from
+    the road side to the town side, pikes first, then foot, then archers; archers stand `archerBack` further toward the
+    town (never on town ground or blocked ground; else the plain ring spot). Post indexes (and so the fallen posts) keep
+    their meaning; an all-foot guard keeps the plain ring. Squad multiplier `TROOP_ROLE.squad.gate` 0.9 / 0.9.
+  - Balance (`pve.ts 200`; `--tunnel`, `--troops --garrison --ritual`; `--foot` plans these rows all-foot to compare;
+    the gate rows now field one clan per run, as the server does, instead of clans in turn per man): every hero row
+    within 9 of before (largest: gate Lv33 Songweaver 31 -> 22, ritual Lv45 Songweaver 73 -> 82).
+- **Known follow-ups:** a real sling draw; caravan escorts and the ram crew use the plain trooper HP (not troopStats,
+  unlike every other module and the sims); `pve.ts --siege` fronts don't model roles; a guard pike still can't answer a
+  ranged hero beyond its tether.
 - Plan: /mnt/project-files/clan-war/troop-roles-plan.md.

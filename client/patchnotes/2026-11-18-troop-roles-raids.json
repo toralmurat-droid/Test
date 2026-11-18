@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-18",
+  "title": "Archers, pikes and riders at tunnels, rituals and town gates",
+  "changes": [
+    "Hide-Kin tunnels now send out burrow-spears and boar riders with their foot soldiers.",
+    "Veiled ritual circles are guarded by a sun-caster standing inside the circle and a dune rider.",
+    "Town gate guards now put their pikes on the road side and their archers behind them, for clans that field them.",
+    "Tunnel soldiers and gate guards in these roles are slightly lighter, so tunnels and gates stay about as hard as before."
+  ]
+}

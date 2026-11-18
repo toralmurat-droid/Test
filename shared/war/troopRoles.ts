@@ -4,11 +4,14 @@
  */
 import { TILE } from "../constants";
 import { isSolidAt, isSolidTile } from "../map";
+import { blocked } from "../movement";
 import type { ClanKey } from "./clans";
 import { fortOf, holdWallPx, type FortKind } from "./holdWalls";
 import type { HoldTier } from "./holdTiers";
 import { battleLine } from "./battles";
-import { CLAN_ROLES, fieldRole, ROLE_FORM, ROLE_PLAN, roleOf, TROOP_ROLE, type TroopRole } from "./troops";
+import { RITUAL } from "./rituals";
+import { gatePosts, gatePx, keepOut, onTownGround, type Town } from "./towns";
+import { CLAN_ROLES, fieldRole, planRole, ROLE_FORM, ROLE_PLAN, roleOf, TROOP_ROLE, type TroopRole } from "./troops";
 
 type Ranged = Omit<typeof TROOP_ROLE.ranged, "wall">;
 
@@ -56,6 +59,41 @@ export function battleRole(k: ClanKey, i: number): TroopRole {
 export function rolePlace(role: TroopRole, x: number, y: number, back: [number, number], out: [number, number]): { x: number; y: number } {
   const b = role === "archer" ? ROLE_FORM.archerBack : 0, w = role === "rider" ? ROLE_FORM.riderWide : 0;
   return { x: x + back[0] * b + out[0] * w, y: y + back[1] * b + out[1] * w };
+}
+
+/**
+ * Acolyte place i of a clan `k` ritual circle at (cx, cy) and its role (ROLE_PLAN.ritual): on the circle at RITUAL.postPx,
+ * an archer ROLE_FORM.archerBack nearer the centre (inside the ring of the others). `free` (server: not off limits, not
+ * blocked) checks the spot: a blocked shifted spot falls back to the plain one, a blocked plain one to the centre.
+ */
+export function ritualPlace(k: ClanKey, i: number, cx: number, cy: number, free: (x: number, y: number) => boolean = (x, y) => !blocked(x, y)): { x: number; y: number; role: TroopRole } {
+  const role = planRole(k, "ritual", i), a = -Math.PI / 2 + (i * 2 * Math.PI) / RITUAL.acolytes, c = Math.cos(a), s = Math.sin(a);
+  const x = cx + c * RITUAL.postPx, y = cy + s * RITUAL.postPx;
+  if (!free(x, y)) return { x: cx, y: cy, role };
+  const q = rolePlace(role, x, y, [-c, -s], [0, 0]);
+  return free(q.x, q.y) ? { ...q, role } : { x, y, role };
+}
+
+/**
+ * Where each gate guard place of clan `k` stands at town t's gate muster (index = place: ROLE_PLAN.gate; same count as
+ * towns.ts gatePosts): the captain (place 0) on the gate; the ring's spots handed out from the one farthest from the town
+ * to the nearest, pikes first, then foot, then archers, so the pikes face the road and the archers stand behind them,
+ * shifted ROLE_FORM.archerBack further toward the town. `free` checks a shifted spot (default: not town ground, not
+ * blocked); a blocked one keeps the plain ring spot. A clan with neither keeps gatePosts' order.
+ */
+export function gateGuardPosts(t: Town, k: ClanKey, free: (x: number, y: number) => boolean = (x, y) => !onTownGround(x, y) && !blocked(x, y)): { x: number; y: number }[] {
+  const plain = gatePosts(t), g = gatePx(t), r = keepOut(t), roles = plain.map((_, i) => (i === 0 ? "foot" : planRole(k, "gate", i)));
+  if (!r || roles.every((x) => x === "foot")) return plain;
+  const tx = ((r.x0 + r.x1) / 2) * TILE - g.x, ty = ((r.y0 + r.y1) / 2) * TILE - g.y, tl = Math.hypot(tx, ty) || 1, back: [number, number] = [tx / tl, ty / tl];
+  const inward = (p: { x: number; y: number }) => (p.x - g.x) * back[0] + (p.y - g.y) * back[1];
+  const spots = plain.slice(1).sort((a, b) => inward(a) - inward(b)), rank: Record<TroopRole, number> = { pike: 0, rider: 1, foot: 2, archer: 3 };
+  const order = roles.map((_, i) => i).slice(1).sort((a, b) => rank[roles[a]] - rank[roles[b]] || a - b);
+  const out = plain.slice();
+  order.forEach((i, n) => {
+    const p = spots[n], q = rolePlace(roles[i], p.x, p.y, back, [0, 0]);
+    out[i] = roles[i] === "foot" || !free(q.x, q.y) ? p : q;
+  });
+  return out;
 }
 
 /** An archer's move against a foe `dist` px away: -1 step back (inside keepAway), 1 close in (out of range), 0 stand and shoot. */

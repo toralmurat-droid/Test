@@ -20,7 +20,8 @@ import { channelStep, NO_RITUAL, pauseStep, RITUAL, ritualDay, ritualLine, ritua
 import { targetsOf, type WarState } from "../shared/war/rules";
 import { STANDARD } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
-import { parseTroop, troopLevel, troopStance, troopStats, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
+import { ritualPlace } from "../shared/war/troopRoles";
+import { parseTroop, squadMod, type TroopRole, troopLevel, troopStance, troopStats, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
 import { addValor, warNow, warState } from "./war";
 import type { SiegeHero } from "./warSieges";
 import { newFighter, type FightGround, type Fighter, type TroopMob, type WarTroops } from "./warTroops";
@@ -65,7 +66,8 @@ interface Ritual {
   live: boolean; lastHero: number; lastStep: number; lingerUntil: number;
   slots: Slot[]; g: FightGround;
 }
-interface Acolyte extends Fighter { r: Ritual; slot: Slot }
+/** An acolyte: its circle, its slot (its role by slot: ROLE_PLAN.ritual), and its own ground when it has a role (the circle's, and its place: a pike's tether). */
+interface Acolyte extends Fighter { r: Ritual; slot: Slot; g?: FightGround }
 
 const offLimits = (x: number, y: number) => isSafeZone(x, y) || inVillage(x, y) || noMobsAt(x, y);
 const the = (name: string) => name.replace(/^The /, "the ");
@@ -143,11 +145,14 @@ export class WarRituals {
     if (r.state === "done") { if (now >= r.lingerUntil) for (const sl of r.slots) this.drop(sl); return; }
     for (const sl of r.slots) {
       if (sl.id || sl.dead || this.count >= room) continue;
-      const post = this.postOf(r, sl.i), id = `wr${++this.seq}`, m = this.h.spawn(id, r.level, post.x, post.y, troopWeapon(RITUAL.clan));
+      const post = this.postOf(r, sl.i), role = post.role, mod = squadMod("ritual", role); // (archers inside the circle: ROLE_PLAN.ritual; TROOP_ROLE.squad)
+      const id = `wr${++this.seq}`, m = this.h.spawn(id, r.level, post.x, post.y, troopWeapon(RITUAL.clan, false, false, false, false, role));
       if (!m) break;
-      m.maxHp = troopStats(RITUAL.clan, r.level).hp; m.hp = sl.hp > 0 ? Math.min(m.maxHp, sl.hp) : m.maxHp;
+      m.maxHp = troopStats(RITUAL.clan, r.level, false, role, mod).hp; m.hp = sl.hp > 0 ? Math.min(m.maxHp, sl.hp) : m.maxHp;
       sl.id = id;
-      this.mobs.set(id, { ...newFighter(RITUAL.clan, false), r, slot: sl });
+      const a: Acolyte = { ...newFighter(RITUAL.clan, false, role, mod), r, slot: sl };
+      if (role !== "foot") a.g = { leash: r.g.leash, hunt: r.g.hunt, post: () => post }; // (a pike's tether: its place on the circle)
+      this.mobs.set(id, a);
     }
     // the ring: Veiled-sworn heroes help (and stand against rivals); rival troopers and hostile-sworn heroes pause it
     let helpers = 0, rivals = 0;
@@ -223,24 +228,23 @@ export class WarRituals {
     this.r = undefined;
   }
 
-  /** An acolyte's place on the circle (the centre if that spot is a wall). */
-  private postOf(r: Ritual, i: number): { x: number; y: number } {
-    const a = -Math.PI / 2 + (i * 2 * Math.PI) / RITUAL.acolytes, x = r.x + Math.cos(a) * RITUAL.postPx, y = r.y + Math.sin(a) * RITUAL.postPx;
-    return offLimits(x, y) || blocked(x, y) ? { x: r.x, y: r.y } : { x, y };
+  /** An acolyte's place on the circle and its role (an archer inside the ring: ritualPlace; the centre if that spot is a wall). */
+  private postOf(r: Ritual, i: number): { x: number; y: number; role: TroopRole } {
+    return ritualPlace(RITUAL.clan, i, r.x, r.y, (x, y) => !offLimits(x, y) && !blocked(x, y));
   }
 
   /** An acolyte's turn (TownRoom.updateMob, trooper branch): fight within the leash, else back to its place, facing the centre. */
   step(m: TroopMob, id: string, dt: number, now: number) {
     const a = this.mobs.get(id);
     if (!a) { this.h.remove(id); return; }
-    const r = a.r, post = this.postOf(r, a.slot.i);
-    if (this.soldiers.think(m, id, a, r.g, now)) return;
+    const r = a.r, post = this.postOf(r, a.slot.i), g = a.g ?? r.g;
+    if (this.soldiers.think(m, id, a, g, now)) return;
     if (!a.near) { // nobody to see it: it keeps its place (cheap)
       if (!offLimits(post.x, post.y)) { m.x = m.homeX = post.x; m.y = m.homeY = post.y; }
       m.moving = false; m.windUntil = 0; m.winding = false;
       return;
     }
-    if (this.soldiers.fight(m, id, a, r.g, dt, now)) return;
+    if (this.soldiers.fight(m, id, a, g, dt, now)) return;
     const d = Math.hypot(post.x - m.x, post.y - m.y);
     if (d > WAR_TROOPS.warpPx && !this.soldiers.seen(m, WAR_TROOPS.warpUnseenPx) && !offLimits(post.x, post.y)) { m.x = post.x; m.y = post.y; m.moving = false; return; }
     if (d < 2) { m.moving = false; m.dir = dirOf(r.x - m.x, r.y - m.y); return; } // chanting toward the centre

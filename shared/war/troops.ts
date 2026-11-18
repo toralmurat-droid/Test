@@ -116,11 +116,13 @@ export const TROOP_ROLE = {
   giveUp: { ms: 4000, shunMs: 8000 },
   /**
    * Role soldiers in the squads that fight a lone hero (planRole kinds: war road columns, caravan escorts, manhunters, the
-   * ram crew) on top of their role's numbers (HP, damage: troopStats `mod`): at full strength the roles cost a lone
-   * Songweaver up to 14 points and a Vampire 12 (tools/balance/pve.ts --column --caravan --hunters --siege; the rule: every
-   * hero row within about 10 of the all-foot squads). Patrols, guards, sieges and battles fight at full strength.
+   * ram crew; phase 4: tunnel waves, town gate guards) on top of their role's numbers (HP, damage: troopStats `mod`): at
+   * full strength the roles cost a lone Songweaver up to 14 points and a Vampire 12 (tools/balance/pve.ts --column
+   * --caravan --hunters --siege; the rule: every hero row within about 10 of the all-foot squads); a tunnel's waves up to
+   * 31 (Songweaver Lv45, --tunnel), a gate's guard up to 15 (--troops --garrison). Patrols, guards, sieges, battles and a
+   * ritual's acolytes (a sun-caster and a dune rider: within 10 untrimmed, --ritual) fight at full strength.
    */
-  squad: { column: { hp: 0.9, dmg: 0.9 }, escort: { hp: 0.8, dmg: 0.8 }, hunt: { hp: 0.92, dmg: 0.92 }, ram: { hp: 0.85, dmg: 1 } } as Partial<Record<RolePlace, { hp: number; dmg: number }>>,
+  squad: { column: { hp: 0.9, dmg: 0.9 }, escort: { hp: 0.8, dmg: 0.8 }, hunt: { hp: 0.92, dmg: 0.92 }, ram: { hp: 0.85, dmg: 1 }, tunnel: { hp: 0.8, dmg: 0.8 }, gate: { hp: 0.9, dmg: 0.9 } } as Partial<Record<RolePlace, { hp: number; dmg: number }>>,
   /**
    * `brace`: a pike facing a rival rider's charge (winding up or galloping at it, or galloping into its front) braces for
    * `ms` (Mob.winding, so the clients see it) and stops the charge on its point: its blow (x vs.pike.rider, x dmgMult)
@@ -169,12 +171,17 @@ export const CLAN_ROLES: Record<ClanKey, Partial<Record<Exclude<TroopRole, "foot
  * crew (server/warWorks.ts: a pike tethered to the ram beside a foot soldier; two pikes cost a lone Songweaver 20 points in pve.ts --siege); `battle` the field battles' lines (server/warBattles.ts,
  * battleRole: the front line's places cycle through `front` with `wings` riders at each end, the rear line's through
  * `rear`; captains are foot); `escort` a caravan's escorts (server/warCaravans.ts: place 0 rides ahead of the cart);
- * `hunt` a manhunter squad (server/warFeuds.ts, place 0 the captain). Head counts never change: only who is what.
+ * `hunt` a manhunter squad (server/warFeuds.ts, place 0 the captain). Phase 4: `tunnel` the places of each wave out of a
+ * Hide-Kin tunnel mouth (server/warTunnels.ts; by place in the wave); `ritual` a Veiled circle's acolytes
+ * (server/warRituals.ts: archers stand inside the circle, the others on it); `gate` a contested town's gate guard
+ * (server/warTowns.ts, place 0 the captain on the gate: shared/war/towns.ts gateGuardPosts puts the pikes on the ring's
+ * outer side and the archers behind them, toward the town). Head counts never change: only who is what.
  */
 export const ROLE_PLAN: {
   march: TroopRole[]; guard: Record<HoldTier, TroopRole[]>; wall: Record<HoldTier, number[]>;
   column: TroopRole[]; siege: { atk: TroopRole[]; def: TroopRole[] }; ram: TroopRole[];
   battle: { front: TroopRole[]; rear: TroopRole[]; wings: number }; escort: TroopRole[]; hunt: TroopRole[];
+  tunnel: TroopRole[]; ritual: TroopRole[]; gate: TroopRole[];
 } = {
   march: ["foot", "rider", "pike", "pike", "foot", "archer", "foot", "archer"],
   guard: {
@@ -189,6 +196,9 @@ export const ROLE_PLAN: {
   battle: { front: ["foot", "pike"], rear: ["archer", "archer", "foot"], wings: 3 },
   escort: ["rider", "foot", "foot"],
   hunt: ["foot", "rider", "archer", "pike", "foot"],
+  tunnel: ["pike", "foot", "rider"],
+  ritual: ["pike", "archer", "rider"],
+  gate: ["foot", "pike", "archer", "pike", "archer"],
 };
 /** Formation shifts by role (px) where a module stands its men in a line (sieges, battles: shared/war/troopRoles.ts rolePlace): archers this far behind their place, riders this far out on their flank. */
 export const ROLE_FORM = { archerBack: 20, riderWide: 18 };
@@ -211,8 +221,11 @@ export function roleOf(k: ClanKey, kind: "march" | "guard", tier: HoldTier, i: n
 /** The squad multipliers (TROOP_ROLE.squad) of a `role` soldier in a `kind` of squad: undefined for foot, or a kind with none. */
 export const squadMod = (kind: RolePlace, role: TroopRole): { hp: number; dmg: number } | undefined => (role === "foot" ? undefined : TROOP_ROLE.squad[kind]);
 
-/** The places the other troop modules plan by index (ROLE_PLAN): a war road column, a siege front's attackers or defenders, a ram's crew, a caravan's escorts, a manhunter squad. */
-export type RolePlace = "column" | "siegeAtk" | "siegeDef" | "ram" | "escort" | "hunt";
+/**
+ * The places the other troop modules plan by index (ROLE_PLAN): a war road column, a siege front's attackers or
+ * defenders, a ram's crew, a caravan's escorts, a manhunter squad; a tunnel wave, a ritual's acolytes, a town's gate guard.
+ */
+export type RolePlace = "column" | "siegeAtk" | "siegeDef" | "ram" | "escort" | "hunt" | "tunnel" | "ritual" | "gate";
 /**
  * The role of place `i` of clan `k` in one of those (ROLE_PLAN; battles: shared/war/troopRoles.ts battleRole). Pure and
  * by index; places past the plan are foot. Officers stay foot whatever the plan (the caller passes the officer's place).
