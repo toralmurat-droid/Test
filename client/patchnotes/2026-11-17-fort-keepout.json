@@ -1,7 +1,9 @@
 {
   "date": "2026-11-17",
   "title": "Clan forts cleared",
+  "pr": 531,
   "changes": [
-    "Wild monsters no longer spawn inside clan forts or wander into them: the holding clan's guards keep the walls."
+    "Wild monsters no longer spawn inside clan forts or wander into them: the holding clan's guards keep the walls. A monster chasing you still follows you in, then heads back out.",
+    "The old bandit camps that some forts were built on keep their bandits for now."
   ]
 }

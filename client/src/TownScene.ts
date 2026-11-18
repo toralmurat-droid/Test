@@ -39,7 +39,7 @@ import { CHORD_NAMES, MODE_COLOR, hasSongShield } from "./songTables";
 const SONG_SFX = new Set(["note", "chord", "swell", "newsong", "matpick", "lutefit", "break", "resonate", "bounce", "soundhit", "shieldbreak"]);
 import { attackMult, cooldownMult, critChance, heroSpeed, STATS, magicMult, STAT_KINDS, STAT_NAMES, StatKind, statPoints, HP_PER_STR } from "../../shared/powers";
 import { NEED_TEXT, pointRange, SkillDef, skillOf, skillTarget, MAX_STACKS, STACK_DECAY_MS, STACK_NAME, talentBonus, withMods } from "../../shared/skills";
-import { SkillFx } from "./skillfx";
+import { preloadShotSheets, SkillFx } from "./skillfx";
 import { BeastForms } from "./beastForms";
 import { movesSheet, SkillMoves } from "./skillMoves";
 import { displayGrid } from "./tileset";
@@ -493,6 +493,7 @@ export class TownScene extends Phaser.Scene {
     preloadGear(this);
     preloadPaintedMobs(this);
     preloadBakedProps(this);
+    preloadShotSheets(this);
   }
 
   async create() {

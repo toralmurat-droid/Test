@@ -19,6 +19,8 @@ import { HOLDS } from "./standards";
 export const FORT_GROUND_MARGIN = 1;
 /** How many spawn points a wild monster's spawn rolls before it gives up on a zone that is mostly fort ground. */
 export const FORT_SPAWN_TRIES = 12;
+/** Tiles of slack round the straight line when a wild monster looks for its way out of, or round, a fort (shared/bandits.ts findPath). */
+export const FORT_PATH_MARGIN = 24;
 
 let MASK: Uint8Array | undefined;
 function mask(): Uint8Array {
@@ -39,15 +41,22 @@ export function fortGroundTile(tx: number, ty: number): boolean {
 /** Is pixel (px, py) on fort ground? */
 export const fortGroundAt = (px: number, py: number): boolean => fortGroundTile(Math.floor(px / TILE), Math.floor(py / TILE));
 
+/** Does the straight walk from (x0, y0) to (x1, y1) (px) cross fort ground? Half-tile samples, so it is cheap per step. */
+export function crossesFort(x0: number, y0: number, x1: number, y1: number): boolean {
+  const n = Math.ceil(Math.hypot(x1 - x0, y1 - y0) / (TILE / 2));
+  for (let i = 1; i <= n; i++) if (fortGroundAt(x0 + (x1 - x0) * i / n, y0 + (y1 - y0) * i / n)) return true;
+  return false;
+}
+
 /** The parts of a monster isWildMob reads (TownRoom's Mob). */
 export interface FortMob { kind: string; owner: string; summonFor: string; tide?: boolean; camp?: boolean; guard?: string }
 /**
  * A wild monster: kept off fort ground. Not wild: a clan's trooper, a hero's summon or charmed monster (owner), a quest
- * monster (summonFor), a Gloam Tide marcher (it follows its march round the walls; server/tide.ts), and the monsters
+ * monster (summonFor), a Night Raider (it rides the whole map after its prey), a Gloam Tide marcher (it follows its march round the walls; server/tide.ts), and the monsters
  * whose posts were there before the Holds: Redfang camp bandits (the Hollow, Fangrock and Hidehall Holds stand in their
  * camps, shared/bandits.ts) and lair chest guardians (a few lair chests lie in a Hold's courtyard, shared/chests.ts).
  */
-export const isWildMob = (m: FortMob): boolean => m.kind !== "trooper" && !m.owner && !m.summonFor && !m.tide && !m.camp && !m.guard;
+export const isWildMob = (m: FortMob): boolean => m.kind !== "trooper" && m.kind !== "nightraider" && !m.owner && !m.summonFor && !m.tide && !m.camp && !m.guard;
 
 /** The nearest open tile centre (px) off fort ground within maxTiles of (px, py): where a wild monster's home moves. */
 export function nearestOffFort(px: number, py: number, maxTiles = 16): { x: number; y: number } | undefined {
