@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-18",
+  "title": "Clan riders and wall archers",
+  "pr": 534,
+  "changes": [
+    "Every clan now fields riders: Warden lancers, Redfang raiders, Host bone riders, Hide-Kin boar riders and Veiled dune riders. A rider lowers its weapon and marks its lane before it charges: step aside or take a heavy, staggering hit.",
+    "Pikemen brace against a charge and stop the rider cold.",
+    "Archers now stand on the walls and towers of clan forts and shoot at enemies outside. Troop archers no longer shoot through walls or rock."
+  ]
+}

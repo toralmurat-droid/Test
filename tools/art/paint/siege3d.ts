@@ -13,7 +13,7 @@ type Clan = "wardens" | "redfang" | "host" | "hidekin" | "veiled";
 type Dir = "down" | "up" | "right";
 const add = (a: V3, b: V3): V3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 /** A ramp kept as the colour (no auto-brightening of dark things). */
-const dk = (col: number, lo = 0.45, hi = 1.5, o: Partial<Omit<Mat, "ramp">> = {}, n = 8): Mat =>
+export const dk = (col: number, lo = 0.45, hi = 1.5, o: Partial<Omit<Mat, "ramp">> = {}, n = 8): Mat =>
   mat(col, { ...o, ramp: Array.from({ length: n }, (_, i) => shade(col, lo + (hi - lo) * (i / (n - 1)))) });
 const glowM = (col: number) => mat(col, { emit: 1, lo: 0.85, hi: 1.5 });
 
@@ -21,7 +21,7 @@ const BONE = 0xd8cfb2, WOOD = 0x6b4a2a, IRON = 0x6a6a68, GOLD = 0xe9b84a, TEAL =
 const wood = (c = WOOD) => dk(c, 0.45, 1.45, { grain: 0.35 });
 const bone = () => dk(BONE, 0.4, 1.18, { grain: 0.15, spec: 0.15 });
 const iron = () => dk(IRON, 0.4, 1.45, { spec: 0.8, shine: 22, grain: 0.1 });
-const gold = () => dk(GOLD, 0.45, 1.35, { spec: 1, shine: 26 });
+export const gold = () => dk(GOLD, 0.45, 1.35, { spec: 1, shine: 26 });
 
 // ---------------------------------------------------------------- transforms of whole prim lists
 /** Prims moved by `fwd` (world -> model inverse) with their boxes refit through `inv`'s forward map. */
@@ -69,7 +69,7 @@ const HORSE: Beast = { col: 0x141a18, rx: 7.8, rz: 4.4, ry: 3.8, leg: 9.0, legR:
 const MOLE: Beast = { col: 0x56524c, rx: 9.6, rz: 5.8, ry: 5.4, leg: 3.6, legR: 1.9, neck: [4.6, 0.2] };
 const CAMEL: Beast = { col: 0xb8905a, rx: 8.2, rz: 4.6, ry: 4.0, leg: 10.2, legR: 0.95, neck: [6.4, 9.6] };
 
-function beast(P: Prim[], eyes: NonNullable<Model["eyes"]>, halos: NonNullable<Model["halos"]>, clan: Clan, bx: number, by: number, p: number, bow: number) {
+export function beast(P: Prim[], eyes: NonNullable<Model["eyes"]>, halos: NonNullable<Model["halos"]>, clan: Clan, bx: number, by: number, p: number, bow: number) {
   const S = clan === "wardens" ? OX : clan === "redfang" ? BOAR : clan === "host" ? HORSE : clan === "hidekin" ? MOLE : CAMEL;
   const C = dk(S.col, 0.42, 1.5, { grain: 0.3, spec: 0.1 }), Cd = dk(mixc(S.col, 0, 0.3), 0.45, 1.4, { grain: 0.3 });
   const B = bone(), legM = S.bone ? B : Cd;

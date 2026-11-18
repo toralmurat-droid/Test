@@ -83,8 +83,8 @@ export const TROOP_VETERAN = { from: 8, hp: 0.02, dmg: 0.025 };
 
 /**
  * What a soldier does in the line (Murat: "archers, cavalry, spikemen"): the plain `foot` soldier, an `archer` who shoots
- * from range and steps back, a `rider` (phase 2: defined, not fielded yet: roleOf gives foot) and a `pike` who holds its
- * place with a longer reach. Officers are always foot. Carried as one mark on the clan key in Mob.weapon (troopWeapon).
+ * from range and steps back, a `rider` who charges from a run-up and a `pike` who holds its place with a longer reach and
+ * braces against a charge. Officers are always foot. Carried as one mark on the clan key in Mob.weapon (troopWeapon).
  */
 export type TroopRole = "foot" | "archer" | "rider" | "pike";
 export const TROOP_ROLES: readonly TroopRole[] = ["foot", "archer", "rider", "pike"];
@@ -93,8 +93,9 @@ export const TROOP_ROLES: readonly TroopRole[] = ["foot", "archer", "rider", "pi
  * The roles' numbers on top of the clan's (troopStats): `mult` on HP, melee damage and speed; the archer's bow
  * (`ranged`: its shot hits shotMult of a foot soldier's blow, from up to `range`, stepping back from foes inside
  * `keepAway`; a guard archer steps back at most `guardTetherTiles` from its post); the pike's reach past a foot soldier's
- * and how far it leaves its post or column place (`pike.tetherTiles`); the counters between troops (`vs`: attacker role ->
- * defender role -> damage multiplier, troop against troop only: never on heroes or wild monsters).
+ * and how far it leaves its post or column place (`pike.tetherTiles`), its brace (`pike.brace`); the rider's charge
+ * (`rider.charge`); the counters between troops (`vs`: attacker role -> defender role -> damage multiplier, troop against
+ * troop only: never on heroes or wild monsters).
  */
 export const TROOP_ROLE = {
   mult: {
@@ -105,9 +106,23 @@ export const TROOP_ROLE = {
   } as Record<TroopRole, { hp: number; dmg: number; speed: number }>,
   // (the plan's 0.8 / 170 px / 80 px / 1.6 s cost a lone wizard 10-25 points against a Hold's garrison: pve.ts --garrison keeps it within 10)
   ranged: { shotMult: 0.6, range: 150, keepAway: 64, everyMs: 2000, windupMs: 500, sightPx: 200, radius: 3, guardTetherTiles: 2 },
-  pike: { reach: 14, tetherTiles: 3 },
-  /** Riders stay off the field until phase 2 (their charge and the pikes' brace): roleOf fields foot in their place. */
-  rider: { fielded: false },
+  /**
+   * `brace`: a pike facing a rival rider's charge (winding up or galloping at it, or galloping into its front) braces for
+   * `ms` (Mob.winding, so the clients see it) and stops the charge on its point: its blow (x vs.pike.rider, x dmgMult)
+   * lands at once and the rider is thrown off its stride for `stunMs`. Only a pike that is not stunned or broken braces.
+   */
+  pike: { reach: 14, tetherTiles: 3, brace: { ms: 700, stunMs: 900, dmgMult: 1 } },
+  /**
+   * `fielded`: roleOf fields riders (false: foot in their place). The charge: a rider whose charge is ready and whose foe
+   * is `min`..`max` px off winds up for `windupMs` (Mob.winding and an sfx "troop_charge" with the lane: the line is
+   * fixed when the wind-up starts, so a hero who steps out of it is missed), then gallops that lane at speedMult x its
+   * speed for at most `gallopMs`. The first foe it reaches (its target, within its reach + WAR_TROOPS.rushSlack) takes
+   * dmgMult x its blow, a knockback (`kb`, x a blow's) and a `stunMs` stagger; then the charge cools for `everyMs` from
+   * the gallop's end (a charge broken off before it struck or missed, by a stun or a lost foe: `breakMs`). With its charge
+   * ready and its foe closer than `min` it wheels away for up to `wheelMs` to get a run-up (once per cooldown: after a
+   * wheel that found no room it fights on foot and tries again `everyMs` / 2 later).
+   */
+  rider: { fielded: true as boolean, charge: { min: 80, max: 200, windupMs: 550, gallopMs: 1000, speedMult: 2.2, dmgMult: 1.7, kb: 2.5, stunMs: 250, everyMs: 6000, breakMs: 2000, wheelMs: 1200 } },
   vs: { archer: { pike: 1.25 }, pike: { rider: 2 }, rider: { archer: 1.5 } } as Partial<Record<TroopRole, Partial<Record<TroopRole, number>>>>,
 };
 
@@ -116,7 +131,8 @@ export interface ClanRole { name: string; shot?: string; shotSpeed?: number }
 /**
  * Which roles each clan fields, by doctrine rather than the same for all: the Wardens' longbows and pikes, Redfang's
  * slingers (no pikes: they rush), the Host's bone archers and phalanx, the Hide-Kin's burrow-spears (no ranged: they
- * close in), the Veiled's sun-casters. A role a clan lacks is filled with foot (roleOf). Riders: phase 2.
+ * close in), the Veiled's sun-casters; every clan has its riders (Warden lancers, Redfang raiders, the Host's bone riders,
+ * Hide-Kin boar riders, Veiled dune riders). A role a clan lacks is filled with foot (roleOf).
  */
 export const CLAN_ROLES: Record<ClanKey, Partial<Record<Exclude<TroopRole, "foot">, ClanRole>>> = {
   wardens: { archer: { name: "longbowman", shot: "arrow", shotSpeed: 230 }, pike: { name: "pikeman" }, rider: { name: "lancer" } },
@@ -126,14 +142,20 @@ export const CLAN_ROLES: Record<ClanKey, Partial<Record<Exclude<TroopRole, "foot
   veiled: { archer: { name: "sun-caster", shot: "sunbolt", shotSpeed: 160 }, rider: { name: "dune rider" } },
 };
 
-/** Who stands in each place: a patrol column of 8 (the officer first) and a Hold's guards per tier (outpost, camp, fortress). */
-const ROLE_PLAN: { march: TroopRole[]; guard: Record<HoldTier, TroopRole[]> } = {
+/**
+ * Who stands in each place: a patrol column of 8 (the officer first) and a Hold's guards per tier (outpost, camp,
+ * fortress); `wall`: the guard places (by index) whose archer stands on the fort's walls or towers instead of a post
+ * outside (courtyard archers: shared/war/troopRoles.ts wallPost; a clan whose fort has no wall cell there, or that has
+ * no archers, keeps the post outside).
+ */
+export const ROLE_PLAN: { march: TroopRole[]; guard: Record<HoldTier, TroopRole[]>; wall: Record<HoldTier, number[]> } = {
   march: ["foot", "rider", "pike", "pike", "foot", "archer", "foot", "archer"],
   guard: {
     0: ["foot", "archer", "pike"],
     1: ["foot", "archer", "pike", "archer", "foot", "pike"],
     2: ["foot", "archer", "pike", "archer", "pike", "archer", "rider", "foot"],
   },
+  wall: { 0: [], 1: [3], 2: [3, 5] },
 };
 
 /**

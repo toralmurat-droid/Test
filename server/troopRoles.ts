@@ -1,19 +1,21 @@
 /**
  * The troop roles in a fight (shared/war/troops.ts TroopRole, TROOP_ROLE; the pure rules in shared/war/troopRoles.ts):
- * the archer who shoots from range and steps back, the pike who holds its place with a longer reach. Foot soldiers never
+ * the archer who shoots from range and steps back (a courtyard archer holds its place on the wall), the pike who holds
+ * its place with a longer reach and braces against a charge, the rider who charges from a run-up. Foot soldiers never
  * come here: server/warTroops.ts fight() switches on the role and keeps the foot soldier's turn as it was.
  * An archer's shot at a hero is a real projectile (the room's trooper shot: it only hurts heroes the clan fights); at a
  * monster or another trooper it is a hit that lands after the flight time (TroopArrows), with an `sfx` "troop_shot"
- * event for the clients to draw the shot.
+ * event for the clients to draw the shot, and only along a clear line (shotClear: no shooting through a wall).
+ * A rider's charge sends `sfx` "troop_charge" when it winds up (the lane), "troop_brace" when a pike stops it.
  */
-import { dirInput, MOB_ATTACK_RANGE, TILE, type MobKind } from "../shared/constants";
+import { BOSS, dirInput, ELITE, MOB_ATTACK_RANGE, TILE, type Dir, type MobKind } from "../shared/constants";
 import { MOB_COMBAT, mobBody } from "../shared/combat";
 import { isSafeZone } from "../shared/map";
 import { moveStep } from "../shared/movement";
 import { SLOW_MOB } from "../shared/powers";
 import { noMobsAt } from "../shared/spawns";
 import { inVillage } from "../shared/wrath";
-import { bowOf, flightMs, kiteStep, roleVs, shotReady } from "../shared/war/troopRoles";
+import { bowOf, chargeEnd, chargeStep, charging, flightMs, kiteStep, roleVs, shotClear, shotReady } from "../shared/war/troopRoles";
 import { parseTroop, TROOP_ROLE, troopName, troopStats, WAR_TROOPS } from "../shared/war/troops";
 import type { Fighter, FightGround, TroopHero, TroopMob, WarTroopsHost } from "./warTroops";
 
@@ -32,15 +34,15 @@ export class TroopArrows {
     for (const a of this.q) {
       if (now < a.at) { keep.push(a); continue; }
       const o = h.mob(a.to);
-      if (o && !o.dead && !o.hidden) h.strikeMob(a.from, a.to, a.dmg, true);
+      if (o && !o.dead && !o.hidden && !offLimits(o.x, o.y)) h.strikeMob(a.from, a.to, a.dmg, true); // (not on a foe that got to the safe squares)
     }
     this.q = keep;
   }
   clear() { this.q = []; }
 }
 
-/** What an archer's turn needs from WarTroops. */
-export interface RoleCtx { h: WarTroopsHost; arrows: TroopArrows; walk(m: TroopMob, gx: number, gy: number, dt: number, pace: number): void }
+/** What a role's turn needs from WarTroops (`fighter`: a patrol trooper's fighting state, for a pike's brace). */
+export interface RoleCtx { h: WarTroopsHost; arrows: TroopArrows; walk(m: TroopMob, gx: number, gy: number, dt: number, pace: number): void; fighter?(id: string): Fighter | undefined }
 
 const face = (m: TroopMob, x: number, y: number) => { m.dir = Math.abs(x - m.x) > Math.abs(y - m.y) ? (x > m.x ? "right" : "left") : (y > m.y ? "down" : "up"); };
 
@@ -49,6 +51,7 @@ const face = (m: TroopMob, x: number, y: number) => { m.dir = Math.abs(x - m.x) 
  * no farther than TROOP_ROLE.ranged.guardTetherTiles from its post. False when it could not step (pinned).
  */
 export function kiteAway(m: TroopMob, fx: number, fy: number, f: Fighter, g: FightGround, dt: number, now: number): boolean {
+  if (g.perch) return false; // a courtyard archer holds its place on the wall
   const pace = troopStats(f.clan, m.level, f.officer, f.role).speed * (m.slowed ? SLOW_MOB : 1);
   const r = moveStep(m.x, m.y, dirInput(m.x - fx, m.y - fy), dt, pace);
   if ((r.x === m.x && r.y === m.y) || offLimits(r.x, r.y) || !g.leash(r.x, r.y)) return false;
@@ -101,7 +104,7 @@ export function archerFight(c: RoleCtx, m: TroopMob, id: string, f: Fighter, g: 
     m.winding = false; m.lastAttack = now;
     const bow = bowOf(f.clan), dmg = st.shot ?? st.dmg;
     if (tp) c.h.shoot(id, f.clan, t.x, t.y, dmg, by, { kind: bow.shot, speed: bow.speed, range: R.range, radius: R.radius });
-    else if (dist <= R.range * 1.4) {
+    else if (dist <= R.range * 1.4 && shotClear(m.x, m.y, t.x, t.y)) { // (never through a wall or a rock: no free kills behind one)
       const ms = flightMs(dist, bow.speed);
       c.arrows.add(id, target, Math.round(dmg * vs), now + ms);
       c.h.sfx?.({ ev: "troop_shot", id, to: target, kind: bow.shot, x: Math.round(m.x), y: Math.round(m.y), tx: Math.round(t.x), ty: Math.round(t.y), ms });
@@ -115,12 +118,104 @@ export function archerFight(c: RoleCtx, m: TroopMob, id: string, f: Fighter, g: 
     if (now - m.lastAttack >= st.cd) { m.windUntil = now + MOB_COMBAT.trooper.windupMs; m.winding = true; }
     return true;
   }
-  if (k <= 0) {
+  const blind = k <= 0 && !!tm && !shotClear(m.x, m.y, t.x, t.y); // a monster or trooper it has no clear shot at: it goes round (a courtyard archer waits)
+  if (k <= 0 && !blind) {
     m.moving = false; face(m, t.x, t.y);
     shotReady(f, now, dist, R); // (starts the wind-up when the bow is ready)
     if (f.aimUntil) m.winding = true;
     return true;
   }
+  if (g.perch) { m.moving = false; face(m, t.x, t.y); return true; }
   c.walk(m, t.x, t.y, dt, st.speed * (m.slowed ? SLOW_MOB : 1));
+  return true;
+}
+
+const DIR_V: Record<Dir, [number, number]> = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+
+/**
+ * A rival pike that stops rider `m` (of clan `clan`) galloping along (dx, dy): within its reach ahead of the rider, not
+ * stunned or broken, braced (it saw the charge coming) or facing the rider. Undefined: none.
+ */
+function bracer(c: RoleCtx, m: TroopMob, id: string, clan: string, dx: number, dy: number, now: number): [string, TroopMob] | undefined {
+  const r = MOB_ATTACK_RANGE + TROOP_ROLE.pike.reach + WAR_TROOPS.heroBody;
+  for (const [oid, o] of c.h.mobsInBox(m.x, m.y, r)) {
+    if (oid === id || o.kind !== "trooper" || o.dead || o.hidden || o.stunned || o.broken) continue;
+    const tr = parseTroop(o.weapon);
+    if (!tr || tr.role !== "pike" || tr.clan === clan) continue;
+    const ox = o.x - m.x, oy = o.y - m.y;
+    if (Math.hypot(ox, oy) > r || ox * dx + oy * dy <= 0) continue; // not in front of the rider
+    const v = DIR_V[o.dir] ?? [0, 0], braced = (c.fighter?.(oid)?.braceUntil ?? 0) > now;
+    if (braced || -(ox * v[0] + oy * v[1]) > 0) return [oid, o];
+  }
+  return undefined;
+}
+
+/**
+ * A pike's brace against a rival rider's charge (its target, winding up or galloping): it stands facing it, braced
+ * (Mob.winding) for TROOP_ROLE.pike.brace.ms; the charge then breaks on it (riderFight). True when it braces this turn.
+ */
+export function pikeBrace(c: RoleCtx, m: TroopMob, f: Fighter, tm: TroopMob | undefined, now: number): boolean {
+  if (tm && tm.kind === "trooper" && parseTroop(tm.weapon)?.role === "rider" && charging(c.fighter?.(m.target)?.charge)) f.braceUntil = now + TROOP_ROLE.pike.brace.ms;
+  if (now >= f.braceUntil) { if (f.braceUntil) { f.braceUntil = 0; m.winding = false; } return false; }
+  m.moving = false; m.winding = true; m.windUntil = 0;
+  if (tm) face(m, tm.x, tm.y);
+  return true;
+}
+
+/**
+ * A rider's turn on its (checked) target (TROOP_ROLE.rider.charge, the pure steps in shared/war/troopRoles.ts chargeStep):
+ * wheel away for a run-up, wind up (the lane fixed and sent to the clients), gallop the lane: the first blow on its
+ * target hits hard, knocks back and staggers, a braced rival pike stops it. False: no charge now, it fights on foot (the
+ * foot soldier's blow, without the rush or the javelin: server/warTroops.ts fight).
+ */
+export function riderFight(c: RoleCtx, m: TroopMob, id: string, f: Fighter, g: FightGround, tp: TroopHero | undefined, tm: TroopMob | undefined, dt: number, now: number): boolean {
+  const t = (tp ?? tm)!, C = TROOP_ROLE.rider.charge, W = WAR_TROOPS, ch = f.charge;
+  if (m.broken || (m.windUntil && ch.phase === 0)) return false; // (a blow on foot is under way: it lands first)
+  const dist = Math.hypot(t.x - m.x, t.y - m.y), st = troopStats(f.clan, m.level, f.officer, "rider"), pace = st.speed * (m.slowed ? SLOW_MOB : 1);
+  const step = chargeStep(ch, now, dist, C);
+  if (step.act === "fight") return false;
+  if (step.act === "wheel") {
+    const r = moveStep(m.x, m.y, dirInput(m.x - t.x, m.y - t.y), dt, pace);
+    if ((r.x === m.x && r.y === m.y) || offLimits(r.x, r.y) || !g.leash(r.x, r.y)) { ch.phase = 0; ch.until = 0; return false; } // no room: on foot
+    m.x = m.homeX = r.x; m.y = m.homeY = r.y; m.moving = true; face(m, r.x * 2 - t.x, r.y * 2 - t.y);
+    return true;
+  }
+  if (step.act === "wind") {
+    if (step.start) {
+      const d = dist || 1, len = Math.round((pace * C.speedMult * C.gallopMs) / 1000);
+      ch.dx = (t.x - m.x) / d; ch.dy = (t.y - m.y) / d;
+      c.h.sfx?.({ ev: "troop_charge", id, to: m.target, x: Math.round(m.x), y: Math.round(m.y), tx: Math.round(m.x + ch.dx * len), ty: Math.round(m.y + ch.dy * len), ms: C.windupMs, gallop: C.gallopMs });
+    }
+    m.moving = false; m.winding = true; face(m, m.x + ch.dx, m.y + ch.dy);
+    return true;
+  }
+  // the gallop: a braced pike first, then its target, then a stride along the lane
+  m.winding = false;
+  const pk = bracer(c, m, id, f.clan, ch.dx, ch.dy, now);
+  if (pk) {
+    const [pid, p] = pk, pc = parseTroop(p.weapon)!, B = TROOP_ROLE.pike.brace, pf = c.fighter?.(pid);
+    if (pf) pf.braceUntil = now + B.ms;
+    p.winding = true; p.moving = false; face(p, m.x, m.y);
+    chargeEnd(ch, now, false, C); m.moving = false;
+    m.stunUntil = Math.max(m.stunUntil, now + B.stunMs); m.stunned = true;
+    c.h.sfx?.({ ev: "troop_brace", id: pid, to: id, x: Math.round(p.x), y: Math.round(p.y) });
+    c.h.strikeMob(pid, id, Math.round(troopStats(pc.clan, p.level, false, "pike").dmg * roleVs("pike", "rider") * B.dmgMult));
+    return true;
+  }
+  const reach = MOB_ATTACK_RANGE + (tm ? mobBody(tm.kind as MobKind) : W.heroBody);
+  if (dist <= reach + W.rushSlack) {
+    chargeEnd(ch, now, true, C); m.lastAttack = now; m.moving = false;
+    const dmg = Math.round(st.dmg * C.dmgMult), by = troopName(f.clan, f.officer, false, false, false, "rider");
+    if (tp) c.h.strikeHero(id, m.target, dmg, by, { push: [ch.dx, ch.dy], kb: C.kb, stunMs: C.stunMs });
+    else {
+      const vs = tm!.kind === "trooper" ? roleVs("rider", parseTroop(tm!.weapon)?.role ?? "foot") : 1, tid = m.target;
+      c.h.strikeMob(id, tid, Math.round(dmg * vs));
+      if (!tm!.dead && !BOSS[tm!.kind as MobKind] && !ELITE[tm!.kind as MobKind]) tm!.stunUntil = Math.max(tm!.stunUntil, now + C.stunMs); // (staggered)
+    }
+    return true;
+  }
+  const want = pace * C.speedMult * dt, r = moveStep(m.x, m.y, dirInput(ch.dx, ch.dy), dt, pace * C.speedMult);
+  if (Math.hypot(r.x - m.x, r.y - m.y) < want * 0.5 || offLimits(r.x, r.y) || !g.leash(r.x, r.y)) { chargeEnd(ch, now, false, C); m.moving = false; return true; } // ran into a wall or the leash: missed
+  m.x = m.homeX = r.x; m.y = m.homeY = r.y; m.moving = true; face(m, m.x + ch.dx, m.y + ch.dy);
   return true;
 }

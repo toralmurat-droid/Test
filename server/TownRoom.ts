@@ -737,7 +737,7 @@ export class TownRoom extends Room<TownState> {
     mob: (id) => this.state.mobs.get(id), mobsInBox: (x, y, r) => this.state.mobs.inBox(x, y, r),
     heroes: () => this.state.players.entries(), hero: (id) => this.state.players.get(id),
     hidden: (id, now) => inVoid(this.state.players.get(id), now),
-    strikeHero: (mid, pid, dmg, by) => { const m = this.state.mobs.get(mid); if (m) { this.broadcast("swing", { id: mid }); this.damagePlayer(pid, dmg, by, DIR_OFFSET[m.dir], 1, { atkLevel: m.level, from: mid }); this.battles.struck(mid, pid); } }, // (a battle soldier's blow keeps the hero active in the battle)
+    strikeHero: (mid, pid, dmg, by, o) => { const m = this.state.mobs.get(mid); if (m) { this.broadcast("swing", { id: mid }); this.damagePlayer(pid, dmg, by, o?.push ?? DIR_OFFSET[m.dir], o?.kb ?? 1, { atkLevel: m.level, from: mid, stunMs: o?.stunMs }); this.battles.struck(mid, pid); } }, // (a battle soldier's blow keeps the hero active in the battle; `o`: a rider's charge)
     shoot: (mid, clan, tx, ty, dmg, by, spec) => { // a javelin, or an archer's shot (`spec`: server/troopRoles.ts)
       const m = this.state.mobs.get(mid), J = WAR_TROOPS.javelin;
       if (!m) return;
@@ -865,7 +865,7 @@ export class TownRoom extends Room<TownState> {
   });
 
   /** Hold walls (server/holdWalls.ts): the forts follow the war's holders; nobody is left standing in a wall. */
-  private holdWalls = new HoldWalls({ heroes: () => this.state.players.entries(), mobs: () => this.state.mobs.entries(), wild: (m) => !(m as Mob).target && !(m as Mob).foe && this.wildMob(m as Mob) }); // (one in a fight keeps its home, and its leash, till the fight ends)
+  private holdWalls = new HoldWalls({ heroes: () => this.state.players.entries(), mobs: () => this.state.mobs.entries(), keep: (id) => this.warTroops.perched(id), wild: (m) => !(m as Mob).target && !(m as Mob).foe && this.wildMob(m as Mob) }); // (one in a fight keeps its home, and its leash, till the fight ends)
 
   /** Tabards (server/warOaths.ts): every hero's clan and Renown rank, by message (the Player schema is full). */
   private oaths = new WarOaths({ heroes: () => this.state.players.entries(), broadcast: (msg) => this.broadcast("oaths", msg) });
@@ -3302,6 +3302,7 @@ export class TownRoom extends Room<TownState> {
     this.tide.tick(now); // the Gloam Tide's march (server/tide.ts)
     this.rumours.tick(now); // rumours: reach steps, ambushers, walking up to Mags (server/rumours.ts)
     this.apprentice.tick(now); // mentoring state for heroes who just joined (server/apprentice.ts)
+    this.warTroops.frame(now); // clan archers' shots at monsters and troopers land (server/troopRoles.ts TroopArrows)
     this.state.items.forEach((it, id) => { if (now > it.expires) this.state.items.delete(id); });
     const tick = ++this.tickNo;
     // Live heroes, gathered once so each monster's "anyone near?" check is a plain array scan

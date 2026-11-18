@@ -1135,9 +1135,33 @@ orders over HTTPS, not by an in-server API call. Routine prompt and setup: [war-
 - **Phase 1 (PR #532):** archers and pikes per clan (`CLAN_ROLES`, `TROOP_ROLE`, `roleOf` in `shared/war/troops.ts`; AI in
   `shared/war/troopRoles.ts`, `server/troopRoles.ts`). Role mark in `Mob.weapon` (`)` archer, `>` rider, `|` pike). Wardens
   longbow + pike, Redfang sling, Host bone bow + pike, Hide-Kin burrow-spear, Veiled sun-caster. Patrols and Hold guards only.
-- **Phase 2 (next):** riders (`TROOP_ROLE.rider.fielded` is false; art keys `war_*_rider` named in `TROOP_LOOK`, sheets not
-  made; client `MOB_LOOK` uses line-soldier size), charge and brace, courtyard archers on fort walls, a real sling draw.
+- **Phase 2 (server/shared, this branch):** riders fielded (`TROOP_ROLE.rider.fielded`): column place 1 and fortress guard
+  place 6, every clan (Warden lancer, Redfang raider, Host bone rider, Hide-Kin boar rider, Veiled dune rider), mark `>`.
+  - **Charge** (`TROOP_ROLE.rider.charge`, pure steps `chargeStep` / `chargeEnd` / `chargeBreak` in
+    `shared/war/troopRoles.ts`, server `riderFight` in `server/troopRoles.ts`): foe 80-200 px off and the charge ready ->
+    a 550 ms wind-up (`Mob.winding`, `sfx` `troop_charge` with the lane: `x,y` -> `tx,ty`, `ms` wind-up, `gallop` ms).
+    The lane is fixed when the wind-up starts, so a hero who steps aside is missed. Gallop at 2.2x for up to 1 s; the
+    first blow on its target: x1.7 damage, x2.5 knockback along the lane, 250 ms stagger; then it wheels away and the
+    charge cools 6 s (2 s when a stun or a lost foe breaks it off). Too close with the charge ready: it wheels away once
+    for a run-up. Between charges it fights on foot (the foot soldier's blow, no rush, no javelin).
+  - **Brace** (`TROOP_ROLE.pike.brace`, `pikeBrace`): a pike whose foe is a rival rider winding up or galloping stands
+    braced (`Mob.winding`); a galloping rider with a rival pike within reach in front of it that is braced or faces it
+    is stopped: the pike's blow x`vs.pike.rider` lands at once, the rider is staggered 900 ms, the charge cools.
+    `sfx` `troop_brace` (`id` the pike, `to` the rider, `x,y`).
+  - **Courtyard archers** (`ROLE_PLAN.wall`: camp place 3, fortress places 3 and 5, archer clans only; `wallPosts` /
+    `wallPost`): they stand on a tower (else a main wall cell) on the fort's outer edge, are put there at spawn (never
+    walk onto a wall), never step off (`FightGround.perch`: no kiting, no closing in), hunt no wild monster unprovoked,
+    and the wall sweep leaves them (`HoldWallHost.keep`). Redfang camps (no wall cells) and ~10-25% of fitted fortresses
+    keep the post outside for one or both.
+  - **Archer fixes:** shots at monsters / troopers only along a clear line (`shotClear`: rock, water, trees, live Hold
+    walls; a courtyard archer's own wall does not count), no hit on a target that reached the safe squares, and
+    `TroopArrows.fly` runs once per room tick (`WarTroops.frame`).
+  - Balance: `pve.ts --roles` has rider rows (`RoleDuel.riderBrain`, the bot rolls out of about half the wind-ups);
+    garrison rows within a few points of phase 1.
+  - Client and art in the same PR: 48x48 rider sheets, charge lane and brace effects with sounds, wall archers drawn
+    raised (a trooper archer standing on a live wall tile).
 - **Phase 3:** roles in sieges, columns, battles, caravans, feuds (all foot today).
-- **Known follow-ups:** archer hits on monsters/troopers land with no wall or safe-zone check (`server/troopRoles.ts`);
-  `TroopArrows.fly` runs per patrol trooper step (move to once per tick); ranged heroes can farm guard pikes beyond the tether.
+- **Known follow-ups:** ranged heroes can farm guard pikes beyond the tether and wall archers (bow 150 px) from beyond
+  their range (a longer bow on the wall, or dropping an unreachable target); a real sling draw; riders and pikes in the
+  other modules (sieges, columns, battles, caravans, feuds: phase 3).
 - Plan: /mnt/project-files/clan-war/troop-roles-plan.md.

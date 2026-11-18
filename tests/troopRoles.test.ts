@@ -42,18 +42,18 @@ test("troop roles: roleOf is pure, by place, and keeps the counts", () => {
   assert.equal(TROOP.perPatrol, 8); assert.equal(patrolCount(100), 8);
   assert.deepEqual(TROOP.garrison.map((g) => [...g]), [[2, 3], [4, 6], [6, 8]]);
   assert.equal(garrisonCount(100, 0), 3); assert.equal(garrisonCount(100, 1), 6); assert.equal(garrisonCount(100, 2), 8);
-  // the plan for a clan that fields both (the Wardens), riders not fielded yet: foot
+  // the plan for a clan that fields every role (the Wardens): one rider in a column, one at a fortress
   const plan = (kind: "march" | "guard", tier: HoldTier, n: number) => Array.from({ length: n }, (_, i) => roleOf("wardens", kind, tier, i));
-  assert.deepEqual(plan("march", 1, 8), ["foot", "foot", "pike", "pike", "foot", "archer", "foot", "archer"]);
+  assert.deepEqual(plan("march", 1, 8), ["foot", "rider", "pike", "pike", "foot", "archer", "foot", "archer"]);
   assert.deepEqual(plan("guard", 0, 3), ["foot", "archer", "pike"]);
   assert.deepEqual(plan("guard", 1, 6), ["foot", "archer", "pike", "archer", "foot", "pike"]);
-  assert.deepEqual(plan("guard", 2, 8), ["foot", "archer", "pike", "archer", "pike", "archer", "foot", "foot"]);
+  assert.deepEqual(plan("guard", 2, 8), ["foot", "archer", "pike", "archer", "pike", "archer", "rider", "foot"]);
   for (const k of CLAN_KEYS) for (const kind of ["march", "guard"] as const) for (const tier of [0, 1, 2] as HoldTier[]) for (let i = 0; i < 12; i++) {
     const r = roleOf(k, kind, tier, i);
     assert.equal(roleOf(k, kind, tier, i), r, "deterministic");
     if (i === 0) assert.equal(r, "foot", "the officer's place is foot");
     assert.ok(r === "foot" || CLAN_ROLES[k][r], `${k} fields ${r}`);
-    assert.notEqual(r, "rider", "no riders until phase 2");
+    if (r === "rider") assert.ok(kind === "march" ? i === 1 : tier === 2 && i === 6, `${k} ${kind} ${tier} ${i}: one rider per column and per fortress`);
   }
   // a clan without the role fields foot there
   assert.ok(Array.from({ length: 8 }, (_, i) => roleOf("hidekin", "guard", 2, i)).every((r) => r !== "archer"), "no Hide-Kin archers");

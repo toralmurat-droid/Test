@@ -462,6 +462,20 @@ const R: Record<string, Recipe> = {
   stomp: (o, t, v) => thud(o, t, 55, 0.5 * v, 0.25),
 
   // ---- shots and impacts
+  // a clan rider winds up its charge: a short horn call, a neigh and a hoof drum that quickens
+  troopCharge: (o, t, v) => {
+    tone(o, t, { type: "sawtooth", f: 220, f2: 262, dur: 0.3, vol: 0.14 * v, att: 0.04 });
+    tone(o, t + 0.02, { type: "square", f: 220 * 1.5, f2: 262 * 1.5, dur: 0.28, vol: 0.05 * v, att: 0.04 });
+    voice(o, t + 0.1, { f: 520, f2: 880, dur: 0.22, vol: 0.12 * v, vowel: [700, 1500], vowel2: [500, 1900] });
+    for (let i = 0; i < 6; i++) thud(o, t + 0.2 + i * (0.09 - i * 0.008), 105 + i * 8, (0.14 + i * 0.03) * v, 0.08);
+  },
+  // a braced pike stops a rider: wood and iron crack, a heavy thud, a horse's cry
+  troopBrace: (o, t, v) => {
+    noise(o, t, { type: "bandpass", f: 900, q: 3, dur: 0.07, vol: 0.4 * v });
+    clank(o, t, 0.4 * v, 1500);
+    thud(o, t + 0.02, 80, 0.55 * v, 0.28);
+    voice(o, t + 0.05, { f: 700, f2: 380, dur: 0.28, vol: 0.12 * v, vowel: [700, 1500], vowel2: [500, 1000] });
+  },
   shotBow: (o, t, v) => { tone(o, t, { type: "triangle", f: rnd(200, 240), f2: 160, dur: 0.12, vol: 0.25 * v }); whoosh(o, t + 0.01, 2500, 4500, 0.12, 0.2 * v); },
   shotThrow: (o, t, v) => whoosh(o, t, 1500, 3500, 0.15, 0.3 * v),
   shotFire: (o, t, v) => fireRoar(o, t, 0.3, 0.35 * v),
@@ -1445,6 +1459,8 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
       case "zap": play("zap", ev.x2, ev.y2, 0.7, undefined, { key: "zap", minGap: 90 }); break;
       case "turret": pos("turret"); break;
       case "troop_shot": play(ev.kind === "stone" ? "shotStone" : ev.kind === "sunbolt" ? "shotFire" : "shotBow", ev.x, ev.y, 0.7, undefined, { key: "ts", minGap: 60 }); break; // a clan archer looses
+      case "troop_charge": play("troopCharge", ev.x, ev.y, 0.85, undefined, { key: "tc", minGap: 250 }); break; // a rider winds up its charge
+      case "troop_brace": play("troopBrace", ev.x, ev.y, 0.9, undefined, { key: "tb", minGap: 200 }); break; // a pike stops a rider
       case "enchanthit": pos("enchanthit", 0.8, undefined, { key: "eh", minGap: 80 }); break;
       case "thorns": pos("thorns", 0.8, undefined, { key: "th", minGap: 80 }); break;
       // the Summoner's Void (client/src/skillfx.ts draws them)

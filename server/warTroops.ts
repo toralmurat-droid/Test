@@ -5,7 +5,8 @@
  * and fight the heroes their clan fights (troopStance: sworn to a clan at war, provoked, Wanted: shared/war/feuds.ts); only
  * those heroes can hurt them. A Wanted hero is seen from farther and chased past the leash. Fallen troopers come back at the Hold gate; a
  * land with no hero near goes back to sleep. Each place in a column or a guard has its role (shared/war/troops.ts roleOf):
- * archers and pikes fight their own way (server/troopRoles.ts), the foot soldier's turn below is that of before the roles.
+ * archers, pikes and riders fight their own way (server/troopRoles.ts), the foot soldier's turn below is that of before
+ * the roles. A fort's courtyard archers (ROLE_PLAN.wall) stand on its walls or towers and never leave them.
  * TownRoom calls in at a few points (a tick a second, every trooper's turn, a hero's hit on one, its death, the war
  * news, a hero leaving) through the narrow WarTroopsHost below. Troopers give no XP and no loot (TownRoom.hitTarget).
  */
@@ -23,7 +24,7 @@ import type { HoldTier } from "../shared/war/holdTiers";
 import { RENOWN_RANKS, rankOf } from "../shared/war/renown";
 import { TERRITORIES } from "../shared/war/territories";
 import { columnLead, parseTroop, roleOf, TROOP_ROLE, troopLevel, troopStats, troopName, troopStance, troopWeapon, WAR_TROOPS, type TroopRole, type TroopStance } from "../shared/war/troops";
-import { roleVs } from "../shared/war/troopRoles";
+import { chargeBreak, newCharge, roleVs, shotClear, wallPost, type Charge } from "../shared/war/troopRoles";
 import type { WarView } from "../shared/war/view";
 import { rallyRenown, targetsOf } from "../shared/war/rules";
 import { atWar, FEUD, wantedTier, type FeudState } from "../shared/war/feuds";
@@ -32,7 +33,7 @@ import { territoryAt } from "../shared/war/view";
 import { inSackReach } from "../shared/war/holdSack";
 import { addValor, warNow, warState } from "./war";
 import { boonRenown, keyOf } from "./warCrown";
-import { archerFight, offLimits, pikeHolds, pikeTether, TroopArrows, type RoleCtx } from "./troopRoles";
+import { archerFight, offLimits, pikeBrace, pikeHolds, pikeTether, riderFight, TroopArrows, type RoleCtx } from "./troopRoles";
 
 /** The parts of a hero this module reads (TownRoom's Player). */
 /** `cls`: the hero's class (a Reckoning keys its heroes by account and class: server/warCrown.ts keyOf). */
@@ -57,13 +58,13 @@ export interface WarTroopsHost {
   hero(id: string): TroopHero | undefined;
   /** The hero cannot be seen or touched right now (Void Slip). */
   hidden(id: string, now: number): boolean;
-  /** A trooper's blow on a hero / on a monster (summons and other troopers included). */
-  strikeHero(mobId: string, heroId: string, dmg: number, byName: string): void;
+  /** A trooper's blow on a hero / on a monster (summons and other troopers included). `o`: a rider's charge (its lane as the push, a harder knockback, a stagger). */
+  strikeHero(mobId: string, heroId: string, dmg: number, byName: string, o?: { push?: [number, number]; kb?: number; stunMs?: number }): void;
   /** `shot`: an archer's shot landing (server/troopRoles.ts TroopArrows), no swing. */
   strikeMob(mobId: string, targetId: string, dmg: number, shot?: boolean): void;
   /** A javelin from the trooper toward (tx, ty), or an archer's shot (`spec`): it only hurts heroes clan `clan` fights. */
   shoot(mobId: string, clan: ClanKey, tx: number, ty: number, dmg: number, byName: string, spec?: TroopShot): void;
-  /** An `sfx` event for the clients (an archer's shot at a monster or a trooper: "troop_shot"). */
+  /** An `sfx` event for the clients (an archer's shot at a monster or a trooper: "troop_shot"; a rider's charge: "troop_charge", a pike stopping it: "troop_brace"). */
   sfx?(msg: { ev: string } & Record<string, unknown>): void;
   /** A hero reached a new renown rank (the room tells them, as for the standards). */
   ranked(heroId: string, rank: string): void;
@@ -79,8 +80,11 @@ type Role = "march" | "guard";
 interface Slot { role: Role; i: number; officer: boolean; id: string; fellAt: number }
 /** `tier`: the Hold's tier its guards stand round (holdTiers.ts, from the war snapshot): their number and posts follow it. */
 interface Land { t: number; clan?: ClanKey; tier: HoldTier; lastHero: number; slots: Slot[] }
-/** A soldier's fighting state: a patrol trooper's, or a caravan escort's (server/warCaravans.ts). `role`: foot but for patrol archers and pikes (nextShot / aimUntil: an archer's bow). */
-export interface Fighter { clan: ClanKey; officer: boolean; role: TroopRole; nextPick: number; near: boolean; nextRush: number; rushUntil: number; rushHit: boolean; nextThrow: number; throwing: boolean; nextShot: number; aimUntil: number }
+/**
+ * A soldier's fighting state: a patrol trooper's, or a caravan escort's (server/warCaravans.ts). `role`: foot but for patrol
+ * archers, pikes and riders (nextShot / aimUntil: an archer's bow; charge: a rider's; braceUntil: a pike braced against one).
+ */
+export interface Fighter { clan: ClanKey; officer: boolean; role: TroopRole; nextPick: number; near: boolean; nextRush: number; rushUntil: number; rushHit: boolean; nextThrow: number; throwing: boolean; nextShot: number; aimUntil: number; charge: Charge; braceUntil: number }
 /**
  * Where a soldier fights: `leash` holds every foe and chase, `hunt` the wild monsters it goes for unprovoked, `far` (when
  * given) the wider leash for a hero its clan wants (shared/war/feuds.ts FEUD.leashTiles).
@@ -90,9 +94,11 @@ export interface FightGround {
   /** Heroes it fights at all (unset: every enemy; a town's gate guard: TOWN.minFoeLevel and up). */ foe?(hero: TroopHero): boolean;
   /** Its post or column place now (a pike's tether, a guard archer's), and whether it is a Hold guard (server/troopRoles.ts). */
   post?(now: number): { x: number; y: number }; guard?: boolean;
+  /** A courtyard archer on its wall post: it never steps off it and hunts no wild monster (only what it fights or what hit it). */
+  perch?: boolean;
 }
 export const newFighter = (clan: ClanKey, officer: boolean, role: TroopRole = "foot"): Fighter =>
-  ({ clan, officer, role: officer ? "foot" : role, nextPick: 0, near: false, nextRush: 0, rushUntil: 0, rushHit: false, nextThrow: 0, throwing: false, nextShot: 0, aimUntil: 0 });
+  ({ clan, officer, role: officer ? "foot" : role, nextPick: 0, near: false, nextRush: 0, rushUntil: 0, rushHit: false, nextThrow: 0, throwing: false, nextShot: 0, aimUntil: 0, charge: newCharge(), braceUntil: 0 });
 interface Troop extends Fighter { t: number; slot: Slot; g: FightGround }
 
 const SLEEPING = -Infinity;
@@ -114,7 +120,7 @@ export class WarTroops {
   private roleCtx: RoleCtx;
 
   constructor(private h: WarTroopsHost) {
-    this.roleCtx = { h, arrows: this.arrows, walk: (m, gx, gy, dt, pace) => this.walk(m, gx, gy, dt, pace) };
+    this.roleCtx = { h, arrows: this.arrows, walk: (m, gx, gy, dt, pace) => this.walk(m, gx, gy, dt, pace), fighter: (id) => this.troops.get(id) };
   }
 
   /** Troopers alive now (tests, the bench). */
@@ -145,6 +151,12 @@ export class WarTroops {
 
   /** Is this one of the patrol troopers (a land's column or guards)? */
   owns(id: string): boolean { return this.troops.has(id); }
+
+  /** Is this a courtyard archer standing on its fort's wall (the wall sweep, server/holdWalls.ts, leaves it there)? */
+  perched(id: string): boolean { return !!this.troops.get(id)?.g.perch; }
+
+  /** Once per room tick: the archers' shots at monsters and troopers in flight land. */
+  frame(now = Date.now()) { if (this.arrows.size) this.arrows.fly(this.h, now); }
 
   /**
    * A patrol trooper died (by any hand). A hero sworn to another clan standing in its land gets the writ credit (returned:
@@ -315,7 +327,8 @@ export class WarTroops {
       for (const s of land.slots) if (!slots.slice(0, want).includes(s) && s.id) this.drop(s);
       land.slots = slots.slice(0, want);
       for (const s of land.slots) {
-        if (s.id) continue;
+        if (s.id) { const tr = this.troops.get(s.id); if (tr) this.perch(tr, this.h.mob(s.id)); continue; } // (the Hold's tier may have changed: on or off the wall)
+
         if (s.fellAt !== SLEEPING && now - s.fellAt < WAR_TROOPS.respawnMs) continue;
         // a land that just woke has its men at their posts; a new holder, the fallen and new recruits come out of the Hold gate
         this.spawn(land, s, fresh && !flipped && s.fellAt === SLEEPING ? this.postOf(t, s, now) : { ...patrolOf(t)!.pts[0] }, clan);
@@ -335,9 +348,21 @@ export class WarTroops {
     m.hp = m.maxHp = troopStats(clan, level, s.officer, role).hp;
     s.id = id; s.fellAt = SLEEPING;
     const t = land.t, W = WAR_TROOPS;
-    const g: FightGround = { leash: (x, y) => this.inLand(t, x, y, W.leashTiles), hunt: (x, y) => this.inLand(t, x, y, W.mobMarginTiles), far: (x, y) => this.inLand(t, x, y, W.leashTiles + FEUD.leashTiles) };
+    const g: FightGround = { leash: (x, y) => this.inLand(t, x, y, W.leashTiles), hunt: (x, y) => !g.perch && this.inLand(t, x, y, W.mobMarginTiles), far: (x, y) => this.inLand(t, x, y, W.leashTiles + FEUD.leashTiles) };
     if (role !== "foot") { g.post = (now) => this.postOf(t, s, now); g.guard = s.role === "guard"; } // (a pike's tether, a guard archer's)
-    this.troops.set(id, { ...newFighter(clan, s.officer, role), t, slot: s, g });
+    const tr: Troop = { ...newFighter(clan, s.officer, role), t, slot: s, g };
+    this.troops.set(id, tr);
+    this.perch(tr, m);
+  }
+
+  /**
+   * A courtyard archer (ROLE_PLAN.wall: a guard archer whose fort at its land's tier has a wall post for its place) stands
+   * on its post: put there at once (it climbs up; it never walks onto a wall). Called at spawn and every tick (the tier may change).
+   */
+  private perch(tr: Troop, m: TroopMob | undefined) {
+    const land = this.lands.get(tr.t), p = tr.role === "archer" && tr.slot.role === "guard" && land?.clan ? wallPost(tr.t, land.clan, land.tier, tr.slot.i) : undefined;
+    tr.g.perch = !!p;
+    if (p && m && (m.x !== p.x || m.y !== p.y)) { m.x = m.homeX = p.x; m.y = m.homeY = p.y; m.moving = false; }
   }
 
   private drop(s: Slot) {
@@ -359,7 +384,11 @@ export class WarTroops {
   /** Where a trooper of this slot belongs now: its place in the marching column, or its guard post. */
   private postOf(t: number, s: Slot, now: number): { x: number; y: number } {
     const p = patrolOf(t)!;
-    if (s.role === "guard") { const g = this.guardPost(t, s.i); return g ? { x: g.x, y: g.y } : { ...p.pts[0] }; }
+    if (s.role === "guard") {
+      const tr = s.id ? this.troops.get(s.id) : undefined, land = this.lands.get(t), w = tr?.g.perch && land?.clan ? wallPost(t, land.clan, land.tier, s.i) : undefined;
+      if (w) return w; // a courtyard archer's place on the wall
+      const g = this.guardPost(t, s.i); return g ? { x: g.x, y: g.y } : { ...p.pts[0] };
+    }
     const lead = columnLead(p, now), q = patrolPos(p, lead.d - (s.i >> 1) * TROOP.rankGap), side = s.i & 1 ? 1 : -1;
     const ox = q.x - q.dy * side * TROOP.lateral, oy = q.y + q.dx * side * TROOP.lateral;
     return offLimits(ox, oy) || blocked(ox, oy) ? { x: q.x, y: q.y } : { x: ox, y: oy };
@@ -406,6 +435,7 @@ export class WarTroops {
     const hated = m.hateId && m.hate > 0 ? this.h.mob(m.hateId) : undefined; // (the only one it sees from twice as far)
     for (const [oid, o] of hated ? [...this.h.mobsInBox(m.x, m.y, R), [m.hateId, hated] as [string, TroopMob]] : this.h.mobsInBox(m.x, m.y, R)) {
       if (oid === id || o.dead || o.hidden) continue;
+      if (g.perch && !shotClear(m.x, m.y, o.x, o.y)) continue; // a courtyard archer only goes for what it can shoot from its wall
       if (o.kind === "trooper") { const k = parseTroop(o.weapon); if (k && k.clan !== tr.clan && !k.object) consider(oid, o.x, o.y, W.troopBonus); continue; } // (carts and rams are for heroes to wreck)
       if (o.owner) { if (this.stance(tr.clan, o.owner) === "enemy") consider(oid, o.x, o.y, 0); continue; }
       const fought = oid === m.hateId && m.hate > 0; // whatever hit it, it answers (within its leash)
@@ -420,12 +450,13 @@ export class WarTroops {
   step(m: TroopMob, id: string, dt: number, now: number) {
     const tr = this.troops.get(id);
     if (!tr) { this.h.remove(id); return; } // left over from a land that is gone (should not happen)
-    if (this.arrows.size) this.arrows.fly(this.h, now); // archers' shots at monsters and troopers land
+    if (tr.g.perch) { const p = this.postOf(tr.t, tr.slot, now); if (m.x !== p.x || m.y !== p.y) { m.x = m.homeX = p.x; m.y = m.homeY = p.y; } } // (a knock never throws a courtyard archer off its wall)
     if (this.think(m, id, tr, tr.g, now)) return;
     if (!tr.near) { // no hero near enough to see it: it just keeps its place, no walking and no fights (cheap)
       const post = this.postOf(tr.t, tr.slot, now);
       if ((Math.abs(post.x - m.x) > 1 || Math.abs(post.y - m.y) > 1) && !offLimits(post.x, post.y)) { m.x = m.homeX = post.x; m.y = m.homeY = post.y; }
-      m.moving = false; m.windUntil = 0; m.winding = false; tr.aimUntil = 0;
+      m.moving = false; m.windUntil = 0; m.winding = false; tr.aimUntil = 0; tr.braceUntil = 0;
+      chargeBreak(tr.charge, now);
       return;
     }
     if (this.fight(m, id, tr, tr.g, dt, now)) return;
@@ -445,7 +476,7 @@ export class WarTroops {
    */
   think(m: TroopMob, id: string, f: Fighter, g: FightGround, now: number): boolean {
     m.stunned = now < m.stunUntil; m.slowed = now < m.slowUntil;
-    if (m.stunned || m.broken) { m.winding = false; m.windUntil = 0; f.throwing = false; f.rushHit = false; f.aimUntil = 0; }
+    if (m.stunned || m.broken) { m.winding = false; m.windUntil = 0; f.throwing = false; f.rushHit = false; f.aimUntil = 0; f.braceUntil = 0; chargeBreak(f.charge, now); } // (a stun breaks a charge off)
     if (m.stunned) { m.moving = false; return true; }
     if (now >= f.nextPick) {
       f.nextPick = now + WAR_TROOPS.pickMs;
@@ -467,8 +498,15 @@ export class WarTroops {
     if (m.target && (!t || (tp && (tp.dead || this.stance(tr.clan, m.target) !== "enemy" || this.h.hidden(m.target, now) || (g.foe && !g.foe(tp))))
       || (tm && (tm.dead || tm.hidden)) || offLimits(t.x, t.y) || !(far ? g.far!(t.x, t.y) : g.leash(t.x, t.y)))) { m.target = ""; m.windUntil = 0; m.winding = false; }
     if (tr.role === "pike" && m.target && t && !pikeHolds(g, t.x, t.y, now)) { m.target = ""; m.windUntil = 0; m.winding = false; } // a pike keeps its place
-    if (!m.target || !t) { tr.throwing = false; tr.rushHit = false; if (tr.aimUntil) { tr.aimUntil = 0; m.winding = false; } return false; }
+    if (!m.target || !t) {
+      tr.throwing = false; tr.rushHit = false; if (tr.aimUntil) { tr.aimUntil = 0; m.winding = false; }
+      if (tr.charge.phase === 1 || tr.charge.phase === 2) { chargeBreak(tr.charge, now); m.winding = false; } // (its foe is gone: the charge is off)
+      if (tr.braceUntil) { tr.braceUntil = 0; m.winding = false; }
+      return false;
+    }
     if (tr.role === "archer") return archerFight(this.roleCtx, m, id, tr, g, tp, tm, dt, now);
+    if (tr.role === "rider" && riderFight(this.roleCtx, m, id, tr, g, tp, tm, dt, now)) return true;
+    if (tr.role === "pike" && pikeBrace(this.roleCtx, m, tr, tm, now)) return true;
     const st = troopStats(tr.clan, m.level, tr.officer, tr.role), speed = st.speed * (m.slowed ? SLOW_MOB : 1);
     const W = WAR_TROOPS, dist = Math.hypot(t.x - m.x, t.y - m.y), reach = MOB_ATTACK_RANGE + (tm ? mobBody(tm.kind as MobKind) : W.heroBody) + (tr.role === "pike" ? TROOP_ROLE.pike.reach : 0);
     const R = W.rush, J = WAR_TROOPS.javelin, by = troopName(tr.clan, tr.officer, false, false, false, tr.role);
@@ -482,7 +520,7 @@ export class WarTroops {
     }
     if (tr.rushHit && now > tr.rushUntil + R.missGraceMs) tr.rushHit = false; // missed
     // a javelin at an enemy hero a few steps away
-    if (tp && !m.broken && !m.windUntil && !tr.rushHit && (tr.throwing || (now >= tr.nextThrow && dist >= J.min && dist <= J.max))) {
+    if (tp && tr.role !== "rider" && !m.broken && !m.windUntil && !tr.rushHit && (tr.throwing || (now >= tr.nextThrow && dist >= J.min && dist <= J.max))) { // (a rider charges instead)
       if (!tr.throwing) { tr.throwing = true; tr.nextThrow = now + J.windupMs; m.winding = true; }
       m.moving = false;
       m.dir = Math.abs(t.x - m.x) > Math.abs(t.y - m.y) ? (t.x > m.x ? "right" : "left") : (t.y > m.y ? "down" : "up");
@@ -491,7 +529,7 @@ export class WarTroops {
       this.h.shoot(id, tr.clan, t.x, t.y, Math.round(st.dmg * J.dmgMult), by);
       return true;
     }
-    if (!m.broken && !m.windUntil && now >= tr.nextRush && dist >= R.min && dist <= R.max) { tr.nextRush = now + R.everyMs; tr.rushUntil = now + R.ms; tr.rushHit = true; }
+    if (tr.role !== "rider" && !m.broken && !m.windUntil && now >= tr.nextRush && dist >= R.min && dist <= R.max) { tr.nextRush = now + R.everyMs; tr.rushUntil = now + R.ms; tr.rushHit = true; }
     if ((dist <= reach || m.windUntil) && !m.broken) {
       m.moving = false;
       m.dir = Math.abs(t.x - m.x) > Math.abs(t.y - m.y) ? (t.x > m.x ? "right" : "left") : (t.y > m.y ? "down" : "up");

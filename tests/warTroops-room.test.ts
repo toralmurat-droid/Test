@@ -12,6 +12,7 @@ import { tierWallAt } from "../shared/war/holdWalls";
 import { newWar, targetsOf } from "../shared/war/rules";
 import { TERRITORIES } from "../shared/war/territories";
 import { parseTroop, WAR_TROOPS } from "../shared/war/troops";
+import { wallPosts } from "../shared/war/troopRoles";
 import { SAFE_ZONE } from "../shared/map";
 import { SPAWN_ZONES } from "../shared/spawns";
 import { _resetWar, warNow, warState } from "../server/war";
@@ -279,7 +280,9 @@ test("war troops (room, W3): the guards follow the Hold's tier: 3 at an outpost,
     warState()!.fort[LAND.id] = 0.7;
     const posts = garrisonSpots(LAND.id, 8, 2);
     for (const p of posts) assert.ok(!tierWallAt(Math.floor(p.x / TILE), Math.floor(p.y / TILE), 2).wall && inSackReach(LAND.id, p.x, p.y, 2));
-    const ok = await until(() => { room.warTroops.tick(Date.now()); return guards().length === 8 && guards().every(([, m]) => posts.some((q) => Math.hypot(q.x - m.x, q.y - m.y) < 6)); }, 15000);
+    const walls = wallPosts(LAND.id, warState()!.owner[LAND.id] as ClanKey, 2); // (courtyard archers stand on the walls: ROLE_PLAN.wall)
+    for (const p of walls) assert.ok(inSackReach(LAND.id, p.x, p.y, 2), "a wall post is in the sack reach");
+    const ok = await until(() => { room.warTroops.tick(Date.now()); return guards().length === 8 && guards().every(([, m]) => [...posts, ...walls].some((q) => Math.hypot(q.x - m.x, q.y - m.y) < 6)); }, 15000);
     assert.ok(ok, `every guard at a fortress post: ${JSON.stringify(guards().map(([, m]) => [Math.round(m.x), Math.round(m.y), m.target]))} posts ${JSON.stringify(posts.map((q) => [Math.round(q.x), Math.round(q.y)]))}`);
   } finally { await srv.stop(); }
 });

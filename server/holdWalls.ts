@@ -21,6 +21,8 @@ export interface HoldWallHost {
   mobs(): Iterable<[string, WallBody]>;
   /** Is this monster wild (shared/war/fortGround.ts isWildMob)? A wild one whose home lies on fort ground gets a home outside. */
   wild?(m: WallBody): boolean;
+  /** A monster that stands on a wall on purpose (a courtyard archer, server/warTroops.ts perched): the sweep leaves it there. */
+  keep?(id: string): boolean;
 }
 
 export class HoldWalls {
@@ -31,8 +33,8 @@ export class HoldWalls {
     setHoldOwners(owner ?? [], tier);
     let moved = 0;
     for (const [, b] of this.h.heroes()) if (this.free(b)) moved++;
-    for (const [, m] of this.h.mobs()) {
-      if (m.dead) continue;
+    for (const [id, m] of this.h.mobs()) {
+      if (m.dead || this.h.keep?.(id)) continue;
       if (this.free(m)) moved++;
       if (m.homeX !== undefined && m.homeY !== undefined && fortGroundAt(m.homeX, m.homeY) && this.h.wild?.(m)) {
         const to = nearestOffFort(m.homeX, m.homeY);
