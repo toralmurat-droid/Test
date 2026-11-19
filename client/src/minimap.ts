@@ -2,6 +2,7 @@ import { uiScale } from "./worldscale";
 import { decodeFog, encodeFog, loadFog } from "./fogmigrate";
 import { BADLANDS_H, BADLANDS_Y0, DESERT_H, DESERT_Y0, CROWN_H, CROWN_Y0, CITIES_Y0, CITIES_H, inBadlandsBand, inCitiesBand, inCrownBand, inDeepRow, inMoorsBand, inSinkholesBand, SINKHOLES_H, SINKHOLES_Y0, MOORS_Y0, MOORS_H, MAP_H, MAP_W, TILE, UNDER_END, WORLD_H } from "../../shared/constants";
 import { floorAt, SEA_END } from "../../shared/dungeon";
+import { isDesertDune } from "../../shared/desert";
 import { AREAS, areaAt, EMPTY, GROUND, OBJECTS, T } from "../../shared/map";
 import { createTilesetCanvas, tileColors } from "./tileset";
 import { ISO } from "./isoflag";
@@ -191,7 +192,7 @@ export class Minimap {
         : inSinkholesBand(y) ? sinkholesColor(o, g, colors) // the Mawdeep Sinkholes
         : inBadlandsBand(y) ? badlandsColor(o, g, colors) // the Red Badlands
         : inMoorsBand(y) ? moorsColor(o, g, colors) // the Grey Barrow Moors
-        : y >= DESERT_Y0 && y < DESERT_Y0 + DESERT_H ? (o === T.CLIFF ? "#7a4a2c" : o !== EMPTY && o !== T.BUSH ? colors[o] : g === T.SAND ? "#c99c60" : g === T.DIRT ? "#a8744a" : g === T.GRASS ? "#5e6e30" : colors[g]) // the desert
+        : y >= DESERT_Y0 && y < DESERT_Y0 + DESERT_H ? (o === T.CLIFF ? (isDesertDune(x, y) ? "#b08248" : "#7a4a2c") : o !== EMPTY && o !== T.BUSH ? colors[o] : g === T.SAND ? "#c99c60" : g === T.DIRT ? "#a8744a" : g === T.GRASS ? "#5e6e30" : colors[g]) // the desert
         : y >= SEA_END ? (o !== EMPTY ? "#0d0b0c" : "#4a3d33") : colors[o !== EMPTY ? o : g];
       b.fillRect(x, y, 1, 1);
     }

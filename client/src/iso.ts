@@ -29,7 +29,7 @@ import { SmoothGround } from "./smoothground";
 import { hiResTexture } from "./smooth";
 import { uprightTexture, UPRIGHT_OY } from "./smoothProps";
 import { ADOBE_PAD, ADOBE_WALL_H, adobeHead, adobeTexture, adobeWallTexture, bonesTexture, CLIFF_DEPTH, cliffDistance, cliffHeight, cliffTexture, cliffVariant, deadTreeTexture, desertRockTexture, sunStoneTexture, tentTexture } from "./desertArt";
-import { D, FURNACE, SUNSTONE } from "../../shared/desert";
+import { D, FURNACE, isDesertDune, SUNSTONE } from "../../shared/desert";
 import { BADLANDS_H, BADLANDS_Y0, DESERT_H, DESERT_Y0, MOORS_H, MOORS_Y0, SINKHOLES_H, SINKHOLES_Y0, CROWN_H, CROWN_Y0, CITIES_Y0 } from "../../shared/constants";
 import { cityAt } from "../../shared/capitals";
 import { CITY_LOOK } from "./cityArt";
@@ -820,6 +820,7 @@ function isoDesert(scene: Phaser.Scene, t: number, tx: number, ty: number, at: (
   const cx = (tx + 0.5) * TILE, cy = (ty + 0.5) * TILE;
   const v = Math.floor(hashXY(tx, ty) * 4);
   if (t === T.CLIFF) {
+    if (isDesertDune(tx, ty)) return true; // the rim's dune sea: ray-traced 3D sand by the ground painter (groundPaint.ts duneHit)
     const d = cd(tx, ty);
     if (d > CLIFF_DEPTH) return true; // deep inside the massif: painted as rock top by the ground
     const H = (x: number, y: number) => (id(at(x, y)) !== T.CLIFF ? 0 : cliffHeight(Math.min(cd(x, y), CLIFF_DEPTH + 1), x, y));
