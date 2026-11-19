@@ -50,6 +50,11 @@ const idsOf = (key: string) => TERRITORIES.filter((t) => t.region === key).map((
 const R = 2, RW = AW * R, RH = AH * R, SU = UNIT / R; // the painted sheet: R px per art pixel, SU sheet units per px
 const hash = (x: number, y: number) => { let h = (x * 374761393 + y * 668265263) | 0; h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0) / 4294967295; };
 const LAND = new Int8Array(RW * RH), CELL = new Int16Array(RW * RH), GRAIN = new Float32Array(RW * RH);
+let built = false;
+/** Fills the per-px maps on the first paint, not at load: every hero loads this module, few open the table. */
+function buildStatics() {
+if (built) return;
+built = true;
 for (let y = 0; y < RH; y++) for (let x = 0; x < RW; x++) {
   const i = y * RW + x, p: Pt = [x * SU + SU / 2 + (hash(x, y) - 0.5) * 7, y * SU + SU / 2 + (hash(y, x) - 0.5) * 7]; // jittered, so land edges are ragged
   const l = SLOTS.findIndex((s) => inPoly(p, s.poly));
@@ -61,6 +66,8 @@ for (let y = 0; y < RH; y++) for (let x = 0; x < RW; x++) {
     if (d < bd) { bd = d; best = t.id; }
   }
   CELL[i] = best;
+}
+fillTiles();
 }
 
 /**
@@ -74,17 +81,20 @@ const surfaceRow = (y: number) => !(y >= WORLD_H && y < UNDER_END) && !inDeepRow
 const BOX = SLOTS.map((s) => {
   const mine = TERRITORIES.filter((t) => t.region === s.key), f = landFrame(s, mine), reg = REGIONS.find((r) => r.key === s.key);
   if (!f || !reg?.contains) return undefined;
-  const cx = Math.round(mine.reduce((a, t) => a + t.cx, 0) / mine.length), cy = Math.round(mine[0].cy);
+  const cx = Math.round(mine.reduce((a, t) => a + t.cx, 0) / mine.length);
+  const cy = Math.round(mine.find((t) => reg.contains!(cx, Math.round(t.cy)))?.cy ?? mine[0].cy); // a row the land really holds
   const ok = (y: number) => y >= 0 && y < MAP_H && surfaceRow(y) && reg.contains!(cx, y);
   let r0 = cy, r1 = cy;
   while (ok(r0 - 1)) r0--;
   while (ok(r1 + 1)) r1++;
+  if (r0 === r1) { r0 = Math.min(...mine.map((t) => t.y)); r1 = Math.max(...mine.map((t) => t.y + t.h)); } // no run of rows: the zones' own
   const x0 = Math.max(0, Math.min(...mine.map((t) => t.x)) - LAND_RIM), x1 = Math.min(MAP_W - 1, Math.max(...mine.map((t) => t.x + t.w)) + LAND_RIM);
   const y0 = Math.max(r0, Math.min(...mine.map((t) => t.y)) - LAND_RIM), y1 = Math.min(r1, Math.max(...mine.map((t) => t.y + t.h)) + LAND_RIM);
   return { f, x0, x1, y0, y1 };
 });
 /** Per px: its world tile (clamped into the land's box, -1 off the lands), how far past the box it lies (fades to parchment), and how far inside its own territory's zone (1 in it, fading to 0 five tiles out). */
 const TX = new Int16Array(RW * RH).fill(-1), TY = new Int16Array(RW * RH).fill(-1), FADE = new Float32Array(RW * RH), IN = new Float32Array(RW * RH);
+function fillTiles() {
 for (let y = 0; y < RH; y++) for (let x = 0; x < RW; x++) {
   const i = y * RW + x, b = LAND[i] >= 0 ? BOX[LAND[i]] : undefined;
   if (!b) continue;
@@ -94,6 +104,7 @@ for (let y = 0; y < RH; y++) for (let x = 0; x < RW; x++) {
   FADE[i] = Math.min(1, Math.hypot(Math.max(b.x0 - fx, fx - b.x1 - 1, 0), Math.max(b.y0 - fy, fy - b.y1 - 1, 0)) / 10);
   const t = CELL[i] >= 0 ? TERRITORIES[CELL[i]] : undefined;
   IN[i] = t ? Math.max(0, 1 - Math.hypot(Math.max(t.x - fx, fx - t.x - t.w, 0), Math.max(t.y - fy, fy - t.y - t.h, 0)) / 5) : 0; // soft edge, 5 tiles
+}
 }
 
 /** How high a tile stands, for the hill shading: cliffs and rock high, woods a little, water and pits low. */
@@ -145,6 +156,7 @@ function terrainOf(c?: HTMLCanvasElement): Uint8ClampedArray | undefined {
 let art: HTMLCanvasElement | undefined, artKey = "";
 /** The painted continent for these owners: the real ground of each land, washed in its holders' colours (cached: only a war tick changes it). */
 function paintArt(v: WarView, ground?: HTMLCanvasElement): HTMLCanvasElement {
+  buildStatics();
   const tc = terrainOf(ground);
   const key = v.owner.join(",") + (tc ? "|t" : "");
   if (art && key === artKey) return art;
@@ -167,13 +179,14 @@ function paintArt(v: WarView, ground?: HTMLCanvasElement): HTMLCanvasElement {
       c = o < 0 ? mix(ground, CROWN, tc ? 0.3 : 1) : mix(ground, MAP[CLAN_KEYS[o]], !tc ? 0.42 : 0.2 + 0.24 * IN[i]);
       const k = 1 + GRAIN[i] * (tc ? 0.1 : 0.22) + (sh ? sh[i] * 0.5 * (1 - FADE[i]) : 0);
       c = [16, 8, 0].reduce((o2, s) => o2 | (Math.max(0, Math.min(255, Math.round(((c >> s) & 255) * k))) << s), 0);
-      for (const j of [x + 1 < RW ? i + 1 : -1, y + 1 < RH ? i + RW : -1, x > 0 ? i - 1 : -1, y > 0 ? i - RW : -1]) { // a border where a neighbour is another cell
+      let edge = 0; // the strongest border a neighbour in another cell gives: 1 within a land, 2 between lands, 3 a front line
+      for (const j of [x + 1 < RW ? i + 1 : -1, y + 1 < RH ? i + RW : -1, x > 0 ? i - 1 : -1, y > 0 ? i - RW : -1]) {
         if (j < 0 || CELL[j] === CELL[i] && LAND[j] === LAND[i]) continue;
-        const a = own(CELL[i]), b = own(CELL[j]), sameLand = LAND[j] === LAND[i];
-        if (a >= 0 && b >= 0 && a !== b) c = EMBER[((x + y) >> 1) & 1]; // a front line: two clans meet
-        else c = sameLand ? mix(c, INK, tc ? 0.45 : 0.55) : mix(c, INK, 0.8);
-        break;
+        const a = own(CELL[i]), b = own(CELL[j]);
+        edge = Math.max(edge, a >= 0 && b >= 0 && a !== b ? 3 : LAND[j] === LAND[i] ? 1 : 2);
       }
+      if (edge === 3) c = EMBER[((x + y) >> 1) & 1]; // a front line: two clans meet
+      else if (edge) c = mix(c, INK, edge === 2 ? 0.8 : tc ? 0.45 : 0.55);
     }
     const o = i * 4;
     img.data[o] = (c >> 16) & 255; img.data[o + 1] = (c >> 8) & 255; img.data[o + 2] = c & 255; img.data[o + 3] = 255;
