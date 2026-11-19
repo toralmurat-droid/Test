@@ -126,6 +126,15 @@ export interface BadlandsTiles {
 export interface BadlandsArea { name: string; x: number; y: number; w: number; h: number; mobs?: never[] }
 
 /**
+ * The outer ring of the band's cliffs (local tiles, row y * MAP_W + x), filled by buildBadlands: the client draws these CLIFF
+ * tiles as ray-traced 3D red rock mountains (groundPaint.ts relief) instead of terraced blocks (Murat 2026-11-19). The map
+ * is unchanged: the tiles stay CLIFF, so collisions and pathing are the same.
+ */
+export const BADLANDS_RIM = new Uint8Array(MAP_W * BADLANDS_H);
+/** True for a map tile in the band's outer mountain ring (check it is CLIFF too: roads and clearings carve the ring open). */
+export const isBadlandsRim = (x: number, y: number) => inBadlandsRow(y) && x >= 0 && x < MAP_W && BADLANDS_RIM[(y - BADLANDS_Y0) * MAP_W + x] === 1;
+
+/**
  * Builds the badlands into the map's ground/object grids (map coordinates). Deterministic (fixed seeds), like the rest
  * of the world. Returns its named areas (specific first), the road tiles and the signposts. Every open tile joins the
  * Red Pass.
@@ -191,6 +200,7 @@ export function buildBadlands(T: BadlandsTiles, ground: number[][], objects: num
     const d = Math.min(x, y, W - 1 - x, H - 1 - y);
     if (d < 6 + noise(x, y, 9, 911) * 8 + noise(x, y, 3, 912) * 2) cliff[y * W + x] = 1;
   }
+  BADLANDS_RIM.set(cliff); // the outer ring
   /** A flat-topped mesa: a squarish blob (superellipse) with a crumbling edge. */
   const mesa = (cx: number, cy: number, rx: number, ry: number, seed: number) => disk(cx, cy, rx + 2, ry + 2, (x, y) => {
     const dx = Math.abs(x + 0.5 - cx) / rx, dy = Math.abs(y + 0.5 - cy) / ry;
