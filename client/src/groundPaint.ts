@@ -29,6 +29,8 @@ export interface GroundData {
   desert?: { y0: number; y1: number };
   /** 1 on the desert's cliff tiles: their ground is the mountains' rock top (the outer steps stand up as blocks, iso.ts). */
   cliff?: Uint8Array;
+  /** 1 on the desert's rim (shared/desert.ts DESERT_DUNES): rolling sand dunes, ray-traced in 3D by paintChunk (duneGrid). */
+  dune?: Uint8Array;
   /** Act 3's moors band (shared/moors.ts), rows y0..y1: cool grey-green heath, peat, bog and granite; the cliffs' top is grey rock. */
   moors?: { y0: number; y1: number };
   /** Act 4's badlands band (shared/badlands.ts), rows y0..y1: red sand, cracked clay, gravel riverbeds; the mesas' top is red rock. */
@@ -101,7 +103,7 @@ const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 const sstep = (a: number, b: number, v: number) => { const t = clamp01((v - a) / (b - a)); return t * t * (3 - 2 * t); };
 
 /** Precomputed fields at tile resolution, interpolated per pixel. */
-export interface Fields { depth: Float32Array; ao: Float32Array; rock?: Float32Array; cliff?: Float32Array }
+export interface Fields { depth: Float32Array; ao: Float32Array; rock?: Float32Array; cliff?: Float32Array; dune?: Float32Array }
 
 export function makeFields(g: GroundData): Fields {
   const { w, h, ground, solid } = g;
@@ -141,7 +143,25 @@ export function makeFields(g: GroundData): Fields {
     for (let y = g.cities.y0 - 4; y < h; y++) for (let x = 0; x < w; x++) rock[y * w + x] = g.cities.rock[y * w + x];
   }
   const cliff = g.cliff ? Float32Array.from(g.cliff) : undefined;
-  return { depth, ao, rock, cliff };
+  // Dune depth: tiles in from the open desert (BFS inside the dune tiles, capped), 0 off the dunes
+  let dune: Float32Array | undefined;
+  if (g.dune && g.desert) {
+    dune = new Float32Array(w * h);
+    const dq: number[] = [], y0 = g.desert.y0, y1 = Math.min(h, g.desert.y1);
+    for (let y = y0; y < y1; y++) for (let x = 0; x < w; x++) { const i = y * w + x; if (g.dune[i]) dune[i] = 99; else dq.push(i); }
+    for (let k = 0; k < dq.length; k++) {
+      const i = dq[k], x = i % w, y = (i / w) | 0, d = dune[i] + 1;
+      if (d > DUNE_CAP) continue;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < y0 || nx >= w || ny >= y1) continue;
+        const j = ny * w + nx;
+        if (dune[j] > d) { dune[j] = d; dq.push(j); }
+      }
+    }
+    for (let i = 0; i < w * h; i++) if (dune[i] > DUNE_CAP) dune[i] = DUNE_CAP;
+  }
+  return { depth, ao, rock, cliff, dune };
 }
 
 const out3 = new Float32Array(3);
@@ -667,12 +687,143 @@ function landTint(el: string, k: number, r: number, g: number, b: number, wx: nu
   return [r + (tr - r) * k, g + (tg - g) * k, b + (tb - b) * k];
 }
 
+// ---------- Act 2's rim: 3D dunes (Murat 2026-11-19: "make the borders nice 3d dunes turned to isometric") ----------
+
+/** Dune depth cap in tiles (the dunes are as big as they get this far in). */
+const DUNE_CAP = 12;
+/** Tallest dune, in world px (a cliff's top step is 106). */
+const DUNE_MAX = 76;
+/** Height grid spacing in world px. */
+const DUNE_S = 4;
+/** The sun, from the upper left like the cliffs' lit faces (normalised). */
+const SUN = (() => { const v = [-0.62, -0.28, 0.73], l = Math.hypot(v[0], v[1], v[2]); return [v[0] / l, v[1] / l, v[2] / l]; })();
+const SUN_XY = Math.hypot(SUN[0], SUN[1]);
+/** Dune sand: a longer, warmer ramp than SANDP, from the slip faces' shade to the crests' glare. */
+const DUNEP = pal(["#5e3e22", "#7a5230", "#96683c", "#b2804a", "#c99a5c", "#ddb070", "#ebc688", "#f4daa4"]);
+
+/**
+ * The dunes' height (world px) at a world point: zero on open ground, rising over the first few tiles of the rim, then
+ * long transverse dunes, gentle windward backs facing west into the sun and short steep slip faces to the east, their
+ * crest lines bent by noise and swelling into big mounds and hollows.
+ */
+function duneHeight(dd: number, wx: number, wy: number): number {
+  if (dd <= 0.25) return 0;
+  const r0 = sstep(0.3, 4.2, dd + (vn(wx / 26, wy / 26, 470) - 0.5) * 1.1);
+  if (r0 <= 0) return 0;
+  const rise = r0 * (0.35 + 0.65 * r0); // a long low apron first, so the trails and passes stay in sight
+  const big = fbm(wx / 300, wy / 300, 471);
+  const p = (wx * 0.93 + wy * 0.36) / 300 + fbm(wx / 260, wy / 260, 472) * 2.2 + vn(wx / 90, wy / 90, 473) * 0.35;
+  const fr = p - Math.floor(p);
+  const prof = fr < 0.72 ? Math.pow(fr / 0.72, 1.7) : Math.pow((1 - fr) / 0.28, 0.75);
+  const amp = 0.6 + 0.4 * sstep(4, 10, dd);
+  // a second, smaller set of dunes riding on the big ones, crossing them at an angle
+  const q = (wx * 0.8 - wy * 0.6) / 120 + fbm(wx / 110, wy / 110, 474) * 1.6, fq = q - Math.floor(q);
+  const prof2 = fq < 0.75 ? Math.pow(fq / 0.75, 1.8) : Math.pow((1 - fq) / 0.25, 0.8);
+  const hgt = rise * (6 + amp * (14 * big + 44 * prof * (0.5 + 0.5 * big) + 13 * prof2 * (1 - 0.5 * prof)));
+  return hgt < 52 ? hgt : Math.min(DUNE_MAX, 52 + (hgt - 52) * 0.5); // the tallest crests squeezed, never cut flat
+}
+
+/** The dunes' heights over one chunk's world box, on a DUNE_S grid; `near` says how far (in cells) the next dune cell is down-right along the view diagonal. */
+interface DuneGrid { x0: number; y0: number; nx: number; ny: number; h: Float32Array; near: Uint8Array }
+
+function duneGrid(g: GroundData, f: Fields, bx0: number, bx1: number, by0: number, by1: number): DuneGrid | undefined {
+  if (!f.dune || !g.desert) return undefined;
+  const { w, tile } = g, d0 = g.desert.y0, d1 = g.desert.y1;
+  if (by1 < d0 || by0 > d1) return undefined;
+  const tx0 = Math.max(0, Math.floor(bx0)), tx1 = Math.min(w - 1, Math.ceil(bx1)), ty0 = Math.max(d0, Math.floor(by0)), ty1 = Math.min(d1 - 1, Math.ceil(by1));
+  let any = false;
+  for (let y = ty0; y <= ty1 && !any; y++) for (let x = tx0; x <= tx1; x++) if (f.dune[y * w + x] > 0) { any = true; break; }
+  if (!any) return undefined;
+  const x0 = Math.floor(bx0 * tile / DUNE_S), y0 = Math.floor(by0 * tile / DUNE_S);
+  const nx = Math.ceil(bx1 * tile / DUNE_S) - x0 + 2, ny = Math.ceil(by1 * tile / DUNE_S) - y0 + 2;
+  const h = new Float32Array(nx * ny);
+  const dd = (fx: number, fy: number) => { // dune depth, bilinear; rows held inside the band so the dunes run on to its edge
+    fy = Math.max(d0, Math.min(d1 - 1, fy));
+    const ix = Math.floor(fx), iy = Math.floor(fy), ax = fx - ix, ay = fy - iy;
+    const q = (x: number, y: number) => f.dune![Math.max(d0, Math.min(d1 - 1, y)) * w + Math.max(0, Math.min(w - 1, x))];
+    return (q(ix, iy) * (1 - ax) + q(ix + 1, iy) * ax) * (1 - ay) + (q(ix, iy + 1) * (1 - ax) + q(ix + 1, iy + 1) * ax) * ay;
+  };
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    const wx = (x0 + i) * DUNE_S, wy = (y0 + j) * DUNE_S, ty = wy / tile;
+    if (ty < d0 - 1 || ty > d1 + 1) continue;
+    h[j * nx + i] = duneHeight(dd(wx / tile - 0.5, wy / tile - 0.5), wx, wy);
+  }
+  // near: cells to the next dune cell along +x+y (the way a view ray runs back to the ground), capped
+  const near = new Uint8Array(nx * ny).fill(255);
+  for (let j = ny - 1; j >= 0; j--) for (let i = nx - 1; i >= 0; i--) {
+    const k = j * nx + i;
+    if (h[k] > 0) near[k] = 0;
+    else if (i + 1 < nx && j + 1 < ny) near[k] = Math.min(255, near[(j + 1) * nx + i + 1] + 1);
+  }
+  return { x0, y0, nx, ny, h, near };
+}
+
+/** Bilinear dune height at a world point (0 off the grid). */
+function duneAt(G: DuneGrid, wx: number, wy: number): number {
+  const fx = wx / DUNE_S - G.x0, fy = wy / DUNE_S - G.y0;
+  const i = Math.floor(fx), j = Math.floor(fy);
+  if (i < 0 || j < 0 || i >= G.nx - 1 || j >= G.ny - 1) return 0;
+  const ax = fx - i, ay = fy - j, k = j * G.nx + i, h = G.h;
+  return (h[k] * (1 - ax) + h[k + 1] * ax) * (1 - ay) + (h[k + G.nx] * (1 - ax) + h[k + G.nx + 1] * ax) * ay;
+}
+
+/**
+ * Where the view ray through a ground point first meets the dunes: the screen pixel that shows ground point (wx, wy)
+ * at height 0 shows (wx + z, wy + z) at height z, so walk z down from the top and take the highest z the dunes reach.
+ * Returns that z (0 = the flat ground itself).
+ */
+function duneHit(G: DuneGrid, wx: number, wy: number): number {
+  const fx = Math.floor(wx / DUNE_S - G.x0), fy = Math.floor(wy / DUNE_S - G.y0);
+  if (fx >= 0 && fy >= 0 && fx < G.nx && fy < G.ny && G.near[fy * G.nx + fx] > DUNE_MAX / DUNE_S + 2) return 0;
+  for (let z = DUNE_MAX; z > 0; z -= 2) {
+    if (duneAt(G, wx + z, wy + z) >= z) {
+      let lo = z, hi = z + 2; // refine: lo is under the surface, hi above it
+      for (let k = 0; k < 4; k++) { const m = (lo + hi) / 2; if (duneAt(G, wx + m, wy + m) >= m) lo = m; else hi = m; }
+      return lo;
+    }
+  }
+  return 0;
+}
+
+/**
+ * The colour of the dune surface at a world point at height z (into out3): lit by the sun from its slope, shadowed where a
+ * crest stands between it and the sun, with wind ripples on the backs, a bright lip along the crests and a dark slip face.
+ */
+function duneColour(G: DuneGrid, wx: number, wy: number, z: number, sx: number, sy: number) {
+  const e = 2;
+  const gx = (duneAt(G, wx + e, wy) - duneAt(G, wx - e, wy)) / (2 * e), gy = (duneAt(G, wx, wy + e) - duneAt(G, wx, wy - e)) / (2 * e);
+  const nl = Math.hypot(gx, gy, 1);
+  const lam = (-gx * SUN[0] - gy * SUN[1] + SUN[2]) / nl;
+  // cast shadow: walk toward the sun; a dune above the sun line hides it
+  let shade = 0;
+  for (let t = 5; t <= 70; t += 5) {
+    const hz = z + t * SUN[2] / SUN_XY;
+    if (hz > DUNE_MAX) break;
+    if (duneAt(G, wx - SUN[0] / SUN_XY * t, wy - SUN[1] / SUN_XY * t) > hz + 0.5) { shade = 1; break; }
+  }
+  const steep = Math.hypot(gx, gy);
+  // wind ripples: fine bent lines across the gentle backs, gone on the steep slip faces
+  const rip = Math.sin((wx * 0.93 + wy * 0.36) / 2.2 + vn(wx / 30, wy / 30, 475) * 4 + z * 0.08);
+  const ripK = (1 - sstep(0.25, 0.6, steep)) * (shade ? 0.5 : 1);
+  // the crest lip: where the slope flips from the lit back to the slip face
+  const ahead = duneAt(G, wx + 3 * 0.93, wy + 3 * 0.36), behind = duneAt(G, wx - 3 * 0.93, wy - 3 * 0.36), here = duneAt(G, wx, wy);
+  const crest = here > ahead + 1.2 && here >= behind - 0.2 ? 1 : 0;
+  const m = vn(wx / 40, wy / 40, 476) + (hash2(Math.floor(wx * 1.5), Math.floor(wy * 1.5), 477) - 0.5) * 0.5; // broad tone + sand grain
+  let lv = -0.9 + Math.max(0, lam) * 8.4 + (m - 0.5) * 0.4 + (rip > 0.9 ? 0.5 : rip < -0.93 ? -0.45 : 0) * ripK;
+  if (shade) lv = Math.min(lv, 1.2 + lam * 1.4);
+  if (crest && !shade) lv += 1.1;
+  lv -= (1 - sstep(4, 26, z)) * 0.4; // the hollows between dunes a touch duskier
+  ramp(DUNEP, lv, sx, sy);
+}
+
 export function paintChunk(g: GroundData, f: Fields, sx0: number, sy0: number, cw: number, ch: number, res: number, px: Uint8ClampedArray) {
   const { w, h, tile, ground } = g;
   // lands that touch this chunk (world box of the iso rectangle, in tiles, with a margin)
   const wxs = [sy0 + sx0 / 2, sy0 + (sx0 + cw) / 2, sy0 + ch + sx0 / 2, sy0 + ch + (sx0 + cw) / 2], wys = [sy0 - sx0 / 2, sy0 - (sx0 + cw) / 2, sy0 + ch - sx0 / 2, sy0 + ch - (sx0 + cw) / 2];
   const bx0 = Math.min(...wxs) / tile - 3, bx1 = Math.max(...wxs) / tile + 3, by0 = Math.min(...wys) / tile - 3, by1 = Math.max(...wys) / tile + 3;
   const lands = (g.lands ?? []).filter((l) => l.x < bx1 && l.x + l.w > bx0 && l.y < by1 && l.y + l.h > by0);
+  const reach = DUNE_MAX / tile + 1; // a view ray can meet a dune this far down-right of its ground point
+  const dunes = duneGrid(g, f, bx0, bx1 + reach, by0, by1 + reach);
   const W = Math.round(cw * res), H = Math.round(ch * res);
   const wt = new Float32Array(NT);
   const gw = new Float32Array(NT); // weights of the grass kinds (they all paint as GRASS)
@@ -696,7 +847,10 @@ export function paintChunk(g: GroundData, f: Fields, sx0: number, sy0: number, c
     const sy = sy0 + (j + 0.5) / res;
     for (let i = 0; i < W; i++) {
       const sx = sx0 + (i + 0.5) / res;
-      const wx = sy + sx / 2, wy = sy - sx / 2;
+      let wx = sy + sx / 2, wy = sy - sx / 2;
+      // the desert's dunes stand up: this pixel shows the dune surface the view ray meets first, so paint the ground there
+      const dz = dunes ? duneHit(dunes, wx, wy) : 0;
+      if (dz > 0) { wx += dz; wy += dz; }
       MOORS = !!g.moors && wy / tile >= g.moors.y0 - 2 && wy / tile < g.moors.y1;
       BADLANDS = !!g.badlands && wy / tile >= g.badlands.y0 - 2 && wy / tile < g.badlands.y1;
       SINKHOLES = !!g.sinkholes && wy / tile >= g.sinkholes.y0 - 2 && wy / tile < g.sinkholes.y1;
@@ -842,6 +996,11 @@ export function paintChunk(g: GroundData, f: Fields, sx0: number, sy0: number, c
           if (d <= 0) continue;
           [r, gg, b] = landTint(l.el, Math.min(1, d / 3.5) * 0.9, r, gg, b, wx, wy, sx, sy, t1 === WATER);
         }
+      }
+      if (dz > 0) { // up on a dune: its own lit sand, blending into the ground at its foot
+        duneColour(dunes!, wx, wy, dz, sx, sy);
+        const a = sstep(0, 7, dz);
+        r += (out3[0] - r) * a; gg += (out3[1] - gg) * a; b += (out3[2] - b) * a;
       }
       for (const t of types) wt[t] = 0;
       const o = (j * W + i) * 4;
