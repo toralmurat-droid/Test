@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-19",
+  "title": "War table shows the real lands",
+  "changes": [
+    "The war table now shows each land's real ground: lakes, rivers, woods, mesas, sinkholes and mountains with hill shading, drawn from the world map itself.",
+    "Each clan's colour is washed over the lands it holds, strongest over the zones themselves, so you can see at a glance who holds what ground."
+  ]
+}

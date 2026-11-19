@@ -64,22 +64,34 @@ export const BANNER_BOX = { x: 78, y0: -85, y1: 112 };
 export const KEEP_M = 14;
 export interface Placed { id: number; x: number; y: number }
 
+/**
+ * How a land's real tiles lie on its slot: the span of its territory centres (tiles) is stretched over the slot's box,
+ * less a 12% rim. The territory markers start from it (layoutTerritories) and the painted terrain under them uses its
+ * inverse (sheetToTile), so a marker stands on its own zone's ground. Undefined for a land with no territories.
+ */
+export interface LandFrame { sx0: number; sy0: number; tx0: number; ty0: number; kx: number; ky: number }
+export function landFrame(s: Slot, mine: readonly Pick<Territory, "cx" | "cy">[]): LandFrame | undefined {
+  if (!mine.length) return undefined;
+  const xs = s.poly.map((p) => p[0]), ys = s.poly.map((p) => p[1]);
+  const bx0 = Math.min(...xs), bx1 = Math.max(...xs), by0 = Math.min(...ys), by1 = Math.max(...ys);
+  const tx0 = Math.min(...mine.map((t) => t.cx)), tx1 = Math.max(...mine.map((t) => t.cx));
+  const ty0 = Math.min(...mine.map((t) => t.cy)), ty1 = Math.max(...mine.map((t) => t.cy));
+  const ix = (bx1 - bx0) * 0.12, iy = (by1 - by0) * 0.12, iw = bx1 - bx0 - 2 * ix, ih = by1 - by0 - 2 * iy;
+  // a land whose centres share one column (or row) is centred, at the same scale as its other axis
+  const kx = tx1 > tx0 ? iw / (tx1 - tx0) : ty1 > ty0 ? ih / (ty1 - ty0) : 1, ky = ty1 > ty0 ? ih / (ty1 - ty0) : kx;
+  return { sx0: tx1 > tx0 ? bx0 + ix : bx0 + ix + iw / 2, sy0: ty1 > ty0 ? by0 + iy : by0 + iy + ih / 2, tx0, ty0, kx, ky };
+}
+export const tileToSheet = (f: LandFrame, tx: number, ty: number): Pt => [f.sx0 + (tx - f.tx0) * f.kx, f.sy0 + (ty - f.ty0) * f.ky];
+export const sheetToTile = (f: LandFrame, x: number, y: number): Pt => [f.tx0 + (x - f.sx0) / f.kx, f.ty0 + (y - f.sy0) / f.ky];
+
 /** Where each territory stands on the sheet (sheet units), for the lands in `slots` that hold territories. */
 export function layoutTerritories(ts: readonly Territory[], slots: readonly Slot[] = SLOTS): Placed[] {
   const out: Placed[] = [];
   for (const s of slots) {
     const mine = ts.filter((t) => t.region === s.key);
     if (!mine.length) continue;
-    const xs = s.poly.map((p) => p[0]), ys = s.poly.map((p) => p[1]);
-    const bx0 = Math.min(...xs), bx1 = Math.max(...xs), by0 = Math.min(...ys), by1 = Math.max(...ys);
-    const tx0 = Math.min(...mine.map((t) => t.cx)), tx1 = Math.max(...mine.map((t) => t.cx));
-    const ty0 = Math.min(...mine.map((t) => t.cy)), ty1 = Math.max(...mine.map((t) => t.cy));
-    const ix = (bx1 - bx0) * 0.12, iy = (by1 - by0) * 0.12;
-    const pts = mine.map((t) => ({
-      id: t.id,
-      x: bx0 + ix + (tx1 > tx0 ? (t.cx - tx0) / (tx1 - tx0) : 0.5) * (bx1 - bx0 - 2 * ix),
-      y: by0 + iy + (ty1 > ty0 ? (t.cy - ty0) / (ty1 - ty0) : 0.5) * (by1 - by0 - 2 * iy),
-    }));
+    const f = landFrame(s, mine)!;
+    const pts = mine.map((t) => { const [x, y] = tileToSheet(f, t.cx, t.cy); return { id: t.id, x, y }; });
     for (let it = 0; it < 200; it++) {
       for (let i = 0; i < pts.length; i++) {
         for (let j = i + 1; j < pts.length; j++) {
