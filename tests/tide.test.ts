@@ -299,6 +299,7 @@ test("pay: a cleared march pays the top heroes near the gate by damage, resets t
     p3.x = 100 * TILE; p3.y = 400 * TILE; // the desert
     assert.equal(actAt(p3.y, p3.x), 2);
     await until(() => L[0].tide.length >= 1, 10_000, "news for the Act 1 hero");
+    await wait(500); // under a loaded run, news sent before the move can still be on its way
     L[2].tide.length = 0; L[2].sfx.length = 0; // whatever came before the move
     const sumId = room.summon(cs[0].sessionId, "golem_fire");
     const g = room.state.mobs.get(sumId);
