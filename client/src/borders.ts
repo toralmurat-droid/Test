@@ -61,11 +61,12 @@ export class BorderLayer {
       if (depth < -1 || along > 6 + Math.max(0, depth)) continue;
       const d = Math.hypot(depth, along);
       if (d < best && d < PREPAINT_TILES && borderOpen(otherEnd(b, e), me)) { best = d; ahead = { b, e }; }
-      if (along < 4) want = Math.max(want, Math.min(1, Math.max(0, 1 - (depth - SEAM) / FOG_TILES)));
+      // a road shut for this hero mists only lightly: they stay at its end and must still see round them
+      if (along < 4) want = Math.max(want, Math.min(borderOpen(otherEnd(b, e), me) ? 1 : 0.45, Math.max(0, 1 - (depth - SEAM) / FOG_TILES)));
     }
     // the far end's ground, painted ahead (keyed apart from the waygates' pin)
     const key = ahead ? `${ahead.b.id}:${ahead.e === ahead.b.a ? "a" : "b"}` : "";
-    if (key !== this.pinned) {
+    if (key !== this.pinned && IsoView.ground) { // (retried until the ground layer exists)
       this.pinned = key;
       const [ex, ey] = ahead ? edgeTile(ahead.e) : [0, 0], [ox, oy] = ahead ? outward(ahead.e.side) : [0, 0];
       const at = ahead ? crossTo(ahead.b, ahead.e, (ex + 0.5 - ox) * TILE, (ey + 0.5 - oy) * TILE) : undefined;

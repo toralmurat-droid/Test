@@ -60,7 +60,7 @@ export const BORDERS: readonly Border[] = [
   // the badlands and the Crown: east from the road down to the Hanging Arches; the Crown's west rim below the Red Gate
   { id: "redgate", name: "The Redgate Road",
     a: { land: 4, side: "e", path: [[231, 110], [236, 124], [252, 135], [287, 136]] },
-    b: { land: 6, side: "w", path: [[26, 93], [12, 95], [0, 95]] } },
+    b: { land: 6, side: "w", path: [[27, 96], [12, 96], [0, 96]] } },
   // the sinkholes (S) and the Crown: north from the Ropewell road at the Rootfall Slopes; the Crown's south rim by the Deep Gate
   { id: "deeproad", name: "The Deep Road",
     a: { land: 5, side: "n", path: [[160, 34], [158, 18], [158, 0]] },

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { actOfTile, MAP_H, MAP_W, TILE } from "../shared/constants";
-import { isSolidTile } from "../shared/map";
+import { isSolidTile, OBJECTS, SIGNPOSTS, T } from "../shared/map";
 import { ARRIVE, BORDERS, BORDER_BOXES, crossTo, edgeTile, endPath, LAND_ROWS, otherEnd, outward, roadTiles, SEAM, seamAt } from "../shared/borders";
 import { actAt, actSpawn, borderOpen, borderShutNote } from "../shared/act2";
 import { randomSpawn } from "../shared/map";
@@ -46,6 +46,10 @@ test("borders: every road runs from its land's open ground to the band's edge, f
     const [px, py] = endPath(e)[0];
     assert.ok(BORDER_BOXES.some((b) => px >= b.x0 && px <= b.x1 && py >= b.y0 && py <= b.y1));
   }
+});
+
+test("borders: the roads leave every signpost standing", () => {
+  for (const sp of SIGNPOSTS) assert.equal(OBJECTS[sp.y][sp.x], T.SIGNPOST, `signpost at ${sp.x},${sp.y}`);
 });
 
 test("borders: walking into the mist comes out at the other end, walking on, and back again", () => {
@@ -103,7 +107,7 @@ test("room: a hero walks the Eastmarch Pass into the moors at Lv 20, and is stop
     assert.deepEqual(crossed, []);
     assert.equal(actAt(p.y, p.x), 1, "still in Oakvale");
     p.level = 20; put();
-    assert.ok(await until(() => crossed.length === 1, 15000), "crossed");
+    assert.ok(await until(() => { p.lastHurt = 0; return crossed.length === 1; }, 15000), "crossed"); // (no stray monster's hit holds the hero)
     assert.deepEqual(crossed, [3]);
     assert.equal(actAt(p.y, p.x), 3, "in the moors");
     c.send("input", { up: false, down: false, left: false, right: false, seq: 2 });
