@@ -1,5 +1,6 @@
 {
   "date": "2026-11-19",
+  "pr": 541,
   "title": "War table shows the real lands",
   "changes": [
     "The war table now shows each land's real ground: lakes, rivers, woods, mesas, sinkholes and mountains with hill shading, drawn from the world map itself.",
