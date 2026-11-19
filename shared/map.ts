@@ -1,5 +1,6 @@
 import { MAP_H as FULL_H, MAP_W, PLAYER_RADIUS, TILE, UNDER_END, WORLD_H, type MobKind } from "./constants";
 import { CRYPT_DOOR, FLOORS, LAIRS, SEA_END, SHORTCUTS, SINKHOLE, UNDER_SHAFT, type Floor } from "./dungeon";
+import { carveBorders } from "./borders";
 import { buildDesert, D, inDesertRow, KEL_MARKET, WAYGATE_OAKVALE } from "./desert";
 import { buildMoors, CAIRN_PORTAL, CAIRN_SQUARE, MOORSGATE_OAKVALE, MR } from "./moors";
 import { BR, buildBadlands, REDPASS_OAKVALE, RUSTWATER_PORTAL, RUSTWATER_SQUARE } from "./badlands";
@@ -1097,6 +1098,9 @@ function buildWorld() {
   // ---------- 21. The clans' capital cities, in their own band under the Crown (shared/capitals.ts) ----------
   // (their areas go first: a city's districts and walls lie inside no other area)
   areas.unshift(...buildCities(T, ground, objects, EMPTY).areas);
+  // ---------- 22. The border roads (shared/borders.ts): each land's roads run on out through its cliffs to the band's
+  // edge, where the mist of the pass takes the hero on into the neighbouring land. Cut last, only inside BORDER_BOXES.
+  carveBorders(ground, objects, roads, T, EMPTY);
   return { ground, objects, areas, posts, roads, broken, makeshift };
 }
 

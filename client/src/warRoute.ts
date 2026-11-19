@@ -13,6 +13,7 @@ import { cityAt } from "../../shared/capitals";
 import { HOMELAND_GATES } from "../../shared/act2";
 import { inDeepRow, UNDER_END, WORLD_H } from "../../shared/constants";
 import { CROWNWAYS } from "../../shared/crown";
+import { BORDERS, edgeTile } from "../../shared/borders";
 import { PORTAL_SPOTS } from "../../shared/map";
 import { REGION_LINKS, regionName, regionOf } from "../../shared/war/regions";
 import { TERRITORIES, type Territory } from "../../shared/war/territories";
@@ -89,6 +90,19 @@ export const WAYS: Way[] = REGION_LINKS.flatMap((l): Way[] => {
   return [{ id: l.name, name: l.name, a: a.id, b: b.id, ta: l.pa, tb: l.pb, req: gateReq(l.b) }];
 });
 
+/**
+ * The border roads (shared/borders.ts) are ways too, walked rather than stepped through: each from its lower land (`a`)
+ * to the land that asks more (`b`), so `req` reads the right way round. They come after the gates.
+ */
+const ACT_LAND: Record<number, string> = { 1: "oakvale", 2: "sunscar", 3: "moors", 4: "badlands", 5: "sinkholes", 6: "crown" };
+const ORDER = [1, 3, 4, 5, 2, 6]; // by what the land asks: Oakvale, Lv 20, Lv 25, Lv 30, Act 1's bosses, Lv 40
+WAYS.push(...BORDERS.flatMap((r): Way[] => {
+  const [lo, hi] = ORDER.indexOf(r.a.land) <= ORDER.indexOf(r.b.land) ? [r.a, r.b] : [r.b, r.a];
+  const [lx, ly] = edgeTile(lo), [hx, hy] = edgeTile(hi);
+  const a = nearestIn(ACT_LAND[lo.land], lx, ly), b = nearestIn(ACT_LAND[hi.land], hx, hy);
+  return a && b ? [{ id: `road_${r.id}`, name: r.name, a: a.id, b: b.id, ta: { x: lx, y: ly }, tb: { x: hx, y: hy }, req: gateReq(ACT_LAND[hi.land]) }] : [];
+}));
+
 /** A portal stone: its id, name and the node it stands in. */
 export interface Stone { id: string; name: string; node: number; tile: Tile }
 export const STONES: Stone[] = PORTAL_SPOTS.flatMap((p) => {
@@ -102,7 +116,10 @@ export interface Step { from: number; to: number; via: Via; way?: Way; stones?: 
 /** Walking costs the real distance between two territories' centres (40 tiles = 1); a gate costs 2, much more when it leads in or out of the Crown (Lv 40) or to the Sunscar (needs Act 1's bosses), so the route takes the natural land gate unless the Crown is the goal. */
 const WALK_TILES = 40;
 const stepCost = (s: Step) => s.via === "walk" ? Math.max(1, Math.hypot(TERRITORIES[s.from].cx - TERRITORIES[s.to].cx, TERRITORIES[s.from].cy - TERRITORIES[s.to].cy) / WALK_TILES)
-  : s.via === "portal" ? 1.5 : 2 + (landOfNode(s.way!.a) === CROWN_LAND || landOfNode(s.way!.b) === CROWN_LAND ? 25 : s.way!.id === "The Waygate" ? 6 : 0);
+  : s.via === "portal" ? 1.5 : 2 + (landOfNode(s.way!.a) === CROWN_LAND || landOfNode(s.way!.b) === CROWN_LAND ? 25 : s.way!.id === "The Waygate" || (s.way!.id.startsWith("road_") && (landOfNode(s.way!.a) === "sunscar" || landOfNode(s.way!.b) === "sunscar")) ? 6 : 0)
+    + (s.way!.id.startsWith("road_") ? ROAD_COST : 0);
+/** A border road costs more than a gate (its last stretch is a long walk through the pass), so a gate on the way is preferred. */
+const ROAD_COST = 4;
 /** Borders inside a land only: `near` also lists the territories a gate joins, and those are ways, not walks. */
 const BORDER: [number, number][] = TERRITORIES.flatMap((t) => t.near.filter((n) => n > t.id && TERRITORIES[n].region === t.region).map((n): [number, number] => [t.id, n]));
 

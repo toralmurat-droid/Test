@@ -8,6 +8,7 @@ import { FLOORS, LANDING } from "../shared/dungeon";
 import { waygateArrival, waygateById } from "../shared/act2";
 import { CROWNWAYS } from "../shared/crown";
 import { CITIES } from "../shared/capitals";
+import { BORDERS, edgeTile } from "../shared/borders";
 
 const N = MAP_W * MAP_H;
 // dungeon gates count as open (a hero opens them), so the floors behind them are reachable
@@ -81,7 +82,26 @@ for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
   if (!walk(x, y)) continue;
   if ((!walk(x - 1, y) && !walk(x + 1, y)) || (!walk(x, y - 1) && !walk(x, y + 1))) narrow++;
 }
+// On foot with the border roads (shared/borders.ts): a road's edge tile leads on to the other land's edge tile
+const hop = new Map<number, number>();
+for (const b of BORDERS) { const [ax, ay] = edgeTile(b.a), [bx, by] = edgeTile(b.b); hop.set(ay * MAP_W + ax, by * MAP_W + bx); hop.set(by * MAP_W + bx, ay * MAP_W + ax); }
+const onFoot = new Uint8Array(N);
+{
+  const q = [sx + sy * MAP_W]; onFoot[q[0]] = 1;
+  for (let i = 0; i < q.length; i++) {
+    const c = q[i], x = c % MAP_W, y = (c / MAP_W) | 0, h = hop.get(c);
+    if (h !== undefined && !onFoot[h]) { onFoot[h] = 1; q.push(h); }
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx, ny = y + dy, k = nx + ny * MAP_W;
+      if (walk(nx, ny) && !onFoot[k]) { onFoot[k] = 1; q.push(k); }
+    }
+  }
+}
+let landsW = 0, landsR = 0;
+for (const [y0, y1] of [[0, WORLD_H], [DESERT_Y0, DESERT_Y0 + DESERT_H], [MOORS_Y0, MOORS_Y0 + MOORS_H], [BADLANDS_Y0, BADLANDS_Y0 + BADLANDS_H], [SINKHOLES_Y0, SINKHOLES_Y0 + SINKHOLES_H], [CROWN_Y0, CROWN_Y0 + CROWN_H]])
+  for (let y = y0; y < y1; y++) for (let x = 0; x < MAP_W; x++) if (walk(x, y)) { landsW++; if (onFoot[y * MAP_W + x]) landsR++; }
 console.log(`map ${MAP_W}x${MAP_H} (${N} tiles)`);
+console.log(`the six lands on foot from Oakvale, border roads included: ${(100 * landsR / landsW).toFixed(1)}% of their walkable tiles`);
 console.log(`walkable ${(100 * walkable / N).toFixed(1)}%  reachable from Oakvale on foot ${(100 * reach / walkable).toFixed(1)}% of walkable (other bands: by gate, rope or stair)`);
 console.log(`reachability per band, from its way in:\n${bandLines.join("\n")}`);
 if (!allReach) { console.log("SOME WALKABLE TILES ARE UNREACHABLE"); process.exitCode = 1; }

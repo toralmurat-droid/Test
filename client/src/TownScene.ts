@@ -49,7 +49,7 @@ import type { RoadEntry } from "../../shared/war/roads";
 import type { ColumnsMsg } from "../../shared/war/marches";
 import { WarFeud } from "./warFeud";
 import { clanOfIndex } from "../../shared/war/view";
-import { Minimap } from "./minimap";
+import { Minimap, type MapMarker } from "./minimap";
 import { fullscreenSupported, isFullscreen, onFullscreen, toggleFullscreen } from "./fullscreen";
 import { SCREEN_SIZES, isSharp, onWorldScale, pct, setWorldScale, uiScale, worldScale, worldScaleName, worldScaleSetting } from "./worldscale";
 import { showLevelNote } from "./hudLogic";
@@ -133,6 +133,7 @@ import { StashUI, TradeUI } from "./trade";
 import { STASH_RANGE, STASHES } from "../../shared/trade";
 import { afterLoading, hideLoading, loadingActive, loadingFor, setLoading, showLoading } from "./loading";
 import { WaygateLayer } from "./waygate";
+import { BorderLayer } from "./borders";
 import { FerryLayer, FERRY_NO } from "./ferry";
 import { WAYGATE_RANGE, WAYGATES } from "../../shared/act2";
 import { CROWNWAYS } from "../../shared/crown";
@@ -401,6 +402,8 @@ export class TownScene extends Phaser.Scene {
   private qcarry?: QuestCarry; // carried lantern and held mill (client/src/questCarry.ts)
   private portals?: PortalLayer;
   private waygates?: WaygateLayer;
+  private borders?: BorderLayer;
+  private roadMarks: MapMarker[] = [];
   private ferry?: FerryLayer;
   private chatEl = document.getElementById("chat") as HTMLInputElement;
   private onlineShown = -1; // online hero count last written next to the chat box
@@ -868,6 +871,19 @@ export class TownScene extends Phaser.Scene {
       showLoading(to === "desert" ? "Crossing into the Sunscar…" : to === "moors" ? "Crossing into the Grey Barrow Moors…" : to === "badlands" ? "Crossing into the Red Badlands…" : to === "sinkholes" ? "Going down into the Mawdeep Sinkholes…" : to === "sinkway" ? "Climbing back up to Oakvale…" : to.startsWith("crown_") ? "Crossing into the Crown of the Marches…" : to.startsWith("crownway_") ? `Crossing home to ${CROWNWAYS.find((c) => `crownway_${c.from}` === to)?.land ?? "your homeland"}…` : "Crossing home to Oakvale…");
       this.settled = 0;
       if (to === "moors") this.cameras.main.fadeIn(1200, 30, 36, 44); else if (to === "badlands") this.cameras.main.fadeIn(1200, 70, 28, 14); else if (to === "sinkholes") this.cameras.main.fadeIn(1200, 22, 30, 14); else if (to.startsWith("crown_")) this.cameras.main.fadeIn(1200, 44, 40, 34); else this.cameras.main.fadeIn(1200, 60, 30, 8);
+    });
+    // The border roads (shared/borders.ts): walked on into the mist, the server moves the hero to the other land's end
+    // of the road. No loading screen: the mist is thick on both sides, and the far ground was painted ahead.
+    this.borders = new BorderLayer(this);
+    this.roadMarks = this.borders.markers();
+    this.room.onMessage("border", ({ id, land, x, y }) => {
+      const e = this.entities.get(id);
+      if (!e) return;
+      e.sprite.setPosition(x, y); e.tx = x; e.ty = y; e.lastX = x; e.lastY = y;
+      if (id !== this.me) return;
+      this.jumped(); this.borders?.crossed();
+      const [r, g, b] = this.borders!.mistRGB(Number(land) || 1);
+      this.arrive(r, g, b, 300); // held only while the far ground is still being painted
     });
     // Down a rope or a stair in the Mawdeep (shared/dungeon.ts LINKS): a jump to the other end, a fade through the dark
     this.room.onMessage("descend", ({ id, x, y }) => {
@@ -3788,9 +3804,10 @@ export class TownScene extends Phaser.Scene {
     this.grimoire?.update(meEnt?.state?.cls);
     this.ferry?.update(meEnt?.state, meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near || !!this.portals?.near);
     this.waygates?.update(meEnt?.state, meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near);
+    this.borders?.update(meEnt?.state, meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, meEnt ? actOfTile(Math.floor(meEnt.sprite.x / TILE), Math.floor(meEnt.sprite.y / TILE)) : 1, dtMs, this.time.now / 1000);
     this.portals?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near || !!this.shrine?.near);
     if (this.minimap) { this.minimap.war = this.warLast; this.minimap.woken = this.portals?.wokenIds(); this.updateLandLine(meEnt?.state); this.minimap.clan = this.warStd?.clan || undefined; this.minimap.sacked = this.sack?.sacked; this.minimap.towns = this.warTowns2; this.minimap.lines = this.warCols; this.minimap.battles = this.warBattle; } // the war table layer (warTable.ts) and the war overlays (warMap.ts)
-    if (this.minimap && this.npcs) this.minimap.markers = [...this.npcs.markers, ...(this.portals?.markers() ?? []), ...(this.bounty?.markers() ?? []), ...(this.dungeon?.markers() ?? []), ...(this.waygates?.markers() ?? []), ...(this.qcarry?.markers() ?? []), ...(this.tide?.markers() ?? [])];
+    if (this.minimap && this.npcs) this.minimap.markers = [...this.npcs.markers, ...(this.portals?.markers() ?? []), ...(this.bounty?.markers() ?? []), ...(this.dungeon?.markers() ?? []), ...(this.waygates?.markers() ?? []), ...this.roadMarks, ...(this.qcarry?.markers() ?? []), ...(this.tide?.markers() ?? [])];
 
     const mine = meEnt?.state;
     if (mine) {

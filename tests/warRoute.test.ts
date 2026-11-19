@@ -32,10 +32,16 @@ test("hereAt: the Crown's territories are nodes like any other (since Crown PR3)
   assert.equal(hereAt(10, 250).node, undefined); // the underground band holds no land
 });
 
-test("WAYS: the four land links and five Crownways, each end in its own land; a Crownway leads into its approach", () => {
-  assert.equal(WAYS.length, 9);
+test("WAYS: the four land links, five Crownways and ten border roads, each end in its own land; a Crownway leads into its approach", () => {
+  // the gates, then the ten border roads (shared/borders.ts), each from its lower land to the land that asks more
+  const roads = WAYS.filter((w) => w.id.startsWith("road_"));
+  assert.equal(WAYS.length - roads.length, 9);
+  assert.equal(roads.length, 10);
+  assert.ok(roads.every((w) => TERRITORIES[w.a].region !== CROWN_LAND), "into the Crown, never out of it");
+  assert.equal(roads.find((w) => w.name === "The Eastmarch Pass")!.req, "Lv 20");
+  assert.equal(roads.find((w) => w.name === "The Ashen Pass")!.req, "after Act 1's bosses");
   for (const w of WAYS) assert.notEqual(TERRITORIES[w.a].region, TERRITORIES[w.b].region);
-  const crown = WAYS.filter((w) => TERRITORIES[w.b].region === CROWN_LAND);
+  const crown = WAYS.filter((w) => !w.id.startsWith("road_") && TERRITORIES[w.b].region === CROWN_LAND);
   assert.deepEqual(crown.map((w) => w.id), CROWNWAYS.map((c) => `crownway_${c.from}`));
   for (const c of CROWNWAYS) {
     const w = crown.find((x) => x.name === c.name)!, g = crownGateTile(c);

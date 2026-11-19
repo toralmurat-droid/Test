@@ -1,4 +1,4 @@
-import { actOfTile, BADLANDS_LEVEL, CROWN_LEVEL, MOORS_LEVEL, PLAYER_RADIUS, SINKHOLES_LEVEL, TILE, type Act } from "./constants";
+import { ACT_LEVEL, actOfTile, BADLANDS_LEVEL, CROWN_LEVEL, MOORS_LEVEL, PLAYER_RADIUS, SINKHOLES_LEVEL, TILE, type Act } from "./constants";
 import { CHAINS, chainDone, type Quester } from "./quests";
 import { KEL_MARKET, D, WAYGATE_DESERT, WAYGATE_OAKVALE } from "./desert";
 import { CAIRN_SQUARE, MOORSGATE_MOORS, MOORSGATE_OAKVALE, MR } from "./moors";
@@ -10,6 +10,7 @@ import { CITIES, CITY, CITY_TEMPLATE, cityOf, cityText, cityTile, type City } fr
 import { CITY_LINES, cityLine } from "./war/cityText";
 import type { ClanKey } from "./war/clans";
 import { underground } from "./dungeon";
+import { LAND_NAMES, type Border, type BorderEnd } from "./borders";
 import { isSolidAt, randomSpawn, SAFE_ZONE } from "./map";
 import { roomyTile } from "./npcs";
 
@@ -128,6 +129,14 @@ export function actOpen(act: number, p: (Quester & { level: number }) | undefine
   if (act === 2) return act2Open(p);
   const h = HOMELAND_GATES.find((o) => o.act === act);
   return !!h && !!p && p.level >= h.level;
+}
+
+/** Whether a border road into land `to` lets this hero through (shared/borders.ts): on the same terms as that land's gates. */
+export const borderOpen = (to: BorderEnd, p: (Quester & { level: number }) | undefined) => actOpen(to.land, p);
+/** The note a hero gets walking into a border road's mist while it is shut for them. */
+export function borderShutNote(b: Border, to: BorderEnd): string {
+  if (to.land === 2) return `The mist of ${b.name.replace(/^The /, "the ")} will not part until Ostrevar the Hollow King and the Hide-Mother of the Mawdeep are beaten.`;
+  return `The mist of ${b.name.replace(/^The /, "the ")} will not part. ${LAND_NAMES[to.land].replace(/^t/, "T")} wants level ${ACT_LEVEL[to.land].min}.`;
 }
 
 /** Which act a point (px) is in (the Lantern Crypt, deep under the desert's west, is Act 1's). */

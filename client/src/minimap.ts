@@ -92,7 +92,7 @@ type P = { x: number; y: number };
 export type OtherHero = P & { name?: string };
 const ALLY = "#5ec8ff"; // other players (own hero is gold)
 /** Something to point at on the maps: a quest giver ("!" / "?"), a trader, or a quest area (circle). */
-export interface MapMarker { x: number; y: number; glyph: string; color: string; r?: number; label?: string; track?: boolean; /** a drawn stair icon (the Mawdeep's ways down and up) */ stair?: "down" | "up"; /** a drawn stone arch (Act 2's waygate); "awake" fills it with light */ gate?: "asleep" | "awake"; /** only once that spot is discovered */ fogged?: boolean }
+export interface MapMarker { x: number; y: number; glyph: string; color: string; r?: number; label?: string; track?: boolean; /** a drawn stair icon (the Mawdeep's ways down and up) */ stair?: "down" | "up"; /** a drawn stone arch (Act 2's waygate); "awake" fills it with light */ gate?: "asleep" | "awake"; /** only once that spot is discovered */ fogged?: boolean; /** a border road's end (client/src/borders.ts): named on the world map */ road?: boolean }
 
 /**
  * Minimap with fog of war: only places the player has been near are shown, and the minimap only
@@ -844,7 +844,7 @@ export class Minimap {
         g.fillStyle = m.color; g.fillText(m.glyph, 0, 0);
         g.restore();
       }
-      if (!mini && m.label && (m.track || m.r || m.stair)) { // (gates are named by warHere.ts: where they lead)
+      if (!mini && m.label && (m.track || m.r || m.stair || m.road)) { // (gates are named by warHere.ts: where they lead)
         g.font = `11px ${PF}`; g.textAlign = "center"; g.textBaseline = "alphabetic";
         g.save(); g.translate(x, y);
         if (this.turned && ISO) g.rotate(-Math.PI / 4); // upright on the turned world map
