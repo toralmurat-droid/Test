@@ -711,7 +711,7 @@ export class Minimap {
       const here = this.caption(me);
       const over = this.hover ? warTablePick(this.hover.x, this.hover.y) : undefined;
       this.big.style.cursor = over !== undefined ? "pointer" : "default";
-      drawWarTable(g, this.war, PF, now, this.hover, { here, area: me ? areaAt(me.x, me.y) : undefined, sel: this.sel, woken: this.woken });
+      drawWarTable(g, this.war, PF, now, this.hover, { here, area: me ? areaAt(me.x, me.y) : undefined, sel: this.sel, woken: this.woken, ground: this.colors });
       return;
     }
     if (this.warCursor) { this.warCursor = false; this.big.style.cursor = "grab"; }

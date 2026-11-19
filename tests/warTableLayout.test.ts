@@ -45,3 +45,15 @@ test("war table: territories keep clear of the standing banners", () => {
     }
   }
 });
+
+test("war table: a land's frame maps tiles to the sheet and back, so the painted ground lines up with the markers", async () => {
+  const { landFrame, sheetToTile, tileToSheet } = await import("../client/src/warTableLayout");
+  for (const s of SLOTS) {
+    const mine = TERRITORIES.filter((t) => t.region === s.key), f = landFrame(s, mine);
+    if (!mine.length) { assert.equal(f, undefined); continue; }
+    for (const t of mine) {
+      const [x, y] = tileToSheet(f!, t.cx, t.cy), [tx, ty] = sheetToTile(f!, x, y);
+      assert.ok(Math.abs(tx - t.cx) < 1e-6 && Math.abs(ty - t.cy) < 1e-6, `${s.key} ${t.id}`);
+    }
+  }
+});

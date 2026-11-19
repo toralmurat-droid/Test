@@ -14,7 +14,9 @@ import { TERRITORIES } from "../../shared/war/territories";
 import type { WarView } from "../../shared/war/view";
 import { viewTier } from "../../shared/war/intel";
 import { CITIES, cityText } from "../../shared/capitals";
-import { inPoly, layoutTerritories, SLOTS, WT_H, WT_W, type Pt } from "./warTableLayout";
+import { inPoly, landFrame, layoutTerritories, sheetToTile, SLOTS, WT_H, WT_W, type Pt } from "./warTableLayout";
+import { EMPTY, GROUND, OBJECTS, T } from "../../shared/map";
+import { inDeepRow, MAP_H, MAP_W, UNDER_END, WORLD_H } from "../../shared/constants";
 import { CROWN_LAND, findRoute, gateReq, landOfNode, nodeName, routeLines, STONES, WAYS, type Here, type Step } from "./warRoute";
 import { wrap } from "./warHere";
 import { reckonCountdown } from "../../shared/war/crown";
@@ -44,46 +46,147 @@ const landOf = landOfNode;
 const NAMES: Record<string, string> = Object.fromEntries(REGIONS.map((r) => [r.key, r.name]));
 const idsOf = (key: string) => TERRITORIES.filter((t) => t.region === key).map((t) => t.id);
 
-/** Static per-pixel maps: which land, which territory's cell (-1 none), a little grain. Built once. */
+/** Static per-pixel maps (R x finer than the art grid): which land, which territory's cell (-1 none), a little grain. Built once. */
+const R = 2, RW = AW * R, RH = AH * R, SU = UNIT / R; // the painted sheet: R px per art pixel, SU sheet units per px
 const hash = (x: number, y: number) => { let h = (x * 374761393 + y * 668265263) | 0; h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0) / 4294967295; };
-const LAND = new Int8Array(AW * AH), CELL = new Int16Array(AW * AH), GRAIN = new Float32Array(AW * AH);
-for (let y = 0; y < AH; y++) for (let x = 0; x < AW; x++) {
-  const i = y * AW + x, p: Pt = [x * UNIT + 2 + (hash(x, y) - 0.5) * 7, y * UNIT + 2 + (hash(y, x) - 0.5) * 7]; // jittered, so land edges are ragged
+const LAND = new Int8Array(RW * RH), CELL = new Int16Array(RW * RH), GRAIN = new Float32Array(RW * RH);
+let built = false;
+/** Fills the per-px maps on the first paint, not at load: every hero loads this module, few open the table. */
+function buildStatics() {
+if (built) return;
+built = true;
+for (let y = 0; y < RH; y++) for (let x = 0; x < RW; x++) {
+  const i = y * RW + x, p: Pt = [x * SU + SU / 2 + (hash(x, y) - 0.5) * 7, y * SU + SU / 2 + (hash(y, x) - 0.5) * 7]; // jittered, so land edges are ragged
   const l = SLOTS.findIndex((s) => inPoly(p, s.poly));
   LAND[i] = l; GRAIN[i] = hash(x + 91, y + 17) - 0.5;
   let best = -1, bd = Infinity;
   if (l >= 0) for (const t of TERRITORIES) {
     if (t.region !== LAND_OF[l]) continue;
-    const q = POS.get(t.id)!, d = (q.x - x * UNIT) ** 2 + (q.y - y * UNIT) ** 2;
+    const q = POS.get(t.id)!, d = (q.x - x * SU) ** 2 + (q.y - y * SU) ** 2;
     if (d < bd) { bd = d; best = t.id; }
   }
   CELL[i] = best;
 }
+fillTiles();
+}
+
+/**
+ * The real ground under each land (Murat 2026-11-19: the table shows the map's own lie of the land). Every px of a slot
+ * looks up the world tile it stands for (landFrame's inverse, so markers stand on their own zone), within the land's
+ * surface: its territories' box plus a rim, cut to the land's own rows (regions.ts `contains`), never the underground or
+ * the deep band. Built from the world data, so a land that grows or moves repaints itself.
+ */
+const LAND_RIM = 14; // tiles of country shown round a land's outermost zones
+const surfaceRow = (y: number) => !(y >= WORLD_H && y < UNDER_END) && !inDeepRow(y);
+const BOX = SLOTS.map((s) => {
+  const mine = TERRITORIES.filter((t) => t.region === s.key), f = landFrame(s, mine), reg = REGIONS.find((r) => r.key === s.key);
+  if (!f || !reg?.contains) return undefined;
+  const cx = Math.round(mine.reduce((a, t) => a + t.cx, 0) / mine.length);
+  const cy = Math.round(mine.find((t) => reg.contains!(cx, Math.round(t.cy)))?.cy ?? mine[0].cy); // a row the land really holds
+  const ok = (y: number) => y >= 0 && y < MAP_H && surfaceRow(y) && reg.contains!(cx, y);
+  let r0 = cy, r1 = cy;
+  while (ok(r0 - 1)) r0--;
+  while (ok(r1 + 1)) r1++;
+  if (r0 === r1) { r0 = Math.min(...mine.map((t) => t.y)); r1 = Math.max(...mine.map((t) => t.y + t.h)); } // no run of rows: the zones' own
+  const x0 = Math.max(0, Math.min(...mine.map((t) => t.x)) - LAND_RIM), x1 = Math.min(MAP_W - 1, Math.max(...mine.map((t) => t.x + t.w)) + LAND_RIM);
+  const y0 = Math.max(r0, Math.min(...mine.map((t) => t.y)) - LAND_RIM), y1 = Math.min(r1, Math.max(...mine.map((t) => t.y + t.h)) + LAND_RIM);
+  return { f, x0, x1, y0, y1 };
+});
+/** Per px: its world tile (clamped into the land's box, -1 off the lands), how far past the box it lies (fades to parchment), and how far inside its own territory's zone (1 in it, fading to 0 five tiles out). */
+const TX = new Int16Array(RW * RH).fill(-1), TY = new Int16Array(RW * RH).fill(-1), FADE = new Float32Array(RW * RH), IN = new Float32Array(RW * RH);
+function fillTiles() {
+for (let y = 0; y < RH; y++) for (let x = 0; x < RW; x++) {
+  const i = y * RW + x, b = LAND[i] >= 0 ? BOX[LAND[i]] : undefined;
+  if (!b) continue;
+  const [fx, fy] = sheetToTile(b.f, x * SU + SU / 2, y * SU + SU / 2);
+  const cx = Math.min(b.x1, Math.max(b.x0, Math.floor(fx))), cy = Math.min(b.y1, Math.max(b.y0, Math.floor(fy)));
+  TX[i] = cx; TY[i] = cy;
+  FADE[i] = Math.min(1, Math.hypot(Math.max(b.x0 - fx, fx - b.x1 - 1, 0), Math.max(b.y0 - fy, fy - b.y1 - 1, 0)) / 10);
+  const t = CELL[i] >= 0 ? TERRITORIES[CELL[i]] : undefined;
+  IN[i] = t ? Math.max(0, 1 - Math.hypot(Math.max(t.x - fx, fx - t.x - t.w, 0), Math.max(t.y - fy, fy - t.y - t.h, 0)) / 5) : 0; // soft edge, 5 tiles
+}
+}
+
+/** How high a tile stands, for the hill shading: cliffs and rock high, woods a little, water and pits low. */
+function tileHeight(x: number, y: number): number {
+  const o = OBJECTS[y][x], g = GROUND[y][x];
+  if (o === T.CLIFF) return 3;
+  if (o === T.ROCK || o === T.SPIRE || o === T.ARCH) return 1.6;
+  if (o === T.PIT || o === T.CAVE) return -1.6;
+  if (o === T.TREE || o === T.PINE || o === T.PALM) return 0.9;
+  if (o === T.BARROW || o === T.STANDING_STONE || o === T.BURROW || o === T.STATUE) return 0.8;
+  if (o !== EMPTY && o !== T.BUSH && o !== T.BRIDGE) return 0.5; // buildings, walls, stalls
+  if (g === T.WATER) return -1.2;
+  if (g === T.BOG) return -0.4;
+  if (g === T.SAND) return 0.1;
+  return 0;
+}
+/** Per px: light from the north-west on the smoothed height (a summed-area table over each land's box). Built on first paint. */
+let SHADE: Float32Array | undefined;
+function shading(): Float32Array {
+  if (SHADE) return SHADE;
+  SHADE = new Float32Array(RW * RH);
+  const rad = 2;
+  const sat = BOX.map((b) => {
+    if (!b) return undefined;
+    const w = b.x1 - b.x0 + 2, h = b.y1 - b.y0 + 2, a = new Float64Array(w * h);
+    for (let y = 1; y < h; y++) for (let x = 1; x < w; x++) a[y * w + x] = tileHeight(b.x0 + x - 1, b.y0 + y - 1) + a[(y - 1) * w + x] + a[y * w + x - 1] - a[(y - 1) * w + x - 1];
+    const mean = (tx: number, ty: number) => { // the box mean round (tx, ty), clipped to the land
+      const x0 = Math.max(b.x0, tx - rad) - b.x0, x1 = Math.min(b.x1, tx + rad) - b.x0 + 1, y0 = Math.max(b.y0, ty - rad) - b.y0, y1 = Math.min(b.y1, ty + rad) - b.y0 + 1;
+      return (a[y1 * w + x1] - a[y0 * w + x1] - a[y1 * w + x0] + a[y0 * w + x0]) / ((x1 - x0) * (y1 - y0));
+    };
+    return mean;
+  });
+  for (let i = 0; i < RW * RH; i++) {
+    const m = TX[i] < 0 ? undefined : sat[LAND[i]];
+    if (!m) continue;
+    const x = TX[i], y = TY[i];
+    SHADE[i] = Math.max(-1, Math.min(1, (m(x - 2, y - 2) - m(x + 2, y + 2)) * 0.55)) + Math.max(-0.4, Math.min(0.6, m(x, y) * 0.12));
+  }
+  return SHADE;
+}
+
+let terrain: Uint8ClampedArray | undefined;
+/** The world's ground colours, 1 px per tile (the minimap's sheet), read once. */
+function terrainOf(c?: HTMLCanvasElement): Uint8ClampedArray | undefined {
+  if (!terrain && c && c.width === MAP_W && c.height === MAP_H) terrain = c.getContext("2d")!.getImageData(0, 0, MAP_W, MAP_H).data;
+  return terrain;
+}
 
 let art: HTMLCanvasElement | undefined, artKey = "";
-/** The painted continent for these owners (cached: only a war tick changes it). */
-function paintArt(v: WarView): HTMLCanvasElement {
-  const key = v.owner.join(",");
+/** The painted continent for these owners: the real ground of each land, washed in its holders' colours (cached: only a war tick changes it). */
+function paintArt(v: WarView, ground?: HTMLCanvasElement): HTMLCanvasElement {
+  buildStatics();
+  const tc = terrainOf(ground);
+  const key = v.owner.join(",") + (tc ? "|t" : "");
   if (art && key === artKey) return art;
   artKey = key;
-  art ??= Object.assign(document.createElement("canvas"), { width: AW, height: AH });
-  const g = art.getContext("2d")!, img = g.createImageData(AW, AH);
+  art ??= Object.assign(document.createElement("canvas"), { width: RW, height: RH });
+  const g = art.getContext("2d")!, img = g.createImageData(RW, RH);
   const own = (t: number) => (t < 0 ? -1 : v.owner[t]);
-  const base = new Int32Array(AW * AH);
-  for (let i = 0; i < AW * AH; i++) {
-    const o = own(CELL[i]);
-    base[i] = LAND[i] < 0 ? VOID : o < 0 ? CROWN : mix(PARCH, MAP[CLAN_KEYS[o]], 0.42);
-  }
-  for (let y = 0; y < AH; y++) for (let x = 0; x < AW; x++) {
-    const i = y * AW + x;
-    let c = base[i];
-    const grain = GRAIN[i], k = 1 + grain * 0.22;
-    c = [16, 8, 0].reduce((o, s) => o | (Math.min(255, Math.round(((c >> s) & 255) * k)) << s), 0);
-    for (const j of [x + 1 < AW ? i + 1 : -1, y + 1 < AH ? i + AW : -1]) { // a border where the neighbour is another cell
-      if (j < 0 || CELL[j] === CELL[i] && LAND[j] === LAND[i]) continue;
-      const a = own(CELL[i]), b = own(CELL[j]), sameLand = LAND[j] === LAND[i];
-      if (a >= 0 && b >= 0 && a !== b) c = EMBER[(x + y) & 1]; // a front line: two clans meet
-      else c = sameLand ? mix(c, INK, 0.55) : mix(c, INK, 0.8);
+  const sh = tc ? shading() : undefined;
+  for (let y = 0; y < RH; y++) for (let x = 0; x < RW; x++) {
+    const i = y * RW + x;
+    let c: number;
+    if (LAND[i] < 0) c = VOID;
+    else {
+      const o = own(CELL[i]);
+      let ground = PARCH;
+      if (tc && TX[i] >= 0) {
+        const q = (TY[i] * MAP_W + TX[i]) * 4;
+        ground = mix(mix((tc[q] << 16) | (tc[q + 1] << 8) | tc[q + 2], PARCH, 0.18), PARCH, FADE[i] * 0.85);
+      }
+      c = o < 0 ? mix(ground, CROWN, tc ? 0.3 : 1) : mix(ground, MAP[CLAN_KEYS[o]], !tc ? 0.42 : 0.2 + 0.24 * IN[i]);
+      const k = 1 + GRAIN[i] * (tc ? 0.1 : 0.22) + (sh ? sh[i] * 0.5 * (1 - FADE[i]) : 0);
+      c = [16, 8, 0].reduce((o2, s) => o2 | (Math.max(0, Math.min(255, Math.round(((c >> s) & 255) * k))) << s), 0);
+      let edge = 0; // the strongest border a neighbour in another cell gives: 1 within a land, 2 between lands, 3 a front line
+      for (const j of [x + 1 < RW ? i + 1 : -1, y + 1 < RH ? i + RW : -1, x > 0 ? i - 1 : -1, y > 0 ? i - RW : -1]) {
+        if (j < 0 || CELL[j] === CELL[i] && LAND[j] === LAND[i]) continue;
+        const a = own(CELL[i]), b = own(CELL[j]);
+        edge = Math.max(edge, a >= 0 && b >= 0 && a !== b ? 3 : LAND[j] === LAND[i] ? 1 : 2);
+      }
+      if (edge === 3) c = EMBER[((x + y) >> 1) & 1]; // a front line: two clans meet
+      else if (edge) c = mix(c, INK, edge === 2 ? 0.8 : tc ? 0.45 : 0.55);
     }
     const o = i * 4;
     img.data[o] = (c >> 16) & 255; img.data[o + 1] = (c >> 8) & 255; img.data[o + 2] = c & 255; img.data[o + 3] = 255;
@@ -125,7 +228,7 @@ function bannerArt(k: ClanKey): HTMLCanvasElement {
 
 export interface WarHover { x: number; y: number }
 /** What the table says about the hero: where they stand, the territory they picked, the portal stones they may use. */
-export interface WarTableUI { here?: Here; area?: string; sel?: number; woken?: ReadonlySet<string> }
+export interface WarTableUI { here?: Here; area?: string; sel?: number; woken?: ReadonlySet<string>; /** the world's ground colours, 1 px per tile (the minimap's sheet): painted under the clans' colours */ ground?: HTMLCanvasElement }
 
 /** Screen spots of the nodes of the last frame, for picking a territory by click. */
 let spots: { id: number; x: number; y: number }[] = [], reach = 16;
@@ -163,7 +266,7 @@ export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, font: stri
   // the table: a gilt frame round the painted continent
   g.fillStyle = "#6e5326"; g.fillRect(mx - 4, my - 4, mw + 8, mh + 8);
   g.fillStyle = "#1a130b"; g.fillRect(mx - 2, my - 2, mw + 4, mh + 4);
-  g.drawImage(paintArt(v), mx, my, mw, mh);
+  g.drawImage(paintArt(v, ui.ground), mx, my, mw, mh);
   // your land lit: a glowing gold edge round it, a light wash over it
   const myLand = here?.land ? SLOTS.find((s) => s.key === here.land) : undefined;
   if (myLand) {
