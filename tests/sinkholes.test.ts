@@ -1,4 +1,5 @@
 import { test } from "node:test";
+import { carveBorders } from "../shared/borders";
 import { CITIES, cityGateDais } from "../shared/capitals";
 import assert from "node:assert/strict";
 import {
@@ -46,6 +47,7 @@ test("sinkholes: a band of its own under the badlands, built the same every time
     const g = Array.from({ length: MAP_H }, () => Array<number>(MAP_W).fill(T.DIRT)), o = Array.from({ length: MAP_H }, () => Array<number>(MAP_W).fill(T.ROCK));
     const r = buildSinkholes(T, g, o, EMPTY);
     for (const c of CITIES) if (c.act === 5) cityGateDais(c, T, g, o, EMPTY, (t) => NATURE.has(t)); // the capital's city gate (W7), cut in after the land
+    carveBorders(g, o, new Set(), T, EMPTY); // the border roads (shared/borders.ts), cut last
     return { g: g.slice(S0, S1), o: o.slice(S0, S1), areas: r.areas, roads: [...r.roads], posts: r.posts };
   };
   const a = fresh(), b = fresh();

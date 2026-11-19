@@ -82,11 +82,11 @@ test("room: the synced fx shows ch1, ch2 and then chlock as Amen (vi IV I) is pl
   const srv = await server();
   const c = await srv.join({ cls: "songweaver" });
   try {
-    await wait(200);
+    await until(() => !!c.state.players?.get(c.sessionId), 10_000); // the client's first state
     const p = srv.room.state.players.get(c.sessionId), [x, y] = openSpot();
     p.x = x; p.y = y; p.level = 30; p.hp = p.maxHp = 99999; p.invulnUntil = Date.now() + 60_000;
     for (const [k, v] of Object.entries(allRanks())) p.talents.set(k, v);
-    const fx = () => String(c.state.players.get(c.sessionId).fx).split(",");
+    const fx = () => String(c.state.players?.get(c.sessionId)?.fx ?? "").split(","); // (the client's first state can lag under a loaded run)
     const again = () => { p.sk.last = {}; p.attackReadyAt = 0; };
     srv.room.cast(c.sessionId, "sg_pedal"); // vi
     // the client copy of fx lags a patch or two; under a loaded full run 200 ms was not always enough

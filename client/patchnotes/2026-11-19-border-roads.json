@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-19",
+  "pr": 542,
+  "title": "Walk between the lands",
+  "changes": [
+    "Ten border roads now join all six lands on foot: follow a road out to the edge of a land and walk on into the mist of the pass to come out in the next one.",
+    "A road into a land opens at the same level as that land's gates, and the way back to Oakvale is always open.",
+    "The roads are marked on the world map with the land they lead to. The gates and portal stones still work as quick ways."
+  ]
+}

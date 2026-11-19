@@ -1,4 +1,5 @@
 import { test } from "node:test";
+import { carveBorders } from "../shared/borders";
 import { CITIES, cityGateDais } from "../shared/capitals";
 import assert from "node:assert/strict";
 import {
@@ -40,6 +41,7 @@ test("moors: its own band under the deep band, built the same every time", () =>
     const g = Array.from({ length: MAP_H }, () => Array<number>(MAP_W).fill(T.DIRT)), o = Array.from({ length: MAP_H }, () => Array<number>(MAP_W).fill(T.ROCK));
     const r = buildMoors(T, g, o, EMPTY);
     for (const c of CITIES) if (c.act === 3) cityGateDais(c, T, g, o, EMPTY, (t) => NATURE.has(t)); // the capital's city gate (W7), cut in after the land
+    carveBorders(g, o, new Set(), T, EMPTY); // the border roads (shared/borders.ts), cut last
     return { g: g.slice(MOORS_Y0, MOORS_Y0 + MOORS_H), o: o.slice(MOORS_Y0, MOORS_Y0 + MOORS_H), areas: r.areas, roads: [...r.roads] };
   };
   const a = fresh(), b = fresh();

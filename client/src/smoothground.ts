@@ -30,6 +30,7 @@ export class SmoothGround {
   private queue: { key: string; cx: number; cy: number; d?: number }[] = [];
   private near = new Set<string>(); // chunks on screen (plus a small margin): the ones the loading screen waits for
   private pins: { x: number; y: number }[] = []; // far spots painted ahead and kept (see pin())
+  private pinSets = new Map<string, { x: number; y: number }[]>(); // per caller (the waygates, the border roads)
 
   constructor(private scene: Phaser.Scene, ground: number[][], private onImage: (img: Phaser.GameObjects.Image) => void) {
     const g = new Int16Array(MAP_W * MAP_H), solid = new Uint8Array(MAP_W * MAP_H), cliff = new Uint8Array(MAP_W * MAP_H);
@@ -80,7 +81,7 @@ export class SmoothGround {
    * Used for the other end of an awake waygate: a chunk takes over a second to paint, so crossing used to wait for a
    * whole screen of them behind the loading screen (Murat 2026-11-13: "the loading time is awful").
    */
-  pin(spots: { x: number; y: number }[]) { this.pins = spots; }
+  pin(spots: { x: number; y: number }[], by = "waygate") { this.pinSets.set(by, spots); this.pins = [...this.pinSets.values()].flat(); }
 
   /** Call every frame with the camera's centre and size in iso screen px. */
   update(midX: number, midY: number, viewW: number, viewH: number) {

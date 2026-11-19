@@ -61,6 +61,7 @@ import { AMBUSH, BANDIT_AI, BANDIT_ROLES, CAMPS, campOfZone, CHIEF, clearWalk, f
 import { accountsShared, claimAccount, onAccountLost, flush, flushFinal, HeroSave, leaveAccount, loadHero, loadStash, login, markChest, openedChests, resetChests, saveHero, saveStash, type Stash } from "./accounts";
 import { ACCOUNT_LEASE } from "./accountGuard";
 import { offerFrom, Offer, settle, stashNear, STASH_GOLD_MAX, STASH_RANGE, STASH_SIZE, TRADE } from "../shared/trade";
+import { crossTo, otherEnd, seamAt } from "../shared/borders";
 import { arrivalOf, cleanPortals, PORTAL_COMBAT_MS, PORTAL_RANGE, PORTAL_WAKE_RANGE, portalById, PORTALS } from "../shared/portals";
 import { rideFerry } from "./ferry";
 import { rollBoon, shrineXp, SHRINE, SHRINE_COOLDOWN_MS, SHRINE_RANGE, WIND_BLESSING, WIND_BLESSING_ID } from "../shared/shrine";
@@ -89,7 +90,7 @@ import { AgeCross } from "./ageCross";
 import { AGE_TAKEN_CLOSE } from "../shared/ageCross";
 import { MobView } from "./mobView";
 import { copyPatches } from "./patchCopy";
-import { act1Home, actAt, actOpen, actSpawn, cityGateOf, gateColdNote, gateOpen, WAYGATE_RANGE, waygateArrival, waygateById, WAYGATES } from "../shared/act2";
+import { act1Home, actAt, actOpen, actSpawn, borderOpen, borderShutNote, cityGateOf, gateColdNote, gateOpen, WAYGATE_RANGE, waygateArrival, waygateById, WAYGATES } from "../shared/act2";
 import { respecCost } from "../shared/upkeep";
 import { ARSENAL, ATTUNE_ORDER, attuneOf, bondShare, DEFAULT_GRIMOIRE, SUMMONER_TREE, ESSENCE, GOLEM, GOLEM_OF, golemSlots, isElement, isSummonKind, parseGrimoire, PORTAL, SUMMON, summonElement, summonScaleLevel, WISP, wispEls, type AttuneElement, type SummonKind } from "../shared/summons";
 import { cleanFeast, familyOf, type Feast, feastMult, THRALL, thrallMax } from "../shared/devour";
@@ -3283,6 +3284,7 @@ export class TownRoom extends Room<TownState> {
         ? moveStep(p.x, p.y, p.rollInput, dt, DODGE.distance / (DODGE.durationMs / 1000))
         : moveStep(p.x, p.y, p.input, dt, heroSpeed(p.cls, p.slowed, p.spd) * gearSpeedMult(this.equipped(p)));
       p.x = r.x; p.y = r.y; p.moving = r.moving;
+      if (r.moving) this.useBorders(pid, p, now);
       if (!p.rolling) { p.dir = dirFromInput(p.input, p.dir); aimOf(p); }
       if (r.moving) p.emote = "";
       // Regeneration from Stamina: always a trickle, ramping up smoothly out of combat, fastest in the safe plaza
@@ -4486,6 +4488,30 @@ export class TownRoom extends Room<TownState> {
       this.broadcast("descend", { id: pid, from: l.id, to: dest.id, down: l.down, x: Math.round(at.x), y: Math.round(at.y) });
       return;
     }
+  }
+
+  /**
+   * Border roads (shared/borders.ts, Murat 2026-11-19): walking on into the mist at the end of one takes the hero to the
+   * other land's end of the road, still walking. Shut like that land's gates (a note says why, at most every 3 s), and
+   * not in a fight or with a quest lantern in hand, like a portal: the hero just stands at the end of the road.
+   */
+  private useBorders(pid: string, p: Player, now: number) {
+    const s = seamAt(p.x, p.y);
+    if (!s) return;
+    const to = otherEnd(s.b, s.from);
+    if (!borderOpen(to, p)) {
+      if (now - p.gateNoteAt > 3000) { p.gateNoteAt = now; this.note(pid, borderShutNote(s.b, to)); }
+      return;
+    }
+    if (this.lanternHeld(pid, p)) return;
+    if (now - p.lastHurt < PORTAL_COMBAT_MS) {
+      if (now - p.gateNoteAt > 3000) { p.gateNoteAt = now; this.clients.find((c) => c.sessionId === pid)?.send("travelno", { why: "fight" }); }
+      return;
+    }
+    const at = crossTo(s.b, s.from, p.x, p.y);
+    p.x = at.x; p.y = at.y;
+    p.rollUntil = 0; p.rolling = false; p.emote = "";
+    this.broadcast("border", { id: pid, road: s.b.id, land: to.land, x: Math.round(at.x), y: Math.round(at.y) });
   }
 
   /**
