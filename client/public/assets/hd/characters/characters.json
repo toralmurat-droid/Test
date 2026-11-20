@@ -850,7 +850,7 @@
     486,
     487
    ],
-   "fps": 19,
+   "fps": 24,
    "loop": true
   },
   "run_up": {
@@ -864,7 +864,7 @@
     494,
     495
    ],
-   "fps": 19,
+   "fps": 24,
    "loop": true
   },
   "run_right": {
@@ -878,7 +878,7 @@
     502,
     503
    ],
-   "fps": 19,
+   "fps": 24,
    "loop": true
   },
   "run_downright": {
@@ -892,7 +892,7 @@
     510,
     511
    ],
-   "fps": 19,
+   "fps": 24,
    "loop": true
   },
   "run_upright": {
@@ -906,7 +906,7 @@
     518,
     519
    ],
-   "fps": 19,
+   "fps": 24,
    "loop": true
   },
   "wave_down": {

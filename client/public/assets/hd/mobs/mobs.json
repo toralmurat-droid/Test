@@ -147,73 +147,84 @@
   "w": 20,
   "h": 30,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_skeleton_axe": {
   "w": 20,
   "h": 30,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_skeleton_spear": {
   "w": 32,
   "h": 30,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_skeleton_bow": {
   "w": 20,
   "h": 30,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_bandit": {
   "w": 20,
   "h": 30,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_bandit_brute": {
   "w": 24,
   "h": 30,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_bandit_archer": {
   "w": 20,
   "h": 30,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_banditchief": {
   "w": 28,
   "h": 34,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_skeletonmage": {
   "w": 24,
   "h": 32,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_necromancer": {
   "w": 24,
   "h": 32,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_bride": {
   "w": 20,
   "h": 30,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_demon": {
   "w": 28,
   "h": 34,
   "scale": 1.5,
-  "frames": 21,
+  "frames": 39,
   "hands": [
    [
     9.99,
@@ -340,32 +351,145 @@
     14.52,
     12.42,
     12.57
+   ],
+   [
+    9.99,
+    23.21,
+    19.3,
+    25.6
+   ],
+   [
+    9.99,
+    23.86,
+    19.33,
+    25.41
+   ],
+   [
+    9.98,
+    24.37,
+    19.33,
+    23.56
+   ],
+   [
+    9.9,
+    25.5,
+    19.33,
+    24.24
+   ],
+   [
+    9.98,
+    25.32,
+    19.33,
+    24.51
+   ],
+   [
+    9.99,
+    22.91,
+    19.33,
+    24.46
+   ],
+   [
+    18.1,
+    25.5,
+    8.67,
+    24.24
+   ],
+   [
+    18.02,
+    25.32,
+    8.67,
+    24.51
+   ],
+   [
+    18,
+    22.91,
+    8.67,
+    24.46
+   ],
+   [
+    18,
+    23.21,
+    8.7,
+    25.6
+   ],
+   [
+    18,
+    23.86,
+    8.67,
+    25.41
+   ],
+   [
+    18.02,
+    24.37,
+    8.67,
+    23.56
+   ],
+   [
+    13.88,
+    24.96,
+    14.7,
+    24.24
+   ],
+   [
+    13.88,
+    24.78,
+    15.55,
+    24.06
+   ],
+   [
+    17.17,
+    23.83,
+    17.25,
+    23.11
+   ],
+   [
+    18.63,
+    24.62,
+    18.1,
+    24.24
+   ],
+   [
+    17.17,
+    24.78,
+    17.25,
+    24.06
+   ],
+   [
+    13.88,
+    23.83,
+    15.55,
+    23.11
    ]
-  ]
+  ],
+  "run": 21
  },
  "mob_hollowking": {
   "w": 44,
   "h": 48,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_gnawkin": {
   "w": 20,
   "h": 30,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_tuskborn": {
   "w": 26,
   "h": 32,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_silkwretch": {
   "w": 20,
   "h": 30,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_duskwing": {
   "w": 32,
@@ -377,19 +501,22 @@
   "w": 24,
   "h": 30,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_tuskborn_folk": {
   "w": 26,
   "h": 32,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_silkwretch_folk": {
   "w": 30,
   "h": 30,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_duskwing_folk": {
   "w": 32,
@@ -407,79 +534,92 @@
   "w": 34,
   "h": 38,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_weaver": {
   "w": 42,
   "h": 40,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_packlord": {
   "w": 30,
   "h": 36,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_hornbrute": {
   "w": 40,
   "h": 40,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_hidemother": {
   "w": 44,
   "h": 48,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_nomad": {
   "w": 22,
   "h": 30,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_nomad_folk": {
   "w": 22,
   "h": 30,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_sanddead": {
   "w": 22,
   "h": 30,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_veiled": {
   "w": 24,
   "h": 32,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_camelfolk": {
   "w": 34,
   "h": 36,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_sphinx": {
   "w": 40,
   "h": 40,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_sunwright": {
   "w": 44,
   "h": 48,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_wight": {
   "w": 24,
   "h": 30,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_bonehound": {
   "w": 30,
@@ -497,55 +637,64 @@
   "w": 26,
   "h": 32,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_legionary": {
   "w": 32,
   "h": 32,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_cairnlord": {
   "w": 38,
   "h": 40,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_barrowking": {
   "w": 46,
   "h": 48,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_outrider": {
   "w": 22,
   "h": 30,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_crossbowman": {
   "w": 22,
   "h": 30,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_firebrand": {
   "w": 24,
   "h": 32,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_redcaptain": {
   "w": 30,
   "h": 34,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_rourke": {
   "w": 40,
   "h": 44,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_warhound": {
   "w": 34,
@@ -562,6 +711,122 @@
  "mob_rattler": {
   "w": 32,
   "h": 22,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_delver": {
+  "w": 24,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 30,
+  "run": 12
+ },
+ "mob_cackler": {
+  "w": 22,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 30,
+  "run": 12
+ },
+ "mob_stagkin": {
+  "w": 28,
+  "h": 38,
+  "scale": 1.5,
+  "frames": 30,
+  "run": 12
+ },
+ "mob_quillback": {
+  "w": 26,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 30,
+  "run": 12
+ },
+ "mob_stitcher": {
+  "w": 24,
+  "h": 34,
+  "scale": 1.5,
+  "frames": 30,
+  "run": 12
+ },
+ "mob_hidechief": {
+  "w": 34,
+  "h": 38,
+  "scale": 1.5,
+  "frames": 30,
+  "run": 12
+ },
+ "mob_mawfather": {
+  "w": 46,
+  "h": 50,
+  "scale": 1.5,
+  "frames": 30,
+  "run": 12
+ },
+ "mob_sinkworm": {
+  "w": 32,
+  "h": 28,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_oathbreaker": {
+  "w": 28,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 30,
+  "run": 12
+ },
+ "mob_crownguard": {
+  "w": 32,
+  "h": 34,
+  "scale": 1.5,
+  "frames": 30,
+  "run": 12
+ },
+ "mob_hollowherald": {
+  "w": 26,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 30,
+  "run": 12
+ },
+ "mob_courtmagus": {
+  "w": 24,
+  "h": 34,
+  "scale": 1.5,
+  "frames": 30,
+  "run": 12
+ },
+ "mob_pretender": {
+  "w": 24,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 30,
+  "run": 12
+ },
+ "mob_thronewarden": {
+  "w": 36,
+  "h": 40,
+  "scale": 1.5,
+  "frames": 30,
+  "run": 12
+ },
+ "mob_rivenking": {
+  "w": 46,
+  "h": 50,
+  "scale": 1.5,
+  "frames": 30,
+  "run": 12
+ },
+ "mob_gildhound": {
+  "w": 34,
+  "h": 24,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_crowncrow": {
+  "w": 36,
+  "h": 34,
   "scale": 1.5,
   "frames": 12
  },
@@ -622,6 +887,78 @@
  "mob_war_veiled_adept": {
   "w": 36,
   "h": 34,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_warden_bow": {
+  "w": 36,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_warden_pike": {
+  "w": 36,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_redfang_sling": {
+  "w": 36,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_host_bow": {
+  "w": 36,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_host_pike": {
+  "w": 36,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_hidekin_spear": {
+  "w": 36,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_veiled_caster": {
+  "w": 36,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_warden_rider": {
+  "w": 48,
+  "h": 48,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_redfang_rider": {
+  "w": 48,
+  "h": 48,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_host_rider": {
+  "w": 48,
+  "h": 48,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_hidekin_rider": {
+  "w": 48,
+  "h": 48,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_veiled_rider": {
+  "w": 48,
+  "h": 48,
   "scale": 1.5,
   "frames": 14
  },
@@ -737,7 +1074,7 @@
   "w": 28,
   "h": 34,
   "scale": 1.5,
-  "frames": 21,
+  "frames": 39,
   "hands": [
    [
     9.99,
@@ -864,14 +1201,123 @@
     14.52,
     12.42,
     12.57
+   ],
+   [
+    9.99,
+    23.21,
+    19.3,
+    25.6
+   ],
+   [
+    9.99,
+    23.86,
+    19.33,
+    25.41
+   ],
+   [
+    9.98,
+    24.37,
+    19.33,
+    23.56
+   ],
+   [
+    9.9,
+    25.5,
+    19.33,
+    24.24
+   ],
+   [
+    9.98,
+    25.32,
+    19.33,
+    24.51
+   ],
+   [
+    9.99,
+    22.91,
+    19.33,
+    24.46
+   ],
+   [
+    18.1,
+    25.5,
+    8.67,
+    24.24
+   ],
+   [
+    18.02,
+    25.32,
+    8.67,
+    24.51
+   ],
+   [
+    18,
+    22.91,
+    8.67,
+    24.46
+   ],
+   [
+    18,
+    23.21,
+    8.7,
+    25.6
+   ],
+   [
+    18,
+    23.86,
+    8.67,
+    25.41
+   ],
+   [
+    18.02,
+    24.37,
+    8.67,
+    23.56
+   ],
+   [
+    13.88,
+    24.96,
+    14.7,
+    24.24
+   ],
+   [
+    13.88,
+    24.78,
+    15.55,
+    24.06
+   ],
+   [
+    17.17,
+    23.83,
+    17.25,
+    23.11
+   ],
+   [
+    18.63,
+    24.62,
+    18.1,
+    24.24
+   ],
+   [
+    17.17,
+    24.78,
+    17.25,
+    24.06
+   ],
+   [
+    13.88,
+    23.83,
+    15.55,
+    23.11
    ]
-  ]
+  ],
+  "run": 21
  },
  "mob_demon2": {
   "w": 28,
   "h": 34,
   "scale": 1.5,
-  "frames": 21,
+  "frames": 39,
   "hands": [
    [
     9.99,
@@ -998,14 +1444,123 @@
     14.52,
     12.42,
     12.57
+   ],
+   [
+    9.99,
+    23.21,
+    19.3,
+    25.6
+   ],
+   [
+    9.99,
+    23.86,
+    19.33,
+    25.41
+   ],
+   [
+    9.98,
+    24.37,
+    19.33,
+    23.56
+   ],
+   [
+    9.9,
+    25.5,
+    19.33,
+    24.24
+   ],
+   [
+    9.98,
+    25.32,
+    19.33,
+    24.51
+   ],
+   [
+    9.99,
+    22.91,
+    19.33,
+    24.46
+   ],
+   [
+    18.1,
+    25.5,
+    8.67,
+    24.24
+   ],
+   [
+    18.02,
+    25.32,
+    8.67,
+    24.51
+   ],
+   [
+    18,
+    22.91,
+    8.67,
+    24.46
+   ],
+   [
+    18,
+    23.21,
+    8.7,
+    25.6
+   ],
+   [
+    18,
+    23.86,
+    8.67,
+    25.41
+   ],
+   [
+    18.02,
+    24.37,
+    8.67,
+    23.56
+   ],
+   [
+    13.88,
+    24.96,
+    14.7,
+    24.24
+   ],
+   [
+    13.88,
+    24.78,
+    15.55,
+    24.06
+   ],
+   [
+    17.17,
+    23.83,
+    17.25,
+    23.11
+   ],
+   [
+    18.63,
+    24.62,
+    18.1,
+    24.24
+   ],
+   [
+    17.17,
+    24.78,
+    17.25,
+    24.06
+   ],
+   [
+    13.88,
+    23.83,
+    15.55,
+    23.11
    ]
-  ]
+  ],
+  "run": 21
  },
  "mob_demon3": {
   "w": 28,
   "h": 34,
   "scale": 1.5,
-  "frames": 21,
+  "frames": 39,
   "hands": [
    [
     9.99,
@@ -1132,14 +1687,123 @@
     14.52,
     12.42,
     12.57
+   ],
+   [
+    9.99,
+    23.21,
+    19.3,
+    25.6
+   ],
+   [
+    9.99,
+    23.86,
+    19.33,
+    25.41
+   ],
+   [
+    9.98,
+    24.37,
+    19.33,
+    23.56
+   ],
+   [
+    9.9,
+    25.5,
+    19.33,
+    24.24
+   ],
+   [
+    9.98,
+    25.32,
+    19.33,
+    24.51
+   ],
+   [
+    9.99,
+    22.91,
+    19.33,
+    24.46
+   ],
+   [
+    18.1,
+    25.5,
+    8.67,
+    24.24
+   ],
+   [
+    18.02,
+    25.32,
+    8.67,
+    24.51
+   ],
+   [
+    18,
+    22.91,
+    8.67,
+    24.46
+   ],
+   [
+    18,
+    23.21,
+    8.7,
+    25.6
+   ],
+   [
+    18,
+    23.86,
+    8.67,
+    25.41
+   ],
+   [
+    18.02,
+    24.37,
+    8.67,
+    23.56
+   ],
+   [
+    13.88,
+    24.96,
+    14.7,
+    24.24
+   ],
+   [
+    13.88,
+    24.78,
+    15.55,
+    24.06
+   ],
+   [
+    17.17,
+    23.83,
+    17.25,
+    23.11
+   ],
+   [
+    18.63,
+    24.62,
+    18.1,
+    24.24
+   ],
+   [
+    17.17,
+    24.78,
+    17.25,
+    24.06
+   ],
+   [
+    13.88,
+    23.83,
+    15.55,
+    23.11
    ]
-  ]
+  ],
+  "run": 21
  },
  "mob_demon4": {
   "w": 28,
   "h": 34,
   "scale": 1.5,
-  "frames": 21,
+  "frames": 39,
   "hands": [
    [
     9.99,
@@ -1266,8 +1930,117 @@
     14.52,
     12.42,
     12.57
+   ],
+   [
+    9.99,
+    23.21,
+    19.3,
+    25.6
+   ],
+   [
+    9.99,
+    23.86,
+    19.33,
+    25.41
+   ],
+   [
+    9.98,
+    24.37,
+    19.33,
+    23.56
+   ],
+   [
+    9.9,
+    25.5,
+    19.33,
+    24.24
+   ],
+   [
+    9.98,
+    25.32,
+    19.33,
+    24.51
+   ],
+   [
+    9.99,
+    22.91,
+    19.33,
+    24.46
+   ],
+   [
+    18.1,
+    25.5,
+    8.67,
+    24.24
+   ],
+   [
+    18.02,
+    25.32,
+    8.67,
+    24.51
+   ],
+   [
+    18,
+    22.91,
+    8.67,
+    24.46
+   ],
+   [
+    18,
+    23.21,
+    8.7,
+    25.6
+   ],
+   [
+    18,
+    23.86,
+    8.67,
+    25.41
+   ],
+   [
+    18.02,
+    24.37,
+    8.67,
+    23.56
+   ],
+   [
+    13.88,
+    24.96,
+    14.7,
+    24.24
+   ],
+   [
+    13.88,
+    24.78,
+    15.55,
+    24.06
+   ],
+   [
+    17.17,
+    23.83,
+    17.25,
+    23.11
+   ],
+   [
+    18.63,
+    24.62,
+    18.1,
+    24.24
+   ],
+   [
+    17.17,
+    24.78,
+    17.25,
+    24.06
+   ],
+   [
+    13.88,
+    23.83,
+    15.55,
+    23.11
    ]
-  ]
+  ],
+  "run": 21
  },
  "mob_crawler": {
   "w": 32,
@@ -1279,37 +2052,43 @@
   "w": 20,
   "h": 30,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_skeletonmage_champ": {
   "w": 24,
   "h": 32,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_bandit_champ": {
   "w": 20,
   "h": 30,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_bandit_brute_champ": {
   "w": 24,
   "h": 30,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_gnawkin_champ": {
   "w": 20,
   "h": 30,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_tuskborn_champ": {
   "w": 26,
   "h": 32,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_tuskborn_folk_champ": {
   "w": 26,
@@ -1321,7 +2100,8 @@
   "w": 20,
   "h": 30,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_silkwretch_folk_champ": {
   "w": 30,
@@ -1351,204 +2131,35 @@
   "w": 22,
   "h": 30,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_sanddead_champ": {
   "w": 22,
   "h": 30,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_veiled_champ": {
   "w": 24,
   "h": 32,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_camelfolk_champ": {
   "w": 34,
   "h": 36,
   "scale": 1.5,
-  "frames": 12
+  "frames": 30,
+  "run": 12
  },
  "mob_sphinx_champ": {
   "w": 40,
   "h": 40,
   "scale": 1.5,
-  "frames": 12
- },
- "mob_delver": {
-  "w": 24,
-  "h": 30,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_cackler": {
-  "w": 22,
-  "h": 30,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_stagkin": {
-  "w": 28,
-  "h": 38,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_quillback": {
-  "w": 26,
-  "h": 30,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_stitcher": {
-  "w": 24,
-  "h": 34,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_hidechief": {
-  "w": 34,
-  "h": 38,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_mawfather": {
-  "w": 46,
-  "h": 50,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_sinkworm": {
-  "w": 32,
-  "h": 28,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_oathbreaker": {
-  "w": 28,
-  "h": 32,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_crownguard": {
-  "w": 32,
-  "h": 34,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_hollowherald": {
-  "w": 26,
-  "h": 32,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_courtmagus": {
-  "w": 24,
-  "h": 34,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_pretender": {
-  "w": 24,
-  "h": 32,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_thronewarden": {
-  "w": 36,
-  "h": 40,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_rivenking": {
-  "w": 46,
-  "h": 50,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_gildhound": {
-  "w": 34,
-  "h": 24,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_crowncrow": {
-  "w": 36,
-  "h": 34,
-  "scale": 1.5,
-  "frames": 12
- },
- "mob_war_warden_bow": {
-  "w": 36,
-  "h": 32,
-  "scale": 1.5,
-  "frames": 14
- },
- "mob_war_warden_pike": {
-  "w": 36,
-  "h": 32,
-  "scale": 1.5,
-  "frames": 14
- },
- "mob_war_redfang_sling": {
-  "w": 36,
-  "h": 32,
-  "scale": 1.5,
-  "frames": 14
- },
- "mob_war_host_bow": {
-  "w": 36,
-  "h": 32,
-  "scale": 1.5,
-  "frames": 14
- },
- "mob_war_host_pike": {
-  "w": 36,
-  "h": 32,
-  "scale": 1.5,
-  "frames": 14
- },
- "mob_war_hidekin_spear": {
-  "w": 36,
-  "h": 32,
-  "scale": 1.5,
-  "frames": 14
- },
- "mob_war_veiled_caster": {
-  "w": 36,
-  "h": 32,
-  "scale": 1.5,
-  "frames": 14
- },
- "mob_war_warden_rider": {
-  "w": 48,
-  "h": 48,
-  "scale": 1.5,
-  "frames": 14
- },
- "mob_war_redfang_rider": {
-  "w": 48,
-  "h": 48,
-  "scale": 1.5,
-  "frames": 14
- },
- "mob_war_host_rider": {
-  "w": 48,
-  "h": 48,
-  "scale": 1.5,
-  "frames": 14
- },
- "mob_war_hidekin_rider": {
-  "w": 48,
-  "h": 48,
-  "scale": 1.5,
-  "frames": 14
- },
- "mob_war_veiled_rider": {
-  "w": 48,
-  "h": 48,
-  "scale": 1.5,
-  "frames": 14
+  "frames": 30,
+  "run": 12
  }
 }

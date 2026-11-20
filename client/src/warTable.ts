@@ -3,7 +3,7 @@
  * bands (design: riven-marches-map.png). Each built land is a slot round the Crown of the Marches (warTableLayout.ts),
  * every territory a cell of its land tinted in its holder's colours (nearest-territory cells, front lines in ember
  * where two clans meet), capitals and holds as markers, the ways between lands as dashed lines, the clans' banners
- * standing in their homelands, a legend on the right. Murat 2026-11-16: a pulsing "You are here" marker with your land
+ * standing on their home capitals, a legend on the right. Murat 2026-11-16: a pulsing "You are here" marker with your land
  * lit, the ways drawn as gate pairs, and a click on a territory shows the route to it (warRoute.ts) both as a gold path and
  * as steps in the side panel, so the table and the zone map speak of the same places. Cosmetic: it draws the server's
  * "war" snapshot and nothing else.
@@ -227,6 +227,39 @@ function bannerArt(k: ClanKey): HTMLCanvasElement {
 }
 
 export interface WarHover { x: number; y: number }
+
+/** Zoom and pan of the table (Murat 2026-11-19): z from 1 (the whole continent) to ZOOM_MAX, centred on (cx, cy) sheet units. */
+const ZOOM_MAX = 4;
+const view = { z: 1, cx: WT_W / 2, cy: WT_H / 2 };
+/** The frame of the last drawn table (canvas px) and its unzoomed px per art pixel: input maps through it. */
+let frame: { x: number; y: number; w: number; h: number; ds: number } | undefined;
+function clampView() {
+  view.z = Math.max(1, Math.min(ZOOM_MAX, view.z));
+  const hw = WT_W / 2 / view.z, hh = WT_H / 2 / view.z;
+  view.cx = Math.max(hw, Math.min(WT_W - hw, view.cx)); view.cy = Math.max(hh, Math.min(WT_H - hh, view.cy));
+}
+/** Zooms the table by `f`, keeping the spot under canvas point (px, py) in place. */
+export function warTableZoom(f: number, px: number, py: number) {
+  if (!frame) return;
+  const u0 = (frame.ds * view.z) / UNIT, ox = px - (frame.x + frame.w / 2), oy = py - (frame.y + frame.h / 2);
+  const sx = view.cx + ox / u0, sy = view.cy + oy / u0; // sheet point under the cursor
+  view.z = Math.max(1, Math.min(ZOOM_MAX, view.z * f));
+  const u1 = (frame.ds * view.z) / UNIT;
+  view.cx = sx - ox / u1; view.cy = sy - oy / u1;
+  clampView();
+}
+/** Moves the table by a canvas-pixel offset (a drag: the sheet follows the pointer). */
+export function warTablePan(dx: number, dy: number) {
+  if (!frame) return;
+  const u = (frame.ds * view.z) / UNIT;
+  view.cx += dx / u; view.cy += dy / u;
+  clampView();
+}
+/** Back to the whole continent. */
+/** Zooms by `f` around the table's own centre (buttons and keys: the legend sits right of it). */
+export function warTableZoomCentre(f: number) { if (frame) warTableZoom(f, frame.x + frame.w / 2, frame.y + frame.h / 2); }
+export function warTableResetView() { view.z = 1; view.cx = WT_W / 2; view.cy = WT_H / 2; }
+export const warTableZoomed = () => view.z > 1;
 /** What the table says about the hero: where they stand, the territory they picked, the portal stones they may use. */
 export interface WarTableUI { here?: Here; area?: string; sel?: number; woken?: ReadonlySet<string>; /** the world's ground colours, 1 px per tile (the minimap's sheet): painted under the clans' colours */ ground?: HTMLCanvasElement }
 
@@ -252,8 +285,11 @@ export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, font: stri
   const avail = { w: W - legW - pad * 3, h: H - pad * 2 };
   let ds = Math.min(avail.w / AW, avail.h / AH);
   if (ds > 1) ds = Math.floor(ds * 4) / 4; // keep art pixels near-whole
-  const mw = AW * ds, mh = AH * ds, mx = Math.round(pad + (avail.w - mw) / 2), my = Math.round(pad + (avail.h - mh) / 2);
-  const u = ds / UNIT; // screen px per sheet unit
+  const fw = AW * ds, fh = AH * ds, fx = Math.round(pad + (avail.w - fw) / 2), fy = Math.round(pad + (avail.h - fh) / 2); // the table's frame
+  frame = { x: fx, y: fy, w: fw, h: fh, ds };
+  clampView();
+  const u = (ds * view.z) / UNIT; // screen px per sheet unit (zoomed)
+  const mw = WT_W * u, mh = WT_H * u, mx = Math.round(fx + fw / 2 - view.cx * u), my = Math.round(fy + fh / 2 - view.cy * u); // the sheet, zoomed and moved
   const kC = Math.max(2, Math.round(ds)); // the Crown icon's pixel size (over the Crown Keep)
   const P = (id: number): [number, number] => { const p = POS.get(id)!; return [mx + p.x * u, my + p.y * u]; };
   const pulse = 0.5 + 0.5 * Math.sin(now / 250);
@@ -264,8 +300,10 @@ export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, font: stri
   const text = (t: string, x: number, y: number, c: string, px = 13) => { g.font = `${px}px ${font}`; g.fillStyle = "#000"; g.fillText(t, x + 1, y + 1); g.fillStyle = c; g.fillText(t, x, y); };
   g.fillStyle = "#0d0a07"; g.fillRect(0, 0, W, H);
   // the table: a gilt frame round the painted continent
-  g.fillStyle = "#6e5326"; g.fillRect(mx - 4, my - 4, mw + 8, mh + 8);
-  g.fillStyle = "#1a130b"; g.fillRect(mx - 2, my - 2, mw + 4, mh + 4);
+  g.fillStyle = "#6e5326"; g.fillRect(fx - 4, fy - 4, fw + 8, fh + 8);
+  g.fillStyle = "#1a130b"; g.fillRect(fx - 2, fy - 2, fw + 4, fh + 4);
+  g.save(); // everything on the sheet stays inside the frame when zoomed in
+  g.beginPath(); g.rect(fx, fy, fw, fh); g.clip();
   g.drawImage(paintArt(v, ui.ground), mx, my, mw, mh);
   // your land lit: a glowing gold edge round it, a light wash over it
   const myLand = here?.land ? SLOTS.find((s) => s.key === here.land) : undefined;
@@ -300,20 +338,19 @@ export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, font: stri
     for (const s of route) for (const n of [s.from, s.to]) { const [x, y] = P(n); g.fillStyle = "#000"; g.fillRect(Math.round(x) - 4, Math.round(y) - 4, 8, 8); g.fillStyle = "#ffd166"; g.fillRect(Math.round(x) - 3, Math.round(y) - 3, 6, 6); }
   }
 
-  // banners of the homelands
+  // the home clans' banners, standing on their capitals (the pole's foot just above the capital's marker, the clan's name over the cloth, drawn later on top)
+  const sz = Math.max(8, Math.round(15 * u)), capH = Math.round(sz * 1.5) >> 1;
+  const bs = Math.max(1, Math.round((100 * u) / 36)), bannerAt = new Map<ClanKey, [number, number]>();
   for (const s of SLOTS) {
-    if (!s.banner) continue;
-    const b = bannerArt(s.banner.clan), bs = Math.max(1, Math.round(ds * 1.1)), bx = Math.round(mx + s.banner.x * u - 10 * bs), by = Math.round(my + s.banner.y * u - 18 * bs);
+    const cap = s.banner && TERRITORIES.find((t) => t.region === s.key && t.capitalOf === s.banner!.clan);
+    if (!cap) continue;
+    const [cx, cy] = P(cap.id), b = bannerArt(s.banner!.clan), bx = Math.round(cx - 10 * bs), by = Math.round(cy - capH - 2 - 36 * bs);
+    bannerAt.set(s.banner!.clan, [cx, by - 12]); // where its name plate goes
     g.fillStyle = "rgba(0,0,0,0.35)"; g.fillRect(bx + 3, by + 3, 20 * bs, 36 * bs);
     g.drawImage(b, bx, by, 20 * bs, 36 * bs);
-    g.textAlign = "center"; g.font = `13px ${font}`;
-    const label = TAG[s.banner.clan], lw = g.measureText(label).width + 10;
-    g.fillStyle = "rgba(10,8,6,0.85)"; g.fillRect(Math.round(bx + 10 * bs - lw / 2), by + 36 * bs + 3, Math.round(lw), 17);
-    text(label, bx + 10 * bs, by + 36 * bs + 12, GOLD); g.textAlign = "left";
   }
 
   // territories: holds and capitals in holder colours
-  const sz = Math.max(8, Math.round(15 * u));
   reach = Math.max(16, sz);
   spots = [];
   for (const t of TERRITORIES) {
@@ -379,12 +416,22 @@ export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, font: stri
     }); else text(sub, px + 7, py + h - 11, "#8a8470", 11);
   }
 
+  // the banners' names, over their cloth and over the markers round them
+  g.textAlign = "center"; g.font = `13px ${font}`;
+  for (const [k, [x, y]] of bannerAt) {
+    const lw = g.measureText(TAG[k]).width + 10;
+    g.fillStyle = "rgba(10,8,6,0.85)"; g.fillRect(Math.round(x - lw / 2), Math.round(y - 8), Math.round(lw), 17);
+    text(TAG[k], x, y + 1, GOLD);
+  }
+  g.textAlign = "left";
+
   // the ways' names, on top of everything on the map; a name that would sit on another is moved down
   const placed: [number, number, number, number][] = []; // x, y, w, h of every label already down
   for (const s of SLOTS) { // the land plates and banner names are in the way too
     const px = mx + s.plate[0] * u, py = my + s.plate[1] * u;
     placed.push([px + 60, py + 17, 120, 34]);
-    if (s.banner) placed.push([mx + s.banner.x * u, my + s.banner.y * u + 18 * Math.max(1, Math.round(ds * 1.1)) + 12, 90, 17]);
+    const ba = s.banner && bannerAt.get(s.banner.clan);
+    if (ba) placed.push([ba[0], ba[1], 110, 17]);
   }
   for (const w of WAYS) {
     const hot0 = onRoute.has(w.id), asked = hovered === w.a || hovered === w.b || ui.sel === w.a || ui.sel === w.b;
@@ -406,18 +453,19 @@ export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, font: stri
   const tag = (x: number, y: number, l1: string, l2: string, col: string, at: "above" | "below" | "right") => {
     g.font = `12px ${font}`; const w1 = g.measureText(l1).width; g.font = `11px ${font}`;
     const w = Math.round(Math.max(w1, g.measureText(l2).width) + 12), h = 31;
-    let tx = Math.round(Math.max(mx + 4, Math.min(mx + mw - w - 4, at === "right" ? x : x - w / 2))), ty = Math.round(at === "above" ? y - h : y);
-    ty = Math.max(my + 4, Math.min(my + mh - h - 4, ty));
+    let tx = Math.round(Math.max(fx + 4, Math.min(fx + fw - w - 4, at === "right" ? x : x - w / 2))), ty = Math.round(at === "above" ? y - h : y);
+    ty = Math.max(fy + 4, Math.min(fy + fh - h - 4, ty));
     g.fillStyle = "rgba(10,8,6,0.93)"; g.fillRect(tx, ty, w, h); g.strokeStyle = col; g.lineWidth = 2; g.strokeRect(tx + 1, ty + 1, w - 2, h - 2);
     text(l1, tx + 6, ty + 10, col, 12); text(l2, tx + 6, ty + 23, "#eadfc8", 11);
   };
-  if (hn !== undefined && here) {
+  const inFrame = (x: number, y: number) => x >= fx && x < fx + fw && y >= fy && y < fy + fh;
+  if (hn !== undefined && here && inFrame(...P(hn))) { // (zoomed away from you: no pin)
     const [x0, y0] = P(hn), x = Math.round(x0), y = Math.round(y0), r = sz * 0.9 + 6 + pulse * 4;
     g.lineWidth = 6; g.strokeStyle = "rgba(0,0,0,0.65)"; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.stroke();
     g.lineWidth = 3; g.strokeStyle = "#ffd166"; g.setLineDash(here.near ? [5, 4] : []); g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.stroke(); g.setLineDash([]);
     g.lineWidth = 2; g.strokeStyle = `rgba(255,209,102,${0.7 * (1 - pulse)})`; g.beginPath(); g.arc(x, y, r + 5 + pulse * 10, 0, Math.PI * 2); g.stroke();
     const label = (here.near ? "near " : "") + nodeName(hn);
-    if (y - r - 3 - 13 - 31 < my + 4) tag(x + r + 8, y - 15, "You are here", label, "#ffd166", "right"); // no room above: beside the ring
+    if (y - r - 3 - 13 - 31 < fy + 4) tag(x + r + 8, y - 15, "You are here", label, "#ffd166", "right"); // no room above: beside the ring
     else {
       const bob = Math.round(pulse * 3), ty = y - Math.round(r) - 3 - bob; // a pin pointing down at the ring
       g.fillStyle = "#000"; g.beginPath(); g.moveTo(x, ty + 2); g.lineTo(x - 9, ty - 11); g.lineTo(x + 9, ty - 11); g.closePath(); g.fill();
@@ -432,6 +480,15 @@ export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, font: stri
     tag(x, y + r + 4, "Picked", nodeName(ui.sel), "#8fe0ff", "below");
   }
   if (hovered !== undefined) { const [x, y] = P(hovered), r = sz * 0.9 + 2; g.lineWidth = 1; g.strokeStyle = "#fff"; g.strokeRect(Math.round(x) - r + 0.5, Math.round(y) - r + 0.5, r * 2, r * 2); }
+
+  g.restore(); // (the frame's clip)
+  spots = spots.filter((p) => inFrame(p.x, p.y)); // only what can be seen can be picked
+  if (view.z >= 1.05) { // how far in: a small plate in the frame's corner
+    const zt = `Zoom x${view.z.toFixed(1)}`;
+    g.font = `11px ${font}`; const zw = g.measureText(zt).width + 10;
+    g.fillStyle = "rgba(10,8,6,0.85)"; g.fillRect(fx + fw - zw - 6, fy + fh - 22, zw, 16);
+    text(zt, fx + fw - zw - 1, fy + fh - 14, "#cfc4aa", 11);
+  }
 
   // legend on the right: where you are, the way to the picked territory, then the clans and the key
   const lx = W - legW - pad + 6, lw = legW - 6, bot = H - pad - 4;

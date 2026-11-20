@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { TERRITORIES } from "../shared/war/territories";
 import { REGIONS } from "../shared/war/regions";
-import { BANNER_BOX, inPoly, layoutTerritories, SLOTS, WT_H, WT_W } from "../client/src/warTableLayout";
+import { BANNER_BOX, inPoly, PLATE, layoutTerritories, SLOTS, WT_H, WT_W } from "../client/src/warTableLayout";
 
 const placed = layoutTerritories(TERRITORIES);
 const slot = (k: string) => SLOTS.find((s) => s.key === k)!;
@@ -35,12 +35,18 @@ test("war table: the layout is deterministic and keeps the west-east order insid
   assert.ok(by(w.id).x < by(e.id).x);
 });
 
-test("war table: territories keep clear of the standing banners", () => {
+test("war table: each home clan's banner stands on its capital, with room above it and other territories clear of it", () => {
   for (const s of SLOTS) {
     if (!s.banner) continue;
+    const cap = TERRITORIES.find((t) => t.region === s.key && t.capitalOf === s.banner!.clan);
+    assert.ok(cap, `${s.key} has a ${s.banner.clan} capital`);
+    const c = placed.find((p) => p.id === cap!.id)!;
+    for (const dx of [-BANNER_BOX.x, 0, BANNER_BOX.x]) assert.ok(inPoly([c.x + dx, c.y + BANNER_BOX.y0], s.poly), `${s.key} banner fits in its land`);
+    const [px, py] = s.plate;
+    assert.ok(!(c.x + BANNER_BOX.x > px && c.x - BANNER_BOX.x < px + PLATE[0] && c.y + BANNER_BOX.y0 < py + PLATE[1] && c.y > py), `${s.key} banner clear of its name plate`);
     for (const p of placed) {
-      if (TERRITORIES[p.id].region !== s.key) continue;
-      const inBox = Math.abs(p.x - s.banner.x) < BANNER_BOX.x && p.y > s.banner.y + BANNER_BOX.y0 && p.y < s.banner.y + BANNER_BOX.y1;
+      if (p.id === cap!.id || TERRITORIES[p.id].region !== s.key) continue;
+      const inBox = Math.abs(p.x - c.x) < BANNER_BOX.x && p.y > c.y + BANNER_BOX.y0 && p.y < c.y + BANNER_BOX.y1;
       assert.ok(!inBox, `territory ${p.id} under the ${s.key} banner`);
     }
   }
