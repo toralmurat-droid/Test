@@ -126,7 +126,7 @@ interface Built { prims: Prim[]; eyes: V3[]; eyeCol: number; handNear: V3; handF
  * of ground at the speed where the feet do not slide (the client scales the animation to the hero's real speed).
  */
 export const RUN_STANCE = 0.32, RUN_A = 5.6;
-function runJoints(ph: number, f: P, s: P, hips: V3[], nearS0: V3, farS0: V3, head0: V3, lean: number) {
+function runJoints(ph: number, f: P, s: P, hips: V3[], nearS0: V3, farS0: V3, head0: V3, lean: number, shield = false) {
   const fw = (p: V3, k: number, up = 0): V3 => [p[0] + f[0] * k, p[1] + f[1] * k, p[2] + up];
   const nearS = fw(nearS0, lean, -0.3), farS = fw(farS0, lean, -0.3), head = fw(head0, lean * 1.25, -0.35);
   const t0 = (((ph / (2 * Math.PI)) % 1) + 1) % 1;
@@ -166,7 +166,8 @@ function runJoints(ph: number, f: P, s: P, hips: V3[], nearS0: V3, farS0: V3, he
     return [E, Hd];
   };
   const c = Math.cos(2 * Math.PI * t0);
-  const [nearE, nearH] = arm(nearS, -c, 0.6, 1), [farE, farH] = arm(farS, c, 0.85, -1);
+  // a shield arm stays up in front as a guard instead of pumping
+  const [nearE, nearH] = arm(nearS, -c, 0.6, 1), [farE, farH] = shield ? arm(farS, 0.35 + c * 0.15, 1, -1) : arm(farS, c, 0.85, -1);
   return { feet, knees, nearS, farS, head, nearE, nearH, farE, farH };
 }
 
@@ -192,7 +193,7 @@ export function build3D(L: Look, w: Dress3D, r: Rig3): Built {
   let head = lift([r.head[0], r.head[1] + 0.7], dep(0.2, 0));
   if (r.run && r.phase !== undefined && !atk) {
     // a real run in 3D, the same for every facing (Murat 2026-11-19: "running, not shuffling")
-    const J = runJoints(r.phase, f, s, hips, nearS, farS, head, r.dir === "right" ? 0.5 : 1.3);
+    const J = runJoints(r.phase, f, s, hips, nearS, farS, head, r.dir === "right" ? 0.5 : 1.3, !!L.shield && L.shield.style !== "book");
     ({ feet, knees, nearS, farS, head, nearE, nearH, farE, farH } = J);
   }
   const chest: V3 = [(nearS[0] + farS[0]) / 2, (nearS[1] + farS[1]) / 2, (nearS[2] + farS[2]) / 2 - 2.2];

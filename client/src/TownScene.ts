@@ -205,6 +205,7 @@ function blobPartsLayout(id: string, parts: string[]): BlobPart[] {
 }
 
 interface Entity {
+  runAt?: number; runKey?: string; runPh?: number; // monster run: first run frame of its sheet (-1 none), for which texture, cycle phase 0..1
   running?: boolean; runX?: number; runY?: number; runT?: number; runV?: number; // hero run cycle: run or walk now, last sprite sample, smoothed speed
   wall?: boolean; troopRole?: string; // a courtyard archer standing on a live Hold wall tile (drawn raised); its role mark, read once
   merged?: number; // blobs fused into this monster (MERGE)
@@ -340,6 +341,8 @@ const HERO_SCALE = CHAR_SCALE;
  * stride at RUN_DESIGN_SPEED world px/s; the animation is sped up or slowed to the hero's real ground speed.
  */
 const RUN_DESIGN_SPEED = 90, RUN_ON = 34, RUN_OFF = 26;
+/** Monster run frames per facing (tools/art/paint/mobs.ts RUN_FRAMES) and which block each facing uses. */
+const MOB_RUN_FRAMES = 6, RUN_DIR: Record<string, number> = { down: 0, up: 1, right: 2, left: 2 };
 /** Smoothed ground speed (world px/s) of a drawn hero, from how far its sprite moved since the last frame. */
 function runSpeed(e: any, dtMs: number, now: number) {
   const x = e.sprite.x, y = e.sprite.y, fresh = e.runT !== undefined && now - e.runT < 100;
@@ -2519,6 +2522,12 @@ export class TownScene extends Phaser.Scene {
   private static RIP = { grab: 450, snap: 1150, don: 1600, equip: 1950 };
 
   /** The demon's sheet frame during its harvest (painted sheets carry 9 harvest frames after the 12). */
+  /** First run frame of a monster's sheet (mobs.json `run`), or -1; looked up once per texture. */
+  private mobRunAt(e: Entity) {
+    const key = e.sprite.texture.key;
+    if (e.runKey !== key) { e.runKey = key; e.runAt = this.cache.json.get("hd_mobs")?.[key]?.run ?? -1; if (e.sprite.texture.frameTotal <= (e.runAt ?? 0) + 3 * MOB_RUN_FRAMES) e.runAt = -1; }
+    return e.runAt!;
+  }
   private ripFrame(e: Entity, now: number, dir: string): number {
     if (e.sprite.texture.frameTotal <= 21) return -1;
     const t = now - e.rip!.start, R = TownScene.RIP, di = dir === "down" ? 0 : dir === "up" ? 1 : 2;
@@ -3662,7 +3671,12 @@ export class TownScene extends Phaser.Scene {
         if (rip >= 0) e.sprite.setFrame(rip);
         else if (attackFrames && !p.dead && p.winding) e.sprite.setFrame(ATTACK_BASE[dir]);
         else if (attackFrames && !p.dead && now < (e.strikeUntil ?? 0)) e.sprite.setFrame(ATTACK_BASE[dir] + 1);
-        else e.sprite.setFrame(FRAME_BASE[dir] + step);
+        else if (moving && e.mob && !p.dead && this.mobRunAt(e) >= 0) {
+          // a humanoid monster with a run cycle (mobs.json run): 6 frames per facing, stepped at its real speed
+          const spd = runSpeed(e, dtMs, now);
+          e.runPh = ((e.runPh ?? 0) + (dtMs / 1000) * 3 * Math.min(1.6, Math.max(0.5, spd / RUN_DESIGN_SPEED))) % 1;
+          e.sprite.setFrame(e.runAt! + RUN_DIR[dir] * MOB_RUN_FRAMES + Math.floor(e.runPh * MOB_RUN_FRAMES));
+        } else e.sprite.setFrame(FRAME_BASE[dir] + step);
         if (e.mob && p.job >= 0) { const wf = this.siege.update(id, e, p, now, moving); if (wf !== undefined) e.sprite.setFrame(wf); } // siege works
         if (e.mob && p.kind === "trooper") this.trooperFrame(e, p, now);
         e.sprite.setFlipX(dir === "left" && !(p.kind === "trooper" && parseTroop(p.weapon)?.part === "mouth")); // a tunnel mouth never turns
