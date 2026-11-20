@@ -1,3 +1,4 @@
+import { hasTree3d, tree3dOrigin, WIND_FRAMES, WIND_LIVE } from "./trees3d";
 import Phaser from "phaser";
 import { MAP_H, MAP_W, TILE, WORLD_H } from "../../shared/constants";
 import { T, TILE_COUNT } from "../../shared/map";
@@ -864,8 +865,20 @@ function isoDesert(scene: Phaser.Scene, t: number, tx: number, ty: number, at: (
     return true;
   }
   if (t === T.ROCK) { staticObj(scene, scene.add.image(cx, cy, desertRockTexture(scene, v)).setOrigin(0.5, DESERT_UPRIGHT_OY).setDepth(cy).setFlipX(v >= 2)); return true; }
-  if (t === T.STUMP) { staticObj(scene, scene.add.image(cx, cy, deadTreeTexture(scene, v)).setOrigin(0.5, 46 / 58).setDepth(cy).setFlipX(v >= 2)); return true; }
+  if (t === T.STUMP) { if (!windTree(scene, "tr3_deadtree", cx, cy, v)) staticObj(scene, scene.add.image(cx, cy, deadTreeTexture(scene, v)).setOrigin(0.5, 46 / 58).setDepth(cy).setFlipX(v >= 2)); return true; }
   return false;
+}
+
+/**
+ * A dead tree of the far lands as a baked 3D sheet (trees3d.ts) that creaks in the wind with the woods (ambient.ts sways
+ * everything in WIND_LIVE). False when the sheet is missing, so the caller paints the old one.
+ */
+function windTree(scene: Phaser.Scene, key: string, cx: number, cy: number, v: number): boolean {
+  if (!hasTree3d(scene, key)) return false;
+  const o = tree3dOrigin(key), s = scene.add.image(cx, cy, key, 0).setOrigin(o.x, o.y).setDepth(cy).setTint(0xe2e4de);
+  s.setData("wf", WIND_FRAMES).setData("ph", v * 0.15);
+  staticObj(scene, s, { onLive: (on) => { if (on) WIND_LIVE.add(s); else WIND_LIVE.delete(s); } });
+  return true;
 }
 
 // ---------- Act 3: the Grey Barrow Moors (shared/moors.ts, art in moorsArt.ts) ----------
@@ -914,7 +927,7 @@ function isoMoors(scene: Phaser.Scene, t: number, tx: number, ty: number, at: (x
   const place = (s: { key: string; ox: number; oy: number; b: { w: number; h: number } }) => { staticObj(scene, scene.add.image(cx, cy + 4, s.key).setOrigin(s.ox / s.b.w, s.oy / s.b.h).setDepth(cy)); return true; };
   if (t === T.STANDING_STONE) { const k = hashXY(tx * 5 + 9, ty * 3 + 1); return place(standingStoneTexture(scene, k < 0.12 ? 2 : k < 0.35 ? 1 : 0, 1 + v)); }
   if (t === T.BONE_PILE) return place(boneHeapTexture(scene, 1 + (v % 3)));
-  if (t === T.STUMP) return place(birchTexture(scene, [0, 1, 2, 0][v], 1 + v));
+  if (t === T.STUMP) return windTree(scene, "tr3_deadbirch", cx, cy, v) || place(birchTexture(scene, [0, 1, 2, 0][v], 1 + v));
   return false;
 }
 
@@ -951,7 +964,7 @@ function isoBadlands(scene: Phaser.Scene, t: number, tx: number, ty: number, at:
   const place = (s: { key: string; ox: number; oy: number; b: { w: number; h: number } }) => { staticObj(scene, scene.add.image(cx, cy + 4, s.key).setOrigin(s.ox / s.b.w, s.oy / s.b.h).setDepth(cy)); return true; };
   if (t === T.ROCK) return place(boulderTexture(scene, 1 + v));
   if (t === T.BONES) return place(bleachedBonesTexture(scene, 1 + (v % 3)));
-  if (t === T.STUMP) return place(snagTexture(scene, [0, 1, 2, 0][v], 1 + v));
+  if (t === T.STUMP) return windTree(scene, "tr3_snag", cx, cy, v) || place(snagTexture(scene, [0, 1, 2, 0][v], 1 + v));
   if (t === T.CACTUS) { const k = hashXY(tx * 5 + 3, ty * 7 + 1); return place(cactusTexture(scene, k < 0.3 ? 2 : k < 0.7 ? 0 : 1, 1 + v)); }
   return false;
 }

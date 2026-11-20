@@ -1,3 +1,4 @@
+import { preloadTrees3d } from "./trees3d";
 import Phaser from "phaser";
 import { MobFeed } from "./mobFeed";
 import type { MobViewMsg } from "../../shared/mobView";
@@ -499,6 +500,7 @@ export class TownScene extends Phaser.Scene {
     preloadGear(this);
     preloadPaintedMobs(this);
     preloadBakedProps(this);
+    preloadTrees3d(this);
     preloadShotSheets(this);
   }
 
