@@ -59,7 +59,7 @@ export const CITY_TEXT: Partial<Record<ClanKey, CityText>> = {
     name: "Duskveil",
     waystone: "Duskveil",
     enter: "Pass the city gate into Duskveil, seat of the Veiled Circle",
-    leave: "Go out through the city gate to the Veiled Sanctum",
+    leave: "Go out through the west gate to the Sunscar Highway and Mirage Wells",
     districts: { gate: "Duskveil Gate Court", market: "The Shaded Bazaar", barracks: "The Quiet Barracks", hall: "The Hall of the Sealed Oath", keep: "The Regent's Veil", houses: "Duskveil Alleys" },
     npcs: {
       leader: ["Regent Sahar of the Seventh Veil", "Voice of the Veiled Oracle"],
@@ -74,10 +74,12 @@ export const CITY_TEXT: Partial<Record<ClanKey, CityText>> = {
     title: "Veilsworn",
     crier: [
       "The Oracle has seen this day. She asks that you do not be surprised.",
+      "Duskveil stands in the Saffron Dunes, below the Thornspire. West gate for the Sunscar Highway and Mirage Wells, south gate for the dune road.",
       "The Shaded Bazaar opens at dusk. What you will buy was foretold.",
       "Speak softly in the Alleys. The walls have been listening longer than you have lived.",
       "The Regent receives those who bear the Veil. Others will find she has already heard them.",
       "Keep to the shade at noon. The sun is a poor counsellor.",
+      "The Thornspire watches from above and the dunes keep our walls. Mirage Wells is a short walk from the west gate. Mind the shimmer.",
       "A stranger will lose a glove today. The Circle takes no blame for it.",
       "The Sealed Oath is kept, and never spoken. Ask no one what it says.",
       "Those at war with the Circle will find the gate shut. It was foreseen.",

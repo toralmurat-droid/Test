@@ -20,7 +20,7 @@ import { TITLES } from "./cosmetics";
  * Every city is the same plan (CITY_TEMPLATE, local tiles 0..w-1 x 0..h-1, the gate in the south wall) dressed in its
  * clan's style (walls, roofs, ground): gate square with the waystone and the stash, market with the quartermaster,
  * barracks yard with the trainer, oath hall with the altar and its keeper, houses, and the keep with the clan's leader
- * and the war table. All five are built: Hearthhold (Wardens), Duskveil (Veiled), Marrowkeep (Host), Scarwall (Redfang)
+ * and the war table. All five are built (in the band, or in their lands once moved): Hearthhold (Wardens), Duskveil (Veiled), Marrowkeep (Host), Scarwall (Redfang)
  * and Deepden (Hide-Kin). Tile ids are passed in (shared/map.ts T) so this file does not import map.ts.
  */
 export const CITY_CLANS: readonly ClanKey[] = ["wardens", "veiled", "host", "redfang", "hidekin"];

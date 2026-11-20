@@ -462,3 +462,35 @@ test("Marrowkeep: north of Kingsbarrow, its back to the crags (no east gate); th
   assert.ok(SPAWN_ZONES.some((z) => z.name === "The Barrow-King's Mound" && z.mobs.barrowking === 1));
   for (let y = mound.y; y < mound.y + mound.h; y++) for (let x = mound.x; x < mound.x + mound.w; x++) assert.ok(!HIGHWAY_TILES.has(y * MAP_W + x), `no highway through the Mound at ${x},${y}`);
 });
+
+test("Duskveil: the Thornspire's eastern valley, closed at its foot by the north wall, leads on round the walls", () => {
+  const D = CITIES.find((c) => c.clan === "veiled")!, B = plotBox(D);
+  /** Steps on foot (4-way over free tiles) from a to b. */
+  const walk = (a: Pt, b: Pt) => {
+    const d = new Int32Array(MAP_W * MAP_H).fill(-1), q = [a.y * MAP_W + a.x];
+    d[q[0]] = 0;
+    for (let i = 0; i < q.length; i++) {
+      const x = q[i] % MAP_W, y = (q[i] / MAP_W) | 0;
+      if (x === b.x && y === b.y) return d[q[i]];
+      for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) {
+        const n = ny * MAP_W + nx;
+        if (d[n] >= 0 || isSolidTile(nx, ny)) continue;
+        d[n] = d[q[i]] + 1; q.push(n);
+      }
+    }
+    return -1;
+  };
+  // the way: two tiles wide along the north wall through the cliff knot, and down the west wall to the dunes trail
+  for (const w of CITY_LAND.veiled!.ways!) for (let y = w.y0; y <= w.y1; y++) for (let x = w.x0; x <= w.x1; x++) {
+    assert.ok(!isSolidTile(x, y) && !cityAt(x, y), `the way at ${x},${y}`);
+    assert.ok(CITY_MASK.has(y * MAP_W + x) && (x < B.x || y < B.y), "in the apron, in the mask");
+  }
+  // from the valley's foot (steps on the map before the city: 68 to the west gate's spot, 64 to Mirage Wells' east shore,
+  // 58 to the south gate's): the west gate and Mirage Wells as near as before; the south gate the long way round the walls
+  // (110: the city has no north gate, so no way runs through it)
+  const valley = { x: 265, y: 398 };
+  assert.ok(walk(valley, { x: 229, y: 430 }) <= 1.3 * 68, "the west gate");
+  assert.ok(walk(valley, { x: 219, y: 416 }) <= 1.3 * 64, "Mirage Wells' east shore");
+  const south = walk(valley, { x: 255, y: 446 });
+  assert.ok(south > 0 && south <= 2 * 58, `the south gate: ${south} steps`);
+});
