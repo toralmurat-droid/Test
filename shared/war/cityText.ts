@@ -152,7 +152,7 @@ export const CITY_TEXT: Partial<Record<ClanKey, CityText>> = {
     name: "Deepden",
     waystone: "Deepden",
     enter: "Pass the city gate into Deepden, the Hide-Kin's warren",
-    leave: "Go out through the city gate to Hidehall",
+    leave: "Go out through the east gate onto the back way to Hidehall",
     districts: { gate: "Deepden Gate Hollow", market: "The Larder Market", barracks: "The Claw Pits", hall: "The Hide-Oath Den", keep: "The Den-Father's Mound", houses: "Deepden Burrows" },
     npcs: {
       leader: ["Den-Father Harrowtooth", "Elder of the Hide-Kin"],
@@ -174,6 +174,10 @@ export const CITY_TEXT: Partial<Record<ClanKey, CityText>> = {
       "One stitch of hide and the Kin know you by smell. Come to the Hide-Oath Den.",
       "Small ones stay out of the warren. Come back when you have grown some teeth.",
       "Surface-folk who are at war with the Kin find the hollow shut. Go home and smell of rain.",
+      "Deepden lies in the Sinkholes now, on the back way through the Pitfields. Hidehall is a short walk east.",
+      "The west gate opens on the back way toward the Pitfields. Watch the ground. It gives way when it likes.",
+      "The east gate gives onto the back way to Hidehall, and the paved highway north to the Great Maw road. Ropewell is at the end of it.",
+      "The south gate lets onto a dirt road round to the east gate. Quiet road. Kin like it so.",
     ],
   },
 };
