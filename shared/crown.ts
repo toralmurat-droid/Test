@@ -144,6 +144,15 @@ export interface CrownTiles {
 export interface CrownArea { name: string; x: number; y: number; w: number; h: number; mobs?: never[] }
 
 /**
+ * The outer ring of the band's cliffs (local tiles, row y * MAP_W + x), filled by buildCrown: the client draws these CLIFF
+ * tiles as ray-traced 3D pale granite mountains (groundPaint.ts relief) instead of terraced blocks (Murat 2026-11-19). The map
+ * is unchanged: the tiles stay CLIFF, so collisions and pathing are the same.
+ */
+export const CROWN_RIM = new Uint8Array(MAP_W * CROWN_H);
+/** True for a map tile in the band's outer mountain ring (check it is CLIFF too: roads and clearings carve the ring open). */
+export const isCrownRim = (x: number, y: number) => inCrownRow(y) && x >= 0 && x < MAP_W && CROWN_RIM[(y - CROWN_Y0) * MAP_W + x] === 1;
+
+/**
  * Builds the Crown into the map's ground/object grids (map coordinates). Deterministic (fixed seeds), like the rest of
  * the world. Returns its named areas (specific first), the road tiles and the signposts. Every open tile joins the
  * Crownways' arrivals.
@@ -213,6 +222,7 @@ export function buildCrown(T: CrownTiles, ground: number[][], objects: number[][
     const d = Math.min(x, y, W - 1 - x, H - 1 - y);
     if (d < 6 + noise(x, y, 9, 1311) * 8 + noise(x, y, 3, 1312) * 2) cliff[y * W + x] = 1;
   }
+  CROWN_RIM.set(cliff); // the outer ring
   CRAGS.forEach(([cx, cy, rx, ry], i) => disk(cx, cy, rx + 2, ry + 2, (x, y) => {
     const dx = (x + 0.5 - cx) / rx, dy = (y + 0.5 - cy) / ry;
     if (dx * dx + dy * dy < 0.8 + 0.4 * noise(x, y, 3, 1321 + i)) cliff[y * W + x] = 1;
