@@ -8,9 +8,9 @@ import { holdGate, linkLegs, pathOfEntry, roadEntry, roadOffLimits, roadPairs, R
 import { LAND_LINKS, TERRITORIES, territoryByName } from "../shared/war/territories";
 import { caravanRoute } from "../shared/war/caravans";
 import { MAP_W } from "../shared/constants";
-
+/** The neighbour pairs of one land the search cannot join today (W4 plan; with Saltwind Coast's fort by the road west of Saltmere it reaches Brinewood and Heronwreck Strand, no longer Gullrock Cove): their columns are simulated on a straight track. */
 /** The four neighbour pairs of one land the search cannot join today (W4 plan): their columns are simulated on a straight track. */
-const NO_ROAD = [["North Meadow", "Old Watchtower"], ["North Meadow", "Old Ruins"], ["Brinewood", "Saltwind Coast"], ["Heronwreck Strand", "Saltwind Coast"]]
+const NO_ROAD = [["North Meadow", "Old Watchtower"], ["North Meadow", "Old Ruins"], ["Gullrock Cove", "Saltwind Coast"]]
   .map(([a, b]) => [territoryByName(a)!.id, territoryByName(b)!.id].sort((x, y) => x - y).join("-"));
 
 const doors = new Set<number>();
@@ -33,7 +33,7 @@ function checkRoad(r: Road, own: number[], what: string) {
   }
 }
 
-test("war roads: every neighbour pair in one land has a road but the four known gaps (tracks); roads keep off limits and off other Holds' forts", () => {
+test("war roads: every neighbour pair in one land has a road but the three known gaps (tracks); roads keep off limits and off other Holds' forts", () => {
   const pairs = roadPairs();
   assert.ok(pairs.length >= 80, `${pairs.length} neighbour pairs`);
   let roads = 0;

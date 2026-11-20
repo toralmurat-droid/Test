@@ -46,7 +46,8 @@ test("holdFall: a work's weapon round-trips and parses as a trooper object", () 
 });
 
 test("rules: a fallen land yields nothing, has no defence and no regrowth; a claim or a won siege gives it a holder again", () => {
-  const s = newWar(), t = TERRITORIES.find((x) => canFall(x.id))!.id, own = s.owner[t];
+  // (a fortified land, standards.ts HOLD_SITES, on a front: the siege below needs a neighbour of another clan)
+  const s = newWar(), t = TERRITORIES.find((x) => canFall(x.id) && x.near.some((n) => s.owner[n] !== s.owner[x.id]))!.id, own = s.owner[t];
   const cap = TERRITORIES.find((x) => x.capitalOf)!.id;
   assert.equal(fellHold(s, cap), false, "a capital never falls");
   assert.equal(fellHold(s, t), true);

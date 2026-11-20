@@ -22,7 +22,7 @@ import { feudLine } from "../shared/war/heralds";
 import { patrolOf } from "../shared/war/patrols";
 import { RENOWN_RANKS, rankOf } from "../shared/war/renown";
 import { rallyRenown } from "../shared/war/rules";
-import { HOLDS, STANDARD } from "../shared/war/standards";
+import { holdOf, MUSTERS, STANDARD } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
 import { parseTroop, planRole, squadMod, TROOP_SHORT, troopStance, troopStats, troopWeapon, type TroopPart } from "../shared/war/troops";
 import { territoryAt } from "../shared/war/view";
@@ -88,7 +88,7 @@ export class WarFeuds {
       const o = this.h.mob(m.id), tr = o && !o.dead && o.kind === "trooper" ? parseTroop(o.weapon) : undefined;
       if (tr && o) { clan = tr.clan; at = o; }
     } else if (Number.isInteger(m.hold)) {
-      const hold = HOLDS.find((x) => x.t === m.hold), owner = warNow()?.owner[m.hold as number];
+      const hold = holdOf(m.hold as number), owner = warNow()?.owner[m.hold as number]; // (only a fortified land has a Hold to strike at)
       if (hold && owner !== undefined && CLAN_KEYS[owner]) { clan = CLAN_KEYS[owner]; at = hold; }
     }
     if (!clan || !at) return "There is nothing of a clan's there to strike at.";
@@ -273,11 +273,11 @@ export class WarFeuds {
     }
   }
 
-  /** A squad of `clan` after hero `id` from its nearest Hold within FEUD.hunt.fromTiles (none in reach: none comes). */
+  /** A squad of `clan` after hero `id` from its nearest muster (a fort, or an unfortified land's muster) within FEUD.hunt.fromTiles (none in reach: none comes). */
   private sendSquad(id: string, p: FeudHero, clan: ClanKey, tier: number, owner: readonly number[], now: number) {
     const H = FEUD.hunt, ci = CLAN_KEYS.indexOf(clan);
     let from: { x: number; y: number } | undefined, t = -1, best = Infinity;
-    for (const hold of HOLDS) {
+    for (const hold of MUSTERS) {
       if (owner[hold.t] !== ci) continue;
       const gate = patrolOf(hold.t)?.pts[0], d = gate ? Math.hypot(gate.x - p.x, gate.y - p.y) : Infinity;
       if (gate && d <= H.fromTiles * TILE && d < best) { best = d; from = gate; t = hold.t; }

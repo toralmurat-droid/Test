@@ -17,8 +17,10 @@ import { SAFE_ZONE } from "../shared/map";
 import { SPAWN_ZONES } from "../shared/spawns";
 import { _resetWar, warNow, warState } from "../server/war";
 
-/** An Act 1 land with a patrol and guard posts, away from Oakvale. */
-const LAND = TERRITORIES.find((t) => patrolOf(t.id) && garrisonSpots(t.id, TROOP.garrisonMax).length >= 4 && t.act === 1 && !t.capitalOf
+/** Can some other clan strike land t at the start of a war (the kill-valor tests need a foe there)? */
+const struck = (t: number) => { const s = newWar(), o = s.owner[t] as ClanKey; return CLAN_KEYS.some((k) => k !== o && targetsOf(s, k).includes(t)); };
+/** A land with a patrol and guard posts (a fortified land: standards.ts HOLD_SITES), some clan's target, away from Oakvale. */
+const LAND = TERRITORIES.find((t) => patrolOf(t.id) && garrisonSpots(t.id, TROOP.garrisonMax).length >= 4 && !t.capitalOf && struck(t.id)
   && Math.hypot(t.cx - (SAFE_ZONE.x + SAFE_ZONE.w / 2), t.cy - (SAFE_ZONE.y + SAFE_ZONE.h / 2)) > 60)!;
 /** A new war, LAND's Hold a camp (W3: a fresh Hold is an outpost; the camp fields the guards these tests count on). */
 const freshWar = () => { const s = newWar(); s.fort[LAND.id] = 0.3; _resetWar({ v: 1, state: s, minds: newMinds(), next: Date.now() + 1e9, log: [] }); };

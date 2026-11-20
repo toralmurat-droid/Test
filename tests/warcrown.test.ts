@@ -9,7 +9,7 @@ import { CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import { newMinds, scriptedOrders } from "../shared/war/doctrine";
 import { regionByKey } from "../shared/war/regions";
 import { bordersOf, landOf, newWar, nightRaid, sackHold, targetsOf, warTick, WAR, type WarState } from "../shared/war/rules";
-import { HOLDS, STANDARDS, STANDARD } from "../shared/war/standards";
+import { holdOf, musterOf, STANDARDS, STANDARD } from "../shared/war/standards";
 import { initialOwners, isSanctuary, leastLanded, linkPairs, TERRITORIES, territoryByName } from "../shared/war/territories";
 
 const CROWN = TERRITORIES.filter((t) => t.region === "crown");
@@ -26,11 +26,13 @@ test("crown war: ten territories after the homelands (ids 62-71), no capital; th
   }
   const X = { ...TOLLCROSS, y: CR(TOLLCROSS.y) }; // the Truce Market is a safe hub: in no territory
   for (const t of TERRITORIES) assert.ok(t.x >= X.x + X.w || X.x >= t.x + t.w || t.y >= X.y + X.h || X.y >= t.y + t.h, `${t.name} overlaps Tollcross`);
-  // every Crown territory has its Hold, on the patch its land keeps clear (shared/crown.ts CROWN_LANDS), and its standards
+  // every Crown territory has its muster, on the patch its land keeps clear (shared/crown.ts CROWN_LANDS) unless the land
+  // is fortified (then at its fort: beside a pass or junction, standards.ts HOLD_SITES), and its standards
   for (const t of CROWN) {
-    const h = HOLDS.find((x) => x.t === t.id), l = CROWN_LANDS.find((x) => x.name === t.name)!;
-    assert.ok(h, `${t.name}: a Hold`);
-    assert.deepEqual([h!.x / 32 - 0.5, h!.y / 32 - 0.5], [l.hold[0], CR(l.hold[1])], `${t.name}: on its patch`);
+    const m = musterOf(t.id), f = holdOf(t.id), l = CROWN_LANDS.find((x) => x.name === t.name)!, h = f ?? m;
+    assert.ok(m, `${t.name}: a muster`);
+    if (f) assert.deepEqual([m!.x, m!.y], [f.x, f.y], `${t.name}: musters at its fort`);
+    else assert.deepEqual([m!.x / 32 - 0.5, m!.y / 32 - 0.5], [l.hold[0], CR(l.hold[1])], `${t.name}: on its patch`);
     const st = STANDARDS.filter((s) => s.t === t.id);
     assert.ok(st.length >= 1, `${t.name}: a standard`);
     for (const s of st) assert.ok(Math.hypot(s.x - h!.x, s.y - h!.y) > STANDARD.range + 2 * 32, `${t.name}: standard clear of the Hold`);

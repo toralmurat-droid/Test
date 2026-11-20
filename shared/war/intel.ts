@@ -7,7 +7,7 @@
 import { TILE } from "../constants";
 import { CLAN_KEYS, type ClanKey } from "./clans";
 import { garrisonCount, garrisonSpots, patrolCount, patrolOf, TROOP } from "./patrols";
-import { HOLDS } from "./standards";
+import { musterOf } from "./standards";
 import { TERRITORIES } from "./territories";
 import { WAR_TROOPS } from "./troops";
 import type { HoldTier } from "./holdTiers";
@@ -85,9 +85,9 @@ export interface CallToArms {
   from?: number; tunnel?: 0 | 1;
 }
 
-/** Where a call points on the map: the land's Hold, else its centre (px). */
+/** Where a call points on the map: the land's muster (its fort if it has one), else its centre (px). */
 export function landPin(t: number): { x: number; y: number } {
-  const h = HOLDS.find((x) => x.t === t), T = TERRITORIES[t];
+  const h = musterOf(t), T = TERRITORIES[t];
   return h ? { x: h.x, y: h.y } : { x: (T.cx + 0.5) * TILE, y: (T.cy + 0.5) * TILE };
 }
 

@@ -12,7 +12,7 @@ import { CLAN_KEYS, type ClanKey } from "./clans";
 import { fortOf, holdReachPx, holdsLive, liveTier, tierReachPx } from "./holdWalls";
 import type { HoldTier } from "./holdTiers";
 import { WAR } from "./rules";
-import { HOLDS } from "./standards";
+import { holdOf } from "./standards";
 
 export const HOLD_SACK = {
   /** Master switch: off, no banner can be raised. */
@@ -39,7 +39,7 @@ export const HOLD_SACK = {
 export function bannerSpot(t: number): { x: number; y: number } | undefined {
   const f = fortOf(t, CLAN_KEYS[0]);
   if (f) return { x: (f.cx + 0.5) * TILE, y: (f.cy + 0.5) * TILE };
-  const h = HOLDS.find((x) => x.t === t);
+  const h = holdOf(t); // (a land without a fort has no banner: nothing to sack)
   return h && { x: h.x, y: h.y };
 }
 

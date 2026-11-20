@@ -3,20 +3,32 @@ import assert from "node:assert/strict";
 import { startRoom, until, wait } from "./helpers/room";
 import { PLAYER_RADIUS, TILE } from "../shared/constants";
 import { blocked } from "../shared/movement";
+import { isSolidTile } from "../shared/map";
 import type { ClanKey } from "../shared/war/clans";
 import { newMinds } from "../shared/war/doctrine";
-import { BLOCKING, FORT_PLANS, fortOf, liveTier, setHoldOwners, touchesHoldWall } from "../shared/war/holdWalls";
+import { BLOCKING, fortOf, liveTier, setHoldOwners, touchesHoldWall } from "../shared/war/holdWalls";
 import { newWar } from "../shared/war/rules";
 import { HOLDS } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
 import { _resetWar, warState } from "../server/war";
 import { rememberLive } from "../server/handoff";
 
-/** A Hold whose `clan` fort stands whole (no wall left out), away from any other Hold. */
-const HOLD = HOLDS.find((h) => {
-  const f = fortOf(h.t, "wardens")!;
-  return f.walls.length === FORT_PLANS.wardens.cells.filter((c) => BLOCKING.has(c.kind)).length && !f.cells.some((c) => c.kind === "gap");
-})!;
+/** Solid map tiles within 7 of a Hold's middle (the test takes the Hold on the most open ground). */
+const rocks = (h: { x: number; y: number }) => {
+  const cx = Math.floor(h.x / TILE), cy = Math.floor(h.y / TILE);
+  let n = 0;
+  for (let dy = -7; dy <= 7; dy++) for (let dx = -7; dx <= 7; dx++) if (isSolidTile(cx + dx, cy + dy)) n++;
+  return n;
+};
+/**
+ * A Hold whose Wardens fort has its north palisade (corner included) at the middle column and its east gate row open, with
+ * no rock on either line (forts sit beside roads now and few stand whole), on the most open ground.
+ */
+const HOLD = HOLDS.filter((h) => {
+  const f = fortOf(h.t, "wardens")!, kind = (dx: number, dy: number) => f.cells.find((c) => c.dx === dx && c.dy === dy)?.kind;
+  return kind(0, -4) === "wall" && kind(4, -4) !== undefined && BLOCKING.has(kind(4, -4)!) && [1, 2, 3, 5, 6].every((d) => !isSolidTile(f.cx, f.cy - d))
+    && [1, 2, 3, 4, 5, 6, 7].every((d) => !isSolidTile(f.cx + d, f.cy) && !BLOCKING.has(kind(d, 0) ?? "court"));
+}).reduce((a, b) => (rocks(b) < rocks(a) ? b : a));
 const stop = { up: false, down: false, left: false, right: false };
 
 /** The war with `holder` holding HOLD's land, its Hold a camp (fort 0.3, W3: a fresh Hold is an outpost) unless `fort` says otherwise. */

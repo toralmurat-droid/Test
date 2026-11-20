@@ -114,7 +114,7 @@ test("hold walls (W3): three tiers per clan: an outpost inside the camp's box, a
 });
 
 test("hold walls: every Hold under every clan at every tier keeps its gates and courtyard reachable, covers no standard, portal stone, road, NPC, chest, board, stair or dungeon gate", () => {
-  assert.ok(HOLDS.length >= 50);
+  assert.ok(HOLDS.length >= 25, `${HOLDS.length} forts`); // (only fortified lands have one: standards.ts HOLD_SITES)
   const doors = new Set(DOORS.flatMap((d) => d.tiles)), K = HOLD_WALL_KEEP;
   for (const h of HOLDS) {
     const T = TERRITORIES[h.t];
@@ -232,14 +232,31 @@ test("hold walls (W3): the walls follow the live tier; a tier change names only 
   } finally { setHoldOwners([]); }
 });
 
-/** A Hold whose `clan` fort stands whole (no wall left out), for the walking tests. */
-const wholeHold = (clan: ClanKey) => HOLDS.find((h) => {
+/** Solid map tiles within 7 of a Hold's middle: the walking tests take the Hold on the most open ground. */
+const rocks = (h: { x: number; y: number }) => {
+  const cx = Math.floor(h.x / TILE), cy = Math.floor(h.y / TILE);
+  let n = 0;
+  for (let dy = -7; dy <= 7; dy++) for (let dx = -7; dx <= 7; dx++) if (isSolidTile(cx + dx, cy + dy)) n++;
+  return n;
+};
+const openest = <T extends { x: number; y: number }>(l: T[]) => l.reduce((a, b) => (rocks(b) < rocks(a) ? b : a));
+/** A Hold whose `clan` fort stands whole (no wall left out), on the most open ground, for the walking tests. */
+const wholeHold = (clan: ClanKey) => openest(HOLDS.filter((h) => {
   const f = fortOf(h.t, clan)!;
   return f.walls.length === FORT_PLANS[clan].cells.filter((c) => BLOCKING.has(c.kind)).length && !f.cells.some((c) => c.kind === "gap");
-})!;
+}));
+/**
+ * A Hold whose Wardens fort has its north palisade at the middle column and its east gate row open, with no rock on either
+ * line (forts sit beside roads now, few stand whole): the walk north stops at the wall, the walk east leaves by the gate.
+ */
+const walkHold = () => openest(HOLDS.filter((h) => {
+  const f = fortOf(h.t, "wardens")!, kind = (dx: number, dy: number) => f.cells.find((c) => c.dx === dx && c.dy === dy)?.kind;
+  return kind(0, -4) === "wall" && [1, 2, 3, 5, 6].every((d) => !isSolidTile(f.cx, f.cy - d))
+    && [1, 2, 3, 4, 5, 6, 7].every((d) => !isSolidTile(f.cx + d, f.cy) && !BLOCKING.has(kind(d, 0) ?? "court"));
+}));
 
 test("hold walls: a hero walking into a wall stops at it; out through the front gate he walks on (shared moveStep)", () => {
-  const h = wholeHold("wardens"), f = fortOf(h.t, "wardens")!;
+  const h = walkHold(), f = fortOf(h.t, "wardens")!;
   try {
     setHoldOwners(allOwned("wardens"));
     let x = h.x, y = h.y;
@@ -311,7 +328,7 @@ test("hold walls: patrol routes, gate spots and guard posts lie outside every cl
     }
   } finally { setHoldOwners([]); }
   const want = TROOP.garrison.reduce((a, g) => a + g[0], 0);
-  assert.ok(lands >= 50 && posts >= lands * want * CLAN_KEYS.length * 0.9, `${lands} lands, ${posts} posts reached`);
+  assert.ok(lands >= 25 && posts >= lands * want * CLAN_KEYS.length * 0.9, `${lands} lands, ${posts} posts reached`);
 });
 
 test("hold walls: troopers chasing a hero round a fort build a route field only when the hero changes tile", async () => {

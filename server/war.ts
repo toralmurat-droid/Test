@@ -994,12 +994,14 @@ export function attachWar(room: { broadcast(type: string, msg: unknown): void })
     let townLines = 0;
     for (const e of events) {
       if (e.kind === "town") { townNews(room, e, ++townLines); continue; } // (W6: Herald capped per tick, sfx, the "towns" message)
-      room.broadcast("chat", { id: "", name: "Herald", text: e.text });
       if (e.kind === "grow") { // a hammer chord where the Hold grew (client/src/sfx.ts hold_grow); no leader line, no horn
         const at = bannerSpot(e.t);
-        if (at) room.broadcast("sfx", { ev: "hold_grow", t: e.t, x: Math.round(at.x), y: Math.round(at.y), by: e.by, tier: e.tier ?? 1 });
+        if (!at) continue; // a land without a fort (standards.ts HOLD_SITES): nothing rose to announce (the war log keeps it)
+        room.broadcast("chat", { id: "", name: "Herald", text: e.text });
+        room.broadcast("sfx", { ev: "hold_grow", t: e.t, x: Math.round(at.x), y: Math.round(at.y), by: e.by, tier: e.tier ?? 1 });
         continue;
       }
+      room.broadcast("chat", { id: "", name: "Herald", text: e.text });
       if (e.kind === "fall" || e.kind === "claim") { // the fort comes down (or a new banner rises over the ruin): a sound there (client/src/sfx.ts)
         const at = bannerSpot(e.t);
         if (at) room.broadcast("sfx", { ev: e.kind === "fall" ? "hold_fell" : "hold_claimed", t: e.t, x: Math.round(at.x), y: Math.round(at.y), by: e.by, from: e.from });

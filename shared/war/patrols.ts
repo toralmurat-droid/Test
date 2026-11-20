@@ -10,7 +10,7 @@ import type { ClanKey } from "./clans";
 import { anyHoldWall, holdReachPx, tierReachPx, tierWallAt } from "./holdWalls";
 import type { HoldTier } from "./holdTiers";
 import type { TroopRole } from "./troops";
-import { HOLDS, STANDARDS } from "./standards";
+import { holdOf, musterOf, STANDARDS } from "./standards";
 import { TERRITORIES } from "./territories";
 
 /** Hold guards of an outpost, a camp and a fortress (holdTiers.ts): [at control 0, at control 100]. */
@@ -209,7 +209,7 @@ function gateSpots(h: { t: number; x: number; y: number }): { x: number; y: numb
 }
 
 function build(tid: number): Patrol | undefined {
-  const t = TERRITORIES[tid], hold = HOLDS.find((h) => h.t === tid);
+  const t = TERRITORIES[tid], hold = musterOf(tid); // (the muster: every land has one, fortified or not)
   if (!t || !hold) return undefined;
   const b = box(t.x - MARGIN, t.y - MARGIN, t.x + t.w - 1 + MARGIN, t.y + t.h - 1 + MARGIN);
   const tile = (p: { x: number; y: number }): [number, number] => [Math.floor(p.x / TILE), Math.floor(p.y / TILE)];
@@ -237,7 +237,7 @@ function build(tid: number): Patrol | undefined {
 }
 
 const cache = new Map<number, Patrol | undefined>();
-/** Territory `t`'s patrol (built on first ask, then cached), or undefined if it has no Hold or reachable standard. */
+/** Territory `t`'s patrol (built on first ask, then cached), from its muster (standards.ts MUSTERS) round its standards; undefined if it has no muster or reachable standard. */
 export function patrolOf(t: number): Patrol | undefined {
   if (!cache.has(t)) cache.set(t, build(t));
   return cache.get(t);
@@ -278,7 +278,7 @@ const AROUND: [number, number][] = [[0, 0], [8, 0], [-8, 0], [0, 8], [0, -8], [8
 export function garrisonSpots(t: number, n: number, tier: HoldTier = 1): { x: number; y: number; fx: number; fy: number }[] {
   const ck = t * 3 + tier;
   if (!spots.has(ck)) {
-    const hold = HOLDS.find((h) => h.t === t), out: { x: number; y: number; fx: number; fy: number }[] = [], reach = tierReachPx(t, tier);
+    const hold = holdOf(t), out: { x: number; y: number; fx: number; fy: number }[] = [], reach = tierReachPx(t, tier); // (a land without a fort has no guards)
     if (hold) for (let k = 0; k < 64 && out.length < TROOP.garrison[tier][1]; k++) {
       // a square ring outside the fort's walls (any clan's at this tier): Chebyshev distance from the Hold, so no guard stands in the compound
       const a = k * 2.399963 + t * 0.7, fx = Math.cos(a), fy = Math.sin(a), r = (reach + FORT_MARGIN + (k % 3) * 18) / Math.max(Math.abs(fx), Math.abs(fy));

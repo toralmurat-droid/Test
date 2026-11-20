@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-20",
+  "title": "Clan forts on the roads",
+  "changes": [
+    "Clan forts now stand beside the roads they guard: by each capital, at the border passes, near town gates and at busy crossroads, about 25 in all instead of one in the middle of every territory.",
+    "Lands without a fort still have their clan's patrols, sieges and rituals; only a fort has walls, guards and a banner to sack."
+  ]
+}
