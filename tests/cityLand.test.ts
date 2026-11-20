@@ -16,6 +16,7 @@ import { NPCS } from "../shared/npcs";
 import { STASHES } from "../shared/trade";
 import { nearCityGate, noMobsAt, NO_MOB_AREAS, randomPointInZone, SPAWN_ZONES } from "../shared/spawns";
 import { territoryAt } from "../shared/war/view";
+import { TERRITORIES } from "../shared/war/territories";
 import { HOLDS, MUSTERS, STANDARDS } from "../shared/war/standards";
 import { CHESTS } from "../shared/chests";
 import { SIEGE_SITES } from "../shared/siege";
@@ -26,11 +27,13 @@ import { blocked } from "../shared/movement";
 import { BOARDS } from "../shared/bounty";
 import { cityClear, clearOfCities, POSTS } from "../shared/bandits";
 import { FANGROCK } from "../shared/badlands";
+import { KINGS_MOUND } from "../shared/moors";
 
 /**
  * The clans' cities in their homelands (settlement network step 5, shared/capitals.ts City.site, shared/cityLand.ts), one
  * table row per city that has moved: Hearthhold north of Goldenreach Farms (Oakvale's lands), Duskveil in the Sunscar's
- * Saffron Dunes east of Mirage Wells, Scarwall on the badlands plain north of Fangrock. The rules every moved city keeps run over the table; what is one city's own is in its own
+ * Saffron Dunes east of Mirage Wells, Marrowkeep on the moor north of Kingsbarrow, Scarwall on the badlands plain north
+ * of Fangrock. The rules every moved city keeps run over the table; what is one city's own is in its own
  * test below. The room side (the gate ward, the hand-off) is in tests/cityLand-room.test.ts.
  */
 type Pt = { x: number; y: number };
@@ -66,6 +69,13 @@ const rows: Row[] = [
     roads: [["west", 219, 416, 30, "Mirage Wells' east shore"], ["west", 231, 353, -1, "the Veiled Sanctum's west gate (the seat)"], ["west", 155, 410, -1, "Kel Ashar"],
       ["south", 229, 445, 40, "the dunes trail"], ["south", 219, 416, 60, "Mirage Wells, up the dunes trail"]],
     over: ["The Saffron Dunes", "The Sunscar"], territory: [[229, 430, "The Saffron Dunes"], [255, 446, "The Saffron Dunes"]],
+  },
+  {
+    clan: "host", land: 3, box: { x: 230, y: 601, w: 52, h: 40 }, outer: { x: 255, y: 641 },
+    gates: { south: [254, 255, 256].map((x) => ({ x, y: 640 })), west: [626, 627, 628].map((y) => ({ x: 230, y })) },
+    seed: () => tileOf(waygateArrival(waygateById("moors")!)), highway: ["south"],
+    roads: [["south", 250, 680, 60, "the fork below the Host's Muster (the seat)"], ["south", 89, 704, -1, "Cairnwatch"], ["west", 255, 641, -1, "the south gate, through the city"]],
+    over: ["Kingsbarrow", "The Grey Barrow Moors"], territory: [[246, 648, "Kingsbarrow"], [232, 648, "Kingsbarrow"]],
   },
   {
     clan: "redfang", land: 4, box: { x: 9, y: 782, w: 52, h: 40 }, outer: { x: 34, y: 822 },
@@ -306,7 +316,8 @@ test("cities in their lands: forts, musters, chests, siege sites, landmarks, que
   let n = 0;
   for (const b of BORDERS) for (const e of [b.a, b.b]) { const [x, y] = endPath(e)[0]; if (HOLDS.some((h) => Math.hypot(h.x / TILE - x, h.y / TILE - y) <= 30)) n++; }
   assert.equal(n, 14);
-  // the digests taken on the map before the moves (default branch after #571; the same after Hearthhold, Scarwall and Duskveil)
+  // the digests taken on the map before the moves (default branch after #571; the same after Hearthhold, Scarwall, Duskveil
+  // and Marrowkeep)
   assert.equal(digest(HOLDS, (h) => [h.t, Math.round(h.x), Math.round(h.y)]), "25:9caa51d");
   assert.deepEqual(HOLDS.filter((h) => h.site === "capital").map((h) => [h.x / TILE, h.y / TILE]), [[26.5, 58.5], [241.5, 355.5], [271.5, 671.5], [27.5, 867.5], [248.5, 1105.5]], "the capital forts");
   assert.equal(digest(MUSTERS, (h) => [h.t, Math.round(h.x), Math.round(h.y)]), "72:82341353");
@@ -315,8 +326,9 @@ test("cities in their lands: forts, musters, chests, siege sites, landmarks, que
   assert.equal(digest(SIEGE_SITES, (s) => [s.tx, s.ty]), "14:cac2c0c9");
   assert.equal(digest(LANDMARKS, (l) => [l.id, l.x, l.y, l.solid ?? null]), "6:4b449bf7");
   assert.equal(digest(allObjects(), (o) => [o.id, Math.round(o.x), Math.round(o.y)]), "213:663e782a");
-  // every stone but the moved cities' waystones ("41:f8dc4b3" with Duskveil's, before it moved)
-  assert.equal(digest(PORTAL_SPOTS.filter((p) => !inLandCities().some((c) => p.id === `city_${c.clan}`)), (p) => [p.id, p.x, p.y]), "40:b1394a39");
+  // every stone but the moved cities' waystones ("41:f8dc4b3" with Duskveil's, before it moved; "40:b1394a39" with
+  // Marrowkeep's; the base map without it hashes the same)
+  assert.equal(digest(PORTAL_SPOTS.filter((p) => !inLandCities().some((c) => p.id === `city_${c.clan}`)), (p) => [p.id, p.x, p.y]), "39:77de2ae2");
   assert.equal(digest(POSTS, (p) => [p.kind ?? "", p.role, p.at, p.route ?? null]), "95:7b83c3b", "every camp post where it was");
   for (const c of CHESTS) assert.ok(!cityAt(Math.floor(c.x / TILE), Math.floor(c.y / TILE)), `${c.id}: not inside the walls`);
 });
@@ -411,4 +423,42 @@ test("Duskveil: under the Thornspire in the Saffron Dunes, its back to the cliff
   assert.ok(sp.dirs.some((d) => d.name.includes("Mirage Wells") && d.arrow === "←"), "Mirage Wells to the west");
   // the Sanctum's plateau (the seat, its fort and the Thornspire muster) a long walk north
   assert.ok(B.y - 361 > 40, "the Sanctum's walls 40+ rows north");
+});
+
+test("Marrowkeep: north of Kingsbarrow, its back to the crags (no east gate); the highway from its south gate to the Muster's fork", () => {
+  const M = CITIES.find((c) => c.clan === "host")!, B = plotBox(M), G = cityGates(M), y0 = LAND_ROWS[3].y0;
+  const inBox = (x: number, y: number) => x >= B.x && y >= B.y && x < B.x + B.w && y < B.y + B.h;
+  assert.deepEqual(M.sideGates, ["west"]);
+  for (let y = B.y; y < B.y + B.h; y++) assert.ok(isSolidTile(B.x + B.w, y), `crag east of the wall at ${y}`);
+  // the leg from the south gate down to the fork below the Muster, where the Mourning Road's and Cairnwatch's legs start;
+  // the old stub from the gate dais is retired, no other leg from the city
+  const h = HIGHWAYS.find((o) => o.land === 3)!, mine = h.legs.find((l) => l.from === "Marrowkeep Gate")!;
+  assert.deepEqual(mine.pts[0], [G[0].out.x, G[0].out.y - y0]);
+  for (const to of ["The Mourning Road", "Cairnwatch"]) assert.deepEqual(h.legs.find((l) => l.from === "The Host's Muster" && l.to === to)!.pts[0], mine.pts.at(-1));
+  assert.equal(h.legs.filter((l) => l.from.startsWith("Marrowkeep")).length, 1);
+  assert.ok(RETIRED_LEGS.some((l) => l.land === 3 && JSON.stringify(l.pts) === JSON.stringify([[242, 79], [249, 85], [250, 84]])), "the old stub retired");
+  // ...kept off the stump that keeps the Muster's fort where it was (cleared, a spot by the highway ties it and wins)
+  assert.equal(OBJECTS[72 + y0][251], T.STUMP);
+  assert.deepEqual(HOLDS.find((o) => o.site === "capital" && o.anchor === "The Host's Muster")!.x / TILE, 271.5);
+  // the west gate: a few tiles of dirt track towards the Nine Widows road, stopping short of it (joined, the fork would be a
+  // junction: the Hollow Mounds' fort would go to Kingsbarrow), the road's old post inside the walls gone
+  const Wg = G.find((g) => g.side === "west")!, track = [[229, 627], [228, 627], [228, 628], [228, 629]];
+  assert.deepEqual(Wg.out, { x: 229, y: 627 });
+  for (const [x, y] of track) { assert.ok(WORLD.roads.has(y * MAP_W + x) && GROUND[y][x] === T.DIRT, `track at ${x},${y}`); }
+  const joined = (x: number, y: number) => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([i, j]) => WORLD.roads.has((y + j) * MAP_W + x + i) && !track.some(([a, b]) => a === x + i && b === y + j) && !inBox(x + i, y + j));
+  assert.ok(!track.some(([x, y]) => joined(x, y)), "the track joins no other road");
+  assert.ok(WORLD.roads.has(634 * MAP_W + 228), "the Nine Widows road five tiles below");
+  assert.ok(HOLDS.some((o) => o.anchor === "187,700") && !HOLDS.some((o) => TERRITORIES[o.t].name === "Kingsbarrow"), "the Hollow Mounds keep their fort, Kingsbarrow has none");
+  assert.ok(!SIGNPOSTS.some((p) => p.x === 230 && p.y === 635), "the Nine Widows road's post inside the walls is gone");
+  const wp = SIGNPOSTS.find((p) => Math.hypot(p.x - Wg.out.x, p.y - Wg.out.y) <= 4)!;
+  assert.ok(wp.dirs.some((d) => d.name.includes("Marrowkeep")) && wp.dirs.some((d) => d.name.includes("The Nine Widows")), wp.dirs.map((d) => d.name).join(" | "));
+  // the fork below the Muster names the city up the leg (beside the Muster: a board names two places)
+  const fork = SIGNPOSTS.find((p) => Math.hypot(p.x - 246, p.y - (85 + y0)) <= 3)!;
+  assert.ok(fork.dirs.some((d) => d.name.includes("Marrowkeep") && d.name.includes("The Host's Muster")), fork.dirs.map((d) => d.name).join(" | "));
+  // the Barrow-King's Mound just below the south apron: its area, its lair and the boss as they were, outside the walls
+  const mound = AREAS.find((a) => a.name === "The Barrow-King's Mound")!;
+  assert.deepEqual([mound.x, mound.y, mound.w, mound.h], [231, 642, 11, 9]);
+  assert.ok(mound.y >= B.y + B.h + 1 && !inBox(KINGS_MOUND.x, KINGS_MOUND.y + y0));
+  assert.ok(SPAWN_ZONES.some((z) => z.name === "The Barrow-King's Mound" && z.mobs.barrowking === 1));
+  for (let y = mound.y; y < mound.y + mound.h; y++) for (let x = mound.x; x < mound.x + mound.w; x++) assert.ok(!HIGHWAY_TILES.has(y * MAP_W + x), `no highway through the Mound at ${x},${y}`);
 });

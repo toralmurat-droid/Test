@@ -19,6 +19,7 @@ const W = CITIES.find((c) => c.clan === "wardens")!;
 const ROWS: { clan: City["clan"]; foe: "redfang" | "wardens"; stone: string; blink: [[number, number], [number, number]] }[] = [
   { clan: "wardens", foe: "redfang", stone: "huntcamp", blink: [[-1.5, 15.5], [3.5, 15.5]] },
   { clan: "veiled", foe: "redfang", stone: "mirage", blink: [[10.5, 40.5], [10.5, 36.5]] },
+  { clan: "host", foe: "redfang", stone: "cairnwatch", blink: [[10.5, 40.5], [10.5, 36.5]] },
   { clan: "redfang", foe: "wardens", stone: "rustwater", blink: [[10.5, 40.5], [10.5, 36.5]] },
 ];
 const px = (t: { x: number; y: number }) => ({ x: (t.x + 0.5) * TILE, y: (t.y + 0.5) * TILE });

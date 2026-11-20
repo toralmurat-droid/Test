@@ -155,8 +155,8 @@ for (const W of CITIES) test(`capitals: ${W.clan}'s people, shop, waystone, stas
 });
 
 test("capitals: the cities in their lands have walk-in gates, no waygate pair; the band cities' gates open from Lv 5", () => {
-  // Hearthhold, Duskveil and Scarwall (settlement network step 5): no city gate dais and no waygate pair (tests/cityLand.test.ts has the cities)
-  assert.deepEqual(CITIES.filter((c) => c.site).map((c) => c.clan), ["wardens", "veiled", "redfang"]);
+  // Hearthhold, Duskveil, Marrowkeep and Scarwall (settlement network step 5): no city gate dais and no waygate pair (tests/cityLand.test.ts has the cities)
+  assert.deepEqual(CITIES.filter((c) => c.site).map((c) => c.clan), ["wardens", "veiled", "host", "redfang"]);
   for (const C of CITIES.filter((c) => c.site)) {
     assert.ok(cityAt(C.outer.x, C.outer.y - 1) === C && cityAt(C.outer.x, C.outer.y) === undefined, `${C.clan}: its outer tile is just outside the south gate`);
     assert.equal(waygateById(`citygate_${C.clan}`), undefined); assert.equal(waygateById(`cityexit_${C.clan}`), undefined);
@@ -164,9 +164,9 @@ test("capitals: the cities in their lands have walk-in gates, no waygate pair; t
   assert.equal(WAYGATES.filter((g) => cityGateOf(g)).length, 2 * CITIES.filter((c) => !c.site).length);
   assert.equal(cityGateOf(waygateById("oakvale")!), undefined);
   // the band cities' gates: open at CITY.minLevel; the way out never shuts
-  const out = waygateById("citygate_host")!, inn = waygateById("cityexit_host")!;
-  assert.deepEqual(cityGateOf(out), { city: cityOf("host"), inner: false });
-  assert.deepEqual(cityGateOf(inn), { city: cityOf("host"), inner: true });
+  const out = waygateById("citygate_hidekin")!, inn = waygateById("cityexit_hidekin")!;
+  assert.deepEqual(cityGateOf(out), { city: cityOf("hidekin"), inner: false });
+  assert.deepEqual(cityGateOf(inn), { city: cityOf("hidekin"), inner: true });
   assert.equal(CITY.minLevel, 5);
   assert.ok(!gateOpen(out, { level: 4 } as never) && gateOpen(out, { level: 5 } as never));
   assert.ok(gateOpen(inn, { level: 1 } as never));
