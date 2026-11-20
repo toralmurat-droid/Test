@@ -95,7 +95,10 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 18
 #worldmap .wm-here:empty { display: none; }
 #worldmap.nopick .wm-pick { display: none; }
 #worldmap .wm-touch { display: none; }
-#worldmap .wm-title-war, #worldmap .wm-keys-war { display: none; }
+#worldmap .wm-title-war, #worldmap .wm-keys-war, #worldmap .wm-zoom { display: none; }
+#worldmap.war .wm-zoom { display: inline-flex; gap: 4px; }
+#worldmap .wm-zoom button { font: 18px var(--pixel-font); color: #ffd166; background: #2a1d12; border: 2px solid #6b4a2a; padding: 2px 10px; cursor: pointer; text-shadow: 2px 2px #000; min-width: 34px; }
+#worldmap .wm-zoom button:hover { background: #3a2817; border-color: #e8c27a; }
 #worldmap.war .wm-keys-war { display: inline; }
 @media (max-height: 800px) { #worldmap.war .wm-keys-war { display: none; } }
 #worldmap.war .wm-title-war { display: grid; }
