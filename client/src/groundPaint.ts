@@ -29,8 +29,14 @@ export interface GroundData {
   desert?: { y0: number; y1: number };
   /** 1 on the desert's cliff tiles: their ground is the mountains' rock top (the outer steps stand up as blocks, iso.ts). */
   cliff?: Uint8Array;
-  /** 1 on the desert's rim (shared/desert.ts DESERT_DUNES): rolling sand dunes, ray-traced in 3D by paintChunk (duneGrid). */
-  dune?: Uint8Array;
+  /**
+   * The lands' rims, ray-traced in 3D by paintChunk (reliefGrid) instead of standing blocks: RELIEF_DUNE on the desert's
+   * dune sea (shared/desert.ts DESERT_DUNES), RELIEF_GRANITE on the Crown's pale granite mountains, RELIEF_RED on the
+   * badlands' red rock (shared/crown.ts CROWN_RIM, shared/badlands.ts BADLANDS_RIM); 0 elsewhere.
+   */
+  relief?: Uint8Array;
+  /** The bands (rows y0..y1) the relief lives in: depth is measured inside a band, and its edge rows carry on past it. */
+  reliefBands?: [number, number][];
   /** Act 3's moors band (shared/moors.ts), rows y0..y1: cool grey-green heath, peat, bog and granite; the cliffs' top is grey rock. */
   moors?: { y0: number; y1: number };
   /** Act 4's badlands band (shared/badlands.ts), rows y0..y1: red sand, cracked clay, gravel riverbeds; the mesas' top is red rock. */
@@ -103,7 +109,7 @@ const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 const sstep = (a: number, b: number, v: number) => { const t = clamp01((v - a) / (b - a)); return t * t * (3 - 2 * t); };
 
 /** Precomputed fields at tile resolution, interpolated per pixel. */
-export interface Fields { depth: Float32Array; ao: Float32Array; rock?: Float32Array; cliff?: Float32Array; dune?: Float32Array }
+export interface Fields { depth: Float32Array; ao: Float32Array; rock?: Float32Array; cliff?: Float32Array; relief?: Float32Array; reliefKind?: Uint8Array }
 
 export function makeFields(g: GroundData): Fields {
   const { w, h, ground, solid } = g;
@@ -143,25 +149,35 @@ export function makeFields(g: GroundData): Fields {
     for (let y = g.cities.y0 - 4; y < h; y++) for (let x = 0; x < w; x++) rock[y * w + x] = g.cities.rock[y * w + x];
   }
   const cliff = g.cliff ? Float32Array.from(g.cliff) : undefined;
-  // Dune depth: tiles in from the open desert (BFS inside the dune tiles, capped), 0 off the dunes
-  let dune: Float32Array | undefined;
-  if (g.dune && g.desert) {
-    dune = new Float32Array(w * h);
-    const dq: number[] = [], y0 = g.desert.y0, y1 = Math.min(h, g.desert.y1);
-    for (let y = y0; y < y1; y++) for (let x = 0; x < w; x++) { const i = y * w + x; if (g.dune[i]) dune[i] = 99; else dq.push(i); }
-    for (let k = 0; k < dq.length; k++) {
-      const i = dq[k], x = i % w, y = (i / w) | 0, d = dune[i] + 1;
-      if (d > DUNE_CAP) continue;
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        const nx = x + dx, ny = y + dy;
-        if (nx < 0 || ny < y0 || nx >= w || ny >= y1) continue;
-        const j = ny * w + nx;
-        if (dune[j] > d) { dune[j] = d; dq.push(j); }
+  // Relief depth: tiles in from open ground (BFS inside the relief tiles of each band, capped), 0 off it; the band's
+  // edge rows are copied a few rows out, so the dunes and peaks run on past the band's edge instead of sinking there
+  let relief: Float32Array | undefined, reliefKind: Uint8Array | undefined;
+  if (g.relief && g.reliefBands) {
+    relief = new Float32Array(w * h); reliefKind = new Uint8Array(w * h);
+    for (const [b0, b1] of g.reliefBands) {
+      const y0 = Math.max(0, b0), y1 = Math.min(h, b1), dq: number[] = [];
+      for (let y = y0; y < y1; y++) for (let x = 0; x < w; x++) { const i = y * w + x; if (g.relief[i]) { relief[i] = 99; reliefKind[i] = g.relief[i]; } else dq.push(i); }
+      for (let k = 0; k < dq.length; k++) {
+        const i = dq[k], x = i % w, y = (i / w) | 0, d = relief[i] + 1;
+        if (d > RELIEF_CAP) continue;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < y0 || nx >= w || ny >= y1) continue;
+          const j = ny * w + nx;
+          if (relief[j] > d) { relief[j] = d; dq.push(j); }
+        }
+      }
+      for (let y = y0; y < y1; y++) for (let x = 0; x < w; x++) if (relief[y * w + x] > RELIEF_CAP) relief[y * w + x] = RELIEF_CAP;
+      for (let k = 1; k <= RELIEF_PAST; k++) for (let x = 0; x < w; x++) {
+        for (const [from, to] of [[y0, y0 - k], [y1 - 1, y1 - 1 + k]]) {
+          if (to < 0 || to >= h || (to >= y0 && to < y1)) continue;
+          const i = to * w + x, f = from * w + x;
+          if (relief[i] === 0 && relief[f] > 0) { relief[i] = relief[f]; reliefKind[i] = reliefKind[f]; }
+        }
       }
     }
-    for (let i = 0; i < w * h; i++) if (dune[i] > DUNE_CAP) dune[i] = DUNE_CAP;
   }
-  return { depth, ao, rock, cliff, dune };
+  return { depth, ao, rock, cliff, relief, reliefKind };
 }
 
 const out3 = new Float32Array(3);
@@ -687,19 +703,36 @@ function landTint(el: string, k: number, r: number, g: number, b: number, wx: nu
   return [r + (tr - r) * k, g + (tg - g) * k, b + (tb - b) * k];
 }
 
-// ---------- Act 2's rim: 3D dunes (Murat 2026-11-19: "make the borders nice 3d dunes turned to isometric") ----------
+// ---------- The lands' rims in 3D: the desert's dunes, the Crown's granite peaks, the badlands' red rock ----------
+// (Murat 2026-11-19: "make the borders nice 3d dunes turned to isometric"; the Crown and the badlands the same way.)
+// Each rim is a height field, ray-traced per pixel: the pixel that shows ground point (wx, wy) at height 0 shows
+// (wx + z, wy + z) at height z, so the first surface along the view ray is the highest z the field reaches there.
 
-/** Dune depth cap in tiles (the dunes are as big as they get this far in). */
-const DUNE_CAP = 12;
-/** Tallest dune, in world px (a cliff's top step is 106). */
-const DUNE_MAX = 76;
+export const RELIEF_DUNE = 1, RELIEF_GRANITE = 2, RELIEF_RED = 3;
+/** Relief depth cap in tiles (the dunes and peaks are as big as they get this far in). */
+const RELIEF_CAP = 12;
+/** Rows past a band's edge its relief carries on (the camera never shows further). */
+const RELIEF_PAST = 6;
+/** Tallest dune and tallest peak, in world px (a cliff's top step is 106). */
+const DUNE_MAX = 76, PEAK_MAX = 168;
 /** Height grid spacing in world px. */
-const DUNE_S = 4;
+const RELIEF_S = 4;
 /** The sun, from the upper left like the cliffs' lit faces (normalised). */
 const SUN = (() => { const v = [-0.62, -0.28, 0.73], l = Math.hypot(v[0], v[1], v[2]); return [v[0] / l, v[1] / l, v[2] / l]; })();
 const SUN_XY = Math.hypot(SUN[0], SUN[1]);
 /** Dune sand: a longer, warmer ramp than SANDP, from the slip faces' shade to the crests' glare. */
 const DUNEP = pal(["#5e3e22", "#7a5230", "#96683c", "#b2804a", "#c99a5c", "#ddb070", "#ebc688", "#f4daa4"]);
+/** The Crown's pale granite, cold shade to sunlit, and its snow. */
+const GRANP = pal(["#2c2e36", "#41444e", "#5a5e69", "#757984", "#9195a0", "#adb0b8", "#c7c9ce", "#dddfe1"]);
+const SNOWP = pal(["#7c8698", "#9aa4b4", "#bcc4d0", "#dce2ea", "#f2f5f8"]);
+/** The badlands' red rock: deep shade to sun-baked. */
+const REDP = pal(["#3e1c14", "#5a281c", "#783626", "#964532", "#b0583e", "#c8704e", "#dc8c64", "#eaa87e"]);
+
+const ridged = (x: number, y: number, s: number) => 1 - Math.abs(2 * vn(x, y, s) - 1);
+const rise = (dd: number, wx: number, wy: number, s: number, full: number) => {
+  const r0 = sstep(0.3, full, dd + (vn(wx / 26, wy / 26, s) - 0.5) * 1.1);
+  return r0 * (0.35 + 0.65 * r0); // a long low apron first, so the trails and passes stay in sight
+};
 
 /**
  * The dunes' height (world px) at a world point: zero on open ground, rising over the first few tiles of the rim, then
@@ -708,9 +741,8 @@ const DUNEP = pal(["#5e3e22", "#7a5230", "#96683c", "#b2804a", "#c99a5c", "#ddb0
  */
 function duneHeight(dd: number, wx: number, wy: number): number {
   if (dd <= 0.25) return 0;
-  const r0 = sstep(0.3, 4.2, dd + (vn(wx / 26, wy / 26, 470) - 0.5) * 1.1);
-  if (r0 <= 0) return 0;
-  const rise = r0 * (0.35 + 0.65 * r0); // a long low apron first, so the trails and passes stay in sight
+  const rs = rise(dd, wx, wy, 470, 4.2);
+  if (rs <= 0) return 0;
   const big = fbm(wx / 300, wy / 300, 471);
   const p = (wx * 0.93 + wy * 0.36) / 300 + fbm(wx / 260, wy / 260, 472) * 2.2 + vn(wx / 90, wy / 90, 473) * 0.35;
   const fr = p - Math.floor(p);
@@ -719,66 +751,91 @@ function duneHeight(dd: number, wx: number, wy: number): number {
   // a second, smaller set of dunes riding on the big ones, crossing them at an angle
   const q = (wx * 0.8 - wy * 0.6) / 120 + fbm(wx / 110, wy / 110, 474) * 1.6, fq = q - Math.floor(q);
   const prof2 = fq < 0.75 ? Math.pow(fq / 0.75, 1.8) : Math.pow((1 - fq) / 0.25, 0.8);
-  const hgt = rise * (6 + amp * (14 * big + 44 * prof * (0.5 + 0.5 * big) + 13 * prof2 * (1 - 0.5 * prof)));
+  const hgt = rs * (6 + amp * (14 * big + 44 * prof * (0.5 + 0.5 * big) + 13 * prof2 * (1 - 0.5 * prof)));
   return hgt < 52 ? hgt : Math.min(DUNE_MAX, 52 + (hgt - 52) * 0.5); // the tallest crests squeezed, never cut flat
 }
 
-/** The dunes' heights over one chunk's world box, on a DUNE_S grid; `near` says how far (in cells) the next dune cell is down-right along the view diagonal. */
-interface DuneGrid { x0: number; y0: number; nx: number; ny: number; h: Float32Array; near: Uint8Array }
+/** The Crown's granite mountains: sharp ridged peaks and spurs, a massif that climbs the further in, foothills at the foot. */
+function graniteHeight(dd: number, wx: number, wy: number): number {
+  if (dd <= 0.25) return 0;
+  const rs = rise(dd, wx, wy, 480, 3.6);
+  if (rs <= 0) return 0;
+  const r1 = ridged(wx / 150, wy / 150, 481), r2 = ridged(wx / 62, wy / 62, 482), r3 = vn(wx / 22, wy / 22, 483);
+  const massif = 0.45 + 0.55 * sstep(2, 9, dd);
+  const hgt = rs * (14 + massif * (120 * Math.pow(r1, 1.8) + 34 * r2 * r1 + 10 * r3));
+  return hgt < 120 ? hgt : Math.min(PEAK_MAX, 120 + (hgt - 120) * 0.6);
+}
 
-function duneGrid(g: GroundData, f: Fields, bx0: number, bx1: number, by0: number, by1: number): DuneGrid | undefined {
-  if (!f.dune || !g.desert) return undefined;
-  const { w, tile } = g, d0 = g.desert.y0, d1 = g.desert.y1;
-  if (by1 < d0 || by0 > d1) return undefined;
-  const tx0 = Math.max(0, Math.floor(bx0)), tx1 = Math.min(w - 1, Math.ceil(bx1)), ty0 = Math.max(d0, Math.floor(by0)), ty1 = Math.min(d1 - 1, Math.ceil(by1));
+/** The badlands' red rock: stepped buttes and mesas, flat ledges with sheer risers between them, cut by gullies. */
+function redHeight(dd: number, wx: number, wy: number): number {
+  if (dd <= 0.25) return 0;
+  const rs = rise(dd, wx, wy, 490, 3.6);
+  if (rs <= 0) return 0;
+  const massif = 0.5 + 0.5 * sstep(2, 9, dd);
+  const lump = fbm(wx / 210, wy / 210, 491), gully = ridged(wx / 120, wy / 120, 492);
+  const raw = rs * (14 + massif * (150 * Math.pow(lump, 1.4) * (0.7 + 0.3 * gully) + 8 * vn(wx / 40, wy / 40, 493)));
+  const STEP = 26, t = raw / STEP, k = Math.floor(t), fr = t - k; // terraces: a broad ledge, then a sheer riser
+  return Math.min(PEAK_MAX, raw * 0.2 + (k + sstep(0.55, 0.92, fr)) * STEP * 0.8);
+}
+
+/** The rims' heights over one chunk's world box, on a RELIEF_S grid, with each cell's kind; `near` = cells to the next raised cell along +x+y. */
+interface ReliefGrid { x0: number; y0: number; nx: number; ny: number; h: Float32Array; kind: Uint8Array; near: Uint8Array; max: number }
+
+function reliefGrid(g: GroundData, f: Fields, bx0: number, bx1: number, by0: number, by1: number): ReliefGrid | undefined {
+  const D = f.relief, K = f.reliefKind;
+  if (!D || !K) return undefined;
+  const { w, h: mh, tile } = g;
+  const tx0 = Math.max(0, Math.floor(bx0)), tx1 = Math.min(w - 1, Math.ceil(bx1)), ty0 = Math.max(0, Math.floor(by0)), ty1 = Math.min(mh - 1, Math.ceil(by1));
   let any = false;
-  for (let y = ty0; y <= ty1 && !any; y++) for (let x = tx0; x <= tx1; x++) if (f.dune[y * w + x] > 0) { any = true; break; }
+  for (let y = ty0; y <= ty1 && !any; y++) for (let x = tx0; x <= tx1; x++) if (D[y * w + x] > 0) { any = true; break; }
   if (!any) return undefined;
-  const x0 = Math.floor(bx0 * tile / DUNE_S), y0 = Math.floor(by0 * tile / DUNE_S);
-  const nx = Math.ceil(bx1 * tile / DUNE_S) - x0 + 2, ny = Math.ceil(by1 * tile / DUNE_S) - y0 + 2;
-  const h = new Float32Array(nx * ny);
-  const dd = (fx: number, fy: number) => { // dune depth, bilinear; rows held inside the band so the dunes run on to its edge
-    fy = Math.max(d0, Math.min(d1 - 1, fy));
-    const ix = Math.floor(fx), iy = Math.floor(fy), ax = fx - ix, ay = fy - iy;
-    const q = (x: number, y: number) => f.dune![Math.max(d0, Math.min(d1 - 1, y)) * w + Math.max(0, Math.min(w - 1, x))];
-    return (q(ix, iy) * (1 - ax) + q(ix + 1, iy) * ax) * (1 - ay) + (q(ix, iy + 1) * (1 - ax) + q(ix + 1, iy + 1) * ax) * ay;
-  };
+  const x0 = Math.floor(bx0 * tile / RELIEF_S), y0 = Math.floor(by0 * tile / RELIEF_S);
+  const nx = Math.ceil(bx1 * tile / RELIEF_S) - x0 + 2, ny = Math.ceil(by1 * tile / RELIEF_S) - y0 + 2;
+  const h = new Float32Array(nx * ny), kind = new Uint8Array(nx * ny);
+  const q = (x: number, y: number) => D[Math.max(0, Math.min(mh - 1, y)) * w + Math.max(0, Math.min(w - 1, x))];
+  let max = 0;
   for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
-    const wx = (x0 + i) * DUNE_S, wy = (y0 + j) * DUNE_S, ty = wy / tile;
-    if (ty < d0 - 1 || ty > d1 + 1) continue;
-    h[j * nx + i] = duneHeight(dd(wx / tile - 0.5, wy / tile - 0.5), wx, wy);
+    const wx = (x0 + i) * RELIEF_S, wy = (y0 + j) * RELIEF_S, fx = wx / tile - 0.5, fy = wy / tile - 0.5;
+    const ix = Math.floor(fx), iy = Math.floor(fy), ax = fx - ix, ay = fy - iy;
+    const dd = (q(ix, iy) * (1 - ax) + q(ix + 1, iy) * ax) * (1 - ay) + (q(ix, iy + 1) * (1 - ax) + q(ix + 1, iy + 1) * ax) * ay;
+    if (dd <= 0.25) continue;
+    // the kind: the nearest relief tile's (a cell between two lands never happens: the bands lie far apart)
+    let kd = 0;
+    for (let b = 0; b <= 1 && !kd; b++) for (let a = 0; a <= 1 && !kd; a++) { const xx = Math.max(0, Math.min(w - 1, Math.round(fx) + a)), yy = Math.max(0, Math.min(mh - 1, Math.round(fy) + b)); kd = K[yy * w + xx]; }
+    if (!kd) for (let b = -1; b <= 2 && !kd; b++) for (let a = -1; a <= 2 && !kd; a++) { const xx = Math.max(0, Math.min(w - 1, ix + a)), yy = Math.max(0, Math.min(mh - 1, iy + b)); kd = K[yy * w + xx]; }
+    if (!kd) continue;
+    const v = kd === RELIEF_DUNE ? duneHeight(dd, wx, wy) : kd === RELIEF_GRANITE ? graniteHeight(dd, wx, wy) : redHeight(dd, wx, wy);
+    h[j * nx + i] = v; kind[j * nx + i] = kd;
+    if (v > max) max = v;
   }
-  // near: cells to the next dune cell along +x+y (the way a view ray runs back to the ground), capped
+  if (max <= 0) return undefined;
   const near = new Uint8Array(nx * ny).fill(255);
   for (let j = ny - 1; j >= 0; j--) for (let i = nx - 1; i >= 0; i--) {
     const k = j * nx + i;
     if (h[k] > 0) near[k] = 0;
     else if (i + 1 < nx && j + 1 < ny) near[k] = Math.min(255, near[(j + 1) * nx + i + 1] + 1);
   }
-  return { x0, y0, nx, ny, h, near };
+  return { x0, y0, nx, ny, h, kind, near, max };
 }
 
-/** Bilinear dune height at a world point (0 off the grid). */
-function duneAt(G: DuneGrid, wx: number, wy: number): number {
-  const fx = wx / DUNE_S - G.x0, fy = wy / DUNE_S - G.y0;
+/** Bilinear relief height at a world point (0 off the grid). */
+function reliefAt(G: ReliefGrid, wx: number, wy: number): number {
+  const fx = wx / RELIEF_S - G.x0, fy = wy / RELIEF_S - G.y0;
   const i = Math.floor(fx), j = Math.floor(fy);
   if (i < 0 || j < 0 || i >= G.nx - 1 || j >= G.ny - 1) return 0;
   const ax = fx - i, ay = fy - j, k = j * G.nx + i, h = G.h;
   return (h[k] * (1 - ax) + h[k + 1] * ax) * (1 - ay) + (h[k + G.nx] * (1 - ax) + h[k + G.nx + 1] * ax) * ay;
 }
 
-/**
- * Where the view ray through a ground point first meets the dunes: the screen pixel that shows ground point (wx, wy)
- * at height 0 shows (wx + z, wy + z) at height z, so walk z down from the top and take the highest z the dunes reach.
- * Returns that z (0 = the flat ground itself).
- */
-function duneHit(G: DuneGrid, wx: number, wy: number): number {
-  const fx = Math.floor(wx / DUNE_S - G.x0), fy = Math.floor(wy / DUNE_S - G.y0);
-  if (fx >= 0 && fy >= 0 && fx < G.nx && fy < G.ny && G.near[fy * G.nx + fx] > DUNE_MAX / DUNE_S + 2) return 0;
-  for (let z = DUNE_MAX; z > 0; z -= 2) {
-    if (duneAt(G, wx + z, wy + z) >= z) {
+/** Where the view ray through ground point (wx, wy) first meets the relief: that height z (0 = the flat ground itself). */
+function reliefHit(G: ReliefGrid, wx: number, wy: number): number {
+  const fx = Math.floor(wx / RELIEF_S - G.x0), fy = Math.floor(wy / RELIEF_S - G.y0);
+  if (fx >= 0 && fy >= 0 && fx < G.nx && fy < G.ny && G.near[fy * G.nx + fx] > G.max / RELIEF_S + 2) return 0;
+  const top = Math.ceil(G.max / 2) * 2;
+  for (let z = top; z > 0; z -= 2) {
+    if (reliefAt(G, wx + z, wy + z) >= z) {
       let lo = z, hi = z + 2; // refine: lo is under the surface, hi above it
-      for (let k = 0; k < 4; k++) { const m = (lo + hi) / 2; if (duneAt(G, wx + m, wy + m) >= m) lo = m; else hi = m; }
+      for (let k = 0; k < 4; k++) { const m = (lo + hi) / 2; if (reliefAt(G, wx + m, wy + m) >= m) lo = m; else hi = m; }
       return lo;
     }
   }
@@ -786,34 +843,64 @@ function duneHit(G: DuneGrid, wx: number, wy: number): number {
 }
 
 /**
- * The colour of the dune surface at a world point at height z (into out3): lit by the sun from its slope, shadowed where a
- * crest stands between it and the sun, with wind ripples on the backs, a bright lip along the crests and a dark slip face.
+ * The colour of the relief surface at a world point at height z (into out3): lit by the sun from its slope and shadowed
+ * where a crest or peak stands between it and the sun; then by kind: dunes get wind ripples, a bright crest lip and dark
+ * slip faces; granite gets cracked rock and snow on the high, gentle ground; red rock gets strata on its risers and dust on its ledges.
  */
-function duneColour(G: DuneGrid, wx: number, wy: number, z: number, sx: number, sy: number) {
+function reliefColour(G: ReliefGrid, wx: number, wy: number, z: number, sx: number, sy: number) {
   const e = 2;
-  const gx = (duneAt(G, wx + e, wy) - duneAt(G, wx - e, wy)) / (2 * e), gy = (duneAt(G, wx, wy + e) - duneAt(G, wx, wy - e)) / (2 * e);
+  const gx = (reliefAt(G, wx + e, wy) - reliefAt(G, wx - e, wy)) / (2 * e), gy = (reliefAt(G, wx, wy + e) - reliefAt(G, wx, wy - e)) / (2 * e);
   const nl = Math.hypot(gx, gy, 1);
   const lam = (-gx * SUN[0] - gy * SUN[1] + SUN[2]) / nl;
-  // cast shadow: walk toward the sun; a dune above the sun line hides it
-  let shade = 0;
-  for (let t = 5; t <= 70; t += 5) {
+  let shade = 0; // cast shadow: walk toward the sun; relief above the sun line hides it
+  for (let t = 5; t <= 140; t += t < 40 ? 5 : 10) {
     const hz = z + t * SUN[2] / SUN_XY;
-    if (hz > DUNE_MAX) break;
-    if (duneAt(G, wx - SUN[0] / SUN_XY * t, wy - SUN[1] / SUN_XY * t) > hz + 0.5) { shade = 1; break; }
+    if (hz > G.max) break;
+    if (reliefAt(G, wx - SUN[0] / SUN_XY * t, wy - SUN[1] / SUN_XY * t) > hz + 0.5) { shade = 1; break; }
   }
   const steep = Math.hypot(gx, gy);
-  // wind ripples: fine bent lines across the gentle backs, gone on the steep slip faces
-  const rip = Math.sin((wx * 0.93 + wy * 0.36) / 2.2 + vn(wx / 30, wy / 30, 475) * 4 + z * 0.08);
-  const ripK = (1 - sstep(0.25, 0.6, steep)) * (shade ? 0.5 : 1);
-  // the crest lip: where the slope flips from the lit back to the slip face
-  const ahead = duneAt(G, wx + 3 * 0.93, wy + 3 * 0.36), behind = duneAt(G, wx - 3 * 0.93, wy - 3 * 0.36), here = duneAt(G, wx, wy);
-  const crest = here > ahead + 1.2 && here >= behind - 0.2 ? 1 : 0;
-  const m = vn(wx / 40, wy / 40, 476) + (hash2(Math.floor(wx * 1.5), Math.floor(wy * 1.5), 477) - 0.5) * 0.5; // broad tone + sand grain
-  let lv = -0.9 + Math.max(0, lam) * 8.4 + (m - 0.5) * 0.4 + (rip > 0.9 ? 0.5 : rip < -0.93 ? -0.45 : 0) * ripK;
-  if (shade) lv = Math.min(lv, 1.2 + lam * 1.4);
-  if (crest && !shade) lv += 1.1;
-  lv -= (1 - sstep(4, 26, z)) * 0.4; // the hollows between dunes a touch duskier
-  ramp(DUNEP, lv, sx, sy);
+  const ci = Math.floor(wx / RELIEF_S - G.x0 + 0.5), cj = Math.floor(wy / RELIEF_S - G.y0 + 0.5);
+  const kind = ci >= 0 && cj >= 0 && ci < G.nx && cj < G.ny ? G.kind[cj * G.nx + ci] || RELIEF_DUNE : RELIEF_DUNE;
+  const grain = (hash2(Math.floor(wx * 1.5), Math.floor(wy * 1.5), 477) - 0.5) * 0.5;
+  if (kind === RELIEF_DUNE) {
+    // wind ripples: fine bent lines across the gentle backs, gone on the steep slip faces
+    const rip = Math.sin((wx * 0.93 + wy * 0.36) / 2.2 + vn(wx / 30, wy / 30, 475) * 4 + z * 0.08);
+    const ripK = (1 - sstep(0.25, 0.6, steep)) * (shade ? 0.5 : 1);
+    // the crest lip: where the slope flips from the lit back to the slip face
+    const ahead = reliefAt(G, wx + 3 * 0.93, wy + 3 * 0.36), behind = reliefAt(G, wx - 3 * 0.93, wy - 3 * 0.36), here = reliefAt(G, wx, wy);
+    const crest = here > ahead + 1.2 && here >= behind - 0.2;
+    const m = vn(wx / 40, wy / 40, 476) + grain;
+    let lv = -0.9 + Math.max(0, lam) * 8.4 + (m - 0.5) * 0.4 + (rip > 0.9 ? 0.5 : rip < -0.93 ? -0.45 : 0) * ripK;
+    if (shade) lv = Math.min(lv, 1.2 + lam * 1.4);
+    if (crest && !shade) lv += 1.1;
+    lv -= (1 - sstep(4, 26, z)) * 0.4; // the hollows between dunes a touch duskier
+    ramp(DUNEP, lv, sx, sy);
+    return;
+  }
+  const tex = vn(wx / 9, wy / 9, 485) * 0.6 + vn(wx / 3.5, wy / 3.5, 486) * 0.4; // rough rock
+  if (kind === RELIEF_GRANITE) {
+    const snowLine = 124 + (vn(wx / 40, wy / 40, 487) - 0.5) * 24;
+    if (z > snowLine && steep < 0.75) { // snow on the high ground that is not too steep to hold it
+      ramp(SNOWP, (shade ? 1.2 : 1 + Math.max(0, lam) * 3.4) + grain * 0.6, sx, sy);
+      return;
+    }
+    const crack = Math.abs(vn(wx / 14, wy / 6, 488) - 0.5) < 0.018 && steep > 0.7; // fissures down the faces
+    let lv = 1.4 + Math.max(0, lam) * 5.6 + (tex - 0.5) * 1.2 + grain + sstep(30, 140, z) * 0.5;
+    if (shade) lv = Math.min(lv, 2.4 + lam * 1.4);
+    if (crack) lv -= 1.1;
+    lv -= (1 - sstep(4, 30, z)) * 0.5; // scree-dark foot
+    ramp(GRANP, lv, sx, sy);
+    return;
+  }
+  // red rock: dusty flat ledges, banded risers
+  if (steep < 0.18 && !shade) {
+    ramp(REDP, 3.4 + Math.max(0, lam) * 2.2 + (tex - 0.5) * 1.2 + grain, sx, sy);
+    return;
+  }
+  const band = Math.floor((z + vn(wx / 30, wy / 30, 494) * 5) / 5);
+  let lv = 1 + Math.max(0, lam) * 6 + ((band * 5) % 3 - 1) * 0.5 * sstep(0.3, 0.8, steep) + (tex - 0.5) * 0.9 + grain;
+  if (shade) lv = Math.min(lv, 2.2 + lam * 1.3);
+  ramp(REDP, lv, sx, sy);
 }
 
 export function paintChunk(g: GroundData, f: Fields, sx0: number, sy0: number, cw: number, ch: number, res: number, px: Uint8ClampedArray) {
@@ -822,8 +909,8 @@ export function paintChunk(g: GroundData, f: Fields, sx0: number, sy0: number, c
   const wxs = [sy0 + sx0 / 2, sy0 + (sx0 + cw) / 2, sy0 + ch + sx0 / 2, sy0 + ch + (sx0 + cw) / 2], wys = [sy0 - sx0 / 2, sy0 - (sx0 + cw) / 2, sy0 + ch - sx0 / 2, sy0 + ch - (sx0 + cw) / 2];
   const bx0 = Math.min(...wxs) / tile - 3, bx1 = Math.max(...wxs) / tile + 3, by0 = Math.min(...wys) / tile - 3, by1 = Math.max(...wys) / tile + 3;
   const lands = (g.lands ?? []).filter((l) => l.x < bx1 && l.x + l.w > bx0 && l.y < by1 && l.y + l.h > by0);
-  const reach = DUNE_MAX / tile + 1; // a view ray can meet a dune this far down-right of its ground point
-  const dunes = duneGrid(g, f, bx0, bx1 + reach, by0, by1 + reach);
+  const reach = PEAK_MAX / tile + 1; // a view ray can meet the relief this far down-right of its ground point
+  const relief = reliefGrid(g, f, bx0, bx1 + reach, by0, by1 + reach);
   const W = Math.round(cw * res), H = Math.round(ch * res);
   const wt = new Float32Array(NT);
   const gw = new Float32Array(NT); // weights of the grass kinds (they all paint as GRASS)
@@ -848,8 +935,8 @@ export function paintChunk(g: GroundData, f: Fields, sx0: number, sy0: number, c
     for (let i = 0; i < W; i++) {
       const sx = sx0 + (i + 0.5) / res;
       let wx = sy + sx / 2, wy = sy - sx / 2;
-      // the desert's dunes stand up: this pixel shows the dune surface the view ray meets first, so paint the ground there
-      const dz = dunes ? duneHit(dunes, wx, wy) : 0;
+      // the rims' dunes and mountains stand up: this pixel shows the surface the view ray meets first, so paint the ground there
+      const dz = relief ? reliefHit(relief, wx, wy) : 0;
       if (dz > 0) { wx += dz; wy += dz; }
       MOORS = !!g.moors && wy / tile >= g.moors.y0 - 2 && wy / tile < g.moors.y1;
       BADLANDS = !!g.badlands && wy / tile >= g.badlands.y0 - 2 && wy / tile < g.badlands.y1;
@@ -997,8 +1084,8 @@ export function paintChunk(g: GroundData, f: Fields, sx0: number, sy0: number, c
           [r, gg, b] = landTint(l.el, Math.min(1, d / 3.5) * 0.9, r, gg, b, wx, wy, sx, sy, t1 === WATER);
         }
       }
-      if (dz > 0) { // up on a dune: its own lit sand, blending into the ground at its foot
-        duneColour(dunes!, wx, wy, dz, sx, sy);
+      if (dz > 0) { // up on a dune or a mountain: its own lit surface, blending into the ground at its foot
+        reliefColour(relief!, wx, wy, dz, sx, sy);
         const a = sstep(0, 7, dz);
         r += (out3[0] - r) * a; gg += (out3[1] - gg) * a; b += (out3[2] - b) * a;
       }

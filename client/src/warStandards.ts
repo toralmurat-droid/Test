@@ -22,6 +22,7 @@ import { hudSlot } from "./hudSlots";
 import { isoAnchor } from "./iso";
 import { ISO } from "./isoflag";
 import { pennant } from "./warPlaque";
+import { STD3D } from "./standard3d";
 
 const POLE_H = 48; // art px (drawn at 2x, like all world art)
 const DOCTRINE_LINE: Record<ClanKey, string> = {
@@ -51,6 +52,30 @@ function standardTexture(scene: Phaser.Scene, k: ClanKey, crowned = false): stri
   return key;
 }
 
+
+/**
+ * Puts up (or re-dresses) a standard: the baked 3D banner pole waving in the wind (Murat 2026-11-19), or the painted
+ * flat one while the sheet is missing. `k` undefined = an unsworn hero's grey rag.
+ */
+function placeStandard(scene: Phaser.Scene, map: Map<number, Phaser.GameObjects.Sprite>, id: number, x: number, y: number, k: ClanKey | undefined, crowned = false) {
+  const key3 = k ? `warstd3_${k}${crowned ? "_crowned" : ""}` : "warstd3_rogue";
+  const baked = scene.textures.exists(key3);
+  const key = baked ? key3 : k ? standardTexture(scene, k, crowned) : rogueTexture(scene);
+  let img = map.get(id);
+  if (img && img.texture.key === key) return;
+  if (!img) {
+    img = scene.add.sprite(x, y, key).setDepth(y);
+    isoAnchor(img, { x, y });
+    map.set(id, img);
+  } else img.setTexture(key);
+  if (baked) {
+    const anim = `${key}_wave`;
+    if (!scene.anims.exists(anim)) scene.anims.create({ key: anim, frames: scene.anims.generateFrameNumbers(key, { start: 0, end: STD3D.frames - 1 }), frameRate: STD3D.fps, repeat: -1 });
+    img.setOrigin(STD3D.ox / STD3D.w, STD3D.oy / STD3D.h).setScale(1 / STD3D.tx);
+    img.play({ key: anim, startFrame: (Math.abs(Math.round(x * 7 + y * 3)) % STD3D.frames) }); // out of step with each other
+  } else { img.stop(); img.setOrigin(0.5, 1).setScale(1); }
+}
+
 /** The plain banner an unsworn hero raises over a sacked Hold: a torn grey rag on the same pole. */
 function rogueTexture(scene: Phaser.Scene): string {
   const key = "warstd_rogue";
@@ -73,9 +98,9 @@ function rogueTexture(scene: Phaser.Scene): string {
 }
 
 export class WarStandards {
-  private poles = new Map<number, Phaser.GameObjects.Image>();
+  private poles = new Map<number, Phaser.GameObjects.Sprite>();
   /** The sacker's banner over each Hold sacked this war tick (client/src/warSack.ts). */
-  private sackBanners = new Map<number, Phaser.GameObjects.Image>();
+  private sackBanners = new Map<number, Phaser.GameObjects.Sprite>();
   private holds = new Map<number, HoldDraw | Phaser.GameObjects.Graphics>();
   private holdClan = new Map<number, string>(); // owner and tier: "redfang:1"
   /** Holds shown as flat blocks for now (the atlas is loading, or the top-down view): solid cells are never left bare. */
@@ -118,13 +143,7 @@ export class WarStandards {
     for (const s of STANDARDS) {
       const k = CLAN_KEYS[v.owner[s.t]];
       if (!k) continue;
-      const key = standardTexture(this.scene, k, v.reck?.crowned === v.owner[s.t]); // (the clan a Reckoning crowned: a crown on its pennant)
-      let img = this.poles.get(s.id);
-      if (!img) {
-        img = this.scene.add.image(s.x, s.y, key).setOrigin(0.5, 1).setDepth(s.y);
-        isoAnchor(img, { x: s.x, y: s.y });
-        this.poles.set(s.id, img);
-      } else if (img.texture.key !== key) img.setTexture(key);
+      placeStandard(this.scene, this.poles, s.id, s.x, s.y, k, v.reck?.crowned === v.owner[s.t]); // (the clan a Reckoning crowned: a crown on its pole)
       this.tint(s.id, this.fronts.get(s.id) ?? k);
     }
     this.syncHolds(this.hero);
@@ -146,13 +165,7 @@ export class WarStandards {
     for (const [t, by] of sacked) {
       const at = bannerSpot(t), k = CLAN_KEYS[by];
       if (!at) continue;
-      const key = k ? standardTexture(this.scene, k) : rogueTexture(this.scene);
-      let img = this.sackBanners.get(t);
-      if (!img) {
-        img = this.scene.add.image(at.x, at.y, key).setOrigin(0.5, 1).setDepth(at.y);
-        isoAnchor(img, { x: at.x, y: at.y });
-        this.sackBanners.set(t, img);
-      } else if (img.texture.key !== key) img.setTexture(key);
+      placeStandard(this.scene, this.sackBanners, t, at.x, at.y, k);
     }
   }
 

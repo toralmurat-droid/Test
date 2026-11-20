@@ -13,6 +13,7 @@ import { WRECK3D } from "./paint/wreck3d";
 import { ELEMENTS3D } from "./paint/elements3d";
 import { TENT3D } from "./paint/tent3d";
 import { SHARDS3D } from "./paint/shards3d";
+import { STANDARDS3D } from "./paint/standards3d";
 import { spiritLantern } from "../../client/src/lanternArt";
 import * as el from "../../client/src/elementArt";
 import { standingStone, throne } from "../../client/src/throneArt";
@@ -58,7 +59,7 @@ function paintedFrame(key: string, w: number, h: number, f: number) {
 mkdirSync(OUT, { recursive: true });
 const PREVIEW = process.env.PREVIEW;
 if (PREVIEW) mkdirSync(PREVIEW, { recursive: true });
-for (const P of [...PROPS3D, ...SIEGE_WORKS, ...DUNGEON3D, ...DEEP3D, ...WRECK3D, ...ELEMENTS3D, ...TENT3D, ...SHARDS3D]) {
+for (const P of [...PROPS3D, ...SIEGE_WORKS, ...DUNGEON3D, ...DEEP3D, ...WRECK3D, ...ELEMENTS3D, ...TENT3D, ...SHARDS3D, ...STANDARDS3D]) {
   if (only.length && !only.includes(P.key)) continue;
   const t0 = Date.now();
   const sheet = bakeSheet(P.w, P.h, P.frames, (f) => renderProp(P.model(f), P.w, P.h, P.ox, P.oy), (P as { shadow?: number }).shadow ?? 0);

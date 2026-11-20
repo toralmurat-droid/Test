@@ -404,6 +404,13 @@ export const FACTION: Partial<Record<MobKind, "blob" | "undead" | "outlaw">> = {
 };
 
 /**
+ * Idle wandering round a monster's home spot. A stroll that would leave `radius` px turns back inward, and one pressed
+ * on a rock or a wall picks a new way, so it never jitters on the spot (going out, being walked home, going out again).
+ * Walking home (pathing, full purpose) only starts past `homeAt` px: after a fight, a knockback or a chase.
+ */
+export const WANDER = { radius: 40, homeAt: 72, minMs: 800, randMs: 2000, idleChance: 0.4, inwardSpread: Math.PI / 3, stuckMs: 250 };
+
+/**
  * Blob merging (Murat): a blob in danger (hurt, or facing several heroes) calls the blobs around it, and they
  * melt into one big blob. Levels, HP and abilities (shoot, charge, heal) add up. At most 5 blobs merge into a
  * blob below Lv 10, up to 10 into a higher one. Only blobs of Lv 4+ merge (Murat 2026-11-03), except near a
