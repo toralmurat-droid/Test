@@ -316,6 +316,11 @@ Roadmap: client/src/roadmap.ts, "Settlement network".
   south and west gates; new highway leg "Duskveil Gate -> Mirage Wells"; the old dais legs keep their points, renamed
   ("The Sanctum's fork -> The Veiled Sanctum", "The Veiled Sanctum -> Mirage Wells"); south gate dirt road west above
   dune_totem3. Client: desert adobe walls whole and clan-tinted inside cities, city doors drawn plain.
+- PR 4 Marrowkeep (branch `claude/marrowkeep-in-land`): site {230,601} north of Kingsbarrow, south and west gates; new
+  highway leg "Marrowkeep Gate -> The Host's Muster" (routed off the stump at local (251,72): clearing it lets a spot by
+  the highway tie the Muster's capital fort and win); old stub retired; west gate track stops 5 tiles short of the Nine
+  Widows road (joined, the fork becomes a junction and the Hollow Mounds' fort moves to Kingsbarrow). Three war roads
+  re-route round the walls; war sim unchanged. Client: moors painter skipped inside cities.
 
 ## Next
 - Step 3 optional follow-ups: working townsfolk for Millbrook, Cairnwatch, the Rustwater Post,
