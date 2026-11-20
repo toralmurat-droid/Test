@@ -39,7 +39,7 @@ test("share of champions over the real zone spawns stays near 5% of the eligible
   for (let round = 0; round < 40; round++) for (const z of SPAWN_ZONES) for (const [k, n] of Object.entries(z.mobs) as [MobKind, number][]) {
     for (let i = 0; i < n; i++) { all++; if (canBeChampion(k)) eligible++; if (rollChampion(k, rnd)) champs++; }
   }
-  assert.ok(eligible / all > 0.9, "almost every zone monster belongs to a family");
+  assert.ok(eligible / all > 0.88, `almost every zone monster belongs to a family (${(eligible / all).toFixed(3)})`); // (0.90 before Hearthhold took ~160 blobs' ground from Oakvale's lands; the champion rate below is unchanged)
   assert.ok(Math.abs(champs / eligible - CHAMPION.chance) < 0.005, `rate ${champs / eligible}`);
 });
 

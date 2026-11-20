@@ -33,6 +33,8 @@ function flood(x0: number, y0: number) {
   }
   return seen;
 }
+/** Where a city is entered (map tiles): a band city's inner gate arrival, a city in its land's south gate from inside. */
+const entry = (c: (typeof CITIES)[number]) => (c.site ? (({ x, y }) => [x, y] as const)(cityTile(c, { x: 25, y: 37 })) : tileOf(waygateArrival(waygateById(`cityexit_${c.clan}`)!)));
 
 test("capitals: the cities' band is appended under the Crown, five plots side by side, the Crown's band bounded", () => {
   assert.equal(CITIES_Y0, CROWN_Y0 + CROWN_H + 8);
@@ -64,8 +66,9 @@ test("capitals: the cities' band is appended under the Crown, five plots side by
   }
 });
 
-for (const W of CITIES) test(`capitals: ${W.clan}'s city is walled shut but for its gate, every tile reachable from the gate, at least 50x36 inside, all safe`, () => {
-  const b = plotBox(W.plot), [gx, gy] = tileOf(waygateArrival(waygateById(`cityexit_${W.clan}`)!));
+// (the cities in their lands, City.site, have three gates onto their land: tests/hearthhold.test.ts)
+for (const W of CITIES.filter((c) => !c.site)) test(`capitals: ${W.clan}'s city is walled shut but for its gate, every tile reachable from the gate, at least 50x36 inside, all safe`, () => {
+  const b = plotBox(W), [gx, gy] = tileOf(waygateArrival(waygateById(`cityexit_${W.clan}`)!));
   assert.ok(cityAt(gx, gy) === W && !isSolidTile(gx, gy), "the arrival is free, inside the city");
   const seen = flood(gx, gy);
   let walk = 0;
@@ -94,7 +97,7 @@ for (const W of CITIES) test(`capitals: ${W.clan}'s city is walled shut but for 
   assert.ok(TERRITORIES.every((t) => t.y + t.h <= CITIES_Y0 - 4), "no war territory in the band");
   // built from the template, deterministic, with no new tile ids
   const g = GROUND.map((r) => [...r]), o = OBJECTS.map((r) => [...r]);
-  for (const c of CITIES) { const pb = plotBox(c.plot); for (let y = pb.y; y < pb.y + pb.h; y++) for (let x = pb.x; x < pb.x + pb.w; x++) { g[y][x] = -2; o[y][x] = -2; } }
+  for (const c of CITIES) { if (c.site) continue; const pb = plotBox(c); for (let y = pb.y; y < pb.y + pb.h; y++) for (let x = pb.x; x < pb.x + pb.w; x++) { g[y][x] = -2; o[y][x] = -2; } }
   buildCities(T, g, o, -1);
   assert.deepEqual(g.slice(b.y, b.y + b.h), GROUND.slice(b.y, b.y + b.h));
   assert.deepEqual(o.slice(b.y, b.y + b.h), OBJECTS.slice(b.y, b.y + b.h));
@@ -111,7 +114,7 @@ for (const W of CITIES) test(`capitals: ${W.clan}'s city is walled shut but for 
 /** Each city's quartermaster sells what its land's own armourer sells, and the flasks of its land's healers (no new power). */
 const LAND_ARMOURER: Record<string, string> = { wardens: "armourer", veiled: "sandarmourer", host: "moorarmourer", redfang: "rustarmourer", hidekin: "ropearmourer" };
 for (const W of CITIES) test(`capitals: ${W.clan}'s people, shop, waystone, stash and props stand on free ground in their districts`, () => {
-  const seen = flood(...tileOf(waygateArrival(waygateById(`cityexit_${W.clan}`)!)));
+  const seen = flood(...entry(W));
   for (const n of CITY_TEMPLATE.npcs) {
     const id = cityNpcId(W, n.role), npc = NPCS.find((o) => o.id === id)!;
     assert.ok(npc, `${id} is an NPC`);
@@ -151,30 +154,22 @@ for (const W of CITIES) test(`capitals: ${W.clan}'s people, shop, waystone, stas
   }
 });
 
-test("capitals: the Wardens' city gate at Goldenreach, open from Lv 5; the city's own gate always lets heroes out", () => {
-  const out = waygateById("citygate_wardens")!, inn = waygateById("cityexit_wardens")!;
-  assert.equal(out.to, "cityexit_wardens"); assert.equal(inn.to, "citygate_wardens");
-  assert.deepEqual(cityGateOf(out), { city: W, inner: false });
-  assert.deepEqual(cityGateOf(inn), { city: W, inner: true });
+test("capitals: Hearthhold stands in Oakvale's lands with walk-in gates, no waygate pair; the band cities' gates open from Lv 5", () => {
+  // Hearthhold (settlement network step 5): no city gate dais at Goldenreach and no waygate pair (tests/hearthhold.test.ts has the city)
+  assert.ok(W.site && cityAt(W.outer.x, W.outer.y - 1) === W && cityAt(W.outer.x, W.outer.y) === undefined, "its outer tile is just outside the south gate");
+  assert.equal(waygateById("citygate_wardens"), undefined); assert.equal(waygateById("cityexit_wardens"), undefined);
+  assert.equal(WAYGATES.filter((g) => cityGateOf(g)).length, 2 * CITIES.filter((c) => !c.site).length);
   assert.equal(cityGateOf(waygateById("oakvale")!), undefined);
-  assert.equal(WAYGATES.filter((g) => cityGateOf(g)).length, 2 * CITIES.length);
-  // at Goldenreach Farms, on open ground reachable from Oakvale, south-west of the barn, inside its carve box
-  const [ox, oy] = tileOf(out), oak = flood(...tileOf(randomSpawn())), [ax, ay] = tileOf(waygateArrival(out));
-  assert.deepEqual([ox, oy], [W.outer.x, W.outer.y]);
-  assert.equal(areaAt(out.x, out.y), "Goldenreach Farms");
-  assert.ok(oak[oy * MAP_W + ox] && oak[ay * MAP_W + ax], "the gate and its arrival are reachable from Oakvale");
-  assert.ok([T.FLAGS, T.RUBBLE].includes(GROUND[oy][ox] as 39 | 40), "on old flagstones");
-  const B = W.outerBox;
-  assert.ok(ox - 4 >= B.x0 && ox + 4 <= B.x1 && oy - 4 >= B.y0 && oy + 4 <= B.y1 && ay <= B.y1, "the dais and the arrival are inside the box");
-  // the city's own gate: heroes come out north of it, into the gate square
-  const [ix, iy] = tileOf(waygateArrival(inn));
-  assert.ok(iy < tileOf(inn)[1] && cityAt(ix, iy) === W && !isSolidTile(ix, iy));
-  // levels: the city gate opens at CITY.minLevel; the way out never shuts
+  // the band cities' gates: open at CITY.minLevel; the way out never shuts
+  const out = waygateById("citygate_veiled")!, inn = waygateById("cityexit_veiled")!;
+  assert.deepEqual(cityGateOf(out), { city: cityOf("veiled"), inner: false });
+  assert.deepEqual(cityGateOf(inn), { city: cityOf("veiled"), inner: true });
   assert.equal(CITY.minLevel, 5);
   assert.ok(!gateOpen(out, { level: 4 } as never) && gateOpen(out, { level: 5 } as never));
   assert.ok(gateOpen(inn, { level: 1 } as never));
   assert.match(gateColdNote(out, { level: 1 } as never), /level 5/);
-  // logging out inside: the city is Act 1, so the hero logs back in at Oakvale's square
+  // logging out inside Hearthhold: the city is Act 1, so the hero logs back in at Oakvale's square
+  const [ix, iy] = entry(W);
   assert.ok(actOpen(1, { level: 1 } as never));
   const home = { x: -1, y: -1 };
   assert.equal(actSpawn(actOfTile(ix, iy), () => home), home);

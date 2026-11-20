@@ -24,6 +24,7 @@ import { TERRITORIES } from "../shared/war/territories";
 import { REGIONS, regionOf } from "../shared/war/regions";
 import { startRoom, until, wait } from "./helpers/room";
 import { carveVillages, VILLAGE_MASK, VILLAGES } from "../shared/villages";
+import { CITY_MASK, OLD_HEARTHHOLD_GATE } from "../shared/cityLand";
 
 /** 4-way flood over free tiles from (sx, sy). */
 function flood(sx: number, sy: number) {
@@ -146,15 +147,18 @@ test("badlands: the Red Pass (and the Sinkway) leave the rest of Act 1 exactly a
   // HIGHWAY_MASK, cut last and only inside it: re-hashed with the mask on the map before them, the same with and without them;
   // the highway villages, shared/villages.ts VILLAGE_MASK, cut after the highways and only inside it: re-hashed with it masked
   // (and Oakvale's village stones' boxes) on the map before Oakvale's villages, the same with and without them, settlement
-  // network step 4 PR 3). A deliberate change to the overworld map must update this hash.
+  // network step 4 PR 3; Hearthhold in Oakvale's lands, settlement network step 5: shared/cityLand.ts CITY_MASK, which holds
+  // the city's box, apron, gate road and posts, the trimmed field and the retired highway legs, and its old gate's box
+  // OLD_HEARTHHOLD_GATE, re-hashed with them masked on the map before the move: the same with and without it).
+  // A deliberate change to the overworld map must update this hash.
   const S = SINKWAY_BOX, C = crownwayFrom("oakvale").box;
   const STONE_BOXES = PORTAL_SPOTS.slice(10 + CITIES.length).map((p) => ({ x0: p.x - 3, x1: p.x + 3, y0: p.y - 3, y1: p.y + 3 }));
   const box = (x: number, y: number) => (x <= 14 && y >= 113 && y <= 123) || (x >= S.x0 && x <= S.x1 && y >= S.y0 && y <= S.y1)
-    || [...SALT_BOXES, C, ...CITIES.map((c) => c.outerBox), ...BORDER_BOXES, ...STONE_BOXES].some((b) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1)
-    || HIGHWAY_MASK.has(y * MAP_W + x) || VILLAGE_MASK.has(y * MAP_W + x);
+    || [...SALT_BOXES, C, ...CITIES.map((c) => c.outerBox), OLD_HEARTHHOLD_GATE, ...BORDER_BOXES, ...STONE_BOXES].some((b) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1)
+    || HIGHWAY_MASK.has(y * MAP_W + x) || VILLAGE_MASK.has(y * MAP_W + x) || CITY_MASK.has(y * MAP_W + x);
   const h = createHash("sha256");
   for (let y = 0; y < WORLD_H; y++) h.update(GROUND[y].map((g, x) => (box(x, y) ? -9 : g)).join(",") + "|" + OBJECTS[y].map((o, x) => (box(x, y) ? -9 : o)).join(",") + "\n");
-  assert.equal(h.digest("hex"), "e8ebdc1edb1a77f51540689b6f1ce6b6db5a01d1c2db2d9bd54657c75715901e");
+  assert.equal(h.digest("hex"), "cda622e9cb5cea836e55fdb7c29edc471557a11af75274e14839e23fab2c21e9");
 });
 
 test("badlands: Lv 25-40 climbing west, the Red Pass opens at Lv 25, a war land of their own", () => {
