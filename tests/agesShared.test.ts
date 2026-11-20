@@ -277,7 +277,7 @@ test("war (shared store): a follower's sack and town claim are applied once by t
   const t0 = 31_000_000_000_000, c = clock(t0), be = memLeases(c.now), { kv, m } = memKv(be);
   const st = newWar(), P = townPatron("saltmere"), own = st.owner[P], foe = CLAN_KEYS.find((k) => k !== own)! as ClanKey;
   st.owner[P] = foe;
-  const t = TERRITORIES.findIndex((x, i) => !x.reckoningOnly && !st.siege[i] && st.owner[i] !== foe && i !== P);
+  const t = TERRITORIES.findIndex((x, i) => !x.reckoningOnly && !x.haven && !st.siege[i] && st.owner[i] !== foe && i !== P);
   const row = { v: 1, state: st, minds: newMinds(), next: t0 + WAR.tickMs, log: [], towns: { saltmere: { k: own, c: { by: foe, until: st.tick + 3, ext: 0 } } } };
   m.set("war", JSON.stringify(row));
   be.rows.set("lease:war", { holder: "main:owner", until: c.t + LEASE.ttlMs });
