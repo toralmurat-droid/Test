@@ -868,7 +868,7 @@ function isoDesert(scene: Phaser.Scene, t: number, tx: number, ty: number, at: (
     return true;
   }
   const isHouse = (x: number, y: number) => { const n = id(at(x, y)); return n === T.ADOBE || (n === T.DOOR && y >= DESERT_Y0); };
-  if (t === T.ADOBE || t === T.DOOR) {
+  if (t === T.ADOBE || (t === T.DOOR && !cityAt(tx, ty))) { // a door in Duskveil's timber walls is a plain door block (drawn below), not a mud-brick one
     const faces = (isHouse(tx, ty + 1) ? 0 : 1) | (isHouse(tx + 1, ty) ? 0 : 2);
     const edges = (isHouse(tx, ty - 1) ? 0 : 1) | (isHouse(tx + 1, ty) ? 0 : 2) | (isHouse(tx, ty + 1) ? 0 : 4) | (isHouse(tx - 1, ty) ? 0 : 8);
     // the house's north-west corner names it, so its tint and upper storey are the same on every tile
@@ -893,8 +893,11 @@ function isoDesert(scene: Phaser.Scene, t: number, tx: number, ty: number, at: (
   if (t === T.ADOBE_WALL) {
     const same = (x: number, y: number) => id(at(x, y)) === T.ADOBE_WALL;
     const mask = (same(tx, ty - 1) ? 1 : 0) | (same(tx + 1, ty) ? 2 : 0) | (same(tx, ty + 1) ? 4 : 0) | (same(tx - 1, ty) ? 8 : 0);
-    const h = ADOBE_WALL_H + 10, broken = (mask === 5 || mask === 10) && hashXY(tx * 3 + 11, ty * 5 + 7) < 0.3; // straight runs crumble here and there
-    staticObj(scene, scene.add.image(cx, cy, adobeWallTexture(scene, mask, v % 2, broken)).setOrigin(0.5, (IH / 2 + h) / (IH + h + ADOBE_PAD)).setDepth(cy));
+    const wcity = cityAt(tx, ty); // Duskveil stands in the dunes: its walls are whole and take the clan's wall tint
+    const h = ADOBE_WALL_H + 10, broken = !wcity && (mask === 5 || mask === 10) && hashXY(tx * 3 + 11, ty * 5 + 7) < 0.3; // straight runs crumble here and there
+    const wimg = scene.add.image(cx, cy, adobeWallTexture(scene, mask, v % 2, broken)).setOrigin(0.5, (IH / 2 + h) / (IH + h + ADOBE_PAD)).setDepth(cy);
+    if (wcity) wimg.setTint(CITY_LOOK[wcity.clan].wall);
+    staticObj(scene, wimg);
     return true;
   }
   if (t === T.TENT) { staticObj(scene, scene.add.image(cx, cy, tentTexture(scene, v)).setOrigin(0.5, 56 / 70).setDepth(cy)); return true; }
