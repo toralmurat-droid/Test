@@ -117,7 +117,7 @@ export const CITY_TEXT: Partial<Record<ClanKey, CityText>> = {
     name: "Scarwall",
     waystone: "Scarwall",
     enter: "Pass the city gate into Scarwall, stronghold of the Redfang Compact",
-    leave: "Go out through the city gate to Fangrock",
+    leave: "Go out through the city gate to the Badlands",
     districts: { gate: "Scarwall Gate Yard", market: "The Fence's Market", barracks: "The Knife Pits", hall: "The Blood Ledger Hall", keep: "The Warlord's Hold", houses: "Scarwall Huts" },
     npcs: {
       leader: ["Warlord Gorrin Ironjaw", "Warlord of the Compact"],
@@ -136,9 +136,10 @@ export const CITY_TEXT: Partial<Record<ClanKey, CityText>> = {
       "Warlord Ironjaw wants it known: nobody takes the wall while he keeps it.",
       "Sign the Blood Ledger, brothers. The Compact pays its own and collects from the rest.",
       "Toll's doubled for surface-folk. Triple if you whine.",
+      "Scarwall stands above Fangrock, at the top of the plain. South gate for the Fang Road, east gate for Gallows Canyon.",
       "Dagny Two-Purse is buying. Dagny is always buying. Count your change.",
       "No cubs on the walls, and no soft heroes at the gate. Come back when you've bled.",
-      "The Compact's enemies stay outside. The dogs are hungry and the gate is shut.",
+      "The Compact's enemies stay outside. The dogs are hungry and the gates are shut.",
     ],
   },
   // The Hide-Kin's Deepden (Act 5): an old den-father under hide and earth, grandmotherly and hungry

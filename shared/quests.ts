@@ -3488,7 +3488,7 @@ const IDLE: Record<string, string> = {
   stonecutter: "You'd think a statue would sit still to be mended. Then a crownguard walks out from behind it. The stone's the easy part. Kneelstone grey, from the old quarry under the field.",
   sawyer: "Two on the saw, one on top and one in the pit, and the one in the pit gets the sawdust. Guess which one I am. Millbrook pays for beams by the yard and complains by the inch.",
   saltcutter: "You cut along the grain of the crust, lift the slab whole, and never look at the white too long or you'll see nothing for a day. Two slabs to a camel. A good cutter fills a string by noon.",
-  drover: "Longhorns are easy. Point them at Fangrock and walk behind. It's the hounds and the snakes and the dust you have to watch, and the bull with the broken horn. Mostly the bull.",
+  drover: "Longhorns are easy. Point them at Fangrock and walk behind. It's the hounds and the snakes and the dust you have to watch, and the bull with the broken horn. Mostly the bull. Past Fangrock, up the road to the north, there's a walled city the Redfang call their own. I don't go near it.",
   huntsman: "Hides on the frames, meat in the smoke. Goldenreach feeds the valley on grain, but someone has to keep the wolves off the sheaves.",
 };
 /**
