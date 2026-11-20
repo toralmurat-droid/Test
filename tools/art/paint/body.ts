@@ -4,7 +4,7 @@ import {
   C2, P, blobPath, canvas, clipTo, css, curve, ellipseP, fillShape, glow, grain, hashStr, ik, limb, line, metal, mix, poly, rad, rng, sh, Shape, vol,
 } from "./brush";
 import { drawFormWeapon, formOf } from "./weaponArt";
-import { build3D, Dress3D, render3D, setHeroFull3D, setMonster3D, TAG_HAND, type Frame3 } from "./body3d";
+import { build3D, Dress3D, render3D, setHeroFull3D, setMonster3D, TAG_HAND, type Frame3, type Swing3, type SwingOut } from "./body3d";
 import { BOOKS, paintBook } from "./books";
 import { HeadGear, HERO_BODIES, LINEN, Look, LOOKS, MOB_LOOKS, TorsoKind } from "./look";
 
@@ -16,7 +16,7 @@ type Dir = "down" | "up" | "right";
 interface PoseLike {
   dir: Dir; t: number; bob: number; stride: number; lean: number; crouch: number; attack: number; move?: string;
   expr: string; headDx?: number; hand?: [number, number]; farHand?: [number, number]; noWeapon?: boolean; run?: boolean; wAng?: number;
-  phase?: number;
+  phase?: number; attackT?: number;
 }
 /** A 3/4 (diagonal) frame: the same pose facing right, blended with the down/up one. */
 export interface DiagAlt { p: PoseLike; info: FrameInfo; diag: "downright" | "upright" }
@@ -1915,14 +1915,14 @@ function moveFx(c: C2, r: Rig, under: C2) {
   const face = r.face;
   const L = 1.45;
   if (ph < 0) return;
-  if ((mv.kind === "slash" || mv.kind === "bonk" || mv.kind === "slam") && ph === 1) {
+  if ((mv.kind === "slash" || mv.kind === "bonk" || mv.kind === "slam") && ph === 1 && !swungNow) {
     // pale smear wedge behind the body
     const a0 = rad(r.info.prevAng(0)), a1 = rad(a);
     const g = under.createRadialGradient(hx, hy, 3, hx, hy, 15);
     g.addColorStop(0, css(mix(col, 0xbfd7ff, 0.3), 0)); g.addColorStop(0.7, css(mix(col, 0xbfd7ff, 0.3), 0.18)); g.addColorStop(1, css(mix(col, 0xbfd7ff, 0.3), 0.4));
     under.beginPath(); under.moveTo(hx, hy); under.arc(hx, hy, 15, Math.min(a0, a1), Math.max(a0, a1)); under.closePath(); under.fillStyle = g; under.fill();
   }
-  if ((mv.kind === "slash" || mv.kind === "bonk") && ph === 2 && p.move !== "a1") {
+  if ((mv.kind === "slash" || mv.kind === "bonk") && ph === 2 && p.move !== "a1" && !swungNow) {
     const pa = r.info.prevAng(1);
     swoosh(c, hx, hy, 12 * L * 0.85, pa, a + (a - pa) * 0.3, col);
   }
@@ -2027,6 +2027,7 @@ function heroFx(c: C2, r: Rig) {
     case "none": return;
     default: {
       const rr = (L.weapon === "dagger" ? 8 : 11) * weaponCols(r).long;
+      if (swungNow) return; // the 3D swing draws its own trail
       if (ph === 2) swoosh(c, hx, hy, rr, a - dirSign * 75, a, L.fx);
       if (ph === 1 && L.weapon === "katana") swoosh(c, hx, hy, rr, a - dirSign * 60, a, 0xbfd7ff, 0.5);
     }
@@ -2350,6 +2351,37 @@ function dress3D(r: Rig): Dress3D {
   };
 }
 
+/** The 3D swing of the frame being painted (null otherwise): the painted 2D swooshes stand down for its own trail. */
+let swungNow: SwingOut | null = null;
+/** Melee attacks that become 3D swings, from the move's kind and how its painted swing table moves. */
+function swing3Of(r: Rig, p: PoseLike): Swing3 | undefined {
+  if (p.attack < 0 || p.attackT === undefined || p.hand) return undefined;
+  const mv = r.info.mv as MoveLike & { swing?: number[]; lift?: number[] };
+  const t = p.attackT;
+  if (mv.kind === "thrust") return { kind: "thrust", t };
+  if (mv.kind === "slam" || mv.kind === "bonk") return { kind: "over", t };
+  if (mv.kind !== "slash") return undefined;
+  const sw = mv.swing ?? [0, 0, 0, 1];
+  if ((mv.lift?.[0] ?? 0) >= 6) return { kind: "over", t };
+  if (p.move === "a5") return { kind: "sweep", t };
+  return { kind: sw[3] >= sw[0] ? "slash" : "back", t };
+}
+/** The blade's arc as a ribbon of its recent tip positions, brightest at the hit (only for weapons that have a blade). */
+function swingTrail(c: C2, r: Rig, sw: SwingOut) {
+  const L = r.L, wpn = L.weapon;
+  if (!sw.trail.length || ["none", "bow", "lute", "wand", "staff"].includes(wpn as string)) return;
+  const len = (wpn === "dagger" ? 8 : 11.5) * weaponCols(r).long, col = r.info.mv.fx ?? L.fx ?? 0xffffff;
+  const pts = [...sw.trail, { h: r.nearH, a: r.ang, k: sw.k }];
+  const tip = (q: { h: P; a: number; k: number }, k: number): P => [q.h[0] + Math.cos(rad(q.a)) * len * k * q.k, q.h[1] + Math.sin(rad(q.a)) * len * k * q.k];
+  for (let i = 1; i < pts.length; i++) {
+    const al = i / pts.length;
+    const a0 = tip(pts[i - 1], 1), a1 = tip(pts[i], 1), b0 = tip(pts[i - 1], 0.55), b1 = tip(pts[i], 0.55);
+    c.beginPath(); c.moveTo(a0[0], a0[1]); c.lineTo(a1[0], a1[1]); c.lineTo(b1[0], b1[1]); c.lineTo(b0[0], b0[1]); c.closePath();
+    c.fillStyle = css(mix(col, 0xbfd7ff, 0.35), 0.2 * al); c.fill();
+    line(c, [a0, a1], i === pts.length - 1 ? 0xffffff : col, 0.45, 0.85 * al);
+  }
+}
+
 function paint3D(r: Rig, p: PoseLike, K: number, S: number, flash: number, withShadow: boolean): HiCanvas {
   const W = Math.round(32 * K), hc = new HiCanvas(32, 32, K);
   hc.data.set(paint3DPix(r, p, S, flash, withShadow, { tw: W, th: W, k: W / 32, x0: 0, y0: 0 }));
@@ -2377,9 +2409,14 @@ function paint3DPix(r: Rig, p: PoseLike, S: number, flash: number, withShadow: b
     head: r.head, nearS: r.nearS, farS: r.farS, nearE: r.nearE, farE: r.farE, nearH: r.nearH, farH: r.farH,
     hips: r.hips, knees: r.knees, feet: r.feet,
     stride: p.stride, phase: p.phase, run: p.run, t: p.t, attack: p.attack, crouch: p.crouch, headDx: p.headDx ?? 0,
-    moving: motion(r), wave: wavePh(r), blink: p.expr === "blink" || p.expr === "x",
+    moving: motion(r), wave: wavePh(r), blink: p.expr === "blink" || p.expr === "x", swing: swing3Of(r, p),
   });
   const m = render3D(model, F);
+  if (m.swing) {
+    // the weapon follows the 3D swing: its angle on screen, and the arc it just cut
+    r.ang = m.swing.ang; r.u = [Math.cos(rad(r.ang)), Math.sin(rad(r.ang))]; r.n = [-Math.sin(rad(r.ang)), Math.cos(rad(r.ang))];
+    swungNow = m.swing;
+  } else swungNow = null;
   const b = m.rgba;
   pixelize(b, W, TH, true, { y0: Math.round((r.hipY + 3 - F.y0) * F.k), y1: Math.round((29.5 - F.y0) * F.k), mud: r.L.bones ? 0.2 : 0.28 });
   // held items keep their painted look, moved onto where the 3D hands ended up on screen
@@ -2392,8 +2429,12 @@ function paint3DPix(r: Rig, p: PoseLike, S: number, flash: number, withShadow: b
     return d;
   };
   const at = (c: C2, d: P, fn: () => void) => { c.save(); c.translate(d[0], d[1]); fn(); c.restore(); };
-  const behind = r.dir === "up" && (p.attack < 1 || p.attack === 3);
-  const weaponNow = (c: C2) => { if (!p.noWeapon) at(c, dn, () => weapon(c, r)); };
+  const behind = m.swing ? m.swing.behind : r.dir === "up" && (p.attack < 1 || p.attack === 3);
+  // a swung blade pointing toward or away from the camera is drawn shorter along its length (foreshortened)
+  const weaponNow = (c: C2) => { if (!p.noWeapon) at(c, dn, () => {
+    if (m.swing && m.swing.k < 0.98) { const [hx, hy] = r.nearH, a = rad(r.ang); c.translate(hx, hy); c.rotate(a); c.scale(m.swing.k, 1); c.rotate(-a); c.translate(-hx, -hy); }
+    weapon(c, r);
+  }); };
   const back = layer("w3b", (c) => { if (behind) weaponNow(c); });
   const front = layer("w3f", (c) => {
     rangedGear(c, r); at(c, df, () => shield(c, r)); if (!behind) weaponNow(c);
@@ -2403,7 +2444,7 @@ function paint3DPix(r: Rig, p: PoseLike, S: number, flash: number, withShadow: b
   // effects in front, and behind (smears, circles, the ground shadow)
   const under = scratch("under", NW, NH), uc0 = under.getContext("2d"); toCanvas(uc0);
   const fx = scratch("fx", NW, NH), fc = fx.getContext("2d");
-  toCanvas(fc); heroFx(fc, r); moveFx(fc, r, uc0);
+  toCanvas(fc); heroFx(fc, r); moveFx(fc, r, uc0); if (m.swing && !p.noWeapon) swingTrail(fc, r, m.swing);
   const f = shrink(fx, "pxf", W, TH); pixelAlpha(f);
   if (withShadow && !F.noShadow) {
     const uc = under.getContext("2d");
@@ -2425,6 +2466,7 @@ function paint3DPix(r: Rig, p: PoseLike, S: number, flash: number, withShadow: b
     if (handOnTop && m.tag[i / 4] === TAG_HAND && b[i + 3]) over(b, i);
     over(f, i);
   }
+  swungNow = null;
   return o;
 }
 

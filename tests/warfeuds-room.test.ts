@@ -44,7 +44,7 @@ function soldier(room: any): [string, any] {
   return landTroops(room).find(([, m]) => !m.dead && parseTroop(m.weapon)?.part === "soldier")!;
 }
 
-test("feuds (room): an unsworn hero can't hurt a neutral trooper until they provoke; provoke is checked; the party shares the grudge; then blows land and the troops chase", async () => {
+test("feuds (room): provoke; provoke is checked; the party shares the grudge; then blows land and the troops chase", async () => {
   const srv = await startRoom();
   freshWar();
   try {
@@ -53,8 +53,6 @@ test("feuds (room): an unsworn hero can't hurt a neutral trooper until they prov
     const owner = OWNER(), [mid, m] = soldier(room), hp0 = m.hp;
     const at = (x: number, y: number) => { p.x = x; p.y = y; };
     at(m.x + 20, m.y);
-    room.hitTarget(id, mid, 50, [0, 0], { basic: true });
-    assert.equal(m.hp, hp0, "neutral: 0 damage");
     // too far
     at(m.x + 20 * TILE, m.y);
     c.send("provoke", { id: mid });
@@ -117,8 +115,6 @@ test("feuds (room): a sworn hero is ignored by a clan their clan doesn't border 
     p.clan = peace; p.x = m.x + 20; p.y = m.y;
     await wait(1500);
     assert.ok(!landTroops(room).some(([, t]) => t.target === id), `${peace} hero: left alone by ${owner}`);
-    room.hitTarget(id, mid, 50, [0, 0], { basic: true });
-    assert.equal(m.hp, hp0, "and can't hurt them");
     p.clan = war;
     assert.ok(await until(() => landTroops(room).some(([, t]) => t.target === id), 4000), `${war} hero: attacked`);
     room.hitTarget(id, mid, 50, [0, 0], { basic: true });
@@ -298,5 +294,43 @@ test("feuds (room): a hero's saved feud is read back on loading (offline decay a
     room.feuds.join(other.id);
     assert.ok(await until(() => other.got.some(([t, v]) => t === "feud" && v.c?.[owner]?.p === FEUD.tiers[0])), "the owner's view");
     assert.ok(await until(() => other.got.some(([t, v]) => t === "wanted" && v.full && v.w?.[other.id]?.[0]?.[0] === owner)), "the marks");
+  } finally { await srv.stop(); }
+});
+
+test("feuds (room): a blow or area damage on a neutral clan's soldier lands and is a provocation (party shared, Herald); never own clan, under the oath level or from safe ground", async () => {
+  const srv = await startRoom();
+  freshWar();
+  try {
+    const { room, id, p, got } = await setup(srv);
+    const mate = await setup(srv);
+    const owner = OWNER(), [mid, m] = soldier(room);
+    p.x = m.x + 20; p.y = m.y;
+    // under the oath level: nothing
+    p.level = 4; let hp0 = m.hp;
+    room.hitTarget(id, mid, 50, [0, 0], { basic: true });
+    assert.equal(m.hp, hp0, "under the oath level: no damage");
+    assert.deepEqual(p.feud, {});
+    // own clan: nothing, and an area never catches its own soldiers
+    p.level = 30; p.clan = owner;
+    room.hitTarget(id, mid, 50, [0, 0], { basic: true });
+    assert.equal(m.hp, hp0, "own clan: no damage");
+    assert.ok(!room.targetsAround(m.x, m.y, 40, id).includes(mid), "own clan: out of the area");
+    // unsworn, in a party: the area catches it, the blow lands and the party has a grudge
+    p.clan = undefined; p.party = mate.p.party = "aoeparty";
+    assert.ok(room.targetsAround(m.x, m.y, 40, id).includes(mid), "a neutral clan's soldier is caught in the area");
+    assert.ok(room.host.enemies(m.x, m.y, 40, id).includes(mid), "skill area damage catches it too");
+    assert.ok(!room.host.enemies(m.x, m.y, 40, id, true).includes(mid), "a skill that picks one foe (chain hop, nearest, link) skips it");
+    room.hitTarget(id, mid, 50, [0, 0], {});
+    assert.ok(m.hp < hp0, "the blow lands");
+    assert.ok((p.feud[owner]?.until ?? 0) > Date.now() + FEUD.grudgeMs - 3000, "marked: a grudge with that clan");
+    assert.ok((mate.p.feud[owner]?.until ?? 0) > Date.now(), "the party shares it");
+    assert.ok(await until(() => got.some(([t, v]) => t === "chat" && /Your blow fell on/.test(v.text))), "the Herald tells them");
+    assert.ok(await until(() => landTroops(room).some(([, t]) => t.target === id), 4000), "the troops answer");
+    // on the safe square: never
+    p.feud = {}; mate.p.feud = {}; hp0 = m.hp;
+    p.x = (SAFE_ZONE.x + SAFE_ZONE.w / 2) * TILE; p.y = (SAFE_ZONE.y + SAFE_ZONE.h / 2) * TILE;
+    room.hitTarget(id, mid, 50, [0, 0], {});
+    assert.equal(m.hp, hp0, "from safe ground: no damage");
+    assert.deepEqual(p.feud, {});
   } finally { await srv.stop(); }
 });

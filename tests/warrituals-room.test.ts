@@ -169,7 +169,7 @@ test("rituals (room): killing the three acolytes breaks it, with renown and lega
     at({ x: SPOT.x + 10 * TILE, y: SPOT.y });
     tick(NOON);
     const a = acolytes(), aid = r().slots[0].id, hp0 = a[0].hp, xp0 = p.xp;
-    for (const clan of [undefined, V]) {
+    for (const clan of [V]) { // (an unsworn hero's blow lands and provokes: tests/warfeuds-room.test.ts)
       p.clan = clan; at({ x: a[0].x + 16, y: a[0].y });
       room.hitTarget(id, aid, 500, [0, 0], {});
       assert.equal(a[0].hp, hp0, `${clan ?? "unsworn"}: 0 damage`);

@@ -35,6 +35,8 @@ export interface Rig3 {
   head: P; nearS: P; farS: P; nearE: P; farE: P; nearH: P; farH: P; hips: [P, P]; knees: [P, P]; feet: [P, P];
   stride: number; phase?: number; run?: boolean; t: number; attack: number; crouch: number; headDx: number;
   moving: number; wave: number; blink: boolean;
+  /** a weapon swing built in 3D (body.ts swing3Of): the arc, and where on it this frame is */
+  swing?: Swing3;
 }
 
 // ---- materials: ramps built from a single colour with the house hue shift (cool shadows, warm lights) ---------
@@ -116,7 +118,7 @@ function facingOf(r: Rig3): P {
 /** Rig point (screen, rig units) + a guessed depth -> world. The rig is drawn flat, so its y is height only. */
 function lift(p: P, depth: number, zMin = -99): V3 { return [p[0], depth, Math.max(zMin, (29 - p[1]) / COS)]; }
 
-interface Built { prims: Prim[]; eyes: V3[]; eyeCol: number; handNear: V3; handFar: V3 }
+interface Built { prims: Prim[]; eyes: V3[]; eyeCol: number; handNear: V3; handFar: V3; swing?: SwingOut }
 
 /**
  * Run cycle joints (3D, rig units). Each leg: a short stance (the foot planted and sliding back under the body at
@@ -171,6 +173,121 @@ function runJoints(ph: number, f: P, s: P, hips: V3[], nearS0: V3, farS0: V3, he
   return { feet, knees, nearS, farS, head, nearE, nearH, farE, farH };
 }
 
+// ---- weapon swings in 3D -----------------------------------------------------------------------------------------
+/**
+ * Swing arcs (Murat 2026-11-19): the weapon hand travels a curved path round the shoulder (the hit lands mid-arc, then it follows through) while the shoulders twist
+ * into the blow, the off foot steps in and the off arm counters; the blade trails the hand on the way in (cocked
+ * wrist) and leads it through the hit. slash = forehand diagonal (high on the weapon side to low across), back =
+ * backhand (across the body and out), over = overhead chop (two hands), sweep = flat cut, thrust = a lunge.
+ * `t` is the attack phase of the painted swings (characters.ts SWING_T: -0.45 pull-back, 0 wind-up, 2 impact, 3 recover),
+ * so the impact frame and its timing are unchanged.
+ */
+export type SwingKind = "slash" | "back" | "over" | "sweep" | "thrust";
+export interface Swing3 { kind: SwingKind; t: number }
+/** What the painter needs: the blade's screen angle (deg, y down), whether the hand is behind the body, and the
+ * blade's recent screen positions for the trail (hand, angle), oldest first. */
+export interface SwingOut { ang: number; behind: boolean; trail: { h: P; a: number; k: number }[]; /** blade length on screen (1 = side-on, less when it points at or away from the camera) */ k: number }
+type B3 = [number, number, number]; // body frame: forward, side (weapon side +), up
+const ARCS: Record<Exclude<SwingKind, "thrust">, [B3, B3, B3]> = {
+  slash: [[-0.2, 0.5, 0.85], [0.95, 0.2, 0.3], [0.45, -0.8, -0.5]],
+  back: [[0.2, -0.9, 0.45], [0.95, 0.0, 0.15], [0.25, 0.9, -0.3]],
+  over: [[-0.5, 0.2, 0.85], [0.7, 0.1, 0.7], [0.8, 0.05, -0.6]],
+  sweep: [[-0.55, 0.85, 0.12], [1, 0.15, 0.02], [0.3, -0.95, -0.05]],
+};
+const nrm = (v: B3): B3 => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
+const sm = (x: number) => { const c = clamp(x); return c * c * (3 - 2 * c); };
+/** Where along the arc (0 = wind-up, 1 = impact) at attack phase t; a little past both ends for the pull-back and follow-through. */
+function arcU(t: number) {
+  if (t <= 0) return t * 0.15;
+  if (t <= 2) return 0.6 * Math.pow(t / 2, 1.7); // slow out of the wind-up, fast into the hit (the target is mid-arc)
+  return 0.6 + 0.4 * sm(t - 2); // follow-through to the end of the arc
+}
+function arcDir(kind: Exclude<SwingKind, "thrust">, u: number): B3 {
+  const [a, m, b] = ARCS[kind], k = 1.5;
+  const w0 = (1 - u) * (1 - u), w1 = 2 * u * (1 - u) * k, w2 = u * u;
+  return nrm([a[0] * w0 + m[0] * w1 + b[0] * w2, a[1] * w0 + m[1] * w1 + b[1] * w2, a[2] * w0 + m[2] * w1 + b[2] * w2]);
+}
+/** Hand (relative to the shoulder, body frame) and blade direction at phase t. */
+function swingAt(kind: SwingKind, t: number): { hand: B3; blade: B3; twist: number; step: number; lean: number } {
+  const u = arcU(t), into = sm(t / 2), out = sm(t - 2);
+  if (kind === "thrust") {
+    const q = t <= 0 ? t * 0.3 : t <= 2 ? Math.pow(t / 2, 2) : 1 - 0.25 * out;
+    const back: B3 = [-0.4, 0.55, 0.05], fwd: B3 = [1, 0.08, 0.06], R = 3.4 + 3.9 * clamp(q, -0.2, 1);
+    const d = nrm([back[0] + (fwd[0] - back[0]) * q, back[1] + (fwd[1] - back[1]) * q, back[2] + (fwd[2] - back[2]) * q]);
+    return { hand: [d[0] * R, d[1] * R, d[2] * R], blade: nrm([1, -0.05, 0.04 + 0.1 * (1 - q)]), twist: 0.45 * (1 - into) - 0.35 * into, step: into * 3.2 - out * 0.8, lean: into * 1.4 };
+  }
+  const d = arcDir(kind, u), d2 = arcDir(kind, u + 0.03);
+  const tg = nrm([d2[0] - d[0], d2[1] - d[1], d2[2] - d[2]]);
+  const R = 4.4 + 2.8 * clamp(u / 0.6) - 0.8 * clamp((u - 0.6) / 0.4) - (kind === "over" ? 0.4 : 0);
+  // wrist: cocked well back at the wind-up, straight at the hit, leading a little through it
+  const cock = 0.4 * (1 - clamp(u / 0.6)) - 0.35 * clamp((u - 0.6) / 0.4);
+  const blade = nrm([d[0] * Math.cos(cock) - tg[0] * Math.sin(cock), d[1] * Math.cos(cock) - tg[1] * Math.sin(cock), d[2] * Math.cos(cock) - tg[2] * Math.sin(cock)]);
+  const sgn = kind === "back" ? -1 : 1; // a backhand winds the other way
+  const tw = kind === "over" ? 0.25 : 0.6;
+  return { hand: [d[0] * R, d[1] * R, d[2] * R], blade, twist: sgn * (tw * (1 - into) - tw * 0.8 * into), step: into * (kind === "over" ? 2.8 : 2.2) - out * 0.6, lean: into * (kind === "over" ? 1.6 : 1.0) };
+}
+/** Two-bone IK in 3D: elbow/knee for a joint from a to b, bent toward `pole`. */
+function ik3(a: V3, b: V3, l1: number, l2: number, pole: V3): [V3, V3] {
+  let dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2], D = Math.hypot(dx, dy, dz) || 1e-3;
+  const M = (l1 + l2) * 0.995;
+  let end = b;
+  if (D > M) { end = [a[0] + dx / D * M, a[1] + dy / D * M, a[2] + dz / D * M]; dx *= M / D; dy *= M / D; dz *= M / D; D = M; }
+  const ux = dx / D, uy = dy / D, uz = dz / D, pd = pole[0] * ux + pole[1] * uy + pole[2] * uz;
+  let px = pole[0] - ux * pd, py = pole[1] - uy * pd, pz = pole[2] - uz * pd;
+  const pl = Math.hypot(px, py, pz) || 1; px /= pl; py /= pl; pz /= pl;
+  const x = (l1 * l1 - l2 * l2 + D * D) / (2 * D), h = Math.sqrt(Math.max(0, l1 * l1 - x * x));
+  return [[a[0] + ux * x + px * h, a[1] + uy * x + py * h, a[2] + uz * x + pz * h], end];
+}
+function swingJoints(sw: Swing3, f: P, s: P, hips: V3[], feet0: V3[], nearS0: V3, farS0: V3, head0: V3, shield = false) {
+  const W = (v: B3): V3 => [f[0] * v[0] + s[0] * v[1], f[1] * v[0] + s[1] * v[1], v[2]];
+  const scr = (p: V3): P => [p[0], 29 - (p[1] * SIN + p[2] * COS)];
+  const scrAng = (h: V3, bl: V3) => { const a = scr(h), b = scr([h[0] + bl[0], h[1] + bl[1], h[2] + bl[2]]); return Math.atan2(b[1] - a[1], b[0] - a[0]) * 180 / Math.PI; };
+  const scrLen = (bl: V3) => clamp(Math.hypot(bl[0], bl[1] * SIN + bl[2] * COS), 0.4, 1);
+  const cx = (nearS0[0] + farS0[0]) / 2, cd = (nearS0[1] + farS0[1]) / 2;
+  const pose = (t: number) => {
+    const A = swingAt(sw.kind, t);
+    // shoulders turn about the spine, the chest leans into the blow
+    const rot = (p: V3, up: number): V3 => {
+      const qx = p[0] - cx, qd = p[1] - cd, a = qx * f[0] + qd * f[1], b = qx * s[0] + qd * s[1];
+      const c = Math.cos(A.twist), sn = Math.sin(A.twist), a2 = a * c - b * sn + A.lean, b2 = a * sn + b * c;
+      return [cx + f[0] * a2 + s[0] * b2, cd + f[1] * a2 + s[1] * b2, p[2] + up];
+    };
+    const nearS = rot(nearS0, -A.lean * 0.3), farS = rot(farS0, -A.lean * 0.3);
+    const hand = W(A.hand), H: V3 = [nearS[0] + hand[0], nearS[1] + hand[1], nearS[2] + hand[2]];
+    return { A, nearS, farS, H, blade: W(A.blade) };
+  };
+  const P0 = pose(sw.t), A = P0.A;
+  const out = W([0, 1, -1.2]), [nearE, nearH] = ik3(P0.nearS, P0.H, 3.9, 3.7, out);
+  // the off hand: on the grip for an overhead chop, else guarding the chest and swinging back as a counterweight
+  let farE: V3, farH: V3;
+  if (sw.kind === "over" && !shield) {
+    const g: V3 = [nearH[0] - P0.blade[0] * 1.3, nearH[1] - P0.blade[1] * 1.3, nearH[2] - P0.blade[2] * 1.3];
+    [farE, farH] = ik3(P0.farS, g, 3.9, 3.7, W([0, -1, -1.2]));
+  } else {
+    const into = sm(sw.t / 2), back = sw.kind === "back" ? -1 : 1;
+    const tgt = W([0.9 - 2.6 * into * back, -1.2 - 1.6 * into, -2.2 - 1.6 * into]);
+    [farE, farH] = ik3(P0.farS, [P0.farS[0] + tgt[0], P0.farS[1] + tgt[1], P0.farS[2] + tgt[2]], 3.9, 3.7, W([-0.3, -1, -1]));
+  }
+  // footwork: the off foot steps in, the weapon-side foot braces behind
+  const feet = feet0.map((ft, i) => { const k = i === 1 ? A.step : -A.step * 0.35; const g = W([k, 0, 0]); return [ft[0] + g[0], ft[1] + g[1], ft[2]] as V3; });
+  const knees = [0, 1].map((i) => ik3(hips[i], feet[i], 5.3, 5.3, W([1, 0, 0.2]))[0]);
+  const head: V3 = [head0[0] + f[0] * A.lean * 0.9, head0[1] + f[1] * A.lean * 0.9, head0[2] - A.lean * 0.35];
+  // blade on screen; facing the camera a long blade must stay inside the frame (as the painted swings did)
+  let ang = scrAng(nearH, P0.blade), kLen = scrLen(P0.blade);
+  const hs = scr(nearH), fits = (a: number) => hs[1] + Math.sin(a * Math.PI / 180) * 12 * kLen <= 31.5;
+  // turn it aside a little, then shorten it (as if pointing more into the screen) rather than lay it flat
+  for (let k = 0; k < 7 && !fits(ang); k++) ang += Math.cos(ang * Math.PI / 180) >= 0 ? -5 : 5;
+  if (!fits(ang)) kLen = clamp((31.5 - hs[1]) / Math.max(0.01, Math.sin(ang * Math.PI / 180) * 12), 0.4, kLen);
+  const chestD = (P0.nearS[1] + P0.farS[1]) / 2;
+  const trail: SwingOut["trail"] = [];
+  if (sw.t > 0.6 && sw.t < 2.45) for (let k = 4; k >= 1; k--) {
+    const tt = sw.t - k * 0.2; if (tt < 0.2) continue;
+    const q = pose(tt), [, h] = ik3(q.nearS, q.H, 3.9, 3.7, out);
+    trail.push({ h: scr(h), a: scrAng(h, q.blade), k: scrLen(q.blade) });
+  }
+  return { feet, knees, nearS: P0.nearS, farS: P0.farS, head, nearE, nearH, farE, farH, out: { ang, behind: nearH[1] > chestD + 0.8, trail, k: kLen } as SwingOut };
+}
+
 export function build3D(L: Look, w: Dress3D, r: Rig3): Built {
   const f = facingOf(r), s: P = [f[1], -f[0]]; // s = the body's right side (the weapon side)
   const dep = (a: number, si: number) => a * f[1] + si * s[1]; // depth of a point `a` forward, `si` to the right
@@ -195,6 +312,13 @@ export function build3D(L: Look, w: Dress3D, r: Rig3): Built {
     // a real run in 3D, the same for every facing (Murat 2026-11-19: "running, not shuffling")
     const J = runJoints(r.phase, f, s, hips, nearS, farS, head, r.dir === "right" ? 0.5 : 1.3, !!L.shield && L.shield.style !== "book");
     ({ feet, knees, nearS, farS, head, nearE, nearH, farE, farH } = J);
+  }
+  let swingOut: SwingOut | undefined;
+  if (r.swing && atk) {
+    // a full-body weapon swing in 3D (Murat 2026-11-19: "a proper swing ... think in 3D, then isometric")
+    const J = swingJoints(r.swing, f, s, hips, feet, nearS, farS, head, !!L.shield && L.shield.style !== "book");
+    ({ feet, knees, nearS, farS, head, nearE, nearH, farE, farH } = J);
+    swingOut = J.out;
   }
   const chest: V3 = [(nearS[0] + farS[0]) / 2, (nearS[1] + farS[1]) / 2, (nearS[2] + farS[2]) / 2 - 2.2];
   const pelvis: V3 = [(hips[0][0] + hips[1][0]) / 2, (hips[0][1] + hips[1][1]) / 2, (hips[0][2] + hips[1][2]) / 2 + 0.6];
@@ -460,7 +584,7 @@ export function build3D(L: Look, w: Dress3D, r: Rig3): Built {
       P.push(custom(cb[0], cb[1], (x, y, z) => collarD(x, y, z, 0.3) + 0.05, lin, 0.1));
     }
   }
-  return { prims: P, eyes, eyeCol: L.eyeGlow ?? L.eye ?? 0x1a1418, handNear: nearH, handFar: farH };
+  return { prims: P, eyes, eyeCol: L.eyeGlow ?? L.eye ?? 0x1a1418, handNear: nearH, handFar: farH, swing: swingOut };
 }
 
 
@@ -927,7 +1051,7 @@ function scene(ps: Prim[], x: number, y: number, z: number, want: { m: Mat | nul
   return d;
 }
 
-export interface Ray3Out { rgba: Uint8ClampedArray; tag: Uint8Array; depth: Float32Array; handNear: P; handFar: P }
+export interface Ray3Out { rgba: Uint8ClampedArray; tag: Uint8Array; depth: Float32Array; handNear: P; handFar: P; swing?: SwingOut }
 
 /**
  * Where a frame sits on the rig: tw x th texels, k texels per rig unit, its top-left at rig (x0, y0). Heroes use the
@@ -1018,5 +1142,5 @@ export function render3D(model: Built, fr: number | Frame3): Ray3Out {
     out[a * 4] = (model.eyeCol >> 16) & 255; out[a * 4 + 1] = (model.eyeCol >> 8) & 255; out[a * 4 + 2] = model.eyeCol & 255; tag[a] = TAG_EYE;
   }
   const scr = (p: V3): P => [p[0], 29 - (p[1] * SIN + p[2] * COS)];
-  return { rgba: out, tag, depth, handNear: scr(model.handNear), handFar: scr(model.handFar) };
+  return { rgba: out, tag, depth, handNear: scr(model.handNear), handFar: scr(model.handFar), swing: model.swing };
 }

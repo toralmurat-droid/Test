@@ -24,7 +24,7 @@ export const FEUD = {
   /** A provocation needs a trooper or a Hold of that clan this close to the hero (tiles). */
   provokeTiles: 10,
   /** Kill points per victim: soldiers, officers, objects (cart, ram, tunnel mouth), heroes sworn to the clan. */
-  pts: { soldier: 1, officer: 2, cart: 2, ram: 2, mouth: 2, hero: 3 } as Record<TroopPart | "hero", number>,
+  pts: { soldier: 1, officer: 2, cart: 2, ram: 2, mouth: 2, work: 1, hero: 3 } as Record<TroopPart | "hero", number>,
   /** A sworn hero's kills of a clan at war with their own count this much (fighting for your clan is the point of the
    * war: only a rampage builds Wanted). Kills of a provoked neutral clan, and every unsworn hero's kills, count in full. */
   warKillWeight: 1 / 3,

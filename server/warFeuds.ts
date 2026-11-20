@@ -112,6 +112,21 @@ export class WarFeuds {
     }
   }
 
+  /**
+   * A hero's blow or area damage landed on a soldier of `clan`, which left them alone until now (WarTroops.canHurt
+   * `strike`): the same as a provocation, a grudge for them and their party here, and the Herald tells them once.
+   */
+  struckNeutral(heroId: string, clan: ClanKey, now = Date.now()) {
+    const p = this.h.hero(heroId);
+    if (!p || p.clan === clan) return;
+    this.grudge(heroId, clan, now);
+    for (const id of this.h.group(heroId)) {
+      if (!((this.h.hero(id)?.feud[clan]?.until ?? 0) > now)) continue; // (a mate sworn to that clan or under the oath level got no grudge)
+      this.push(id, now);
+      this.h.send(id, "chat", { id: "", name: "Herald", text: id === heroId ? `Your blow fell on ${CLANS[clan].name}: their soldiers will fight you for ${Math.round(FEUD.grudgeMs / 60_000)} min.` : `${p.name}'s blow fell on ${CLANS[clan].name}: their soldiers will fight your party for ${Math.round(FEUD.grudgeMs / 60_000)} min.` });
+    }
+  }
+
   /** A hero's blow landed on a trooper of `clan` (only one they may hurt): a running grudge with it starts over. */
   struck(heroId: string, clan: ClanKey, now = Date.now()) {
     const p = this.h.hero(heroId), e = p?.feud[clan];
