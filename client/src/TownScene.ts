@@ -2521,13 +2521,17 @@ export class TownScene extends Phaser.Scene {
   /** Bone Harvest timeline (ms, server DEMON.harvest.ripMs/equipMs): reach, lift overhead, snap, press the piece on. */
   private static RIP = { grab: 450, snap: 1150, don: 1600, equip: 1950 };
 
-  /** The demon's sheet frame during its harvest (painted sheets carry 9 harvest frames after the 12). */
   /** First run frame of a monster's sheet (mobs.json `run`), or -1; looked up once per texture. */
   private mobRunAt(e: Entity) {
     const key = e.sprite.texture.key;
-    if (e.runKey !== key) { e.runKey = key; e.runAt = this.cache.json.get("hd_mobs")?.[key.split("__")[0]]?.run ?? -1; // forged recolours (key__forgeId) copy the base sheet if (e.sprite.texture.frameTotal <= (e.runAt ?? 0) + 3 * MOB_RUN_FRAMES) e.runAt = -1; }
+    if (e.runKey !== key) {
+      e.runKey = key;
+      e.runAt = this.cache.json.get("hd_mobs")?.[key.split("__")[0]]?.run ?? -1; // forged recolours (key__forgeId) copy the base sheet
+      if (e.sprite.texture.frameTotal <= (e.runAt ?? 0) + 3 * MOB_RUN_FRAMES) e.runAt = -1;
+    }
     return e.runAt!;
   }
+  /** The demon's sheet frame during its harvest (painted sheets carry 9 harvest frames after the 12). */
   private ripFrame(e: Entity, now: number, dir: string): number {
     if (e.sprite.texture.frameTotal <= 21) return -1;
     const t = now - e.rip!.start, R = TownScene.RIP, di = dir === "down" ? 0 : dir === "up" ? 1 : 2;
