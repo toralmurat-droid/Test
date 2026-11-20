@@ -39,6 +39,8 @@ export const RETIRED_LEGS: readonly { land: Act; pts: readonly [number, number][
   { land: 1, pts: [[52, 57], [52, 21], [44, 16], [36, 16], [35, 17]] },
   // the Red Badlands: the first stretch from Scarwall's old gate dais down to Fangrock (the leg starts at its south gate now)
   { land: 4, pts: [[26, 44], [47, 63]] },
+  // the Grey Barrow Moors: the stub from Marrowkeep's old gate dais west of the Host's Muster down to the fork below it
+  { land: 3, pts: [[242, 79], [249, 85], [250, 84]] },
 ];
 /** Signposts the moves took away (local tiles of their land): the King's Highway's post where it met the North Meadow road (now inside Hearthhold's walls). */
 export const RETIRED_POSTS: readonly { land: Act; x: number; y: number }[] = [{ land: 1, x: 50, y: 20 }];
