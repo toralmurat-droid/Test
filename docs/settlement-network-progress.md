@@ -291,11 +291,17 @@ Roadmap: client/src/roadmap.ts, "Settlement network".
   - Open (owner): the Crown villages' war income (keep 0.5, lower it, or leave them out of the war).
 
 ## Step 5: clan cities move into their homelands (one PR per city)
-- PR 1 Hearthhold (in progress, branch `claude/hearthhold-in-land`): the Wardens' city leaves the city strip and stands in
+- PR 1 Hearthhold (PR #572, branch `claude/hearthhold-in-land`): the Wardens' city leaves the city strip and stands in
   Oakvale's north-west (x 41..92, y 1..40), with south, west and east gates on the highways and roads, a gate ward for
   W7's entry rules, and about 37 client-side townsfolk per city. Plot 0 of the strip stays rock until all five cities have
   moved. Defaults taken: keep entry rules, remove the old Goldenreach gate dais, highway seat stays Goldenreach Farms,
   login stays at Oakvale, strip cities get the townsfolk too.
+  - Built: `City.site`, `shared/cityLand.ts` (carve in map section 22b, `CITY_MASK`, `cityBefore`), highway legs from
+    the south and west gates, east-gate road to the Watchtower Trail, `server/cityGates.ts` gate ward, `relocateCitySpot`
+    on resume, client `cityFolk.ts` (37 people in Hearthhold, 33 in strip cities), `paintGatehouse` in cityProps.ts,
+    crier lines in cityText.ts.
+  - Deviations: windmill stays 0.6 tiles off the east wall (walkable gap tested); champions family-share floor 0.90 -> 0.88
+    (Oakvale lost ~160 blobs); city through streets join the road set.
 
 ## Next
 - Step 3 optional follow-ups: working townsfolk for Millbrook, Cairnwatch, the Rustwater Post,
