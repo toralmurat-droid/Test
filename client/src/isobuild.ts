@@ -596,7 +596,9 @@ function sliced(scene: Phaser.Scene, key: string, X0: number, Y0: number, X1: nu
   left: number, topY: number, cw: number, ch: number, fade: boolean, fadeTo?: number) {
   const b: Building = { X0, Y0, X1, Y1, strips: [], left, right: left + cw, top: topY, bottom: topY + ch, faded: false, fadeTo };
   const SW = 8;
-  const city = cityAt(Math.floor((X0 + X1) / 2 / TILE), Math.floor((Y0 + Y1) / 2 / TILE)); // a house inside a capital's walls takes its clan's tint (cityArt.ts)
+  // Deepden's houses take the Hide-Kin tint (cityArt.ts) so the moss-green sinkholes houses read as a clan city; other cities keep their own look.
+  const c = cityAt(Math.floor((X0 + X1) / 2 / TILE), Math.floor((Y0 + Y1) / 2 / TILE));
+  const city = c?.clan === "hidekin" ? c : undefined;
   const front = P(X1, Y1).x; // screen x of the front corner
   for (let x = 0; x < cw; x += SW) {
     const sx = left + x + SW / 2;
