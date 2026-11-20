@@ -205,7 +205,7 @@ function blobPartsLayout(id: string, parts: string[]): BlobPart[] {
 }
 
 interface Entity {
-  swAt?: number; swV?: number; // monster swings: first swing frame of its sheet (-1 none), the blow being shown
+  swAt?: number; swV?: number; swEnd?: number; // monster swings: first swing frame of its sheet (-1 none), the blow being shown
   runAt?: number; runKey?: string; runPh?: number; // monster run: first run frame of its sheet (-1 none), for which texture, cycle phase 0..1
   running?: boolean; runX?: number; runY?: number; runT?: number; runV?: number; // hero run cycle: run or walk now, last sprite sample, smoothed speed
   wall?: boolean; troopRole?: string; // a courtyard archer standing on a live Hold wall tile (drawn raised); its role mark, read once
@@ -2532,7 +2532,9 @@ export class TownScene extends Phaser.Scene {
     this.mobRunAt(e);
     const striking = now < (e.strikeUntil ?? 0);
     if (e.swAt! < 0 || p.dead || (!p.winding && !striking)) { e.swV = undefined; return -1; }
+    if (e.swEnd !== undefined && now >= e.swEnd) { e.swV = undefined; e.swEnd = undefined; } // the last blow is over: a fresh one
     e.swV ??= Math.floor(Math.random() * MOB_SWINGS);
+    if (striking) e.swEnd = e.strikeUntil;
     const el = striking ? now - (e.strikeUntil! - MOB_STRIKE_MS) : -1;
     const step = el < 0 ? 0 : el < 50 ? 1 : el < 150 ? 2 : 3;
     return e.swAt! + RUN_DIR[dir] * MOB_SWING_FRAMES + e.swV * 4 + step;

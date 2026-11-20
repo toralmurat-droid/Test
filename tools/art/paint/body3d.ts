@@ -238,7 +238,7 @@ function ik3(a: V3, b: V3, l1: number, l2: number, pole: V3): [V3, V3] {
   const x = (l1 * l1 - l2 * l2 + D * D) / (2 * D), h = Math.sqrt(Math.max(0, l1 * l1 - x * x));
   return [[a[0] + ux * x + px * h, a[1] + uy * x + py * h, a[2] + uz * x + pz * h], end];
 }
-function swingJoints(sw: Swing3, f: P, s: P, hips: V3[], feet0: V3[], nearS0: V3, farS0: V3, head0: V3) {
+function swingJoints(sw: Swing3, f: P, s: P, hips: V3[], feet0: V3[], nearS0: V3, farS0: V3, head0: V3, shield = false) {
   const W = (v: B3): V3 => [f[0] * v[0] + s[0] * v[1], f[1] * v[0] + s[1] * v[1], v[2]];
   const scr = (p: V3): P => [p[0], 29 - (p[1] * SIN + p[2] * COS)];
   const scrAng = (h: V3, bl: V3) => { const a = scr(h), b = scr([h[0] + bl[0], h[1] + bl[1], h[2] + bl[2]]); return Math.atan2(b[1] - a[1], b[0] - a[0]) * 180 / Math.PI; };
@@ -260,7 +260,7 @@ function swingJoints(sw: Swing3, f: P, s: P, hips: V3[], feet0: V3[], nearS0: V3
   const out = W([0, 1, -1.2]), [nearE, nearH] = ik3(P0.nearS, P0.H, 3.9, 3.7, out);
   // the off hand: on the grip for an overhead chop, else guarding the chest and swinging back as a counterweight
   let farE: V3, farH: V3;
-  if (sw.kind === "over") {
+  if (sw.kind === "over" && !shield) {
     const g: V3 = [nearH[0] - P0.blade[0] * 1.3, nearH[1] - P0.blade[1] * 1.3, nearH[2] - P0.blade[2] * 1.3];
     [farE, farH] = ik3(P0.farS, g, 3.9, 3.7, W([0, -1, -1.2]));
   } else {
@@ -316,7 +316,7 @@ export function build3D(L: Look, w: Dress3D, r: Rig3): Built {
   let swingOut: SwingOut | undefined;
   if (r.swing && atk) {
     // a full-body weapon swing in 3D (Murat 2026-11-19: "a proper swing ... think in 3D, then isometric")
-    const J = swingJoints(r.swing, f, s, hips, feet, nearS, farS, head);
+    const J = swingJoints(r.swing, f, s, hips, feet, nearS, farS, head, !!L.shield && L.shield.style !== "book");
     ({ feet, knees, nearS, farS, head, nearE, nearH, farE, farH } = J);
     swingOut = J.out;
   }

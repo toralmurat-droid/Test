@@ -52,7 +52,7 @@ const RUN_FRAMES = 6;
 const SWING_STEPS = [0, 1.1, 2.0, 2.6], SWING_VARIANTS = 3;
 /** Which of a weapon family's moves become the three swings (characters.ts human() moves: a1 basic, a2, a3, a4). */
 const SWING_MOVES: Record<string, (undefined | "a2" | "a3" | "a4")[]> = {
-  axe: [undefined, "a2", "a3"], hammer: [undefined, "a2", "a3"], dagger: [undefined, "a2", "a4"], spear: [undefined, "a3", "a4"],
+  axe: [undefined, "a2", "a3"], hammer: [undefined, "a2", "a3"], dagger: [undefined, "a2", "a4"], spear: [undefined, "a2", "a4"], // a1 is already the lunge
 };
 /** Facing and pose of sheet frame f. */
 /** A beast built in 3D (beasts3d.ts): `oy` is the client origin row, where its feet stand. */
