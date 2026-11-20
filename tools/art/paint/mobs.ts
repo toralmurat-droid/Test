@@ -22,6 +22,7 @@ import { WAR_RIDERS, WAR_SOLDIERS, type WarRider } from "./warLooks";
 import { mountModel, RIDER_GROUND, RIDER_H, RIDER_SEAT, RIDER_W } from "./warRiders";
 import { CART_FRAMES, CART_H, CART_W, G, WAR_CARTS } from "./warCarts";
 import { WAR_RAMS } from "./warRam";
+import { WAR_WORKS, WORK_FRAMES, workModel } from "./warWorks";
 import { TUNNEL_FRAMES, TUNNEL_H, TUNNEL_W, WAR_TUNNELS } from "./warTunnel";
 import { cartModel, ramModel, siegeFrame, tunnelModel } from "./siege3d";
 
@@ -351,6 +352,8 @@ export function buildMobs(out: string, ONLY?: string[]) {
     ...WAR_CARTS.map((k) => ({ key: `mob_${k}`, w: CART_W, h: CART_H, frames: CART_FRAMES, draw: () => {}, pix: (f: number) => siegeFrame(cartModel(k, f), CART_W, CART_H, G, TX) })),
     // the Ossuary Host's bone siege ram (warRam.ts): same frame size and 14-frame layout
     ...WAR_RAMS.map((k) => ({ key: `mob_${k}`, w: CART_W, h: CART_H, frames: CART_FRAMES, draw: () => {}, pix: (f: number) => siegeFrame(ramModel(f), CART_W, CART_H, G, TX) })),
+    // the Hold works (warWorks.ts): barracks, stores, weapon rack, rubble per clan; the 14-frame layout again
+    ...WAR_WORKS.map((k) => ({ key: `mob_${k.key}`, w: k.w, h: k.h, frames: WORK_FRAMES, draw: () => {}, pix: (f: number) => siegeFrame(workModel(k.kind, k.clan, f), k.w, k.h, k.oy, TX) })),
     // the Hide-Kin tunnel mouth (warTunnel.ts): 80x44 frames, the same 14-frame layout
     ...WAR_TUNNELS.map((k) => ({ key: `mob_${k}`, w: TUNNEL_W, h: TUNNEL_H, frames: TUNNEL_FRAMES, draw: () => {}, pix: (f: number) => siegeFrame({ m: tunnelModel(f), dir: "down" }, TUNNEL_W, TUNNEL_H, G, TX) })),
     beast3D("mob_scorpion", 36, 30, 27, (pose, f) => scorpion(pose, f)),

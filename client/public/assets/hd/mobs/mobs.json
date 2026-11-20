@@ -2161,5 +2161,125 @@
   "scale": 1.5,
   "frames": 30,
   "run": 12
+ },
+ "mob_war_work_barracks_wardens": {
+  "w": 88,
+  "h": 64,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_work_stores_wardens": {
+  "w": 48,
+  "h": 40,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_work_rack_wardens": {
+  "w": 44,
+  "h": 44,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_work_rubble_wardens": {
+  "w": 40,
+  "h": 36,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_work_barracks_redfang": {
+  "w": 88,
+  "h": 64,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_work_barracks_host": {
+  "w": 88,
+  "h": 64,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_work_barracks_hidekin": {
+  "w": 88,
+  "h": 64,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_work_barracks_veiled": {
+  "w": 88,
+  "h": 64,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_work_stores_redfang": {
+  "w": 48,
+  "h": 40,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_work_stores_host": {
+  "w": 48,
+  "h": 40,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_work_stores_hidekin": {
+  "w": 48,
+  "h": 40,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_work_stores_veiled": {
+  "w": 48,
+  "h": 40,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_work_rack_redfang": {
+  "w": 44,
+  "h": 44,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_work_rack_host": {
+  "w": 44,
+  "h": 44,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_work_rack_hidekin": {
+  "w": 44,
+  "h": 44,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_work_rack_veiled": {
+  "w": 44,
+  "h": 44,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_work_rubble_redfang": {
+  "w": 40,
+  "h": 36,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_work_rubble_host": {
+  "w": 40,
+  "h": 36,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_work_rubble_hidekin": {
+  "w": 40,
+  "h": 36,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_work_rubble_veiled": {
+  "w": 40,
+  "h": 36,
+  "scale": 1.5,
+  "frames": 14
  }
 }

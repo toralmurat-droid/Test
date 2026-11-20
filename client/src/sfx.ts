@@ -36,7 +36,7 @@ let voices = 0;
 const MAX_VOICES = 28;
 const lastPlay = new Map<string, number>();
 /** Sounds that ring for seconds (kept connected longer). */
-const LONG = new Set(["lootRare", "lootLegendary", "horn", "ritual", "ritualCall", "demonRise", "demonRoar", "shrine", "portalTravel", "portalWake", "ferryOff", "ferryOn", "necroWind", "heroDie", "levelup", "owl", "chime", "warcry", "motherInflate", "demonFire", "skelDie", "lutePluck", "swResonate", "swShatter", "swBounce", "swSnap", "swSwell", "caravan_raided", "caravan_arrived", "siege_front", "ram_wrecked", "ram_at_gate", "tunnel_open", "tunnel_collapse", "ritual_broken", "ritual_done", "wanted_up", "bounty_claimed", "hold_sacked", "hold_grow", "column_clash", "column_march", "column_gate", "battle_horn", "battle_banner", "battle_officer", "battle_end", "town_contested", "town_claimed", "city_oath", "city_reward", "crownBell", "crownFall"]);
+const LONG = new Set(["lootRare", "lootLegendary", "horn", "ritual", "ritualCall", "demonRise", "demonRoar", "shrine", "portalTravel", "portalWake", "ferryOff", "ferryOn", "necroWind", "heroDie", "levelup", "owl", "chime", "warcry", "motherInflate", "demonFire", "skelDie", "lutePluck", "swResonate", "swShatter", "swBounce", "swSnap", "swSwell", "caravan_raided", "caravan_arrived", "siege_front", "ram_wrecked", "ram_at_gate", "tunnel_open", "tunnel_collapse", "ritual_broken", "ritual_done", "wanted_up", "bounty_claimed", "hold_sacked", "hold_grow", "work_wrecked", "hold_fell", "hold_claimed", "column_clash", "column_march", "column_gate", "battle_horn", "battle_banner", "battle_officer", "battle_end", "town_contested", "town_claimed", "city_oath", "city_reward", "crownBell", "crownFall"]);
 const AMBIENT = new Set(["crackle", "bird", "cricket", "chime", "owl", "step", "skelIdle", "blobGurgle", "crawl"]);
 
 const TOWNS = ["Oakvale", "Market Square", "Chapel of the Dawn", "The Rusty Tankard", "The Smithy", "Saltmere", "Hunter's Camp"];
@@ -773,6 +773,25 @@ const R: Record<string, Recipe> = {
     for (let i = 0; i < 8; i++) bell(o, t + 0.75 + i * 0.06 + rnd(0, 0.03), rnd(2200, 3600), 0.2, rnd(0.04, 0.07) * v);
     rattle(o, t + 0.75, 5, 0.45, 0.07 * v, 3000);
   },
+  // Hold works (server broadcast("sfx", { ev: "work_wrecked", t, i, x, y, kind, clan }), server/warHoldWorks.ts): a barracks,
+  // a stack of stores, a rack or a fortification gives way: timber splitting, a heavy collapse, a rattle of debris settling
+  work_wrecked: (o, t, v) => {
+    noise(o, t, { type: "bandpass", f: 1600, f2: 500, q: 2.5, dur: 0.22, vol: 0.28 * v });
+    for (let i = 0; i < 4; i++) clank(o, t + 0.05 + i * 0.05 + rnd(0, 0.03), rnd(0.06, 0.12) * v, rnd(700, 1400));
+    thud(o, t + 0.12, 52, 0.7 * v, 0.35); noise(o, t + 0.12, { type: "lowpass", f: 500, f2: 120, dur: 0.6, vol: 0.3 * v });
+    rattle(o, t + 0.4, 7, 0.5, 0.06 * v, 1600);
+  },
+  // A Hold fell (server/war.ts attachWar: "hold_fell"): its walls come down, a long rolling collapse under a slow, falling horn
+  hold_fell: (o, t, v) => {
+    for (let i = 0; i < 5; i++) { thud(o, t + i * 0.22 + rnd(0, 0.05), 48 + i * 3, (0.6 - i * 0.07) * v, 0.4); noise(o, t + i * 0.22, { type: "lowpass", f: 600, f2: 150, dur: 0.5, vol: 0.22 * v }); }
+    [1, 2].forEach((m, i) => tone(o, t + 0.5, { type: "sawtooth", f: 165 * m, f2: 98 * m, dur: 1.6, vol: (0.16 / (1 + i)) * v, att: 0.08, vib: 1.5 * m, vibHz: 4 }));
+    rattle(o, t + 1.1, 8, 0.8, 0.05 * v, 1400);
+  },
+  // A fallen Hold claimed ("hold_claimed"): a pole driven into the ruin and a bright rising horn call
+  hold_claimed: (o, t, v) => {
+    thud(o, t, 75, 0.6 * v, 0.2); noise(o, t, { type: "bandpass", f: 1500, f2: 2600, q: 2, dur: 0.16, vol: 0.2 * v });
+    [1, 2, 3].forEach((m, i) => tone(o, t + 0.25, { type: "sawtooth", f: 196 * m, f2: 262 * m, dur: 0.9, vol: (0.2 / (1 + i)) * v, att: 0.05, vib: 1.2 * m, vibHz: 5 }));
+  },
   // A Hold grew (server broadcast("sfx", { ev: "hold_grow", t, x, y, by, tier }), server/war.ts attachWar, W3): mallets on
   // timber, then a short, warm builders' chord; a fortress (arg: tier 2) adds a third hammer blow and a higher top note
   hold_grow: (o, t, v, tier = 1) => {
@@ -1492,6 +1511,9 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
       case "wanted_up": pos("wanted_up", ev.id === me() ? 1 : 0.6, ev.tier, { key: "wu" + (ev.id ?? ""), minGap: 800 }); break;
       case "bounty_claimed": pos("bounty_claimed", 1, undefined, { key: "bc" + (ev.id ?? ""), minGap: 800, reach: 1.6 }); break;
       case "hold_sacked": pos("hold_sacked", 1, undefined, { key: "hs" + (ev.t ?? ""), minGap: 1500, reach: 2 }); break;
+      case "work_wrecked": pos("work_wrecked", 1, undefined, { key: "ww" + (ev.t ?? "") + ":" + (ev.i ?? ""), minGap: 400, reach: 1.8 }); break;
+      case "hold_fell": pos("hold_fell", 1, undefined, { key: "hf" + (ev.t ?? ""), minGap: 3000, reach: 3 }); break;
+      case "hold_claimed": pos("hold_claimed", 1, undefined, { key: "hc" + (ev.t ?? ""), minGap: 3000, reach: 2.5 }); break;
       case "hold_grow": pos("hold_grow", 0.9, ev.tier, { key: "hg" + (ev.t ?? ""), minGap: 1500, reach: 2 }); break;
       case "column_march": pos("column_march", 0.9, undefined, { key: "cm" + (ev.id ?? ""), minGap: 4000, reach: 1.8 }); break;
       case "column_clash": pos("column_clash", 1, undefined, { key: "cc" + (ev.x ?? "") + ":" + (ev.y ?? ""), minGap: 1500, reach: 2 }); break;

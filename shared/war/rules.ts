@@ -82,6 +82,9 @@ export const WAR = {
   // Capturable towns (W6, shared/war/towns.ts): troops each town its holder holds adds to that clan's income per tick
   // (only with TickExtra.towns: a tick without it plays as before W6)
   townIncome: 0.5,
+  // Fallen Holds (shared/war/holdFall.ts): a land whose Hold fell yields its holder nothing and has no defenders until a clan
+  // claims it (a hero's banner at the ruin, or a siege won); a claimed land starts at claimControl with a fresh outpost
+  claimControl: 40,
 };
 
 /** `sack`: called by a sacked Hold (sackHold), not by the armies (optional: older saves have none). */
@@ -95,6 +98,33 @@ export interface WarState {
   siege: (Siege | null)[];
   /** Attack each territory took last tick (leaders use it to send defenders where the pressure is). */
   pressure: number[];
+  /** 1 where the land's Hold fell (shared/war/holdFall.ts) and no clan has claimed it yet. Optional: older saves have none. */
+  fallen?: number[];
+}
+
+/** Has territory t's Hold fallen (no clan has claimed it since)? */
+export const isFallen = (s: Pick<WarState, "fallen">, t: number) => s.fallen?.[t] === 1;
+
+/**
+ * Territory t's Hold fell (every work wrecked, shared/war/holdFall.ts): it stands neutral, the holder loses its grip and
+ * its works (Control and `fort` to 0) until a clan claims it (claimFallen). An announced siege stays: an army may still
+ * take it. False (nothing changed) for a capital, Reckoning-only ground, a heartland haven or a Hold already fallen. Mutates `s`.
+ */
+export function fellHold(s: WarState, t: number): boolean {
+  const tr = TERRITORIES[t];
+  if (!tr || tr.capitalOf || warProof(tr) || t >= s.owner.length || isFallen(s, t)) return false;
+  (s.fallen ??= Array(s.owner.length).fill(0))[t] = 1;
+  s.control[t] = 0; s.fort[t] = 0;
+  return true;
+}
+
+/** Clan `k` claims fallen territory t (a hero's banner at the ruin): the land is its, a fresh outpost at WAR.claimControl. False when t has not fallen. Mutates `s`. */
+export function claimFallen(s: WarState, t: number, k: ClanKey): boolean {
+  if (!CLANS[k] || !isFallen(s, t)) return false;
+  s.fallen![t] = 0;
+  if (!s.fallen!.some((f) => f === 1)) delete s.fallen;
+  s.owner[t] = k; s.fort[t] = 0; s.control[t] = WAR.claimControl; s.siege[t] = null;
+  return true;
 }
 /** What a leader decides for one tick: the share of its army that defends, and where the rest attacks. */
 export interface Orders { defend: number; attack: { t: number; share: number }[] }
@@ -297,7 +327,7 @@ export function warTick(s: WarState, orders: Partial<Record<ClanKey, Orders>>, e
   // 1. Income and upkeep
   for (const k of CLAN_KEYS) {
     let inc = 0;
-    for (const t of TERRITORIES) if (s.owner[t.id] === k) inc += (t.capitalOf === k ? WAR.capitalIncome : WAR.income) * supply[t.id];
+    for (const t of TERRITORIES) if (s.owner[t.id] === k && !isFallen(s, t.id)) inc += (t.capitalOf === k ? WAR.capitalIncome : WAR.income) * supply[t.id];
     // Rally: the less land a clan holds below a fair share, the more its people take up arms
     inc *= 1 + WAR.rally * Math.max(0, 1 - land[k] / (foughtCount(s.owner) / CLAN_KEYS.length));
     if (extra.towns) inc += WAR.townIncome * townCount(extra.towns, k); // held towns (W6); nothing at all without them
@@ -349,8 +379,9 @@ export function warTick(s: WarState, orders: Partial<Record<ClanKey, Orders>>, e
     const id = t.id, own = s.owner[id], atk = attack[id];
     const total = Object.values(atk).reduce((a, b) => a + (b ?? 0), 0);
     s.pressure[id] = total;
-    const def = defenceAt(s, id, defence[id], phase, supply);
+    const down = isFallen(s, id), def = down ? 0 : defenceAt(s, id, defence[id], phase, supply); // (a fallen Hold has no defenders)
     if (total <= 0) {
+      if (down) continue; // (nobody rebuilds a fallen Hold: it waits for a claim)
       s.control[id] = Math.min(100, s.control[id] + WAR.regrow);
       s.fort[id] = Math.min(fortCap(own), s.fort[id] + WAR.fortGrow * (CLANS[own].doctrine === "palisade" ? WAR.palisadeFort : 1));
       if (s.siege[id] && s.control[id] > WAR.siegeAt) s.siege[id] = null;
@@ -374,7 +405,7 @@ export function warTick(s: WarState, orders: Partial<Record<ClanKey, Orders>>, e
       const by = atk[sg.by] ?? 0, mult = CLANS[sg.by].doctrine === "siege" ? WAR.hostSiege : WAR.siegeBonus;
       const storm = storms?.get(id)?.att === sg.by ? storms.get(id)!.result : undefined; // (a storming settles it: W5)
       if (storm === "def") s.control[id] = sg.sack ? Math.min(100, s.control[id] + WAR.sackSiegeFail) : 50;
-      else if (storm === "att" || by * mult > def * WAR.siegeHold) { s.owner[id] = sg.by; s.fort[id] = 0; s.control[id] = 60; }
+      else if (storm === "att" || by * mult > def * WAR.siegeHold) { s.owner[id] = sg.by; s.fort[id] = 0; s.control[id] = 60; if (down) { s.fallen![id] = 0; if (!s.fallen!.some((f) => f === 1)) delete s.fallen; } } // (an army claims a fallen land)
       else s.control[id] = sg.sack ? Math.min(100, s.control[id] + WAR.sackSiegeFail) : 50; // (a sack's siege does not hand the holder its grip back)
       s.siege[id] = null;
     }

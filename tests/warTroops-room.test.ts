@@ -65,7 +65,7 @@ test("war troops (room): a land near a hero fields its holder's troops; they van
   } finally { WAR_TROOPS.sleepMs = sleep; await srv.stop(); }
 });
 
-test("war troops (room): who they fight; only enemy-sworn heroes hurt them (own clan's and unsworn heroes' blows, skills and shots deal 0)", async () => {
+test("war troops (room): who they fight; own clan's blows, skills and shots deal 0", async () => {
   const srv = await startRoom();
   freshWar();
   try {
@@ -92,7 +92,7 @@ test("war troops (room): who they fight; only enemy-sworn heroes hurt them (own 
       p.ax = -post.fx; p.ay = -post.fy; p.attackReadyAt = 0;
       room.playerAttack(id); // a basic bolt straight at the guard
     };
-    for (const clan of [owner, undefined]) {
+    for (const clan of [owner]) { // (an unsworn hero's blows land and provoke: tests/warfeuds-room.test.ts)
       p.clan = clan; stand();
       await wait(1200);
       assert.equal(hits.filter((h) => h === id).length, 0, `${clan ?? "unsworn"}: left alone`);
