@@ -51,7 +51,9 @@ const FALL_WAIT_MS = 3 * 60_000;
 /** Bumped on every wreck, rebuild or reset (rooms send "holdworks" when it moved). */
 let version = 0;
 /** Tests: forget every wreck. */
-export function _resetHoldWorks() { lands.clear(); falling.clear(); version++; }
+/** Works each hero (by name: the cap holds across relogs and rooms) was paid wreck renown for in a war tick. */
+const earned = new Map<string, { tick: number; n: number }>();
+export function _resetHoldWorks() { lands.clear(); falling.clear(); earned.clear(); version++; }
 
 /** The works state of land t for its holder `clan` at live tier `tier` (a new holder starts afresh; the tier follows the Hold while nothing is wrecked). */
 function landOf(t: number, clan: ClanKey, tier: HoldTier): LandWorks {
@@ -73,8 +75,6 @@ export class WarHoldWorks {
   private awake = new Map<number, number>();
   private seq = 0;
   private sent = -1;
-  /** Works each hero was paid wreck renown for in a war tick. */
-  private earned = new Map<string, { tick: number; n: number }>();
 
   constructor(private h: HoldWorksHost) {}
 
@@ -123,7 +123,7 @@ export class WarHoldWorks {
       if (!v || !l || l.clan !== p.clan || l.tier !== p.tier || l.wrecked.has(p.i) || warFallen(p.t) || CLAN_KEYS[v.owner[p.t]] !== p.clan) this.drop(id);
     }
     if (!v) { this.tell(); return; }
-    for (const [hid, e] of this.earned) if (e.tick !== v.tick) this.earned.delete(hid);
+    for (const [hid, e] of earned) if (e.tick !== v.tick) earned.delete(hid);
     for (const [t, l] of lands) {
       const down = warFallen(t);
       if (down && l.fell) continue; // (its ruin stays until a clan claims it)
@@ -191,7 +191,7 @@ export class WarHoldWorks {
     if (hero && heroId) {
       let valor = 0;
       if (legal && addValor(p.t, hero.clan!, HOLD_FALL.wreckValor)) valor = HOLD_FALL.wreckValor;
-      if (legal && this.mayEarn(heroId)) this.renown([[heroId, hero]], p.t, hero.clan!, HOLD_FALL.wreckRenown); // (only for effort the war counts, capped per war tick)
+      if (legal && this.mayEarn(`${hero.name}:${hero.cls ?? ""}`)) this.renown([[heroId, hero]], p.t, hero.clan!, HOLD_FALL.wreckRenown); // (only for effort the war counts, capped per war tick)
       const what = workName(p.clan, w.kind);
       this.h.send(heroId, "chat", { id: "", name: "Herald", text: `You wrecked the ${what} of ${land}${valor ? `: +${valor} valor for ${the(CLANS[hero.clan!].name)}` : ""}.${left ? ` ${left} work${left === 1 ? "" : "s"} still stand${left === 1 ? "s" : ""}.` : ""}` });
     }
@@ -218,11 +218,11 @@ export class WarHoldWorks {
   }
 
   /** Wreck renown a hero may still earn this war tick (HOLD_FALL.wreckRenownPerTick works). */
-  private mayEarn(heroId: string): boolean {
-    const tick = warNow()?.tick ?? -1, e = this.earned.get(heroId);
+  private mayEarn(name: string): boolean {
+    const tick = warNow()?.tick ?? -1, e = earned.get(name);
     const n = e && e.tick === tick ? e.n : 0;
     if (n >= HOLD_FALL.wreckRenownPerTick) return false;
-    this.earned.set(heroId, { tick, n: n + 1 });
+    earned.set(name, { tick, n: n + 1 });
     return true;
   }
 

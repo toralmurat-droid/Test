@@ -12,11 +12,11 @@ import { canFall, HOLD_FALL, holdWorks, parseWork } from "../shared/war/holdFall
 import { fortOf, liveHoldWall } from "../shared/war/holdWalls";
 import { holdTier } from "../shared/war/holdTiers";
 import { patrolOf } from "../shared/war/patrols";
-import { isFallen, newWar, targetsOf, WAR } from "../shared/war/rules";
+import { fellHold, isFallen, newWar, targetsOf, WAR } from "../shared/war/rules";
 import { TERRITORIES } from "../shared/war/territories";
 import { WAR_TROOPS } from "../shared/war/troops";
 import { isSafeZone, SAFE_ZONE } from "../shared/map";
-import { _resetWar, warNow, warState } from "../server/war";
+import { _resetWar, _setWarRole, warNow, warState } from "../server/war";
 import { _resetHolds } from "../server/warHolds";
 import { _resetHoldWorks } from "../server/warHoldWorks";
 
@@ -102,4 +102,77 @@ test("hold works (room): works stand, soldiers come out of the barracks, the Hol
     assert.ok(works().length > 0 && works().every(([, m]) => parseWork(m.weapon)!.clan === FOE), "the new holder's works stand");
     assert.ok(room.holdWorks.barracks(LAND.id), "its barracks stands");
   } finally { await srv.stop(); _resetHoldWorks(); }
+});
+
+test("hold works (room): renown only for legal wrecks, capped per war tick; works outside the troop budget", async () => {
+  const srv = await startRoom();
+  _resetWar({ v: 1, state: newWar(), minds: newMinds(), next: Date.now() + 1e9, log: [] }); _resetHolds(); _resetHoldWorks();
+  const cap = HOLD_FALL.wreckRenownPerTick;
+  try {
+    const c = await srv.join({ cls: "wizard" });
+    await wait(150);
+    const room: any = srv.room, id = c.sessionId, p = room.state.players.get(id);
+    p.level = 30; p.hp = p.maxHp = 1_000_000; p.invulnUntil = Date.now() + 1e9; p.clan = undefined; p.renown = 0; p.lastAct = Date.now();
+    p.x = SPOT.x; p.y = SPOT.y;
+    room.holds.tick = () => {};
+    room.state.mobs.forEach((m: any, mid: string) => { if (m.kind !== "trooper") room.state.mobs.delete(mid); });
+    const before = room.warTroops.h.reserved();
+    room.holdWorks.tick(Date.now());
+    const works = () => { const out: [string, any][] = []; room.state.mobs.forEach((m: any, mid: string) => { if (!m.dead && parseWork(m.weapon) && room.holdWorks.owns(mid)) out.push([mid, m]); }); return out; };
+    assert.ok(works().length >= 3);
+    assert.equal(room.warTroops.h.reserved(), before, "standing works take no troop budget");
+    const kill = (mid: string, m: any) => { m.hp = 0; room.mobDied(m, mid, id, p.name); };
+    // an unsworn hero (no war counts it) earns no renown
+    const [a, am] = works()[0]; kill(a, am);
+    assert.equal(p.renown, 0, "no renown for a wreck the war does not count");
+    // a hero at war with the holder: paid up to the cap per war tick, then again in a new tick
+    (HOLD_FALL as any).wreckRenownPerTick = 1;
+    p.clan = FOE;
+    const [b, bm] = works()[0]; kill(b, bm);
+    const one = p.renown;
+    assert.ok(one > 0, "renown for a legal wreck");
+    const [c2, cm] = works()[0]; kill(c2, cm);
+    assert.equal(p.renown, one, "nothing past the cap in one war tick");
+    warState()!.tick++;
+    room.holdWorks.tick(Date.now());
+    const [d, dm] = works()[0]; kill(d, dm);
+    assert.ok(p.renown > one, "a new war tick pays again");
+  } finally { (HOLD_FALL as any).wreckRenownPerTick = cap; await srv.stop(); _resetHoldWorks(); }
+});
+
+test("hold works (room, follower): the fall waits on the owner with the ruin kept, one claim is queued, no rewards", async () => {
+  const srv = await startRoom();
+  _resetWar({ v: 1, state: newWar(), minds: newMinds(), next: Date.now() + 1e9, log: [] }); _resetHolds(); _resetHoldWorks();
+  const capF = HOLD_FALL.wreckRenownPerTick;
+  try {
+    const c = await srv.join({ cls: "wizard" }), c2 = await srv.join({ cls: "wizard" });
+    await wait(150);
+    const room: any = srv.room, id = c.sessionId, p = room.state.players.get(id), id2 = c2.sessionId, p2 = room.state.players.get(id2);
+    for (const h of [p, p2]) { h.level = 30; h.hp = h.maxHp = 1_000_000; h.invulnUntil = Date.now() + 1e9; h.clan = FOE; h.renown = 0; h.lastAct = Date.now(); h.x = SPOT.x; h.y = SPOT.y; }
+    const holdsTick: (now: number) => void = room.holds.tick.bind(room.holds);
+    room.holds.tick = () => {};
+    room.state.mobs.forEach((m: any, mid: string) => { if (m.kind !== "trooper") room.state.mobs.delete(mid); });
+    room.holdWorks.tick(Date.now());
+    const tier = holdTier(warState()!, LAND.id), want = holdWorks(LAND.id, OWN, tier);
+    const works = () => { const out: [string, any][] = []; room.state.mobs.forEach((m: any, mid: string) => { if (!m.dead && parseWork(m.weapon) && room.holdWorks.owns(mid)) out.push([mid, m]); }); return out; };
+    assert.equal(works().length, want.length);
+    _setWarRole("follower");
+    (HOLD_FALL as any).wreckRenownPerTick = 0; // (only the fall's own rewards are looked at here)
+    for (const [mid, m] of works()) { m.hp = 0; room.mobDied(m, mid, id, p.name); }
+    assert.ok(!isFallen(warState()!, LAND.id), "the follower only queued the fall");
+    assert.equal(p.renown, 0, "no fall rewards on a follower");
+    assert.equal(room.holdWorks.barracks(LAND.id), null, "no soldiers while the fall waits");
+    room.holdWorks.tick(Date.now() + 60_000);
+    assert.equal(works().length, 0, "no works rise while the fall waits");
+    assert.equal(room.holdWorks.view().wrecked.filter((w: number[]) => w[0] === LAND.id).length, want.length, "the ruin is kept while the fall waits");
+    // the owner's fall arrives: one claim goes out from here, the second hero is told so
+    fellHold(warState()!, LAND.id);
+    assert.equal(room.holds.sack(id, { t: LAND.id }), "");
+    const t0 = Date.now();
+    for (let i = 1; i <= 20 && room.holds.count; i++) holdsTick(t0 + i * 1000);
+    assert.equal(room.holds.count, 0);
+    assert.ok(isFallen(warState()!, LAND.id), "the claim waits on the owner");
+    assert.equal(p.renown, 0, "no claim rewards on a follower");
+    assert.match(room.holds.sack(id2, { t: LAND.id }), /banner already flies/);
+  } finally { (HOLD_FALL as any).wreckRenownPerTick = capF; _setWarRole("owner"); await srv.stop(); _resetHoldWorks(); }
 });

@@ -312,7 +312,7 @@ async function takeOver(now: number) {
 }
 /** Taking over: the sacks and claims made here while following and not written to the queue yet, applied at once. */
 function applyPendingActs(now: number) {
-  const acts = pendingActs; pendingActs = []; claimedHere.clear(); claimingHere.clear();
+  const acts = pendingActs; pendingActs = []; claimedHere.clear(); claimingHere.clear(); claimingHere.clear();
   for (const a of acts) applyAct(a, now);
   if (acts.length) void save(now);
 }
@@ -490,7 +490,7 @@ export function holdClaim(t: number, k: ClanKey, hero = "A hero", now = Date.now
   if (!saved || !(t >= 0 && t < saved.state.owner.length) || !CLANS[k]) return false;
   if (role === "follower") { // (queued for the owner; no second claim from here meanwhile)
     if (!isFallen(saved.state, t) || claimingHere.has(t) || !queueAct(["hclaim", t, k, hero.slice(0, 64), { id: `${ACT_RUN}:${++actN}` }])) return false;
-    claimingHere.set(t, Date.now());
+    claimingHere.set(t, now);
     return true;
   }
   if (role !== "owner" || !claimCore(t, k, hero, now)) return false;
@@ -518,9 +518,9 @@ const claimingHere = new Map<number, number>();
 /** Has land t's Hold fallen (no clan claimed it since), as this server knows the war? */
 export const warFallen = (t: number): boolean => !!saved && isFallen(saved.state, t);
 /** Is a claim of fallen land t already on its way to the war's owner from this server (Ages)? */
-export function warClaimQueued(t: number): boolean {
+export function warClaimQueued(t: number, now = Date.now()): boolean {
   const at = claimingHere.get(t);
-  if (at !== undefined && (!saved || !isFallen(saved.state, t) || Date.now() - at > ACT_FATE_MS)) claimingHere.delete(t); // (claimed, or the owner dropped it)
+  if (at !== undefined && (!saved || !isFallen(saved.state, t) || now - at > ACT_FATE_MS)) claimingHere.delete(t); // (claimed, or the owner dropped it)
   return claimingHere.has(t);
 }
 
@@ -960,6 +960,9 @@ export function flushWar(): Promise<void> {
   if (role === "owner") role = "follower";
   return last.then(() => saving).then(() => l.release());
 }
+
+/** Tests: act as a follower of the war (Ages) without a store or a lease. */
+export function _setWarRole(r: "owner" | "follower") { role = r; }
 
 /** Tests: start from a given state without a store or a clock. */
 export function _resetWar(s?: Saved, store?: Kv) {
