@@ -122,7 +122,7 @@ interface Built { prims: Prim[]; eyes: V3[]; eyeCol: number; handNear: V3; handF
  * Run cycle joints (3D, rig units). Each leg: a short stance (the foot planted and sliding back under the body at
  * ground speed), then a swing where the heel kicks up behind and the knee drives forward; both feet are off the ground
  * between strides. Arms pump bent at the elbow, opposite to the legs; the upper body leans into the run.
- * Leg 0 touches down at phase 0, leg 1 half a cycle later. With RUN_A below, one cycle covers 2 x 2 x RUN_A / RUN_STANCE
+ * Leg 0 touches down at phase 0, leg 1 half a cycle later. With RUN_A below, one cycle covers 2 x RUN_A / RUN_STANCE (about 35 rig units)
  * of ground at the speed where the feet do not slide (the client scales the animation to the hero's real speed).
  */
 export const RUN_STANCE = 0.32, RUN_A = 5.6;
