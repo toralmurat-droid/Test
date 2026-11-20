@@ -158,8 +158,12 @@ test("battles (room): the lines wake near a hero in slots of their own; only swo
       const along = (q: { x: number; y: number }) => Math.abs((q.x - c.x) * lv.ax.x + (q.y - c.y) * lv.ax.y) / TILE;
       assert.ok(along(p0) >= BATTLE.lineGapTiles - 0.01, "at first on its line");
       assert.ok(along(p1) <= BATTLE.meetTiles + 0.01 || p1 === lv.places[0][i].at, `then in the clash (${along(p1).toFixed(2)} tiles from the centre)`); }
-    const per = Math.min(BATTLE.perSide, b.men0[0]);
+    // the room fields the pool as it stands when the lines wake, up to perSide: a slow start (a loaded machine) lets the
+    // clock step the battle first, and a pool under perSide (this site's attackers) is then a man or two short of men0
+    const per = Math.min(BATTLE.perSide, b.men[0]);
+    assert.ok(per >= BATTLE.perSide / 2, `a real line (${per} men)`);
     assert.equal(lv.places[0].filter((x: any) => x.id).length, per);
+    assert.equal(lv.places[1].filter((x: any) => x.id).length, Math.min(BATTLE.perSide, b.men[1]));
     assert.ok(room.battles.count <= BATTLE.extraTroops);
     let troopers = 0; room.state.mobs.forEach((m: any) => { if (m.kind === "trooper") troopers++; });
     assert.ok(troopers <= WAR_TROOPS.maxTroops + BATTLE.extraTroops, `${troopers} troopers in the room`);
