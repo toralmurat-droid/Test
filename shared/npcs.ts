@@ -6,6 +6,7 @@ import { BR } from "./badlands";
 import { SR } from "./sinkholes";
 import { CR } from "./crown";
 import { CITIES, CITY_SOLIDS, CITY_TEMPLATE, cityNpcId, cityNpcPx, cityShopId, cityText } from "./capitals";
+import { LANDMARK_SOLIDS } from "./landmarks";
 
 /** Village NPCs: where they stand (feet, in pixels) and which sprite sheet they use. Server and client share this. */
 export interface Npc {
@@ -165,14 +166,15 @@ export const NPC_DECOR: NpcDecor[] = [
 ];
 
 /**
- * Solid trader props bucketed by 4-tile cell (the villages are far apart: one bounding box over all of them would
+ * Solid trader props (and landmarks) bucketed by 4-tile cell (the villages are far apart: one bounding box over all of them would
  * cover most of the map), so most collision checks find an empty cell and stop there.
  */
 const DECOR_CELL = 4;
 let decorCells: Map<number, [number, number, number, number][]> | undefined;
 function decorGrid() {
   const m = new Map<number, [number, number, number, number][]>();
-  for (const r of [...NPC_DECOR.flatMap((d) => (d.solid ? [d.solid] : [])), ...CITY_SOLIDS]) { // the capitals' war tables, altars, dummies (shared/capitals.ts)
+  // the capitals' war tables, altars, dummies (shared/capitals.ts) and the lands' landmarks (shared/landmarks.ts)
+  for (const r of [...NPC_DECOR.flatMap((d) => (d.solid ? [d.solid] : [])), ...CITY_SOLIDS, ...LANDMARK_SOLIDS.map((b): [number, number, number, number] => [b[0], b[1], b[2], b[3]])]) {
     for (let cy = Math.floor(r[1] / DECOR_CELL); cy <= Math.floor((r[1] + r[3]) / DECOR_CELL); cy++)
       for (let cx = Math.floor(r[0] / DECOR_CELL); cx <= Math.floor((r[0] + r[2]) / DECOR_CELL); cx++) {
         const k = cy * 4096 + cx;
@@ -182,7 +184,7 @@ function decorGrid() {
   return m;
 }
 
-/** True if (px, py) is inside one of the NPC props that block movement. */
+/** True if (px, py) is inside one of the NPC props or landmarks that block movement. */
 export function isDecorSolidAt(px: number, py: number): boolean {
   const tx = px / TILE, ty = py / TILE;
   const w = WRECK.solid;

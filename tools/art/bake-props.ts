@@ -18,6 +18,7 @@ import { spiritLantern } from "../../client/src/lanternArt";
 import * as el from "../../client/src/elementArt";
 import { standingStone, throne } from "../../client/src/throneArt";
 import { DEEP3D } from "./paint/deep3d";
+import { OAKVALE_KIT } from "./paint/landKit/oakvale";
 import * as painted from "../../client/src/isoProps";
 import { BLACKR, REDR } from "../../client/src/isoProps";
 import { cow } from "../../client/src/farmArt";
@@ -59,7 +60,8 @@ function paintedFrame(key: string, w: number, h: number, f: number) {
 mkdirSync(OUT, { recursive: true });
 const PREVIEW = process.env.PREVIEW;
 if (PREVIEW) mkdirSync(PREVIEW, { recursive: true });
-for (const P of [...PROPS3D, ...SIEGE_WORKS, ...DUNGEON3D, ...DEEP3D, ...WRECK3D, ...ELEMENTS3D, ...TENT3D, ...SHARDS3D, ...STANDARDS3D]) {
+// the land kits (settlement network step 3): one file per land in paint/landKit/
+for (const P of [...PROPS3D, ...SIEGE_WORKS, ...DUNGEON3D, ...DEEP3D, ...WRECK3D, ...ELEMENTS3D, ...TENT3D, ...SHARDS3D, ...STANDARDS3D, ...OAKVALE_KIT]) {
   if (only.length && !only.includes(P.key)) continue;
   const t0 = Date.now();
   const sheet = bakeSheet(P.w, P.h, P.frames, (f) => renderProp(P.model(f), P.w, P.h, P.ox, P.oy), (P as { shadow?: number }).shadow ?? 0);

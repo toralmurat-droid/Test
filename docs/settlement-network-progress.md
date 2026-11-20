@@ -57,5 +57,34 @@ Roadmap: client/src/roadmap.ts, "Settlement network".
     HIGHWAY_MASK, hashes the same as the map before PR 1. Hold atlases rebaked.
   - `tools/highway-route.ts`: `NOFORT=1` routes along the old road past forts (without it, the fort penalty makes detours).
 
+- Step 3, PR 1: land identity framework + Oakvale (plan: each land gets a kit of props, one house look and one landmark).
+  - Owner calls (Murat 2026-11-20, the plan's defaults): landmarks block movement, kit props are walk-through; the windmill
+    stands on North Meadow; the five clan seats stay undressed until step 5; Tollcross gets cosmetic pavilions (PR 4).
+  - `shared/landmarks.ts`: `LANDMARKS` (id, land, area, foot, optional `solid` box in tiles) and `LANDMARK_SOLIDS`, added to
+    the decor collision grid in `shared/npcs.ts` (`isDecorSolidAt`) next to `CITY_SOLIDS`. Not in `NPC_DECOR` (siege works,
+    tunnels and rituals read that). Oakvale: the windmill, foot 94.5,31.5, solid 93.6,30.6 1.8x1.8.
+  - `client/src/landKit.ts` (Phaser-free): `kitFree` keep-clear rule (3x3 of empty or nature, no road/highway/water/bridge
+    beside it, no field under it except for `ON_FIELD` kinds, no fence gateway; 2.5 tiles from NPCs and NPC_DECOR, 2 from
+    signposts, chests, bounty boards, quest objects; 3 from portal stones and war-town gates/banners/stewards; 7 from forts
+    and musters; the siege-site box; barns; 1.5 round a landmark box; never in a `CAPITAL_FORTS` skip box + `SEAT_MARGIN`
+    12; clear of the world props). `LAND_KIT_SPOTS`: per-land `Place` lists scattered by a fixed hash; budget 40 per land.
+  - `client/src/worldPropSpots.ts`: worldProps.ts's placement (spots, scatter, free) moved out, Phaser-free, so the kits
+    keep clear of it. `client/src/landKitSheets.ts`: one size table for the bake, the client and the test.
+  - `client/src/landKitView.ts`: preload (from `preloadBakedProps`) and placement (from `addWorldProps`), static chunks,
+    skips a sheet that failed to load. The windmill's sails turn as a 6-frame sheet (a quarter turn, 5 fps).
+  - Art: `tools/art/paint/landKit/oakvale.ts` (stook, scarecrow with a crow, grain cart, beehives, hide frame, windmill),
+    listed in `tools/art/bake-props.ts`, sheets `client/public/assets/hd/props/lk_*.png`. One file per land, so the next
+    lands' models can be made in parallel.
+  - Oakvale's 26 props: North Meadow (cart, 9 stooks, hives round the windmill), Goldenreach's north field (scarecrow, 8
+    stooks, hives by the barn; the fort end is the seat), Millbrook (cart and hives west of the mill: north of it the roof
+    hides them), the Hunter's Camp (2 hide frames), Oakvale's square (a cart on the east edge).
+  - Text: Odo's and Huntmaster Bryn's IDLE lines (shared/quests.ts), Brann's and Hilda's greetings (shared/shops.ts).
+  - `tests/landKit.test.ts`: determinism, keep-clear rules, seats, budget, sheet sizes on disk, landmark boxes on open
+    ground and blocking, reachability with and without the landmarks, and digests of chests, siege sites, forts and musters
+    taken on the commit before (unchanged). No map tile changed: map hashes and map-metrics untouched.
+  - Not done: Oakvale's working townsfolk (sack carriers at Millbrook), left for later; the spare millstone from the plan.
+
 ## Next
+- Step 3, PR 2: Moors + Badlands (LAND_LOOK refactor, cairn/drover house styles, Beacon Cairn, headframe, longhorns, folk).
+  PR 3: Sinkholes + Sunscar. PR 4: Crown. Each adds a `tools/art/paint/landKit/<land>.ts` and its `Place` list in landKit.ts.
 - Later: 3-wide bridges (client isobridge.ts), per-land cobble palettes, highways on the war table (all owner calls: no for now).
