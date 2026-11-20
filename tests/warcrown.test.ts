@@ -8,7 +8,7 @@ import { SPAWN_ZONES } from "../shared/spawns";
 import { CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import { newMinds, scriptedOrders } from "../shared/war/doctrine";
 import { regionByKey } from "../shared/war/regions";
-import { bordersOf, newWar, nightRaid, sackHold, targetsOf, warTick, WAR, type WarState } from "../shared/war/rules";
+import { bordersOf, landOf, newWar, nightRaid, sackHold, targetsOf, warTick, WAR, type WarState } from "../shared/war/rules";
 import { HOLDS, STANDARDS, STANDARD } from "../shared/war/standards";
 import { initialOwners, isSanctuary, leastLanded, linkPairs, TERRITORIES, territoryByName } from "../shared/war/territories";
 
@@ -37,19 +37,24 @@ test("crown war: ten territories after the homelands (ids 62-71), no capital; th
   }
 });
 
-test("crown war: each Crownway joins its homeland's capital to one approach, warded by that homeland's clan", () => {
+test("crown war: each homeland's border road to the Crown joins its rim to the approach its Crownway opens into, warded by that homeland's clan", () => {
+  // since the coherence review (2026-11-20) the war links are the walkable border roads, not the Crownway gates
   const pairs = linkPairs(TERRITORIES).filter((p) => p.link.b === "crown");
   assert.equal(pairs.length, 5);
+  assert.deepEqual(Object.fromEntries(pairs.map((p) => [p.link.a, p.link.name])), { oakvale: "The Greenward Road", moors: "The Mourning Road",
+    badlands: "The Redgate Road", sinkholes: "The Deep Road", sunscar: "The Sun Road" });
   const wards = new Map<string, ClanKey>();
   for (const c of CROWNWAYS) {
-    const p = pairs.find((x) => x.link.name === c.name)!, g = crownGateTile(c), A = TERRITORIES[p.b];
+    const p = pairs.find((x) => x.link.a === c.from)!, g = crownGateTile(c), A = TERRITORIES[p.b];
     assert.equal(TERRITORIES[p.a].region, c.from);
-    // from a capital at home (the Greenward Gate stands under the Stormbreak Crags, the Host's Oakvale foothold)
-    assert.equal(TERRITORIES[p.a].capitalOf, c.from === "oakvale" ? "host" : homeOf(c.from), `${c.name}: from a capital`);
-    assert.ok(g.x >= A.x && g.x < A.x + A.w && g.y >= A.y && g.y < A.y + A.h + 4, `${c.name}: its gate opens into ${A.name}`);
+    // from an ordinary rim land (the Greenward Road leaves Oakvale at the Stormbreak Crags, no capital any more)
+    assert.ok(!TERRITORIES[p.a].capitalOf && !TERRITORIES[p.a].haven, `${p.link.name}: from a fought rim land, not ${TERRITORIES[p.a].name}`);
+    assert.ok(g.x >= A.x && g.x < A.x + A.w && g.y >= A.y && g.y < A.y + A.h + 4, `${c.name}: its gate opens into ${A.name}, where ${p.link.name} arrives`);
     assert.equal(A.wards, homeOf(c.from), `${A.name}: warded by ${homeOf(c.from)}`);
     wards.set(A.name, A.wards!);
   }
+  assert.equal(TERRITORIES[pairs.find((p) => p.link.a === "oakvale")!.a].name, "Stormbreak Crags");
+  assert.equal(TERRITORIES[pairs.find((p) => p.link.a === "oakvale")!.b].name, "The Pilgrims' Way");
   assert.deepEqual(Object.fromEntries(wards), { "The Pilgrims' Way": "wardens", "The Spirefall": "host", "The Field of Statues": "redfang",
     "The Sunken Courts": "hidekin", "The Ember Gardens": "veiled" });
   assert.equal(CROWN.filter((t) => t.wards).length, 5, "the inner lands and the Keep have no warden");
@@ -62,8 +67,10 @@ test("crown war: a new war gives the approaches to their wardens, the inner land
   for (const t of CROWN) if (t.wards) assert.equal(o[t.id], t.wards, t.name);
   const before = o.map((k, i) => (i === KEEP.id ? undefined : k));
   assert.equal(o[KEEP.id], leastLanded(before), "the Keep: the clan holding the least land without it");
-  // the claims in the Crown keep each clan's share near a fair one (no clan starts above 16 of 72)
-  for (const k of CLAN_KEYS) { const n = o.filter((x) => x === k).length; assert.ok(n >= 12 && n <= 16, `${k}: ${n}`); }
+  // the claims in the Crown keep each clan's share of the fought land near a fair one (no clan starts above 16 of the
+  // 66 outside the heartland; the Wardens' six Oakvale havens count for nobody, rules.ts landOf)
+  for (const k of CLAN_KEYS) { const n = landOf({ owner: o }, k); assert.ok(n >= 12 && n <= 16, `${k}: ${n}`); }
+  assert.equal(o.filter((x, i) => x === "wardens" && TERRITORIES[i].haven).length, 6, "the havens start the Wardens'");
   assert.equal(leastLanded(["wardens", "redfang", "redfang", "host", "host", "hidekin", "hidekin", "veiled", "veiled"]), "wardens");
   assert.equal(leastLanded(["wardens", "redfang", "host", "hidekin", "veiled"]), "wardens", "a tie goes to the first in CLAN_KEYS order");
   // a preset (a saved war) is kept; only the unset territories are claimed

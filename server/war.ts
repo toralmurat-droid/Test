@@ -177,7 +177,7 @@ export function migrateWar(saved: Saved, oldNames: readonly string[], names: rea
   };
   if (st.fallen) { const f = pick(st.fallen, () => 0); if (f.some((x) => x === 1)) state.fallen = f; else delete state.fallen; } // (fallen Holds follow their land)
   for (let i = 0; i < names.length; i++) {
-    const cap = ts.find((x) => x.name === names[i])?.capitalOf;
+    const t = ts.find((x) => x.name === names[i]), cap = t?.capitalOf ?? t?.haven; // (a heartland haven goes home too: coherence review 2026-11-20)
     if (cap && state.owner[i] !== cap) { state.owner[i] = cap; state.control[i] = 100; state.siege[i] = null; }
     if (cap && state.fallen) state.fallen[i] = 0; // (a capital never stands fallen)
   }

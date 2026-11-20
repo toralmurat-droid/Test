@@ -13,7 +13,7 @@
  * by night they bleed its army and strike its weakest border lands (roadmap M2: the brakes on a runaway clan).
  */
 import { CLANS, CLAN_KEYS, type ClanKey } from "./clans";
-import { initialOwners, TERRITORIES, type Territory } from "./territories";
+import { initialOwners, TERRITORIES, warProof, type Territory } from "./territories";
 
 export const WAR = {
   tickMs: 10 * 60_000,
@@ -25,7 +25,7 @@ export const WAR = {
   upkeep: 0.02, // share of the army lost to upkeep each tick, so armies settle near income / upkeep
   supplyDecay: 0.25, // supply = 1 / (1 + decay x borders from the nearest own capital)
   cutOff: 0.35, // supply of land with no road back to a capital
-  defender: 1.3,
+  defender: 1.1, // (1.3 until the fronts moved to the roads, 2026-11-20: fewer fronts concentrate the defence, so the edge is smaller)
   counter: 1.2, // attacking the clan you counter
   doctrine: 1.25, // night for the Host, noon for the Veiled
   controlDiv: 25, // (attack - defence) / controlDiv = Control points per tick...
@@ -108,11 +108,11 @@ export const isFallen = (s: Pick<WarState, "fallen">, t: number) => s.fallen?.[t
 /**
  * Territory t's Hold fell (every work wrecked, shared/war/holdFall.ts): it stands neutral, the holder loses its grip and
  * its works (Control and `fort` to 0) until a clan claims it (claimFallen). An announced siege stays: an army may still
- * take it. False (nothing changed) for a capital, Reckoning-only ground or a Hold already fallen. Mutates `s`.
+ * take it. False (nothing changed) for a capital, Reckoning-only ground, a heartland haven or a Hold already fallen. Mutates `s`.
  */
 export function fellHold(s: WarState, t: number): boolean {
   const tr = TERRITORIES[t];
-  if (!tr || tr.capitalOf || tr.reckoningOnly || t >= s.owner.length || isFallen(s, t)) return false;
+  if (!tr || tr.capitalOf || warProof(tr) || t >= s.owner.length || isFallen(s, t)) return false;
   (s.fallen ??= Array(s.owner.length).fill(0))[t] = 1;
   s.control[t] = 0; s.fort[t] = 0;
   return true;
@@ -137,11 +137,14 @@ export function newWar(): WarState {
 }
 
 export const phaseOf = (tick: number) => tick % WAR.phases; // 0 noon, 1 dusk, 2 night
-export const landOf = (s: WarState, k: ClanKey) => s.owner.filter((o) => o === k).length;
+/** Land that is fought over (foughtCount: how many such territories; writs.ts shares it): the heartland havens (territories.ts haven) never count toward a clan's share of the war. */
+const fought = (i: number) => !TERRITORIES[i]?.haven;
+export const foughtCount = (owner: readonly (ClanKey | undefined)[]) => owner.reduce((n, _, i) => n + (fought(i) ? 1 : 0), 0) || 1;
+export const landOf = (s: Pick<WarState, "owner">, k: ClanKey) => s.owner.reduce((n, o, i) => n + (o === k && fought(i) ? 1 : 0), 0);
 /** The clan holding more than WAR.leaderShare of the land, if any. */
 export function leaderOf(s: WarState): ClanKey | undefined {
   const best = CLAN_KEYS.reduce((a, b) => (landOf(s, b) > landOf(s, a) ? b : a));
-  return landOf(s, best) / s.owner.length > WAR.leaderShare ? best : undefined;
+  return landOf(s, best) / foughtCount(s.owner) > WAR.leaderShare ? best : undefined;
 }
 
 /**
@@ -149,7 +152,7 @@ export function leaderOf(s: WarState): ClanKey | undefined {
  * land and WAR.huntLead territories more than any other clan. Takes the owners only, so the client can ask it too.
  */
 export function huntedClan(s: Pick<WarState, "owner">): ClanKey | undefined {
-  const land = CLAN_KEYS.map((k) => s.owner.filter((o) => o === k).length), n = s.owner.length || 1;
+  const land = CLAN_KEYS.map((k) => landOf(s, k)), n = foughtCount(s.owner);
   const top = Math.max(...land), i = land.indexOf(top), second = Math.max(...land.filter((_, j) => j !== i));
   if (top / n > WAR.leaderShare && top > second) return CLAN_KEYS[i];
   return top / n >= WAR.huntShare && top - second >= WAR.huntLead ? CLAN_KEYS[i] : undefined;
@@ -171,9 +174,9 @@ export function nightRaid(s: WarState, phase: number): { clan: ClanKey; ts: numb
  * Takes the owners only, so the client and the writ board name the same clan.
  */
 export function rallyClan(s: Pick<WarState, "owner">): ClanKey | undefined {
-  const land = (k: ClanKey) => s.owner.filter((o) => o === k).length;
+  const land = (k: ClanKey) => landOf(s, k);
   const k = CLAN_KEYS.reduce((a, b) => (land(b) < land(a) ? b : a));
-  return land(k) < WAR.rallyBelow * (s.owner.length / CLAN_KEYS.length) ? k : undefined;
+  return land(k) < WAR.rallyBelow * (foughtCount(s.owner) / CLAN_KEYS.length) ? k : undefined;
 }
 /** Renown multiplier for a hero sworn to clan `k` (WAR.rallyRenown while the war rallies for `k`). */
 export const rallyRenown = (s: Pick<WarState, "owner"> | undefined, k: ClanKey | undefined): number =>
@@ -204,14 +207,14 @@ export function targetsOf(s: Pick<WarState, "owner">, k: ClanKey): number[] {
     for (const id of frontier) for (const n of TERRITORIES[id].near) {
       if (seen.has(n)) continue;
       seen.add(n);
-      if (s.owner[n] !== k) { if (!TERRITORIES[n]?.reckoningOnly) out.add(n); next.push(n); }
+      if (s.owner[n] !== k) { if (!warProof(TERRITORIES[n])) out.add(n); next.push(n); }
     }
     frontier = next;
   }
   return [...out];
 }
 /** Own territories that touch an enemy (where defenders stand). Reckoning-only ground is none: nobody can strike it. */
-export const bordersOf = (s: WarState, k: ClanKey) => TERRITORIES.filter((t) => s.owner[t.id] === k && !t.reckoningOnly && t.near.some((n) => s.owner[n] !== k)).map((t) => t.id);
+export const bordersOf = (s: WarState, k: ClanKey) => TERRITORIES.filter((t) => s.owner[t.id] === k && !warProof(t) && t.near.some((n) => s.owner[n] !== k)).map((t) => t.id);
 
 /** The doctrine's time-of-day bonus of clan `k` in phase `p` (night for the Host, noon for the Veiled; rituals.ts reads it). */
 export const timeBonus = (k: ClanKey, p: number) => {
@@ -278,7 +281,7 @@ export const valorForce = (v: number) => (v > 0 ? WAR.valorCap * (1 - Math.exp(-
  * holder's own clan or a land already under siege.
  */
 export function sackHold(s: WarState, t: number, k: ClanKey | undefined, half: boolean): { control: number; siege?: Siege } | undefined {
-  if (!Number.isInteger(t) || t < 0 || t >= s.owner.length || TERRITORIES[t]?.reckoningOnly || s.siege[t] || (k && s.owner[t] === k)) return undefined;
+  if (!Number.isInteger(t) || t < 0 || t >= s.owner.length || warProof(TERRITORIES[t]) || s.siege[t] || (k && s.owner[t] === k)) return undefined;
   s.control[t] = Math.max(0, s.control[t] - WAR.sackControl * (half ? 0.5 : 1));
   s.fort[t] = Math.max(0, (s.fort[t] ?? 0) - WAR.sackFort * (half ? 0.5 : 1));
   const out: { control: number; siege?: Siege } = { control: s.control[t] };
@@ -326,7 +329,7 @@ export function warTick(s: WarState, orders: Partial<Record<ClanKey, Orders>>, e
     let inc = 0;
     for (const t of TERRITORIES) if (s.owner[t.id] === k && !isFallen(s, t.id)) inc += (t.capitalOf === k ? WAR.capitalIncome : WAR.income) * supply[t.id];
     // Rally: the less land a clan holds below a fair share, the more its people take up arms
-    inc *= 1 + WAR.rally * Math.max(0, 1 - land[k] / (s.owner.length / CLAN_KEYS.length));
+    inc *= 1 + WAR.rally * Math.max(0, 1 - land[k] / (foughtCount(s.owner) / CLAN_KEYS.length));
     if (extra.towns) inc += WAR.townIncome * townCount(extra.towns, k); // held towns (W6); nothing at all without them
     s.army[k] = s.army[k] * (1 - WAR.upkeep) + inc;
   }
@@ -394,7 +397,7 @@ export function warTick(s: WarState, orders: Partial<Record<ClanKey, Orders>>, e
       if (CLANS[k].doctrine === "raid") { const take = Math.min(s.army[own], v * WAR.raidSteal); s.army[own] -= take; s.army[k] += take / 2; }
     }
     s.control[id] = Math.max(0, Math.min(100, s.control[id] - Math.max(-WAR.maxShift, Math.min(WAR.maxShift, (total - def) / WAR.controlDiv))));
-    if (t.capitalOf === own || t.reckoningOnly) continue; // capitals never fall, nor the Crown Keep (only a Reckoning moves it)
+    if (t.capitalOf === own || warProof(t)) continue; // capitals never fall, nor the Crown Keep (only a Reckoning moves it) or a haven
     const top = (Object.entries(atk) as [ClanKey, number][]).reduce((a, b) => (b[1] > a[1] ? b : a));
     const sg = s.siege[id];
     if (!sg && s.control[id] <= WAR.siegeAt) s.siege[id] = { by: top[0], at: s.tick + WAR.siegeWarnTicks };

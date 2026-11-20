@@ -31,13 +31,15 @@ test("feuds: at war on the opening map = the pairs that can strike each other's 
     setWarRelations(newWar().owner, 0);
     const war = new Set(warPairs().map((p) => key(...clansOf(p)!)));
     // the pairs whose land touches (since the Crown joined, 2026-11-16, its approaches and inner lands bring every clan
-    // to the others' borders: the Hide-Kin meet the Host and the Veiled there)...
-    for (const [a, b] of [["host", "veiled"], ["redfang", "wardens"], ["host", "wardens"], ["veiled", "wardens"], ["host", "redfang"], ["hidekin", "wardens"],
+    // to the others' borders: the Hide-Kin meet the Host and the Veiled there; since the fronts follow the border roads,
+    // 2026-11-20, Redfang reach the Veiled over the Crown's Vigil Courts)...
+    for (const [a, b] of [["host", "veiled"], ["redfang", "wardens"], ["host", "wardens"], ["redfang", "veiled"], ["host", "redfang"], ["hidekin", "wardens"],
       ["hidekin", "host"], ["hidekin", "veiled"]] as [ClanKey, ClanKey][])
       assert.ok(atWar(a, b) && atWar(b, a), `${a}-${b} at war`);
     // ...and the Hide-Kin reach the Redfang two borders away by tunnel (and over the Crown's Mourning Gardens)
     assert.ok(atWar("hidekin", "redfang"), "hidekin-redfang: within tunnel reach");
-    for (const [a, b] of [["redfang", "veiled"]] as [ClanKey, ClanKey][]) assert.ok(!atWar(a, b), `${a}-${b} at peace`);
+    // ...but the Wardens and the Veiled share no front: Oakvale's heartland and roads never touch the Sunscar's land
+    for (const [a, b] of [["veiled", "wardens"]] as [ClanKey, ClanKey][]) assert.ok(!atWar(a, b), `${a}-${b} at peace`);
     assert.equal(war.size, 9);
     assert.ok(!atWar("wardens", "wardens"));
   } finally { _resetWarRelations(); }
@@ -73,13 +75,13 @@ test("feuds: the stance matrix (ally, at war, at peace, grudge, Wanted, newcomer
   try {
     setWarRelations(newWar().owner, 0);
     const L = STANDARD.minLevel, now = T0;
-    const grudge: FeudState = { redfang: { until: now + 1000 } }, wanted: FeudState = { redfang: { pts: FEUD.tiers[0], at: now } };
+    const grudge: FeudState = { redfang: { until: now + 1000 } }, grudgeV: FeudState = { veiled: { until: now + 1000 } }, wanted: FeudState = { redfang: { pts: FEUD.tiers[0], at: now } };
     assert.equal(troopStance("redfang", { clan: "redfang", level: 20, feud: wanted }, now), "ally", "own clan stays an ally, even Wanted");
     assert.equal(troopStance("redfang", { clan: "wardens", level: 20 }, now), "enemy", "at war");
-    assert.equal(troopStance("redfang", { clan: "veiled", level: 20 }, now), "neutral", "at peace");
+    assert.equal(troopStance("veiled", { clan: "wardens", level: 20 }, now), "neutral", "at peace");
     assert.equal(troopStance("redfang", { level: 20 }, now), "neutral", "unsworn");
     assert.equal(troopStance("redfang", { level: 20, feud: grudge }, now), "enemy", "a grudge");
-    assert.equal(troopStance("redfang", { clan: "veiled", level: 20, feud: grudge }, now), "enemy", "a grudge beats peace");
+    assert.equal(troopStance("veiled", { clan: "wardens", level: 20, feud: grudgeV }, now), "enemy", "a grudge beats peace");
     assert.equal(troopStance("redfang", { level: 20, feud: grudge }, now + 1000), "neutral", "the grudge ran out");
     assert.equal(troopStance("redfang", { level: 20, feud: wanted }, now + 60_000), "enemy", "Wanted implies a grudge");
     assert.equal(troopStance("host", { level: 20, feud: grudge }, now), "neutral", "a grudge is with one clan only");
@@ -178,7 +180,7 @@ test("feuds: every clan has leader lines for every feud moment", () => {
 
 test("feuds: a sworn hero fighting a clan at war builds Wanted only slowly; a provoked neutral clan's kills and an unsworn hero's count in full", () => {
   try {
-    setWarRelations(newWar().owner, 0); // opening map: Redfang at war with the Wardens, at peace with the Veiled
+    setWarRelations(newWar().owner, 0); // opening map: Redfang at war with the Wardens; the Veiled at peace with the Wardens
     const now = T0;
     assert.equal(killPoints("soldier", "wardens", "redfang"), FEUD.pts.soldier * FEUD.warKillWeight);
     assert.equal(killPoints("hero", "wardens", "redfang"), FEUD.pts.hero * FEUD.warKillWeight);
@@ -188,10 +190,10 @@ test("feuds: a sworn hero fighting a clan at war builds Wanted only slowly; a pr
     assert.ok(war.redfang!.pts! > 3 && war.redfang!.pts! < FEUD.tiers[0]);
     for (let i = 0; i < 2; i++) addKill(war, "redfang", killPoints("soldier", "wardens", "redfang"), now);
     assert.equal(war.redfang!.pts, FEUD.tiers[0], "thirds add up exactly: a rampage of 12 does make them Wanted");
-    // the Veiled, at peace with Redfang, provoked them: full points
-    const prov: FeudState = { redfang: { until: now + FEUD.grudgeMs } };
-    for (let i = 0; i < 4; i++) addKill(prov, "redfang", killPoints("soldier", "veiled", "redfang"), now);
-    assert.equal(wantedTier(prov, "redfang", now), 1, "4 kills of a provoked neutral clan: Wanted");
+    // the Wardens, at peace with the Veiled, provoked them: full points
+    const prov: FeudState = { veiled: { until: now + FEUD.grudgeMs } };
+    for (let i = 0; i < 4; i++) addKill(prov, "veiled", killPoints("soldier", "wardens", "veiled"), now);
+    assert.equal(wantedTier(prov, "veiled", now), 1, "4 kills of a provoked neutral clan: Wanted");
     assert.equal(killPoints("soldier", undefined, "redfang"), FEUD.pts.soldier, "unsworn: full");
     assert.equal(killPoints("officer", "redfang", "redfang"), FEUD.pts.officer, "(own clan never reaches here: the server skips it)");
     // fractions survive the save and the client view

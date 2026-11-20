@@ -36,11 +36,11 @@ test("troops: the clan and part ride in Mob.weapon and round-trip; nothing else 
 
 test("troops: stance table (own clan, a clan at war, a clan at peace, unsworn, under the oath level)", () => {
   const L = STANDARD.minLevel;
-  setWarRelations(newWar().owner, 0); // the opening map: Redfang border the Wardens, not the Veiled (shared/war/feuds.ts)
+  setWarRelations(newWar().owner, 0); // the opening map: Redfang border the Wardens; the Wardens and the Veiled share no front (shared/war/feuds.ts)
   try {
     assert.equal(troopStance("redfang", { clan: "redfang", level: 20 }), "ally");
     assert.equal(troopStance("redfang", { clan: "wardens", level: 20 }), "enemy", "sworn to a clan at war with them");
-    assert.equal(troopStance("redfang", { clan: "veiled", level: 20 }), "neutral", "since feuds: a clan they don't border leaves its heroes alone");
+    assert.equal(troopStance("wardens", { clan: "veiled", level: 20 }), "neutral", "since feuds: a clan they don't border leaves its heroes alone");
     assert.equal(troopStance("redfang", { level: 20 }), "neutral");
     assert.equal(troopStance("redfang", { level: L - 1 }), "neutral", "newcomers are left alone");
     assert.equal(troopStance("redfang", { clan: "wardens", level: L - 1 }), "neutral");

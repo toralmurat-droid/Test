@@ -10,7 +10,7 @@
 import { CARAVAN, caravanLines, caravanRoute, type CaravanLine } from "./caravans";
 import { CLAN_KEYS, type ClanKey } from "./clans";
 import { patrolOf } from "./patrols";
-import { bordersOf, landOf, rallyClan, targetsOf, type WarState } from "./rules";
+import { bordersOf, foughtCount, landOf, rallyClan, targetsOf, type WarState } from "./rules";
 import { STANDARD, STANDARDS, isClan } from "./standards";
 import { TERRITORIES } from "./territories";
 import { WAR_TROOPS } from "./troops";
@@ -86,7 +86,7 @@ export const landLevel = (t: number) => { const l = TERRITORIES[t]?.levels ?? [1
  * times that while the war rallies for `k` (the weakest clan; the Rally on valor and renown is in rules.ts).
  */
 export function writRally(s: Pick<WarState, "owner">, k: ClanKey): number {
-  const fair = s.owner.length / CLAN_KEYS.length;
+  const fair = foughtCount(s.owner) / CLAN_KEYS.length; // (over fought land: the havens never count, as in rallyClan)
   return (1 + WRIT.rally * Math.max(0, 1 - landOf(s as WarState, k) / fair)) * (rallyClan(s) === k ? WRIT.rallyClan : 1);
 }
 

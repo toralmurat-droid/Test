@@ -102,10 +102,12 @@ test("ritual acolytes (room): HP in their roles, the archer inside the circle", 
 
 test("tunnel waves (room): each wave in its roles by place, HP with the squad multipliers, a pike tethered by the mouth", async () => {
   const HK: ClanKey = "hidekin", s0 = newWar();
+  // an Act 1 target if there is any; since the fronts follow the border roads (2026-11-20) the Hide-Kin no longer border
+  // Oakvale, so another land's (as tests/wartunnels-room.test.ts): the waves and their roles are the same in every land
   const pick = (() => {
-    for (const t of targetsOf(s0, HK)) {
+    for (const act1 of [true, false]) for (const t of targetsOf(s0, HK)) {
       const T = TERRITORIES[t], g = tunnelStrikes(s0, { [HK]: { defend: 0.5, attack: [{ t, share: 1 }] } })[0];
-      if (g && T.act === 1 && !T.capitalOf && Math.hypot(T.cx - (SAFE_ZONE.x + SAFE_ZONE.w / 2), T.cy - (SAFE_ZONE.y + SAFE_ZONE.h / 2)) >= 60) return { t, from: g.from };
+      if (g && (!act1 || T.act === 1) && !T.capitalOf && Math.hypot(T.cx - (SAFE_ZONE.x + SAFE_ZONE.w / 2), T.cy - (SAFE_ZONE.y + SAFE_ZONE.h / 2)) >= 60) return { t, from: g.from };
     }
     throw new Error("no tunnel target");
   })();

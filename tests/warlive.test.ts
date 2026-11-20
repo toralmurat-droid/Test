@@ -5,7 +5,7 @@ import { newMinds } from "../shared/war/doctrine";
 import { newWar, targetsOf, valorForce, WAR, warTick } from "../shared/war/rules";
 import { TERRITORIES } from "../shared/war/territories";
 import { territoryAt, warView } from "../shared/war/view";
-import { _resetWar, addValor, onWar, step, warLog, warNow, warTowns, type SavedWar } from "../server/war";
+import { _resetWar, addValor, onWar, step, warLog, warNow, warState, warTowns, type SavedWar } from "../server/war";
 import { townCounts } from "../shared/war/towns";
 import type { Kv } from "../server/store";
 
@@ -237,7 +237,8 @@ test("live war (W4 review B1): with no players the server war plays exactly the 
   const { COLUMN } = await import("../shared/war/marches");
   const { warPhase } = await import("../shared/war/view");
   const { BATTLE } = await import("../shared/war/battles");
-  const t0 = 10_000_000_000_000, N = 300, battlesWere = BATTLE.live;
+  // (a start whose 300 ticks see columns meet: on the road-front map of 2026-11-20 the old 10_000_000_000_000 had none)
+  const t0 = 12_000_000_000_000, N = 300, battlesWere = BATTLE.live;
   BATTLE.live = false; // (W5 battles off: they move the war with no players too, tests/warbattles-room.test.ts checks them)
   const run = async (check: boolean) => {
     _resetWar(saved(t0));
@@ -266,12 +267,24 @@ test("live war (W4 review B1): with no players the server war plays exactly the 
   assert.ok(a.meetings > 0, `columns met (${a.meetings}) and cost nothing`);
 });
 
-/** Steps the war from a fresh start until the interval has a meeting; returns it. */
+/**
+ * A fresh war whose orders ahead send two clans at each other across one border (each strikes the land the other
+ * marches from), so the interval has a meeting; returns it. (Scripted: since the fronts follow the roads, 2026-11-20,
+ * the leaders' own orders seldom cross on one road.)
+ */
 async function untilMeeting(t0: number) {
-  const { warMeetings } = await import("../server/war");
+  const { warMeetings, _setWarOrders } = await import("../server/war");
   _resetWar(saved(t0));
-  for (let i = 0; i < 400; i++) { const mt = warMeetings()[0]; if (mt) return mt; await step(warNow()!.next); }
-  throw new Error("no meeting in 400 ticks");
+  const s = warState()!;
+  for (const ka of CLAN_KEYS) for (const i of targetsOf(s, ka)) {
+    const kb = s.owner[i]!;
+    for (const j of TERRITORIES[i].near) {
+      if (s.owner[j] !== ka || !targetsOf(s, kb).includes(j)) continue;
+      _setWarOrders({ [ka]: { defend: 0.2, attack: [{ t: i, share: 1 }] }, [kb]: { defend: 0.2, attack: [{ t: j, share: 1 }] } });
+      const mt = warMeetings()[0]; if (mt) return mt;
+    }
+  }
+  throw new Error("no two clans can meet on a road");
 }
 
 test("live war (W4 review B2): a meeting is settled once at its time, marked sim or live (both columns live in one room), and costs no men", async () => {

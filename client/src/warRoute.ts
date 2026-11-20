@@ -15,7 +15,7 @@ import { ACT2_LEVEL, inDeepRow, UNDER_END, WORLD_H } from "../../shared/constant
 import { CROWNWAYS } from "../../shared/crown";
 import { BORDERS, edgeTile } from "../../shared/borders";
 import { PORTAL_SPOTS } from "../../shared/map";
-import { REGION_LINKS, regionName, regionOf } from "../../shared/war/regions";
+import { GATE_LINKS, regionName, regionOf } from "../../shared/war/regions";
 import { TERRITORIES, type Territory } from "../../shared/war/territories";
 
 export interface Tile { x: number; y: number }
@@ -81,8 +81,8 @@ export function gateReq(land: string): string {
   return lv ? `Lv ${lv}` : `Lv ${ACT2_LEVEL.min}`;
 }
 
-/** The ways are the war map's land links (regions.ts REGION_LINKS, the Crownways among them: id `crownway_<land>`). */
-export const WAYS: Way[] = REGION_LINKS.flatMap((l): Way[] => {
+/** The gates between lands are ways (regions.ts GATE_LINKS, the Crownways among them: id `crownway_<land>`). */
+export const WAYS: Way[] = GATE_LINKS.flatMap((l): Way[] => {
   const a = nearestIn(l.a, l.pa.x, l.pa.y), b = nearestIn(l.b, l.pb.x, l.pb.y);
   if (!a || !b) return [];
   const cw = l.b === CROWN_LAND ? CROWNWAYS.find((c) => c.name === l.name) : undefined;

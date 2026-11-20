@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import { newMinds } from "../shared/war/doctrine";
-import { huntedClan, newWar, rallyClan, WAR, type WarState } from "../shared/war/rules";
+import { huntedClan, landOf, newWar, rallyClan, WAR, type WarState } from "../shared/war/rules";
 import { TERRITORIES } from "../shared/war/territories";
 import { troopWeapon } from "../shared/war/troops";
 import { BOARDS } from "../shared/bounty";
@@ -80,15 +80,16 @@ test("Rally (room): the writ view carries rally for the rallied clan's sworn at 
 test("Night Raiders (room): a rider goes for the hunted clan's soldier before another clan's at the same distance", async () => {
   const srv = await startRoom();
   // Redfang over leaderShare: the Raiders' prey
-  const s = newWar(), want = Math.floor(TERRITORIES.length * WAR.leaderShare) + 1;
-  for (const t of TERRITORIES) { if (s.owner.filter((o) => o === "redfang").length >= want) break; if (s.owner[t.id] !== "redfang" && !t.capitalOf) s.owner[t.id] = "redfang"; }
+  // (shares of the fought land: the heartland havens count for nobody and never change hands, rules.ts landOf)
+  const s = newWar(), want = Math.floor(TERRITORIES.filter((t) => !t.haven).length * WAR.leaderShare) + 1;
+  for (const t of TERRITORIES) { if (landOf(s, "redfang") >= want) break; if (s.owner[t.id] !== "redfang" && !t.capitalOf && !t.haven) s.owner[t.id] = "redfang"; }
   assert.equal(huntedClan(s), "redfang");
   freshWar(s);
   try {
     const c = await srv.join({ cls: "wizard" });
     await wait(200);
     const room = srv.room;
-    const land = TERRITORIES.find((t) => t.act === 1 && !t.capitalOf)!;
+    const land = TERRITORIES.find((t) => t.act === 1 && !t.capitalOf && !t.haven)!;
     let rid: string | undefined;
     for (let i = 0; i < 20 && !rid; i++) rid = room.raidArrive(1, Date.now(), undefined, { x: land.cx * TILE, y: land.cy * TILE });
     assert.ok(rid, "a rider came");
