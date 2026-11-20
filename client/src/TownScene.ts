@@ -207,6 +207,7 @@ function blobPartsLayout(id: string, parts: string[]): BlobPart[] {
 }
 
 interface Entity {
+  swAt?: number; swV?: number; swEnd?: number; // monster swings: first swing frame of its sheet (-1 none), the blow being shown
   runAt?: number; runKey?: string; runPh?: number; // monster run: first run frame of its sheet (-1 none), for which texture, cycle phase 0..1
   running?: boolean; runX?: number; runY?: number; runT?: number; runV?: number; // hero run cycle: run or walk now, last sprite sample, smoothed speed
   wall?: boolean; troopRole?: string; // a courtyard archer standing on a live Hold wall tile (drawn raised); its role mark, read once
@@ -344,6 +345,8 @@ const HERO_SCALE = CHAR_SCALE;
  */
 const RUN_DESIGN_SPEED = 90, RUN_ON = 34, RUN_OFF = 26;
 /** Monster run frames per facing (tools/art/paint/mobs.ts RUN_FRAMES) and which block each facing uses. */
+/** Monster swing frames per facing (mobs.ts: 3 blows x 4 poses) and how long the strike shows. */
+const MOB_SWINGS = 3, MOB_SWING_FRAMES = 12, MOB_STRIKE_MS = 240;
 const MOB_RUN_FRAMES = 6, RUN_DIR: Record<string, number> = { down: 0, up: 1, right: 2, left: 2 };
 /** Smoothed ground speed (world px/s) of a drawn hero, from how far its sprite moved since the last frame. */
 function runSpeed(e: any, dtMs: number, now: number) {
@@ -2359,7 +2362,7 @@ export class TownScene extends Phaser.Scene {
     if (e.hero) { this.moves.stop(id, e); playCharAnim(e.sprite, e.hero, this.attackAnim(e.hero, step, variant), this.dirOf(e)); }
     const beast = !!e.hero && this.forms.active(id);
     if (beast) this.forms.attack(id); // Bat / Wolf Form: a bite, no weapon swing
-    if (e.mob) e.strikeUntil = this.time.now + 240;
+    if (e.mob) e.strikeUntil = this.time.now + MOB_STRIKE_MS;
     // Aim can be diagonal (the server sends it); mobs and old messages fall back to the facing direction
     const off = typeof ax === "number" && typeof ay === "number" ? [ax, ay]
       : { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[dir] ?? [0, 1];
@@ -2530,13 +2533,30 @@ export class TownScene extends Phaser.Scene {
   /** Bone Harvest timeline (ms, server DEMON.harvest.ripMs/equipMs): reach, lift overhead, snap, press the piece on. */
   private static RIP = { grab: 450, snap: 1150, don: 1600, equip: 1950 };
 
+  /**
+   * A monster's 3D swing frame now (mobs.json `swing`: 3 blows x 4 poses per facing), or -1: the wind-up pose while it
+   * winds up, then mid-arc, hit and follow-through over the strike. Each blow picks one of the three at random.
+   */
+  private mobSwingFrame(e: Entity, p: any, now: number, dir: string): number {
+    this.mobRunAt(e);
+    const striking = now < (e.strikeUntil ?? 0);
+    if (e.swAt! < 0 || p.dead || (!p.winding && !striking)) { e.swV = undefined; return -1; }
+    if (e.swEnd !== undefined && now >= e.swEnd) { e.swV = undefined; e.swEnd = undefined; } // the last blow is over: a fresh one
+    e.swV ??= Math.floor(Math.random() * MOB_SWINGS);
+    if (striking) e.swEnd = e.strikeUntil;
+    const el = striking ? now - (e.strikeUntil! - MOB_STRIKE_MS) : -1;
+    const step = el < 0 ? 0 : el < 50 ? 1 : el < 150 ? 2 : 3;
+    return e.swAt! + RUN_DIR[dir] * MOB_SWING_FRAMES + e.swV * 4 + step;
+  }
   /** First run frame of a monster's sheet (mobs.json `run`), or -1; looked up once per texture. */
   private mobRunAt(e: Entity) {
     const key = e.sprite.texture.key;
     if (e.runKey !== key) {
       e.runKey = key;
-      e.runAt = this.cache.json.get("hd_mobs")?.[key.split("__")[0]]?.run ?? -1; // forged recolours (key__forgeId) copy the base sheet
+      const meta = this.cache.json.get("hd_mobs")?.[key.split("__")[0]]; // forged recolours (key__forgeId) copy the base sheet
+      e.runAt = meta?.run ?? -1; e.swAt = meta?.swing ?? -1;
       if (e.sprite.texture.frameTotal <= (e.runAt ?? 0) + 3 * MOB_RUN_FRAMES) e.runAt = -1;
+      if (e.sprite.texture.frameTotal <= (e.swAt ?? 0) + 3 * MOB_SWING_FRAMES) e.swAt = -1;
     }
     return e.runAt!;
   }
@@ -3681,7 +3701,9 @@ export class TownScene extends Phaser.Scene {
         // Monsters gather themselves before a blow (wind-up frame) and lunge when it lands (strike frame)
         const attackFrames = e.mob && e.sprite.texture.frameTotal > 12;
         const rip = e.rip && !p.dead && now < e.rip.end ? this.ripFrame(e, now, dir) : -1;
+        const swf = e.mob && rip < 0 ? this.mobSwingFrame(e, p, now, dir) : -1;
         if (rip >= 0) e.sprite.setFrame(rip);
+        else if (swf >= 0) e.sprite.setFrame(swf);
         else if (attackFrames && !p.dead && p.winding) e.sprite.setFrame(ATTACK_BASE[dir]);
         else if (attackFrames && !p.dead && now < (e.strikeUntil ?? 0)) e.sprite.setFrame(ATTACK_BASE[dir] + 1);
         else if (moving && e.mob && !p.dead && this.mobRunAt(e) >= 0 && (e.running = runSpeed(e, dtMs, now) > (e.running ? RUN_OFF : RUN_ON))) {

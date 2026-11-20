@@ -1,5 +1,6 @@
 import { TILE } from "./constants";
 import { PORTAL_SPOTS } from "./map";
+import { REGIONS } from "./war/regions";
 
 /**
  * Portal stones for fast travel (Murat 2026-11-03): carved standing-stone arches in several zones, one right outside
@@ -12,6 +13,18 @@ export interface Portal { id: string; name: string; x: number; y: number }
 /** Pixel position of each portal's foot (the centre of the arch's threshold). */
 export const PORTALS: Portal[] = PORTAL_SPOTS.map((p) => ({ id: p.id, name: p.name, x: (p.x + 0.5) * TILE, y: (p.y + 0.6) * TILE }));
 export const portalById = (id: unknown) => PORTALS.find((p) => p.id === id);
+
+/**
+ * The stones by land (Murat 2026-11-19: "portal stones grouped by territory"), in REGIONS order (Oakvale first), each
+ * land's stones in map order. A capital's waystone counts in its clan's homeland. The travel list shows these groups and
+ * a stone's ring has one block per stone of its own land.
+ */
+export interface PortalLand { key: string; name: string; portals: Portal[] }
+const landKey = (p: Portal) => REGIONS.find((r) => r.contains?.(Math.floor(p.x / TILE), Math.floor(p.y / TILE)))?.key ?? "oakvale";
+export const PORTAL_LANDS: PortalLand[] = REGIONS.map((r) => ({ key: r.key, name: r.name, portals: PORTALS.filter((p) => landKey(p) === r.key) }))
+  .filter((l) => l.portals.length);
+/** The land a stone stands in. */
+export const portalLand = (p: Portal): PortalLand => PORTAL_LANDS.find((l) => l.portals.includes(p))!;
 
 /** Walking this close wakes a portal (px). */
 export const PORTAL_WAKE_RANGE = TILE * 2.2;

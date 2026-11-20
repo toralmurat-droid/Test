@@ -141,7 +141,7 @@ for (const W of CITIES) test(`capitals: ${W.clan}'s people, shop, waystone, stas
   assert.ok(ws && cityAt(ws.x, ws.y) === W && !isSolidTile(ws.x, ws.y) && seen[(ws.y + 1) * MAP_W + ws.x]);
   assert.deepEqual(PORTAL_SPOTS.slice(0, 10).map((p) => p.id), ["oakvale", "farms", "barrow", "saltmere", "ruins", "keep", "gravemoor", "cairnwatch", "rustwater", "ropewell"]);
   assert.equal(cityOfPortal(`city_${W.clan}`), W);
-  assert.deepEqual(PORTAL_SPOTS.slice(-CITIES.length).map((p) => p.id), CITIES.map((c) => `city_${c.clan}`));
+  assert.deepEqual(PORTAL_SPOTS.slice(10, 10 + CITIES.length).map((p) => p.id), CITIES.map((c) => `city_${c.clan}`));
   assert.equal(cityOfPortal("farms"), undefined);
   // the stash chest opens the account stash; the props that block movement do
   assert.ok(STASHES.some((s) => cityAt(...tileOf(s)) === W));
