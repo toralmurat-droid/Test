@@ -173,13 +173,17 @@ export const HIDEHALL_POSTS: BanditPost[] = clearOfCities([
   hp("quillback", "archer", 237, 144), hp("quillback", "archer", 259, 143),
   hp("cackler", "cutthroat", 246, 133), hp("cackler", "cutthroat", 250, 138), hp("cackler", "cutthroat", 240, 141), hp("cackler", "cutthroat", 253, 154),
   hp("stagkin", "cutthroat", 243, 132), hp("stagkin", "cutthroat", 262, 150), hp("stagkin", "cutthroat", 236, 141),
-  // patrols: out of the north gate up the road toward the Maw, out of the west gate along the back way
+  // patrols: out of the north gate up the road toward the Maw, out of the west gate along the back way. The back way now
+  // runs into Deepden 15 tiles west (settlement network step 5): the west patrols keep to the gate's apron, 10 tiles and
+  // more from the city's east gate (by hand: clearOfCities would leave them a single point)
   hp("cackler", "cutthroat", 248, HH.y - 1, [[248, HH.y - 1], [244, 118], [236, 104]]),
   hp("stagkin", "cutthroat", 249, HH.y - 1, [[249, HH.y - 1], [245, 118], [237, 104]]),
-  hp("cackler", "cutthroat", HH.x - 1, 142, [[HH.x - 1, 142], [218, 146], [190, 150]]),
-  hp("stagkin", "cutthroat", HH.x - 1, 143, [[HH.x - 1, 143], [218, 147], [190, 151]]),
-  // ambushers: a Delver under each burrow mound by the roads (shared/sinkholes.ts HIDEHALL_BURROWS)
-  ...HIDEHALL_BURROWS.map(([x, y]) => hp("delver", "ambusher", x, y + 1)),
+  hp("cackler", "cutthroat", HH.x - 1, 142, [[HH.x - 1, 142], [224, 143]]),
+  hp("stagkin", "cutthroat", HH.x - 1, 143, [[HH.x - 1, 143], [224, 144]]),
+  // ambushers: a Delver under each burrow mound by the roads to the north (shared/sinkholes.ts HIDEHALL_BURROWS); the last
+  // two burrows lay on the back way where Deepden stands now (one inside its walls, one at its east gate): no Delver there.
+  // They are the camp's last posts, so dropping them moves no other post's index (Mob.post)
+  ...HIDEHALL_BURROWS.slice(0, 4).map(([x, y]) => hp("delver", "ambusher", x, y + 1)),
 ]);
 
 /**
