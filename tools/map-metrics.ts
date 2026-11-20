@@ -45,8 +45,9 @@ const bands: { name: string; y0: number; y1: number; from: [number, number][] }[
   { name: "Act 5 sinkholes (Sinkway)", y0: SINKHOLES_Y0, y1: SINKHOLES_Y0 + SINKHOLES_H, from: [px(waygateArrival(waygateById("sinkholes")!))] },
   // the Crown: one entry per Crownway, so each gate's arrival is shown to reach the whole land on its own
   ...CROWNWAYS.map((c) => ({ name: `Act 6 Crown (${c.name.replace(/^The /, "")})`, y0: CROWN_Y0, y1: CROWN_Y0 + CROWN_H, from: [px(waygateArrival(waygateById(`crown_${c.from}`)!))] })),
-  // the clans' capitals (shared/capitals.ts): each city floods from its own main gate's arrival (its city gate's far end)
-  { name: "Capitals (city gates)", y0: CITIES_Y0, y1: CITIES_Y0 + CITIES_H, from: CITIES.map((c) => px(waygateArrival(waygateById(`cityexit_${c.clan}`)!))) },
+  // the clans' capitals (shared/capitals.ts): each band city floods from its own main gate's arrival (its city gate's far
+  // end); a city in its land (City.site) is part of its land's flood, through its walk-in gates
+  { name: "Capitals (city gates)", y0: CITIES_Y0, y1: CITIES_Y0 + CITIES_H, from: CITIES.filter((c) => !c.site).map((c) => px(waygateArrival(waygateById(`cityexit_${c.clan}`)!))) },
 ];
 const bandLines: string[] = [];
 let allReach = true;

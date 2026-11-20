@@ -8,6 +8,7 @@ import type { WarState } from "./rules";
 import { huntedClan, rallyClan, WAR } from "./rules";
 import { holdTiers } from "./holdTiers";
 import { TERRITORIES, type Territory } from "./territories";
+import { cityAt } from "../capitals";
 import type { ReckonView } from "./crown";
 
 export interface WarView {
@@ -53,8 +54,9 @@ export function warView(s: WarState, next: number, raided: readonly number[] = [
   return v;
 }
 
-/** The territory a tile lies in (sanctuaries and villages lie in none). */
+/** The territory a tile lies in (sanctuaries, villages and the clans' cities lie in none: Hearthhold's walls stand over two lands' edges). */
 export function territoryAt(tx: number, ty: number): Territory | undefined {
+  if (cityAt(tx, ty)) return undefined;
   return TERRITORIES.find((t) => tx >= t.x && tx < t.x + t.w && ty >= t.y && ty < t.y + t.h);
 }
 

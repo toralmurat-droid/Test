@@ -11,6 +11,11 @@ import { TITLES } from "./cosmetics";
  * isSafeZone). Each city counts as part of its clan's homeland (shared/constants.ts actOfTile), so a hero who logs out
  * inside logs back in at that land's town.
  *
+ * Settlement network step 5: one by one the cities leave the band and stand in their homelands (`site`, shared/cityLand.ts
+ * builds them there): heroes walk in through three open gates (south, west, east) on the land's roads, and a gate ward
+ * (server/cityGates.ts) keeps W7's entry rules. Hearthhold stands in Oakvale's north-west; its strip plot stays rock until
+ * all five have moved.
+ *
  * Every city is the same plan (CITY_TEMPLATE, local tiles 0..w-1 x 0..h-1, the gate in the south wall) dressed in its
  * clan's style (walls, roofs, ground): gate square with the waystone and the stash, market with the quartermaster,
  * barracks yard with the trainer, oath hall with the altar and its keeper, houses, and the keep with the clan's leader
@@ -56,6 +61,8 @@ export const CITY_TEMPLATE = {
   /** The main gate's gap in the south wall (x range, row h-1) and the inner waygate's tile. */
   gateGap: [24, 26] as const,
   gate: { x: 25, y: 38 },
+  /** A city in its land (City.site) also has a west and an east gate: these rows of its side walls, where the cross street ends. */
+  sideGateRows: [25, 27] as const,
   /** The waystone (shared/portals.ts) and the account stash chest (shared/trade.ts STASHES) in the gate square. */
   waystone: { x: 31, y: 33 },
   stash: { x: 20, y: 33 },
@@ -121,7 +128,10 @@ export interface CityStyle {
   ground: readonly [CityGround, CityGround, CityGround]; yard: CityGround;
 }
 
-/** One capital. `outer` is the city gate in the clan's land (map tiles), carved only inside `outerBox`. */
+/**
+ * One capital. `outer` is the city gate in the clan's land (map tiles), carved only inside `outerBox`. A city with a `site`
+ * stands in its land instead: `outer` is the tile outside its south gate and `outerBox` its plot (the highways skip it).
+ */
 export interface City {
   clan: ClanKey;
   /** Its land (shared/constants.ts CITY_ACTS for its plot). */
@@ -133,13 +143,16 @@ export interface City {
   style: CityStyle;
   /** NPC character sheets per role (client/public/assets/characters). */
   sprites: Record<CityRole, string>;
+  /** Built in its land (settlement network step 5): the map tile of its plot's top-left corner. Unset: in the band's plot. */
+  site?: { x: number; y: number };
 }
 
 export const CITIES: readonly City[] = [
-  // The Wardens' Hearthhold: its city gate stands at Goldenreach Farms, on the grass south-west of the barn, away from the
-  // farm's Hold (26, 58) and standards (30, 49 / 34, 68).
+  // The Wardens' Hearthhold: in Oakvale's north-west (settlement network step 5), north of Goldenreach Farms and the
+  // King's Highway, a short walk up the road from Oakvale's north gate. Its city gate used to stand at Goldenreach
+  // (shared/cityLand.ts OLD_HEARTHHOLD_GATE); the farm's Hold (26, 58) and standards (30, 49 / 34, 68) stay where they were.
   {
-    clan: "wardens", act: 1, plot: 0, outer: { x: 13, y: 47 }, outerBox: { x0: 8, x1: 18, y0: 43, y1: 52 },
+    clan: "wardens", act: 1, plot: 0, outer: { x: 66, y: 41 }, outerBox: { x0: 41, x1: 92, y0: 1, y1: 40 }, site: { x: 41, y: 1 },
     style: { wall: "WALL_STONE", roof: "ROOF_SLATE", roof2: "ROOF_RED", street: "COBBLE", ground: ["GRASS", "GRASS_DARK", "FLOWERS"], yard: "DIRT" },
     sprites: { leader: "cap_wardens_leader", quartermaster: "steward_wardens", oathkeeper: "cap_wardens_oathkeeper", trainer: "cap_wardens_trainer" },
   },
@@ -179,16 +192,20 @@ export const cityText = (c: City): CityText => CITY_TEXT[c.clan]!;
 /** The TITLES index of the clan title a city's leader grants at CITY.titleRank (-1 if the list lacks it). */
 export const cityTitle = (c: City): number => (TITLES as readonly string[]).indexOf(cityText(c).title);
 
-/** A plot's box in map tiles. */
-export const plotBox = (plot: number) => ({ x: CITY_PLOT.x0 + plot * CITY_PLOT.stride, y: CITIES_Y0 + CITY_PLOT.y, w: CITY_PLOT.w, h: CITY_PLOT.h });
+/** A band plot's box in map tiles. */
+export const stripBox = (plot: number) => ({ x: CITY_PLOT.x0 + plot * CITY_PLOT.stride, y: CITIES_Y0 + CITY_PLOT.y, w: CITY_PLOT.w, h: CITY_PLOT.h });
+/** A city's box in map tiles: its site in its land, else its band plot (a number: that band plot). */
+export const plotBox = (c: City | number) => (typeof c === "number" ? stripBox(c) : c.site ? { x: c.site.x, y: c.site.y, w: CITY_PLOT.w, h: CITY_PLOT.h } : stripBox(c.plot));
 /** A local city tile in map tiles. */
-export const cityTile = (c: City, t: { x: number; y: number }) => { const b = plotBox(c.plot); return { x: b.x + t.x, y: b.y + t.y }; };
+export const cityTile = (c: City, t: { x: number; y: number }) => { const b = plotBox(c); return { x: b.x + t.x, y: b.y + t.y }; };
 /** A local city point (tiles, fractional) in px. */
-export const cityPx = (c: City, x: number, y: number) => { const b = plotBox(c.plot); return { x: (b.x + x) * TILE, y: (b.y + y) * TILE }; };
+export const cityPx = (c: City, x: number, y: number) => { const b = plotBox(c); return { x: (b.x + x) * TILE, y: (b.y + y) * TILE }; };
+/** The cities built in their lands (City.site), not in the band. */
+export const inLandCities = (): City[] => CITIES.filter((c) => c.site);
 
 /** The built city whose plot (walls included) holds map tile (tx, ty), if any. */
 export function cityAt(tx: number, ty: number): City | undefined {
-  for (const c of CITIES) { const b = plotBox(c.plot); if (tx >= b.x && ty >= b.y && tx < b.x + b.w && ty < b.y + b.h) return c; }
+  for (const c of CITIES) { const b = plotBox(c); if (tx >= b.x && ty >= b.y && tx < b.x + b.w && ty < b.y + b.h) return c; }
   return undefined;
 }
 /** The built city at a pixel position, if any. */
@@ -216,9 +233,40 @@ export const cityOfPortal = (id: string): City | undefined => (id.startsWith("ci
 export const cityShopId = (c: City) => `cap_${c.clan}`;
 /** Every city prop's solid box in map tiles (shared/npcs.ts adds them to the props that block movement). */
 export const CITY_SOLIDS: [number, number, number, number][] = CITIES.flatMap((c) => {
-  const b = plotBox(c.plot);
+  const b = plotBox(c);
   return CITY_TEMPLATE.props.flatMap((p) => (p.solid ? [[b.x + p.solid[0], b.y + p.solid[1], p.solid[2], p.solid[3]] as [number, number, number, number]] : []));
 });
+
+/** One walk-in gate of a city in its land: its gap in the wall (map tiles, 3 wide) and the tile just outside it. */
+export interface CityGate { side: "south" | "west" | "east"; tiles: { x: number; y: number }[]; out: { x: number; y: number } }
+/**
+ * The walk-in gates of a city in its land (City.site): the main gate's gap in the south wall and the cross street's ends in
+ * the west and east walls. A band city has none (its waygate pair, shared/act2.ts, is its way in). The gate ward
+ * (server/cityGates.ts), the spawn ring (shared/spawns.ts nearCityGate) and the client's gatehouses read these.
+ */
+export function cityGates(c: City): CityGate[] {
+  if (!c.site) return [];
+  const b = plotBox(c), P = CITY_TEMPLATE, [r0, r1] = P.sideGateRows, rows = Array.from({ length: r1 - r0 + 1 }, (_, i) => b.y + r0 + i);
+  const mid = b.y + Math.round((r0 + r1) / 2);
+  return [
+    { side: "south", tiles: Array.from({ length: P.gateGap[1] - P.gateGap[0] + 1 }, (_, i) => ({ x: b.x + P.gateGap[0] + i, y: b.y + b.h - 1 })), out: { ...c.outer } },
+    { side: "west", tiles: rows.map((y) => ({ x: b.x, y })), out: { x: b.x - 1, y: mid } },
+    { side: "east", tiles: rows.map((y) => ({ x: b.x + b.w - 1, y })), out: { x: b.x + b.w, y: mid } },
+  ];
+}
+/**
+ * A spot (px) remembered before a city moved into its land (a deploy's live hand-off, server/handoff.ts): inside the old
+ * band plot of a city that now has a site, the same local tile at the site; anywhere else, unchanged.
+ */
+export function relocateCitySpot(x: number, y: number): { x: number; y: number } {
+  const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
+  for (const c of CITIES) {
+    if (!c.site) continue;
+    const o = stripBox(c.plot);
+    if (tx >= o.x && ty >= o.y && tx < o.x + o.w && ty < o.y + o.h) return { x: x + (c.site.x - o.x) * TILE, y: y + (c.site.y - o.y) * TILE };
+  }
+  return { x, y };
+}
 
 /** Why a city gate (or its waystone) refuses a hero: "ok" lets them in. */
 export type CityAdmit = "ok" | "war" | "wanted";
@@ -258,49 +306,59 @@ function hash(x: number, y: number, seed: number) {
 }
 
 /**
- * Builds every city in CITIES on its plot (the band is solid rock before: shared/map.ts section 15) and returns their
- * areas, districts first (the first match names a tile). Deterministic.
+ * Builds every band city in CITIES on its plot (the band is solid rock before: shared/map.ts section 15) and returns their
+ * areas, districts first (the first match names a tile). The cities with a `site` are built in their lands instead
+ * (shared/cityLand.ts). Deterministic.
  */
 export function buildCities(T: CityTiles, ground: number[][], objects: number[][], EMPTY: number): { areas: CityArea[] } {
   const areas: CityArea[] = [];
-  const P = CITY_TEMPLATE;
-  for (const c of CITIES) {
-    const b = plotBox(c.plot), S = c.style, txt = cityText(c);
-    const setG = (x: number, y: number, t: number) => { ground[b.y + y][b.x + x] = t; };
-    const setO = (x: number, y: number, t: number) => { objects[b.y + y][b.x + x] = t; };
-    const rect = (r: CityRect, f: (x: number, y: number) => void) => { for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) f(x, y); };
-    // open ground inside the wall, the wall round the plot's edge, the main gate's gap onto the rock
-    rect({ x: 0, y: 0, w: b.w, h: b.h }, (x, y) => {
-      const edge = x === 0 || y === 0 || x === b.w - 1 || y === b.h - 1, h = hash(b.x + x, b.y + y, 701);
-      setG(x, y, T[h < 0.25 ? S.ground[1] : h > 0.97 ? S.ground[2] : S.ground[0]]);
-      setO(x, y, edge ? T[S.wall] : EMPTY);
-    });
-    for (let x = P.gateGap[0]; x <= P.gateGap[1]; x++) { setO(x, b.h - 1, EMPTY); setG(x, b.h - 1, T.FLAGS); }
-    for (const r of P.yards) rect(r, (x, y) => setG(x, y, T[hash(b.x + x, b.y + y, 702) < 0.15 ? S.ground[1] : S.yard]));
-    for (const r of P.courts) rect(r, (x, y) => setG(x, y, T.FLAGS));
-    for (const r of P.streets) rect(r, (x, y) => setG(x, y, T[S.street]));
-    // the keep's courtyard wall: the front row (a gap for the main street) and the two sides
-    const K = P.keepWall;
-    for (let x = K.x0; x <= K.x1; x++) if (x < K.gap[0] || x > K.gap[1]) setO(x, K.y1, T[S.wall]);
-    for (let y = K.y0; y < K.y1; y++) { setO(K.x0, y, T[S.wall]); setO(K.x1, y, T[S.wall]); }
-    // buildings: roof rows, two rows of wall, the door on the bottom row, windows beside it
-    for (const B of P.buildings) {
-      const stone = B.kind !== "house", wall = stone ? T.WALL_STONE : T.WALL_TIMBER, win = stone ? T.WINDOW_STONE : T.WINDOW_TIMBER;
-      const roof = B.kind === "house" ? T[(B.x + B.y) % 2 ? S.roof2 : S.roof] : T[S.roof];
-      rect({ x: B.x, y: B.y, w: B.w, h: B.h - 2 }, (x, y) => setO(x, y, roof));
-      rect({ x: B.x, y: B.y + B.h - 2, w: B.w, h: 2 }, (x, y) => setO(x, y, wall));
-      for (const wx of [B.x + 1, B.x + B.w - 2]) setO(wx, B.y + B.h - 1, win);
-      if (B.kind === "hall" || B.kind === "keep") for (let wx = B.x + 1; wx < B.x + B.w - 1; wx += 2) setO(wx, B.y + B.h - 2, win);
-      setO(B.door.x, B.door.y, T.DOOR);
-      setG(B.door.x, B.door.y + 1, T[S.street]); // the doorstep
-    }
-    P.stalls.forEach(([x, y], i) => setO(x, y, i % 2 ? T.STALL_BLUE : T.STALL_RED));
-    P.crates.forEach(([x, y], i) => setO(x, y, i % 2 ? T.BARREL : T.CRATE));
-    setO(P.well.x, P.well.y, T.WELL);
-    for (const d of P.districts) areas.push({ name: txt.districts[d.d], x: b.x + d.x, y: b.y + d.y, w: d.w, h: d.h });
-    areas.push({ name: txt.name, x: b.x, y: b.y, w: b.w, h: b.h });
-  }
+  for (const c of CITIES) if (!c.site) areas.push(...buildCity(c, T, ground, objects, EMPTY));
   return { areas };
+}
+
+/**
+ * Builds one city on its box (plotBox: its band plot, or its site in its land), every tile of the box, and returns its
+ * areas, districts first. A city in its land also opens its west and east gates (CITY_TEMPLATE.sideGateRows). Deterministic.
+ */
+export function buildCity(c: City, T: CityTiles, ground: number[][], objects: number[][], EMPTY: number): CityArea[] {
+  const areas: CityArea[] = [];
+  const P = CITY_TEMPLATE;
+  const b = plotBox(c), S = c.style, txt = cityText(c);
+  const setG = (x: number, y: number, t: number) => { ground[b.y + y][b.x + x] = t; };
+  const setO = (x: number, y: number, t: number) => { objects[b.y + y][b.x + x] = t; };
+  const rect = (r: CityRect, f: (x: number, y: number) => void) => { for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) f(x, y); };
+  // open ground inside the wall, the wall round the plot's edge, the main gate's gap onto the rock
+  rect({ x: 0, y: 0, w: b.w, h: b.h }, (x, y) => {
+    const edge = x === 0 || y === 0 || x === b.w - 1 || y === b.h - 1, h = hash(b.x + x, b.y + y, 701);
+    setG(x, y, T[h < 0.25 ? S.ground[1] : h > 0.97 ? S.ground[2] : S.ground[0]]);
+    setO(x, y, edge ? T[S.wall] : EMPTY);
+  });
+  for (let x = P.gateGap[0]; x <= P.gateGap[1]; x++) { setO(x, b.h - 1, EMPTY); setG(x, b.h - 1, T.FLAGS); }
+  if (c.site) for (let y = P.sideGateRows[0]; y <= P.sideGateRows[1]; y++) for (const x of [0, b.w - 1]) { setO(x, y, EMPTY); setG(x, y, T[S.street]); }
+  for (const r of P.yards) rect(r, (x, y) => setG(x, y, T[hash(b.x + x, b.y + y, 702) < 0.15 ? S.ground[1] : S.yard]));
+  for (const r of P.courts) rect(r, (x, y) => setG(x, y, T.FLAGS));
+  for (const r of P.streets) rect(r, (x, y) => setG(x, y, T[S.street]));
+  // the keep's courtyard wall: the front row (a gap for the main street) and the two sides
+  const K = P.keepWall;
+  for (let x = K.x0; x <= K.x1; x++) if (x < K.gap[0] || x > K.gap[1]) setO(x, K.y1, T[S.wall]);
+  for (let y = K.y0; y < K.y1; y++) { setO(K.x0, y, T[S.wall]); setO(K.x1, y, T[S.wall]); }
+  // buildings: roof rows, two rows of wall, the door on the bottom row, windows beside it
+  for (const B of P.buildings) {
+    const stone = B.kind !== "house", wall = stone ? T.WALL_STONE : T.WALL_TIMBER, win = stone ? T.WINDOW_STONE : T.WINDOW_TIMBER;
+    const roof = B.kind === "house" ? T[(B.x + B.y) % 2 ? S.roof2 : S.roof] : T[S.roof];
+    rect({ x: B.x, y: B.y, w: B.w, h: B.h - 2 }, (x, y) => setO(x, y, roof));
+    rect({ x: B.x, y: B.y + B.h - 2, w: B.w, h: 2 }, (x, y) => setO(x, y, wall));
+    for (const wx of [B.x + 1, B.x + B.w - 2]) setO(wx, B.y + B.h - 1, win);
+    if (B.kind === "hall" || B.kind === "keep") for (let wx = B.x + 1; wx < B.x + B.w - 1; wx += 2) setO(wx, B.y + B.h - 2, win);
+    setO(B.door.x, B.door.y, T.DOOR);
+    setG(B.door.x, B.door.y + 1, T[S.street]); // the doorstep
+  }
+  P.stalls.forEach(([x, y], i) => setO(x, y, i % 2 ? T.STALL_BLUE : T.STALL_RED));
+  P.crates.forEach(([x, y], i) => setO(x, y, i % 2 ? T.BARREL : T.CRATE));
+  setO(P.well.x, P.well.y, T.WELL);
+  for (const d of P.districts) areas.push({ name: txt.districts[d.d], x: b.x + d.x, y: b.y + d.y, w: d.w, h: d.h });
+  areas.push({ name: txt.name, x: b.x, y: b.y, w: b.w, h: b.h });
+  return areas;
 }
 
 /**
@@ -309,6 +367,7 @@ export function buildCities(T: CityTiles, ground: number[][], objects: number[][
  * touching water, and only inside `outerBox`, so nothing else in the land changes. Deterministic.
  */
 export function cityGateDais(c: City, T: Pick<CityTiles, "FLAGS" | "RUBBLE" | "WATER">, ground: number[][], objects: number[][], EMPTY: number, nature: (o: number) => boolean) {
+  if (c.site) return; // (a city in its land has walk-in gates: shared/cityLand.ts)
   const G = c.outer, B = c.outerBox;
   for (let y = B.y0; y <= B.y1; y++) for (let x = B.x0; x <= B.x1; x++) {
     const dx = (x - G.x - 0.5) / 3.6, dy = (y - G.y - 0.5) / 3.2, d = dx * dx + dy * dy;
@@ -319,7 +378,7 @@ export function cityGateDais(c: City, T: Pick<CityTiles, "FLAGS" | "RUBBLE" | "W
 }
 
 /** True when the plots fit the band side by side (a guard for the numbers in shared/constants.ts). */
-export const plotsFit = () => CITY_ACTS.every((_, i) => { const b = plotBox(i); return b.x >= 1 && b.x + b.w <= MAP_W - 1; });
+export const plotsFit = () => CITY_ACTS.every((_, i) => { const b = stripBox(i); return b.x >= 1 && b.x + b.w <= MAP_W - 1; });
 
 /**
  * What a hero pays at a capital's quartermaster or trainer: heroes sworn to the city's clan pay CITY.discount less

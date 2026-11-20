@@ -3,6 +3,7 @@ import { CRYPT_DOOR, FLOORS, LAIRS, SEA_END, SHORTCUTS, SINKHOLE, UNDER_SHAFT, t
 import { carveBorders, LAND_ROWS } from "./borders";
 import { carveHighways, fortSkipBoxes, HIGHWAYS, highwayTiles } from "./highways";
 import { carveVillages, VILLAGES, villageBox, villageSpots } from "./villages";
+import { carveCitiesInLand } from "./cityLand";
 import { buildDesert, D, inDesertRow, KEL_MARKET, WAYGATE_OAKVALE } from "./desert";
 import { buildMoors, CAIRN_PORTAL, CAIRN_SQUARE, MOORSGATE_OAKVALE, MR } from "./moors";
 import { BR, buildBadlands, LEDGES, REDPASS_OAKVALE, RUSTWATER_PORTAL, RUSTWATER_SQUARE } from "./badlands";
@@ -296,11 +297,13 @@ function buildWorld() {
   const V = VILLAGE, { RX, RY } = ROADS, SQ = SAFE_ZONE;
 
   // ---------- 1. Ground: grass with patches of dark and tall grass, wildflowers ----------
-  for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
+  /** The meadow's own ground at a tile (a field cut back turns to it again: shared/cityLand.ts). */
+  const meadow = (x: number, y: number) => {
     const n = noise(x, y, 7, 3);
     const h = hash(x, y, 9);
-    ground[y][x] = n > 0.68 ? T.TALL_GRASS : n < 0.32 ? T.GRASS_DARK : h < 0.04 ? T.FLOWERS : T.GRASS;
-  }
+    return n > 0.68 ? T.TALL_GRASS : n < 0.32 ? T.GRASS_DARK : h < 0.04 ? T.FLOWERS : T.GRASS;
+  };
+  for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) ground[y][x] = meadow(x, y);
 
   // ---------- 2. Water: River Ashwell, Mirror Pond, and the pools of Misty Marsh ----------
   for (let y = 0; y < MAP_H; y++) {
@@ -810,7 +813,7 @@ function buildWorld() {
     setO(best[0], best[1], T.SIGNPOST);
     posts.push({ x: best[0], y: best[1], to });
   };
-  signpost(RX - 2, V.y0 - 4, ["North Meadow", "Hunter's Camp", "Old Watchtower", "Oakvale"]);          // north gate
+  signpost(RX - 2, V.y0 - 4, ["Hearthhold", "North Meadow", "Hunter's Camp", "Old Watchtower", "Oakvale"]); // north gate
   signpost(RX - 2, V.y1 + 4, ["Stonecrag Quarry", "Oakvale"]);                                       // south gate
   signpost(V.x0 - 4, RY - 1, ["Goldenreach Farms", "Mirror Pond", "Misty Marsh", "Oakvale"]);         // west gate
   signpost(V.x1 + 5, RY + 3, ["Millbrook Mill", "Old Ruins", "Oakvale"]);                            // east gate
@@ -1025,8 +1028,9 @@ function buildWorld() {
 
   // ---------- 14f. The capitals' city gates (shared/capitals.ts CITIES `outer`): a dais of old flagstones beside each
   // clan's seat in its land, carved after the reachability pass and only inside the city's `outerBox`, so the rest of the
-  // land (and its Hold and standards) stays exactly as it was. Act 1's (the Wardens', at Goldenreach Farms) is cut here; the
-  // other lands' after their own bands are built (section 20b), with the same dais.
+  // land (and its Hold and standards) stays exactly as it was. Act 1's would be cut here, the other lands' after their own
+  // bands are built (section 20b), with the same dais. A city in its land (Hearthhold, settlement network step 5) has none:
+  // it is built into its land in section 22b, with walk-in gates.
   const cityGateDais = (c: (typeof CITIES)[number]) => carveCityGate(c, T, ground, objects, EMPTY, (o) => NATURE.has(o));
   for (const c of CITIES) if (c.act === 1) cityGateDais(c);
 
@@ -1128,11 +1132,23 @@ function buildWorld() {
   // Redfang's by Fangrock, the Hide-Kin's by Hidehall, each on open ground inside its `outerBox`
   for (const c of CITIES) if (c.act !== 1) cityGateDais(c);
   // ---------- 21. The clans' capital cities, in their own band under the Crown (shared/capitals.ts) ----------
-  // (their areas go first: a city's districts and walls lie inside no other area)
+  // (their areas go first: a city's districts and walls lie inside no other area). The cities with a `site` are not built
+  // here: their plots stay rock, they stand in their lands (section 22b)
   areas.unshift(...buildCities(T, ground, objects, EMPTY).areas);
   // ---------- 22. The border roads (shared/borders.ts): each land's roads run on out through its cliffs to the band's
   // edge, where the mist of the pass takes the hero on into the neighbouring land. Cut last, only inside BORDER_BOXES.
   carveBorders(ground, objects, roads, T, EMPTY);
+  // ---------- 22b. The clans' cities in their lands (shared/cityLand.ts; settlement network step 5): Hearthhold north of
+  // Goldenreach Farms. The city over its whole box, cleared ground round its walls, gates onto the roads, the fields in the
+  // way cut back, the posts inside its walls gone. Cut before the highways (they skip the box and run up to its gates) and
+  // only inside CITY_MASK; what it changed is kept (cityBefore, the oldest record: chests and siege sites never move). Its
+  // areas go first, like the band's cities'
+  const cityBefore = new Map<number, { g: number; o: number }>();
+  const inLand = carveCitiesInLand(T, ground, objects, EMPTY, roads, posts, meadow, cityBefore);
+  areas.unshift(...inLand.areas);
+  const firstCityPost = posts.length;
+  for (const p of inLand.posts) placePost(p, (y) => y >= 0 && y < MAP_H, cityBefore);
+  const cityPosts = posts.slice(firstCityPost);
   // ---------- 23. The land highways (shared/highways.ts): each land's main road, 3 cobbles wide, from the capital's gate
   // to its towns, villages and pass ends. Cut after everything else, so nothing overwrites it; never inside a town or
   // village, a city gate's box or round a capital's fort (there it rides the old streets), then its signposts beside it
@@ -1157,7 +1173,7 @@ function buildWorld() {
   const villagePosts = carveVillages(ground, objects, roads, T, EMPTY, (v) => { const h = HIGHWAYS.find((q) => q.land === v.land)!; return [v.name, h.seat, h.town]; }, villageBefore);
   areas.unshift(...VILLAGES.map((v) => { const b = villageBox(v); return { name: v.name, x: b.x0, y: b.y0, w: v.w, h: v.h, mobs: [] as MobKind[] }; }));
   posts.push(...villagePosts);
-  return { ground, objects, areas, posts, roads, broken, makeshift, highways, highwaySkip: skip, highwayBefore, highwayPosts: posts.slice(firstHighwayPost, posts.length - villagePosts.length), villageBefore, villagePosts };
+  return { ground, objects, areas, posts, roads, broken, makeshift, highways, highwaySkip: skip, highwayBefore, highwayPosts: posts.slice(firstHighwayPost, posts.length - villagePosts.length), villageBefore, villagePosts, cityBefore, cityPosts };
 }
 
 /**
@@ -1220,7 +1236,10 @@ export const HIGHWAY_SKIP: readonly TileBox[] = WORLD.highwaySkip;
 export const HIGHWAY_POSTS: readonly { x: number; y: number; to: string[] }[] = WORLD.highwayPosts;
 /** The villages' signposts (shared/villages.ts), where each one's path meets the road. */
 export const VILLAGE_POSTS: readonly { x: number; y: number; to: string[] }[] = WORLD.villagePosts;
+/** The signposts by the gate roads of the cities in their lands (shared/cityLand.ts CITY_LAND posts). */
+export const CITY_POSTS: readonly { x: number; y: number; to: string[] }[] = WORLD.cityPosts;
 export { VILLAGE_MASK } from "./villages";
+export { CITY_MASK, OLD_HEARTHHOLD_GATE } from "./cityLand";
 
 /**
  * Mawdeep gates (Murat 2026-11-05: "doors to open"; 2026-11-08: "part should be like a prison wall and only part a
@@ -1421,8 +1440,11 @@ export function signpostNear(px: number, py: number, reach = 1.6): Signpost | un
  * The map as it was before the land highways (shared/highways.ts) were cut: spots worked out from the map that are saved
  * or pinned (chests, siege sites: tests/quest-steps.test.ts) are found on it, so a highway never moves them.
  */
-/** What a tile was before the highways and the villages (shared/villages.ts) were cut: the highways' record first (older). */
-const beforeAt = (k: number) => WORLD.highwayBefore.get(k) ?? WORLD.villageBefore.get(k);
+/**
+ * What a tile was before the cities in their lands (shared/cityLand.ts), the highways and the villages (shared/villages.ts)
+ * were cut: the oldest record first (the cities' carve runs before the highways, the villages' after them).
+ */
+const beforeAt = (k: number) => WORLD.cityBefore.get(k) ?? WORLD.highwayBefore.get(k) ?? WORLD.villageBefore.get(k);
 export const groundBefore = (tx: number, ty: number): number | undefined => beforeAt(ty * MW + tx)?.g ?? GROUND[ty]?.[tx];
 export const objectBefore = (tx: number, ty: number): number | undefined => beforeAt(ty * MW + tx)?.o ?? OBJECTS[ty]?.[tx];
 export function solidBefore(tx: number, ty: number): boolean {

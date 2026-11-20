@@ -1,0 +1,141 @@
+import { MAP_W } from "./constants";
+import { buildCity, CITIES, cityGates, plotBox, type City, type CityArea, type CityTiles } from "./capitals";
+import { highwayTiles, type Highway } from "./highways";
+import type { ClanKey } from "./war/clans";
+
+/**
+ * The clans' cities in their homelands (settlement network step 5): a city with a `site` (shared/capitals.ts) is built
+ * into its land's map instead of the band, with an apron of cleared ground round its walls, its three gates opened onto
+ * the land's roads and highways, and whatever stood in the way cut back. Carved after the border roads and before the
+ * highways (shared/map.ts section 22b), only inside CITY_MASK; what it changed is kept (`before`: chests and siege sites
+ * read the map from before it, so none ever moves). Pure data plus the carve: no map.ts import, like highways.ts.
+ */
+
+/** Tiles of cleared ground (nature only) round a city's walls, so no pocket is walled in against them. */
+export const CITY_APRON = 2;
+
+/** Hearthhold's old city gate dais at Goldenreach Farms (its `outerBox` before it moved): the land hash tests mask it. */
+export const OLD_HEARTHHOLD_GATE = { x0: 8, x1: 18, y0: 43, y1: 52 };
+
+/**
+ * The King's Highway's legs the move retired (waypoints in map tiles, as they were in shared/highways.ts): from the old
+ * city gate to Goldenreach Farms, and from the West Road north to Hunter's Camp through what is now the city. Their
+ * tiles went back to the map from before the highways; the mask keeps them.
+ */
+export const RETIRED_LEGS: readonly (readonly [number, number][])[] = [
+  [[18, 53], [19, 56], [27, 56], [30, 58]],
+  [[52, 57], [52, 21], [44, 16], [36, 16], [35, 17]],
+];
+/** Signposts the move took away (map tiles): the highway's post where it met the North Meadow road (now inside the walls). */
+export const RETIRED_POSTS: readonly { x: number; y: number }[] = [{ x: 50, y: 20 }];
+
+/** What a city in its land changes round it besides its box. */
+export interface CityLandFit {
+  /** Dirt roads from a gate's outside tile to the old roads (map tiles, waypoints walked 4-connected; each stops at the first road tile it meets). */
+  roads: readonly (readonly [number, number])[][];
+  /**
+   * Fenced fields cut back off the walls: the fence box as it was (x, y, w, h); the rows above `top` give up their fence
+   * and their field (plain ground again), `top` gets the new fence with the old top gap's columns (`gap`) open.
+   */
+  trims: readonly { x: number; y: number; w: number; h: number; top: number; gap: readonly [number, number] }[];
+  /** Signposts beside the gate roads (placed after them, on the nearest free tile beside the road). */
+  posts: readonly { x: number; y: number; to: string[] }[];
+}
+export const CITY_LAND: Partial<Record<ClanKey, CityLandFit>> = {
+  // Hearthhold: the east gate's road north along the wall to the Watchtower Trail; Goldenreach's north field four rows
+  // shorter (its fence stood where the south-west corner of the walls is); the west and south gates are on the highway
+  wardens: {
+    roads: [[[93, 27], [93, 17]]],
+    trims: [{ x: 28, y: 38, w: 18, h: 17, top: 42, gap: [35, 37] }],
+    posts: [{ x: 94, y: 25, to: ["Hearthhold", "North Meadow", "Old Watchtower"] }],
+  },
+};
+
+/** The streets through a city in its land that count as roads (local tiles): the cross street gate to gate, and the gate square's middle to the main gate. */
+const THROUGH = [{ x: 0, y: 25, w: 52, h: 3 }, { x: 24, y: 28, w: 3, h: 12 }] as const;
+
+/** A gate road's tiles (map tiles), 4-connected, all of it (the carve stops at the first road tile). */
+export function gateRoadTiles(pts: readonly (readonly [number, number])[]): { x: number; y: number }[] {
+  const out: { x: number; y: number }[] = [];
+  for (let i = 0; i + 1 < pts.length; i++) {
+    let [x, y] = pts[i]; const [bx, by] = pts[i + 1];
+    if (!out.length) out.push({ x, y });
+    while (x !== bx || y !== by) { if (x !== bx) x += Math.sign(bx - x); else y += Math.sign(by - y); out.push({ x, y }); }
+  }
+  return out;
+}
+/** The apron round a city's box (map tiles): CITY_APRON tiles each side, never row 0 (the map's edge). */
+function apronTiles(c: City): number[] {
+  const b = plotBox(c), out: number[] = [];
+  for (let y = Math.max(1, b.y - CITY_APRON); y < b.y + b.h + CITY_APRON; y++) for (let x = Math.max(0, b.x - CITY_APRON); x < Math.min(MAP_W, b.x + b.w + CITY_APRON); x++)
+    if (x < b.x || y < b.y || x >= b.x + b.w || y >= b.y + b.h) out.push(y * MAP_W + x);
+  return out;
+}
+const postBoxTiles = (p: { x: number; y: number }) => { const s: number[] = []; for (let j = -3; j <= 3; j++) for (let i = -3; i <= 3; i++) s.push((p.y + j) * MAP_W + p.x + i); return s; };
+
+/** Every tile the cities in their lands may change (map tiles): box, apron, gate roads and posts, trimmed fields, the retired legs and posts. The map hash tests mask these. */
+export const CITY_MASK: Set<number> = (() => {
+  const s = new Set<number>();
+  for (const c of CITIES) {
+    if (!c.site) continue;
+    const b = plotBox(c), fit = CITY_LAND[c.clan];
+    for (let y = b.y; y < b.y + b.h; y++) for (let x = b.x; x < b.x + b.w; x++) s.add(y * MAP_W + x);
+    for (const k of apronTiles(c)) s.add(k);
+    for (const r of fit?.roads ?? []) for (const t of gateRoadTiles(r)) s.add(t.y * MAP_W + t.x);
+    for (const f of fit?.trims ?? []) for (let y = f.y; y <= f.top; y++) for (let x = f.x; x < f.x + f.w; x++) s.add(y * MAP_W + x);
+    for (const p of fit?.posts ?? []) for (const k of postBoxTiles(p)) s.add(k);
+  }
+  const retired = { land: 1, name: "", seat: "", town: "", towns: [], legs: RETIRED_LEGS.map((pts) => ({ from: "", to: "", pts })) } as Highway, { core, verge } = highwayTiles(retired);
+  for (const k of core) s.add(k);
+  for (const k of verge) s.add(k);
+  for (const p of RETIRED_POSTS) for (const k of postBoxTiles(p)) s.add(k);
+  return s;
+})();
+
+type CityLandT = CityTiles & { TREE: number; PINE: number; BUSH: number; STUMP: number; FENCE: number; FENCE_V: number; FIELD: number; BRIDGE: number };
+
+/**
+ * Builds every city with a `site` into its land (shared/map.ts section 22b): cuts back the fields in the way (`natural`:
+ * the land's own ground there before any field), clears the apron's nature, builds the city over its whole box, makes its
+ * through streets and gates roads (and no other tile inside the box), lays the dirt gate roads, and drops the signposts
+ * that stood inside the walls. Writes only inside CITY_MASK and keeps what each changed tile was in `before`. Returns the
+ * cities' areas (districts first) and the gate roads' signposts for the map to place. Deterministic, no randomness.
+ */
+export function carveCitiesInLand(T: CityLandT, ground: number[][], objects: number[][], EMPTY: number, roads: Set<number>,
+  posts: { x: number; y: number }[], natural: (x: number, y: number) => number, before?: Map<number, { g: number; o: number }>):
+  { areas: CityArea[]; posts: { x: number; y: number; to: string[] }[] } {
+  const areas: CityArea[] = [], newPosts: { x: number; y: number; to: string[] }[] = [];
+  const was = new Map<number, { g: number; o: number }>();
+  for (const k of CITY_MASK) { const x = k % MAP_W, y = Math.floor(k / MAP_W); if (ground[y]?.[x] !== undefined) was.set(k, { g: ground[y][x], o: objects[y][x] }); }
+  const nature = new Set<number>([T.TREE, T.PINE, T.BUSH, T.ROCK, T.STUMP]);
+  for (const c of CITIES) {
+    if (!c.site) continue;
+    const b = plotBox(c), fit = CITY_LAND[c.clan], inBox = (x: number, y: number) => x >= b.x && y >= b.y && x < b.x + b.w && y < b.y + b.h;
+    // the fields in the way: the rows above the new top lose fence and field, the new top row is fenced but for its gap
+    for (const f of fit?.trims ?? []) {
+      for (let y = f.y; y < f.top; y++) for (let x = f.x; x < f.x + f.w; x++) {
+        if (objects[y][x] === T.FENCE || objects[y][x] === T.FENCE_V) objects[y][x] = EMPTY;
+        if (ground[y][x] === T.FIELD) ground[y][x] = natural(x, y);
+      }
+      for (let x = f.x; x < f.x + f.w; x++) if (x < f.gap[0] || x > f.gap[1]) objects[f.top][x] = T.FENCE;
+    }
+    for (const k of apronTiles(c)) { const x = k % MAP_W, y = Math.floor(k / MAP_W); if (nature.has(objects[y][x])) objects[y][x] = EMPTY; }
+    areas.push(...buildCity(c, T, ground, objects, EMPTY));
+    // roads: none inside the walls but the through streets and the gates
+    for (const k of [...roads]) if (inBox(k % MAP_W, Math.floor(k / MAP_W))) roads.delete(k);
+    for (const r of THROUGH) for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) roads.add((b.y + y) * MAP_W + b.x + x);
+    for (const g of cityGates(c)) for (const t of g.tiles) roads.add(t.y * MAP_W + t.x);
+    // the gate roads: dirt out to the old roads, nature cleared, never over water, a bridge or anything built
+    for (const r of fit?.roads ?? []) for (const t of gateRoadTiles(r)) {
+      const k = t.y * MAP_W + t.x, g = ground[t.y][t.x], o = objects[t.y][t.x];
+      if (roads.has(k)) break;
+      if (g === T.WATER || g === T.BRIDGE || (o !== EMPTY && !nature.has(o))) continue;
+      objects[t.y][t.x] = EMPTY; ground[t.y][t.x] = T.DIRT; roads.add(k);
+    }
+    // the signposts that stood inside the walls are gone with the roads they stood by
+    for (let i = posts.length - 1; i >= 0; i--) if (inBox(posts[i].x, posts[i].y)) posts.splice(i, 1);
+    newPosts.push(...(fit?.posts ?? []).map((p) => ({ x: p.x, y: p.y, to: [...p.to] })));
+  }
+  if (before) for (const [k, v] of was) { const x = k % MAP_W, y = Math.floor(k / MAP_W); if ((ground[y][x] !== v.g || objects[y][x] !== v.o) && !before.has(k)) before.set(k, v); }
+  return { areas, posts: newPosts };
+}
