@@ -1,0 +1,143 @@
+import { MAP_W, type Act } from "./constants";
+import { LAND_ROWS } from "./borders";
+import type { TileBox } from "./crown";
+
+/**
+ * Land highways (settlement network step 2b): each land's main road, 3 cobbled tiles wide, a tier above the 1-tile dirt
+ * roads. It runs from the capital's city gate past the seat to the main town, then on to every village and every border
+ * road's pass end, so a hero can follow it from the capital to any settlement of the land without leaving road.
+ *
+ * The legs mostly widen roads that were already there: their waypoints (local tiles of the land, like borders.ts; worked
+ * out with tools/highway-route.ts, then nudged by hand off the lake shore and a lair's chest) stay within a tile of the old
+ * road, so it lies under the new cobbles. Carved last (shared/map.ts, after the border roads), only on open ground: never
+ * on water or a bridge (the highway narrows to the bridge), never over a house, wall, palisade, signpost or cliff (it
+ * narrows round them), and not at all inside a town, a village, a city gate's box or round a capital's fort (`skip`):
+ * there it rides the existing streets and gates.
+ * Pure data plus the carve: no map.ts import, so the map can call it (like borders.ts).
+ */
+export interface HighwayLeg { from: string; to: string; pts: readonly [number, number][] }
+export interface Highway {
+  land: Act; name: string; legs: readonly HighwayLeg[];
+  /** The seat's and the main town's AREAS names: every fork's signpost names both (the way home). */
+  seat: string; town: string;
+  /** AREAS (shared/map.ts) the highway passes through without widening: its towns and villages. */
+  towns: readonly string[];
+  /** Signposts at its forks and settlement exits (local tiles; placed on the nearest free tile beside the road). */
+  posts?: readonly { x: number; y: number; to: string[] }[];
+}
+
+/** Tiles each side of the middle line: the paved core is 2 * HALF + 1 wide. */
+export const HIGHWAY_HALF = 1;
+/** Tiles beyond the core each side where only trees, bushes, boulders, stumps, cactus and bones are cleared (the ground stays). */
+export const HIGHWAY_VERGE = 1;
+/** Capitals' forts (map tiles; pinned in tests/holdsites.test.ts): the highway keeps a 9x9 box round each unwidened. */
+export const CAPITAL_FORTS: readonly [number, number][] = [[26, 58], [241, 355], [271, 671], [27, 867], [248, 1105]];
+/** Half the side of the box round each capital fort. */
+export const FORT_SKIP = 4;
+
+export const HIGHWAYS: readonly Highway[] = [
+  // Oakvale: from Hearthhold's gate at Goldenreach Farms along the West Road to Oakvale; north to Hunter's Camp, east to
+  // Millbrook Mill, south-west to the Red Road, south to Stonecrag Quarry, then over the quarry bridge to the Old Ruins,
+  // Greywatch Keep and the Eastmarch Pass (the Ruins bridge on the King's Road stays broken), and round the Sunken Lake
+  // to Saltmere and along the coast to the Greenward Road (up to the old spur down to the pass: paved, its cleared verge
+  // would pull Saltwind Coast's fort east of the river and cut the clans' Brinewood road)
+  { land: 1, name: "The King's Highway", seat: "Goldenreach Farms", town: "Oakvale", towns: ["Oakvale", "Millbrook Mill", "Hunter's Camp", "Saltmere"], legs: [
+    { from: "Hearthhold Gate", to: "Goldenreach Farms", pts: [[18, 53], [19, 56], [27, 56], [30, 58]] },
+    { from: "Goldenreach Farms", to: "Oakvale", pts: [[30, 58], [37, 61], [44, 61], [49, 58], [59, 58], [64, 60]] },
+    { from: "Goldenreach Farms", to: "Hunter's Camp", pts: [[52, 57], [52, 21], [44, 16], [36, 16], [35, 17]] },
+    { from: "Oakvale", to: "Millbrook Mill", pts: [[96, 60], [95, 57], [100, 52], [104, 50]] },
+    { from: "Oakvale", to: "The Red Road", pts: [[63, 60], [64, 62], [55, 72], [44, 71], [41, 72], [35, 77], [32, 85], [42, 97], [35, 104], [32, 110], [29, 113], [22, 113], [14, 121]] },
+    { from: "Oakvale", to: "Stonecrag Quarry", pts: [[80, 74], [86, 82], [88, 88], [92, 94], [95, 95]] },
+    { from: "Stonecrag Quarry", to: "Saltmere", pts: [[96, 96], [96, 101], [98, 103], [99, 117], [95, 128], [109, 142], [110, 143], [110, 149], [109, 150], [107, 151], [106, 152], [104, 153], [102, 154], [100, 156], [100, 160], [112, 177], [121, 177], [123, 178], [125, 176]] },
+    { from: "Saltmere", to: "The Greenward Road", pts: [[163, 185], [170, 184], [194, 176], [206, 170], [209, 170], [212, 167], [222, 162], [234, 171], [246, 176], [262, 176], [272, 177]] },
+    { from: "Stonecrag Quarry", to: "Old Ruins", pts: [[96, 95], [109, 94], [115, 97], [125, 97], [127, 95], [128, 87], [131, 83], [139, 66]] },
+    { from: "Old Ruins", to: "The Eastmarch Pass", pts: [[139, 66], [146, 60], [157, 62], [169, 57], [202, 57], [203, 58], [206, 58], [220, 73], [222, 73], [223, 72], [228, 72], [246, 57]] },
+  ], posts: [
+    // forks: each names the seat and the main town (the way home) and what the other ways lead to
+    { x: 52, y: 56, to: ["Goldenreach Farms", "Oakvale", "Hunter's Camp"] }, // West Road, the turn north
+    { x: 50, y: 20, to: ["Goldenreach Farms", "Oakvale", "Hunter's Camp"] }, // where it meets the North Meadow road
+    { x: 16, y: 119, to: ["Goldenreach Farms", "Oakvale"] }, // the Red Road's foot
+    { x: 96, y: 126, to: ["Goldenreach Farms", "Oakvale", "Saltmere", "Sunken Lake"] }, // above the Sunken Lake
+    { x: 110, y: 174, to: ["Goldenreach Farms", "Oakvale", "Saltmere", "Saltwind Coast"] }, // above Saltmere's bridge
+    { x: 193, y: 176, to: ["Goldenreach Farms", "Oakvale", "Gullrock Cove", "Gravemoor Cemetery"] }, // the coast road east
+    { x: 221, y: 162, to: ["Goldenreach Farms", "Oakvale", "Redfang Hollow", "Stormbreak Crags"] }, // where the Greenward leg leaves the old road
+    { x: 146, y: 64, to: ["Goldenreach Farms", "Oakvale", "Greywatch Keep", "Old Ruins"] }, // the Old Ruins
+    { x: 224, y: 74, to: ["Goldenreach Farms", "Oakvale", "Redfang Hollow", "Cinder Scar"] }, // past Greywatch Keep, the Redfang road and the Eastmarch
+  ] },
+];
+
+/** A leg's middle line in map tiles (row * MAP_W + x), in walking order, without repeats. */
+export function legLine(h: Highway, leg: HighwayLeg): number[] {
+  const y0 = LAND_ROWS[h.land].y0, out: number[] = [];
+  for (let i = 0; i + 1 < leg.pts.length; i++) {
+    const [x0, ya] = leg.pts[i], [x1, yb] = leg.pts[i + 1], n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, yb - ya) * 4));
+    for (let k = 0; k <= n; k++) {
+      const x = Math.round(x0 + ((x1 - x0) * k) / n), y = Math.round(ya + ((yb - ya) * k) / n) + y0, t = y * MAP_W + x;
+      if (out[out.length - 1] !== t) out.push(t);
+    }
+  }
+  return out;
+}
+
+/** Every tile a highway may touch (map tiles): the middle line, the paved core round it, and the verge beyond that. */
+export function highwayTiles(h: Highway): { mid: Set<number>; core: Set<number>; verge: Set<number> } {
+  const mid = new Set<number>(), core = new Set<number>(), verge = new Set<number>(), { y0, h: rows } = LAND_ROWS[h.land];
+  const R = HIGHWAY_HALF + HIGHWAY_VERGE, inLand = (x: number, y: number) => x >= 0 && x < MAP_W && y >= y0 && y < y0 + rows;
+  for (const leg of h.legs) for (const t of legLine(h, leg)) mid.add(t);
+  for (const t of mid) {
+    const x = t % MAP_W, y = Math.floor(t / MAP_W);
+    for (let j = -R; j <= R; j++) for (let i = -R; i <= R; i++) {
+      if (!inLand(x + i, y + j)) continue;
+      const k = (y + j) * MAP_W + x + i;
+      if (Math.max(Math.abs(i), Math.abs(j)) <= HIGHWAY_HALF) core.add(k); else verge.add(k);
+    }
+  }
+  for (const k of core) verge.delete(k);
+  return { mid, core, verge };
+}
+
+/** The tiles round a highway's signpost spot the post may land on (it takes the nearest free tile within 3). */
+const postBox = (h: Highway, p: { x: number; y: number }): TileBox => {
+  const y = p.y + LAND_ROWS[h.land].y0;
+  return { x0: p.x - 3, x1: p.x + 3, y0: y - 3, y1: y + 3 };
+};
+
+/** Every tile the highways (and their signposts) may change: the map hash tests mask these. */
+export const HIGHWAY_MASK: Set<number> = (() => {
+  const s = new Set<number>();
+  for (const h of HIGHWAYS) {
+    const { core, verge } = highwayTiles(h);
+    for (const k of core) s.add(k);
+    for (const k of verge) s.add(k);
+    for (const p of h.posts ?? []) { const b = postBox(h, p); for (let y = b.y0; y <= b.y1; y++) for (let x = b.x0; x <= b.x1; x++) s.add(y * MAP_W + x); }
+  }
+  return s;
+})();
+
+/** The boxes the carve leaves alone: a capital fort's (see CAPITAL_FORTS). The map adds its towns, villages and city gates. */
+export const fortSkipBoxes = (): TileBox[] => CAPITAL_FORTS.map(([x, y]) => ({ x0: x - FORT_SKIP, x1: x + FORT_SKIP, y0: y - FORT_SKIP, y1: y + FORT_SKIP }));
+
+type HighwayT = { COBBLE: number; WATER: number; BRIDGE: number; TREE: number; PINE: number; BUSH: number; ROCK: number; STUMP: number; CACTUS: number; BONES: number };
+
+/**
+ * Cuts the highways into the built map (shared/map.ts, after the border roads; tests pass `lands` to cut one band).
+ * Core: cobbles, nature cleared, every tile a road. Verge: nature cleared only. Nothing changes inside `skip`, on water or
+ * a bridge, or under any object that is not nature. Returns the paved core tiles (and keeps what each changed tile was in
+ * `before`). Deterministic, no randomness.
+ */
+export function carveHighways(ground: number[][], objects: number[][], roads: Set<number>, T: HighwayT, EMPTY: number, skip: readonly TileBox[], lands?: readonly Act[], before?: Map<number, { g: number; o: number }>): Set<number> {
+  const nature = new Set<number>([T.TREE, T.PINE, T.BUSH, T.ROCK, T.STUMP, T.CACTUS, T.BONES]), paved = new Set<number>();
+  const skipped = (x: number, y: number) => skip.some((b) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1);
+  for (const h of HIGHWAYS) {
+    if (lands && !lands.includes(h.land)) continue;
+    const { core, verge } = highwayTiles(h);
+    for (const [set, pave] of [[verge, false], [core, true]] as const) for (const k of [...set].sort((a, b) => a - b)) {
+      const x = k % MAP_W, y = Math.floor(k / MAP_W), g = ground[y][x], o = objects[y][x];
+      if (skipped(x, y) || g === T.WATER || g === T.BRIDGE || (o !== EMPTY && !nature.has(o))) continue;
+      if (before && !before.has(k) && (o !== EMPTY || pave)) before.set(k, { g, o });
+      objects[y][x] = EMPTY;
+      if (pave) { ground[y][x] = T.COBBLE; roads.add(k); paved.add(k); }
+    }
+  }
+  return paved;
+}

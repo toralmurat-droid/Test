@@ -16,6 +16,8 @@ export const MAP_KEY = {
   front: "#e0503a", frontDark: "#b83a28",
   /** a gate or a border road between lands */
   way: "#96d7ff",
+  /** a land highway (shared/highways.ts): the 3-wide cobbled main road from the capital to every settlement */
+  highway: "#e8c070",
   /** a portal stone */
   stone: "#ff9a3c",
 };
@@ -47,6 +49,7 @@ const ROWS: Row[] = [
   { key: "quests", label: "Quests: givers and areas", sample: (g) => { glyph(g, 8, "!", "#ffd166"); g.strokeStyle = MAP_LINE.quest; g.lineWidth = 2; g.setLineDash([3, 2]); g.beginPath(); g.arc(26, 9, 7, 0, Math.PI * 2); g.stroke(); g.setLineDash([]); } },
   { key: "people", label: "People and shops", sample: (g) => { glyph(g, 10, "•", "#b9f27c"); glyph(g, 26, "$", "#f2c14e"); } },
   { key: "ways", label: "Gates and roads / portal stones", sample: (g) => { glyph(g, 10, "◆", MAP_KEY.way); glyph(g, 26, "◆", MAP_KEY.stone); } },
+  { key: "ways", label: "Highways", sample: (g) => { g.fillStyle = "rgba(0,0,0,0.7)"; g.fillRect(2, 5, 32, 8); g.fillStyle = MAP_KEY.highway; g.fillRect(3, 6, 30, 6); } },
   { key: "boards", label: "Bounty boards", sample: (g) => glyph(g, 18, "!", "#e3bf6a") },
   { key: "lands", label: "Your territory / picked", sample: (g) => { g.save(); g.beginPath(); g.rect(0, 0, 18, 18); g.clip(); line(g, MAP_LINE.here); g.restore(); g.save(); g.beginPath(); g.rect(18, 0, 18, 18); g.clip(); line(g, MAP_LINE.picked, [5, 3]); g.restore(); } },
   { key: "war", label: "Clan war: front, roads, Holds", sample: (g) => { g.save(); g.beginPath(); g.rect(0, 0, 18, 18); g.clip(); line(g, MAP_LINE.front, [], 2.5); g.restore(); g.save(); g.beginPath(); g.rect(18, 0, 18, 18); g.clip(); line(g, ROAD_STYLE.color, ROAD_STYLE.dash); g.restore(); } },
@@ -92,9 +95,12 @@ export function legendPanel(): HTMLDivElement {
     const t = document.createElement("span"); t.textContent = r.label;
     b.append(tick, c, t);
     b.addEventListener("mousedown", (ev) => ev.preventDefault());
+    b.dataset.layer = r.key;
     b.addEventListener("click", () => {
       if (off.has(r.key)) off.delete(r.key); else off.add(r.key);
-      b.classList.toggle("off", off.has(r.key)); store();
+      // (a layer may have more than one row: "ways" lists the gates and stones and the highways)
+      for (const o of list.querySelectorAll<HTMLButtonElement>(`.wm-lg-row[data-layer="${r.key}"]`)) o.classList.toggle("off", off.has(r.key));
+      store();
     });
     list.append(b);
   }

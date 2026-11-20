@@ -1,4 +1,4 @@
-import { T, AREAS, GROUND, OBJECTS, EMPTY, areaInfoAt, isSolidTile, ELEMENT_LANDS } from "./map";
+import { T, AREAS, EMPTY, areaInfoAt, ELEMENT_LANDS, groundBefore, objectBefore, solidBefore } from "./map";
 import { MobKind, MOBS, TILE, WORLD_H } from "./constants";
 import { baseLevelAt, SPAWN_ZONES, zoneLevels } from "./spawns";
 import { GEAR, LOOT_IDS, LOOT_LEVEL, rollAffixes, withLevel } from "./gear";
@@ -68,14 +68,17 @@ const LAIRS: { area: string; guards: Partial<Record<MobKind, number>>; at?: [num
 ];
 
 const PATHS = new Set<number>([T.DIRT, T.COBBLE, T.BRIDGE, T.WATER]);
-/** Open ground (not a road), free all around in radius r, not inside a bush; `front`: also nothing tall just in front of it. */
+/**
+ * Open ground (not a road), free all around in radius r, not inside a bush; `front`: also nothing tall just in front of it.
+ * Read on the map before the land highways (shared/map.ts solidBefore): chest spots are pinned, a highway never moves one.
+ */
 function openSpot(tx: number, ty: number, r: number, front: boolean): boolean {
   for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
-    if (isSolidTile(tx + dx, ty + dy) || (PATHS.has(GROUND[ty + dy]?.[tx + dx]) && ty < WORLD_H)) return false; // the Mawdeep is all earth floor
+    if (solidBefore(tx + dx, ty + dy) || (PATHS.has(groundBefore(tx + dx, ty + dy)!) && ty < WORLD_H)) return false; // the Mawdeep is all earth floor
   }
-  if (OBJECTS[ty]?.[tx] !== EMPTY) return false;
+  if (objectBefore(tx, ty) !== EMPTY) return false;
   // Iso view: nothing solid just in front (south/east), or a roof or tree would hide the chest
-  if (front) for (let dy = 0; dy <= 4; dy++) for (let dx = 0; dx <= 4; dx++) if (isSolidTile(tx + dx, ty + dy)) return false;
+  if (front) for (let dy = 0; dy <= 4; dy++) for (let dx = 0; dx <= 4; dx++) if (solidBefore(tx + dx, ty + dy)) return false;
   return true;
 }
 

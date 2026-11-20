@@ -1,5 +1,5 @@
 import { TILE } from "./constants";
-import { AREAS, EMPTY, GROUND, OBJECTS, SIGNPOSTS, T } from "./map";
+import { AREAS, EMPTY, groundBefore, objectBefore, SIGNPOSTS, T } from "./map";
 import { NPCS, NPC_DECOR } from "./npcs";
 import { CHESTS } from "./chests";
 import { ENGINES } from "./quests";
@@ -49,7 +49,8 @@ const BAD = new Set<number>([T.WATER, T.BRIDGE]);
 /** A site needs open ground under the engine (3x3) and the yard (3x3, six tiles to one side), and free tiles for its workers. */
 function fits(cx: number, cy: number, flip: boolean, taken: SiegeSite[]): boolean {
   const d = flip ? -1 : 1;
-  const free = (x: number, y: number) => { const o = OBJECTS[y]?.[x], g = GROUND[y]?.[x]; return o !== undefined && o === EMPTY && !BAD.has(g); };
+  // (on the map before the land highways, shared/map.ts objectBefore: the sites, and the quarry's engines, keep their spots)
+  const free = (x: number, y: number) => { const o = objectBefore(x, y), g = groundBefore(x, y); return o !== undefined && o === EMPTY && !BAD.has(g!); };
   for (let y = cy - 2; y <= cy + 1; y++) for (let i = -1; i <= 1; i++) if (!free(cx + i, y) || !free(cx + d * 6 + i, y)) return false;
   for (const [i, j] of [[-2, 0], [0, 1], [2, 0], [2, -1], [-1, -3], [0, -3], [5, -2], [5, -1], [4, 1], [4, -1], [3, 0]]) if (!free(cx + d * i, cy + j)) return false;
   const px = (cx + 0.5) * TILE, py = (cy + 0.5) * TILE, D = (ax: number, ay: number) => Math.hypot(ax - px, ay - py);

@@ -3,11 +3,11 @@ import { decodeFog, encodeFog, loadFog } from "./fogmigrate";
 import { BADLANDS_H, BADLANDS_Y0, DESERT_H, DESERT_Y0, CROWN_H, CROWN_Y0, CITIES_Y0, CITIES_H, inBadlandsBand, inCitiesBand, inCrownBand, inDeepRow, inMoorsBand, inSinkholesBand, SINKHOLES_H, SINKHOLES_Y0, MOORS_Y0, MOORS_H, MAP_H, MAP_W, TILE, UNDER_END, WORLD_H } from "../../shared/constants";
 import { floorAt, SEA_END } from "../../shared/dungeon";
 import { isDesertDune } from "../../shared/desert";
-import { AREAS, areaAt, EMPTY, GROUND, OBJECTS, T } from "../../shared/map";
+import { AREAS, areaAt, EMPTY, GROUND, HIGHWAY_TILES, OBJECTS, T } from "../../shared/map";
 import { createTilesetCanvas, tileColors } from "./tileset";
 import { ISO } from "./isoflag";
 import { pixelText } from "./pixeltext";
-import { layerOn, legendPanel, type MapLayer } from "./mapLayers";
+import { layerOn, legendPanel, MAP_KEY, type MapLayer } from "./mapLayers";
 import { clasp, frameBorderImage, plaque, FRAME } from "./mapframe";
 import type { WarColumns } from "./warColumns";
 import { drawWarTable, warTableOn, setWarTableOn, warTablePan, warTablePick, warTableResetView, warTableZoom, warTableZoomCentre, warTableZoomed } from "./warTable";
@@ -103,6 +103,7 @@ export interface MapMarker { x: number; y: number; glyph: string; color: string;
  */
 export class Minimap {
   private colors = document.createElement("canvas"); // 1 px per tile
+  private highways = document.createElement("canvas"); // 1 px per tile: the land highways in their key colour, clear elsewhere (the "ways" layer; never on the war table)
   private fog = document.createElement("canvas"); // 1 px per tile, alpha = undiscovered
   private fogCtx: CanvasRenderingContext2D;
   private seen = new Uint8Array(MAP_W * MAP_H); // 0 = unknown .. 255 = discovered
@@ -197,6 +198,10 @@ export class Minimap {
         : y >= SEA_END ? (o !== EMPTY ? "#0d0b0c" : "#4a3d33") : colors[o !== EMPTY ? o : g];
       b.fillRect(x, y, 1, 1);
     }
+    this.highways.width = MAP_W; this.highways.height = MAP_H;
+    const hw = this.highways.getContext("2d")!;
+    hw.fillStyle = MAP_KEY.highway;
+    for (const k of HIGHWAY_TILES) hw.fillRect(k % MAP_W, Math.floor(k / MAP_W), 1, 1);
     this.fogCtx = this.fog.getContext("2d")!;
     this.load();
     for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) if (this.seen[y * MAP_W + x]) this.grow(x, y);
@@ -664,6 +669,7 @@ export class Minimap {
     c.fillStyle = FOG;
     c.fillRect(0, 0, this.el.width, this.el.height);
     c.drawImage(this.colors, -sx * mpx, -sy * mpx, MAP_W * mpx, MAP_H * mpx);
+    if (layerOn("ways")) c.drawImage(this.highways, -sx * mpx, -sy * mpx, MAP_W * mpx, MAP_H * mpx);
     const dot = this.dot.bind(this);
     const wd = layerOn("war") ? this.warData() : undefined;
     // the war's lines go under the fog, so they only show in discovered land
@@ -743,6 +749,7 @@ export class Minimap {
     g.save();
     if (ISO) { g.translate(cw / 2, ch / 2); g.rotate(Math.PI / 4); g.scale(K, K); g.translate(-cw / 2, -ch / 2); }
     g.drawImage(this.colors, -R.x * BIG, -R.y * BIG, MAP_W * BIG, MAP_H * BIG);
+    if (layerOn("ways")) g.drawImage(this.highways, -R.x * BIG, -R.y * BIG, MAP_W * BIG, MAP_H * BIG);
     // the war's lines and icons go under the fog: only discovered land shows them (Murat 2026-11-19)
     const wd = layerOn("war") ? this.warData() : undefined;
     if (wd) drawWarWorld(g, wd, { mini: false, s: BIG, ox: R.x, oy: R.y, now, wall: Date.now(), upright: (u) => { if (ISO) { u.rotate(-Math.PI / 4); u.scale(1 / K, 1 / K); } } });

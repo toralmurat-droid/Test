@@ -1,11 +1,12 @@
 import { MAP_H as FULL_H, MAP_W, PLAYER_RADIUS, TILE, UNDER_END, WORLD_H, type MobKind } from "./constants";
 import { CRYPT_DOOR, FLOORS, LAIRS, SEA_END, SHORTCUTS, SINKHOLE, UNDER_SHAFT, type Floor } from "./dungeon";
-import { carveBorders } from "./borders";
+import { carveBorders, LAND_ROWS } from "./borders";
+import { carveHighways, fortSkipBoxes, HIGHWAYS, highwayTiles } from "./highways";
 import { buildDesert, D, inDesertRow, KEL_MARKET, WAYGATE_OAKVALE } from "./desert";
 import { buildMoors, CAIRN_PORTAL, CAIRN_SQUARE, MOORSGATE_OAKVALE, MR } from "./moors";
 import { BR, buildBadlands, REDPASS_OAKVALE, RUSTWATER_PORTAL, RUSTWATER_SQUARE } from "./badlands";
 import { buildSinkholes, ROPEWELL_PORTAL, ROPEWELL_SQUARE, SINKWAY_OAKVALE, SR } from "./sinkholes";
-import { buildCrown, CR, crownwayDais, crownwayFrom, TOLLCROSS_SQUARE } from "./crown";
+import { buildCrown, CR, crownwayDais, crownwayFrom, TOLLCROSS_SQUARE, type TileBox } from "./crown";
 import { buildCities, cityGateDais as carveCityGate, CITIES, CITY_TEMPLATE, cityAt, cityText, cityTile } from "./capitals";
 import { JETTY_RUNS, SALT_BUILDINGS, SALT_HARBOUR_STREET, SALT_LANE, SALT_PIERS, SALT_RACKS, SALT_SQUARE, SALT_TOWN, SALT_UPPER_LANE } from "./saltmere";
 
@@ -1062,17 +1063,19 @@ function buildWorld() {
   // ---------- 16. Act 2: the desert, in its own band under the rock (shared/desert.ts) ----------
   const desert = buildDesert(T, ground, objects, EMPTY);
   for (const k of desert.roads) roads.add(k);
-  for (const p of desert.posts) { // a post beside the trail, on the nearest free tile
+  /** Puts a post beside the road on the nearest free tile within 3 of (p.x, p.y) whose row `rowOk` allows (the desert's trails, the highways). */
+  const placePost = (p: { x: number; y: number; to: string[] }, rowOk: (y: number) => boolean) => {
     let best: [number, number] | undefined, bd = Infinity;
     for (let j = -3; j <= 3; j++) for (let i = -3; i <= 3; i++) {
       const x = p.x + i, y = p.y + j;
-      if (!inDesertRow(y) || objects[y][x] !== EMPTY || roads.has(y * MAP_W + x) || ground[y][x] === T.WATER) continue;
+      if (!rowOk(y) || objects[y][x] !== EMPTY || roads.has(y * MAP_W + x) || ground[y][x] === T.WATER) continue;
       let byRoad = false;
       for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (roads.has((y + dy) * MAP_W + x + dx)) byRoad = true;
       if (byRoad && Math.hypot(i, j) < bd) { bd = Math.hypot(i, j); best = [x, y]; }
     }
     if (best) { objects[best[1]][best[0]] = T.SIGNPOST; posts.push({ x: best[0], y: best[1], to: p.to }); }
-  }
+  };
+  for (const p of desert.posts) placePost(p, inDesertRow); // a post beside the trail, on the nearest free tile
   // the Undercity's well-shaft in Kharsun: a ring of old paving round the black hole (shared/dungeon.ts UNDER_SHAFT)
   for (let y = UNDER_SHAFT.y - 3; y <= UNDER_SHAFT.y + 3; y++) for (let x = UNDER_SHAFT.x - 3; x <= UNDER_SHAFT.x + 3; x++) {
     const d = Math.hypot(x - UNDER_SHAFT.x, (y - UNDER_SHAFT.y) * 1.15);
@@ -1117,7 +1120,21 @@ function buildWorld() {
   // ---------- 22. The border roads (shared/borders.ts): each land's roads run on out through its cliffs to the band's
   // edge, where the mist of the pass takes the hero on into the neighbouring land. Cut last, only inside BORDER_BOXES.
   carveBorders(ground, objects, roads, T, EMPTY);
-  return { ground, objects, areas, posts, roads, broken, makeshift };
+  // ---------- 23. The land highways (shared/highways.ts): each land's main road, 3 cobbles wide, from the capital's gate
+  // to its towns, villages and pass ends. Cut after everything else, so nothing overwrites it; never inside a town or
+  // village, a city gate's box or round a capital's fort (there it rides the old streets), then its signposts beside it
+  const skip: TileBox[] = [{ x0: V.x0 - 4, x1: V.x1 + 4, y0: V.y0 - 4, y1: V.y1 + 4 }, { x0: SALT_TOWN.x, x1: SALT_TOWN.x + SALT_TOWN.w - 1, y0: SALT_TOWN.y, y1: SALT_TOWN.y + SALT_TOWN.h - 1 },
+    ...CITIES.map((c) => c.outerBox), ...fortSkipBoxes()];
+  for (const h of HIGHWAYS) for (const name of h.towns) {
+    const a = areas.find((o) => o.name === name);
+    if (a) skip.push({ x0: a.x, x1: a.x + a.w - 1, y0: a.y, y1: a.y + a.h - 1 });
+  }
+  const highwayBefore = new Map<number, { g: number; o: number }>(), highways = carveHighways(ground, objects, roads, T, EMPTY, skip, undefined, highwayBefore);
+  for (const h of HIGHWAYS) {
+    const { y0, h: rows } = LAND_ROWS[h.land];
+    for (const p of h.posts ?? []) placePost({ x: p.x, y: p.y + y0, to: p.to }, (y) => y >= y0 && y < y0 + rows);
+  }
+  return { ground, objects, areas, posts, roads, broken, makeshift, highways, highwaySkip: skip, highwayBefore };
 }
 
 /**
@@ -1172,6 +1189,10 @@ for (let ty = 0; ty < MH; ty++) for (let tx = 0; tx < MW; tx++) {
   SOLID[ty * MW + tx] = GROUND[ty][tx] === T.WATER ? 1 : o === EMPTY || WALKABLE_OBJECTS.has(o) ? 0 : SMALL_OBJECTS.has(o) ? 2 : 1;
 }
 export const AREAS = WORLD.areas;
+/** The land highways' paved tiles (shared/highways.ts; row * MAP_W + x): the maps draw them in their own colour. */
+export const HIGHWAY_TILES: ReadonlySet<number> = WORLD.highways;
+/** Where the highways stay unwidened (towns, villages, city gate boxes, capital forts), for the tests and tools/highway-route.ts. */
+export const HIGHWAY_SKIP: readonly TileBox[] = WORLD.highwaySkip;
 
 /**
  * Mawdeep gates (Murat 2026-11-05: "doors to open"; 2026-11-08: "part should be like a prison wall and only part a
@@ -1280,20 +1301,29 @@ export const MAKESHIFT_BRIDGES = WORLD.makeshift;
 export interface Signpost { x: number; y: number; dirs: { name: string; arrow: string; angle: number }[] }
 const ARROWS = ["→", "↘", "↓", "↙", "←", "↖", "↑", "↗"]; // by compass octant, starting east, clockwise (y points down)
 
+/** The areas a tile lies in, in AREAS order (kept per tile: the signposts walk thousands of road tiles, the 3-wide highways most of all). */
+const AREAS_AT = new Map<number, Area[]>();
+function areasAt(k: number): Area[] {
+  let l = AREAS_AT.get(k);
+  if (!l) { const x = k % MW, y = Math.floor(k / MW); l = AREAS.filter((a) => x >= a.x && x < a.x + a.w && y >= a.y && y < a.y + a.h); AREAS_AT.set(k, l); }
+  return l;
+}
+/** The highways' middle lines: a signpost reads a highway as one line along its middle, not three tiles of road. */
+const HIGHWAY_MID = new Set(HIGHWAYS.flatMap((h) => [...highwayTiles(h).mid]));
 function buildSignpost(p: { x: number; y: number; to: string[] }): Signpost {
-  const roads = WORLD.roads;
+  const roads = WORLD.roads, line = (k: number) => roads.has(k) && (!WORLD.highways.has(k) || HIGHWAY_MID.has(k));
   // Centre on the nearest road tile: that's the spot the boards describe
   let cx = p.x + 0.5, cy = p.y + 0.5, cd = Infinity;
   for (let j = -3; j <= 3; j++) for (let i = -3; i <= 3; i++) {
     const x = p.x + i, y = p.y + j;
-    if (roads.has(y * MW + x) && Math.hypot(i, j) < cd) { cd = Math.hypot(i, j); cx = x + 0.5; cy = y + 0.5; }
+    if (line(y * MW + x) && Math.hypot(i, j) < cd) { cd = Math.hypot(i, j); cx = x + 0.5; cy = y + 0.5; }
   }
   const dist = (k: number) => Math.hypot((k % MW) + 0.5 - cx, ((k / MW) | 0) + 0.5 - cy);
   // Road tiles on a ring around the post, grouped into arcs: each arc is one road leaving the spot
   const ring: { k: number; a: number }[] = [];
   for (let j = -5; j <= 5; j++) for (let i = -5; i <= 5; i++) {
     const x = Math.floor(cx) + i, y = Math.floor(cy) + j, k = y * MW + x;
-    if (x < 0 || y < 0 || x >= MW || y >= MH || !roads.has(k)) continue;
+    if (x < 0 || y < 0 || x >= MW || y >= MH || !line(k)) continue;
     const d = dist(k);
     if (d >= 2.5 && d <= 4) ring.push({ k, a: Math.atan2((y + 0.5) - cy, (x + 0.5) - cx) });
   }
@@ -1305,15 +1335,14 @@ function buildSignpost(p: { x: number; y: number; to: string[] }): Signpost {
   }
   if (arcs.length > 1 && ring[0].a + Math.PI * 2 - ring[ring.length - 1].a < 0.6) arcs[0].push(...arcs.pop()!); // wrap around
   // Walk each road outwards to see which places it reaches first
-  const named = AREAS.filter((a) => !(p.x >= a.x && p.x < a.x + a.w && p.y >= a.y && p.y < a.y + a.h));
+  const own = new Set(areasAt(p.y * MW + p.x)); // (the places the post stands in are not named on it)
   const broad = (name: string) => (AREAS.find((a) => a.name === name)!.w * AREAS.find((a) => a.name === name)!.h) >= 2500;
-  const inArea = (k: number, a: Area) => { const x = k % MW, y = (k / MW) | 0; return x >= a.x && x < a.x + a.w && y >= a.y && y < a.y + a.h; };
   const branches = arcs.map((arc) => {
     const reach = new Map<string, number>();
     const seen = new Set<number>(arc.map((r) => r.k));
     let frontier = arc.map((r) => r.k);
     for (let step = 0; frontier.length && step < 400; step++) {
-      for (const k of frontier) for (const a of named) if (!reach.has(a.name) && inArea(k, a)) reach.set(a.name, step);
+      for (const k of frontier) for (const a of areasAt(k)) if (!own.has(a) && !reach.has(a.name)) reach.set(a.name, step);
       const next: number[] = [];
       for (const k of frontier) for (const n of [k + 1, k - 1, k + MW, k - MW, k + MW + 1, k + MW - 1, k - MW + 1, k - MW - 1]) {
         if (seen.has(n) || !roads.has(n) || dist(n) < 2.5) continue;
@@ -1343,11 +1372,23 @@ function buildSignpost(p: { x: number; y: number; to: string[] }): Signpost {
   return { x: p.x, y: p.y, dirs };
 }
 export const SIGNPOSTS: Signpost[] = WORLD.posts.map(buildSignpost);
+AREAS_AT.clear();
 
 /** The signpost within reach of a player at pixel (px, py), if any. */
 export function signpostNear(px: number, py: number, reach = 1.6): Signpost | undefined {
   const tx = px / TILE, ty = py / TILE;
   return SIGNPOSTS.find((s) => Math.hypot(s.x + 0.5 - tx, s.y + 0.5 - ty) <= reach);
+}
+
+/**
+ * The map as it was before the land highways (shared/highways.ts) were cut: spots worked out from the map that are saved
+ * or pinned (chests, siege sites: tests/quest-steps.test.ts) are found on it, so a highway never moves them.
+ */
+export const groundBefore = (tx: number, ty: number): number | undefined => WORLD.highwayBefore.get(ty * MW + tx)?.g ?? GROUND[ty]?.[tx];
+export const objectBefore = (tx: number, ty: number): number | undefined => WORLD.highwayBefore.get(ty * MW + tx)?.o ?? OBJECTS[ty]?.[tx];
+export function solidBefore(tx: number, ty: number): boolean {
+  const b = WORLD.highwayBefore.get(ty * MW + tx);
+  return b ? b.g === T.WATER || (b.o !== EMPTY && !WALKABLE_OBJECTS.has(b.o)) : isSolidTile(tx, ty);
 }
 
 export function isSolidTile(tx: number, ty: number): boolean {

@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { MAP_W, TILE } from "../shared/constants";
 import { BORDERS, endPath } from "../shared/borders";
+import { CAPITAL_FORTS } from "../shared/highways";
 import { isSafeZone, WORLD } from "../shared/map";
 import { patrolOf } from "../shared/war/patrols";
 import { HOLD_SITES, HOLDS, holdOf, MUSTERS, musterOf } from "../shared/war/standards";
@@ -27,6 +28,10 @@ test("hold sites: 25-30 forts, at most one per territory, none on war-proof land
     assert.ok(h && h.site === "capital", `${t.name}: the capital keeps its fort`);
     assert.deepEqual([h!.x, h!.y], [musterOf(t.id)!.x, musterOf(t.id)!.y]);
   }
+  // ...exactly where it stood before the land highways (shared/highways.ts keeps a box round each unwidened)
+  assert.deepEqual(HOLDS.filter((h) => h.site === "capital").map((h) => [TERRITORIES[h.t].name, h.x / TILE, h.y / TILE]),
+    [["Goldenreach Farms", 26.5, 58.5], ["The Veiled Sanctum", 241.5, 355.5], ["The Host's Muster", 271.5, 671.5], ["Fangrock", 27.5, 867.5], ["Hidehall", 248.5, 1105.5]]);
+  assert.deepEqual(CAPITAL_FORTS.map(([x, y]) => [x + 0.5, y + 0.5]), HOLDS.filter((h) => h.site === "capital").map((h) => [h.x / TILE, h.y / TILE]));
   // per land: never over its quota
   const per: Record<string, number> = {};
   for (const h of HOLDS) per[TERRITORIES[h.t].region] = (per[TERRITORIES[h.t].region] ?? 0) + 1;

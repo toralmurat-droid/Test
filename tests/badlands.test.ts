@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import { BORDER_BOXES, carveBorders } from "../shared/borders";
+import { HIGHWAY_MASK } from "../shared/highways";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
@@ -138,15 +139,17 @@ test("badlands: the Red Pass (and the Sinkway) leave the rest of Act 1 exactly a
   // shared/crown.ts CROWNWAYS; the capitals' city gates, W7: shared/capitals.ts CITIES outerBox), hashed before any of them was added (the same hash before and after the Saltmere rework;
   // re-hashed with the Greenward Gate's box masked on the map before the Crown, and with Hearthhold's box masked on the
   // map before W7: the only tiles the city gate changed lie inside it; the border roads' BORDER_BOXES, shared/borders.ts, too: re-hashed with them masked, the same with and without the roads cut; the portal stones added after the capitals' waystones, settlement network 2026-11-19,
-  // each clear the nature in a small disk round them: re-hashed with their boxes masked on the map before them). A deliberate change to the overworld
+  // each clear the nature in a small disk round them: re-hashed with their boxes masked on the map before them; the land highways, shared/highways.ts
+  // HIGHWAY_MASK, cut last and only inside it: re-hashed with the mask on the map before them, the same with and without them). A deliberate change to the overworld
   // map must update this hash.
   const S = SINKWAY_BOX, C = crownwayFrom("oakvale").box;
   const STONE_BOXES = PORTAL_SPOTS.slice(10 + CITIES.length).map((p) => ({ x0: p.x - 3, x1: p.x + 3, y0: p.y - 3, y1: p.y + 3 }));
   const box = (x: number, y: number) => (x <= 14 && y >= 113 && y <= 123) || (x >= S.x0 && x <= S.x1 && y >= S.y0 && y <= S.y1)
-    || [...SALT_BOXES, C, ...CITIES.map((c) => c.outerBox), ...BORDER_BOXES, ...STONE_BOXES].some((b) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1);
+    || [...SALT_BOXES, C, ...CITIES.map((c) => c.outerBox), ...BORDER_BOXES, ...STONE_BOXES].some((b) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1)
+    || HIGHWAY_MASK.has(y * MAP_W + x);
   const h = createHash("sha256");
   for (let y = 0; y < WORLD_H; y++) h.update(GROUND[y].map((g, x) => (box(x, y) ? -9 : g)).join(",") + "|" + OBJECTS[y].map((o, x) => (box(x, y) ? -9 : o)).join(",") + "\n");
-  assert.equal(h.digest("hex"), "b6861b22884d2f4b9ea14d644c83cc82994b7b997484c2cbdad5d9db19c9e778");
+  assert.equal(h.digest("hex"), "a28b8681b9ec3f38021666f2363212f8c386e5d2002b9b2376963fdf3f8b6301");
 });
 
 test("badlands: Lv 25-40 climbing west, the Red Pass opens at Lv 25, a war land of their own", () => {
