@@ -10,7 +10,7 @@ import { pixelText } from "./pixeltext";
 import { layerOn, legendPanel, type MapLayer } from "./mapLayers";
 import { clasp, frameBorderImage, plaque, FRAME } from "./mapframe";
 import type { WarColumns } from "./warColumns";
-import { drawWarTable, warTableOn, setWarTableOn, warTablePick } from "./warTable";
+import { drawWarTable, warTableOn, setWarTableOn, warTablePan, warTablePick, warTableResetView, warTableZoom, warTableZoomCentre, warTableZoomed } from "./warTable";
 import { drawHereOnMap, pickAt, type ExitRow } from "./warHere";
 import { hereAt, hereCaption, nodeTile } from "./warRoute";
 import type { WarTowns } from "./warTowns";
@@ -206,7 +206,7 @@ export class Minimap {
     // Big world map overlay
     this.overlay = document.createElement("div");
     this.overlay.id = "worldmap";
-    this.overlay.innerHTML = `<div class="wm-box"><div class="wm-title"></div><canvas class="wm-map"></canvas><div class="wm-hint"><button type="button" class="wm-center" tabindex="-1" title="Centre on your hero (C)">◎ Centre</button><button type="button" class="wm-war" tabindex="-1" title="Show who holds each land in the clan war, with you on it">War table</button><span class="wm-here"></span><span class="wm-keys-war">M / Esc to close</span><span class="wm-keys"><span class="wm-pick">Click a territory to pick it · </span>Drag or I J K L to move · Wheel to zoom · C centres · M / Esc closes</span><span class="wm-touch">Drag · Pinch to zoom · Double-tap to centre</span></div></div>`;
+    this.overlay.innerHTML = `<div class="wm-box"><div class="wm-title"></div><canvas class="wm-map"></canvas><div class="wm-hint"><button type="button" class="wm-center" tabindex="-1" title="Centre on your hero (C)">◎ Centre</button><button type="button" class="wm-war" tabindex="-1" title="Show who holds each land in the clan war, with you on it">War table</button><span class="wm-here"></span><span class="wm-zoom"><button type="button" class="wm-zin" tabindex="-1" title="Zoom in (wheel or +)">+</button><button type="button" class="wm-zout" tabindex="-1" title="Zoom out (wheel or -)">-</button><button type="button" class="wm-zall" tabindex="-1" title="Show the whole continent">Whole map</button></span><span class="wm-keys-war">Wheel or + / - to zoom · Drag to move · M / Esc to close</span><span class="wm-keys"><span class="wm-pick">Click a territory to pick it · </span>Drag or I J K L to move · Wheel to zoom · C centres · M / Esc closes</span><span class="wm-touch">Drag · Pinch to zoom · Double-tap to centre</span></div></div>`;
     this.big = this.overlay.querySelector("canvas")!;
     // Ornate frame: iron-bound oak with gem corners, a title plaque on top and clasps on the sides
     const box = this.overlay.querySelector<HTMLDivElement>(".wm-box")!;
@@ -240,6 +240,15 @@ export class Minimap {
     war.classList.toggle("on", warTableOn());
     war.addEventListener("mousedown", (ev) => ev.preventDefault());
     war.addEventListener("click", () => { war.blur(); this.switchView(); });
+    // The war table's zoom buttons (shown only on the table): around the frame's centre
+    const zoomBtn = (sel: string, act: () => void) => {
+      const b = this.overlay.querySelector<HTMLButtonElement>(sel)!;
+      b.addEventListener("mousedown", (ev) => ev.preventDefault());
+      b.addEventListener("click", () => { b.blur(); act(); });
+    };
+    zoomBtn(".wm-zin", () => warTableZoomCentre(1.5));
+    zoomBtn(".wm-zout", () => warTableZoomCentre(1 / 1.5));
+    zoomBtn(".wm-zall", () => warTableResetView());
     this.bindMapInput();
     el.addEventListener("click", () => this.toggle(true));
     el.title = "Open map (M)";
@@ -403,7 +412,7 @@ export class Minimap {
 
   /** Moves the world map by a canvas-pixel offset (screen directions, even on the turned iso map). */
   private pan(dx: number, dy: number) {
-    if (this.tableUp) return; // the war table is fixed
+    if (this.tableUp) { warTablePan(dx, dy); return; } // the war table moves its own sheet
     const c = this.camera(), [mx, my] = this.unturn(dx, dy);
     c.cx += mx / c.s; c.cy += my / c.s;
     this.follow = false;
@@ -412,7 +421,7 @@ export class Minimap {
 
   /** Zooms the world map by `f`, keeping the spot under canvas point (px, py) in place. */
   private zoomAt(f: number, px: number, py: number) {
-    if (this.tableUp) return;
+    if (this.tableUp) { warTableZoom(f, px, py); return; }
     const c = this.camera(), [ox, oy] = this.unturn(px - this.big.width / 2, py - this.big.height / 2);
     const tx = c.cx + ox / c.s, ty = c.cy + oy / c.s; // tile under the point
     c.s *= f;
@@ -702,7 +711,7 @@ export class Minimap {
       for (const k of this.held) { const d = PAN_KEYS[k]; if (d) { px += d[0]; py += d[1]; } }
       if (px || py) { const n = Math.hypot(px, py); this.pan((px / n) * PAN_SPEED * dt, (py / n) * PAN_SPEED * dt); }
       const zf = (this.held.has("+") ? 1 : 0) - (this.held.has("-") ? 1 : 0);
-      if (zf) this.zoomAt(Math.pow(ZOOM_SPEED, zf * dt), cw / 2, ch / 2);
+      if (zf) { if (this.tableUp) warTableZoomCentre(Math.pow(ZOOM_SPEED, zf * dt)); else this.zoomAt(Math.pow(ZOOM_SPEED, zf * dt), cw / 2, ch / 2); }
     }
     if (this.follow && me && this.cam) { this.cam.cx = me.x / TILE; this.cam.cy = me.y / TILE; }
     this.clampCam();
@@ -714,7 +723,7 @@ export class Minimap {
       this.big.style.cursor = "default"; this.warCursor = true;
       const here = this.caption(me);
       const over = this.hover ? warTablePick(this.hover.x, this.hover.y) : undefined;
-      this.big.style.cursor = over !== undefined ? "pointer" : "default";
+      this.big.style.cursor = over !== undefined ? "pointer" : this.ptrs.size && this.dragged ? "grabbing" : warTableZoomed() ? "grab" : "default"; // zoomed in: it can be dragged
       drawWarTable(g, this.war, PF, now, this.hover, { here, area: me ? areaAt(me.x, me.y) : undefined, sel: this.sel, woken: this.woken, ground: this.colors });
       return;
     }
