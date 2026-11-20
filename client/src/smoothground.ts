@@ -2,7 +2,8 @@ import Phaser from "phaser";
 import { BADLANDS_H, BADLANDS_Y0, DEEP_END, DEEP_Y0, DESERT_H, DESERT_Y0, MAP_H, MAP_W, MOORS_H, MOORS_Y0, SINKHOLES_H, SINKHOLES_Y0, CROWN_H, CROWN_Y0, CITIES_Y0, CITY_ACTS, CITY_PLOT, TILE, UNDER_END, WORLD_H } from "../../shared/constants";
 import { SEA_END } from "../../shared/dungeon";
 import { ELEMENT_LANDS, EMPTY, OBJECTS, T, TILE_COUNT } from "../../shared/map";
-import { CITIES, cityAt } from "../../shared/capitals";
+import { CITIES, cityAt, plotBox } from "../../shared/capitals";
+import type { ClanKey } from "../../shared/war/clans";
 import { isDesertDune } from "../../shared/desert";
 import { isCrownRim } from "../../shared/crown";
 import { isBadlandsRim } from "../../shared/badlands";
@@ -49,8 +50,10 @@ export class SmoothGround {
     }
     const cityRock = new Uint8Array(MAP_W * MAP_H);
     for (let y = CITIES_Y0 - 4; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) if (!cityAt(x, y)) cityRock[y * MAP_W + x] = 1; // the solid rock round the plots
-    const tints = [0, 1, 2, 3, 4].map((i) => { const c = CITIES.find((q) => q.plot === i); if (!c) return [1, 1, 1]; const s = CITY_LOOK[c.clan].stone; return [(s >> 16) / 255 * 1.02, ((s >> 8) & 255) / 255 * 1.02, (s & 255) / 255 * 1.02]; });
-    const data: GroundData = { w: MAP_W, h: MAP_H, tile: TILE, tileCount: TILE_COUNT, ground: g, solid, lands: ELEMENT_LANDS.map((l) => ({ x: l.x, y: l.y, w: l.w, h: l.h, el: l.el })), cave: { y0: WORLD_H, rock: SEA_END, end: UNDER_END, deep: [DEEP_Y0, DEEP_END] }, desert: { y0: DESERT_Y0, y1: DESERT_Y0 + DESERT_H }, moors: { y0: MOORS_Y0, y1: MOORS_Y0 + MOORS_H }, badlands: { y0: BADLANDS_Y0, y1: BADLANDS_Y0 + BADLANDS_H }, sinkholes: { y0: SINKHOLES_Y0, y1: SINKHOLES_Y0 + SINKHOLES_H }, crown: { y0: CROWN_Y0, y1: CROWN_Y0 + CROWN_H }, cities: { y0: CITIES_Y0, x0: CITY_PLOT.x0, stride: CITY_PLOT.stride, tints, acts: [...CITY_ACTS], rock: cityRock }, cliff, relief, reliefBands: [[DESERT_Y0, DESERT_Y0 + DESERT_H], [CROWN_Y0, CROWN_Y0 + CROWN_H], [BADLANDS_Y0, BADLANDS_Y0 + BADLANDS_H]] };
+    const tints = [0, 1, 2, 3, 4].map((i) => { const c = CITIES.find((q) => q.plot === i && !q.site); if (!c) return [1, 1, 1]; const s = CITY_LOOK[c.clan].stone; return [(s >> 16) / 255 * 1.02, ((s >> 8) & 255) / 255 * 1.02, (s & 255) / 255 * 1.02]; });
+    const stoneTint = (clan: ClanKey) => { const s = CITY_LOOK[clan].stone; return [(s >> 16) / 255 * 1.02, ((s >> 8) & 255) / 255 * 1.02, (s & 255) / 255 * 1.02]; };
+    const cityBoxes = CITIES.filter((q) => q.site).map((q) => { const b = plotBox(q); return { x0: b.x, y0: b.y, x1: b.x + b.w, y1: b.y + b.h, tint: stoneTint(q.clan) }; }); // a city in its land: its box in the clan's stone tint
+    const data: GroundData = { cityBoxes, w: MAP_W, h: MAP_H, tile: TILE, tileCount: TILE_COUNT, ground: g, solid, lands: ELEMENT_LANDS.map((l) => ({ x: l.x, y: l.y, w: l.w, h: l.h, el: l.el })), cave: { y0: WORLD_H, rock: SEA_END, end: UNDER_END, deep: [DEEP_Y0, DEEP_END] }, desert: { y0: DESERT_Y0, y1: DESERT_Y0 + DESERT_H }, moors: { y0: MOORS_Y0, y1: MOORS_Y0 + MOORS_H }, badlands: { y0: BADLANDS_Y0, y1: BADLANDS_Y0 + BADLANDS_H }, sinkholes: { y0: SINKHOLES_Y0, y1: SINKHOLES_Y0 + SINKHOLES_H }, crown: { y0: CROWN_Y0, y1: CROWN_Y0 + CROWN_H }, cities: { y0: CITIES_Y0, x0: CITY_PLOT.x0, stride: CITY_PLOT.stride, tints, acts: [...CITY_ACTS], rock: cityRock }, cliff, relief, reliefBands: [[DESERT_Y0, DESERT_Y0 + DESERT_H], [CROWN_Y0, CROWN_Y0 + CROWN_H], [BADLANDS_Y0, BADLANDS_Y0 + BADLANDS_H]] };
     const n = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 2) - 1));
     for (let i = 0; i < n; i++) {
       const w = new Worker(new URL("./groundWorker.ts", import.meta.url), { type: "module" });

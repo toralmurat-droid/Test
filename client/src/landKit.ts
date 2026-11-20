@@ -11,6 +11,7 @@ import { VILLAGES, villageBox, type VillageId } from "../../shared/villages";
 import { BOARDS } from "../../shared/bounty";
 import { allObjects } from "../../shared/quests";
 import { WORLD_PROP_SPOTS } from "./worldPropSpots";
+import { inCityBox } from "./cityFolk";
 import { LK_SHEETS, type LkKind } from "./landKitSheets";
 
 /**
@@ -78,7 +79,7 @@ const nearLandmarkBox = (tx: number, ty: number, m: number) => LANDMARKS.some((l
  * either (`onField`: a field or crop tile is fine, for scarecrows), no gateway in a fence, 3 tiles from a palisade gate; clear of NPCs and their props, signposts, chests, boards, quest objects, portal stones, war-town gates,
  * banners and stewards, forts and musters, siege works, the world props (worldPropSpots.ts), barns, landmarks, the
  * clan seats and the other kit props in `taken` (`gap` tiles). `pen`: stock inside a pen may stand against its fence,
- * hay and palisade (and the pen's gap is no gateway to keep clear: the beasts are walk-through).
+ * hay and palisade (and the pen's gap is no gateway to keep clear: the beasts are walk-through). Never within a city's box + 2 tiles.
  */
 export function kitFree(tx: number, ty: number, taken: readonly KitSpot[] = [], gap = 2, onField = false, pen = false): boolean {
   for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
@@ -87,6 +88,7 @@ export function kitFree(tx: number, ty: number, taken: readonly KitSpot[] = [], 
     if (i === 0 && j === 0 ? o !== EMPTY || (BAD_GROUND.has(g) && !(onField && FIELDS.has(g))) : o !== EMPTY && !NATURE.has(o) && !(pen && PEN_SIDES.has(o))) return false;
     if (NO_NEIGHBOUR.has(g) || HIGHWAY_TILES.has((ty + j) * MW + tx + i)) return false;
   }
+  if (inCityBox(tx, ty, 2)) return false; // none within a city standing in its land and two tiles round it
   if ((!pen && (inGateway(tx, ty) || nearGate(tx, ty))) || inSeat(tx, ty) || nearLandmarkBox(tx, ty, 1.5)) return false;
   if (BARNS.some((b) => tx >= b.x - 1 && tx <= b.x + b.w && ty >= b.y - 1 && ty <= b.y + b.h)) return false;
   if (SIEGE_SITES.some((s) => Math.abs(s.tx - tx) <= 9 && Math.abs(s.ty - ty) <= 4)) return false; // the siege works (worldProps rule)

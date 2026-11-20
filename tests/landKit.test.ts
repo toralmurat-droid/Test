@@ -12,6 +12,7 @@ import { CAPITAL_FORTS, FORT_SKIP, HIGHWAYS, legLine } from "../shared/highways"
 import { bodySolidAt } from "../shared/movement";
 import { buildLandKit, IN_PEN, inSeat, KIT_BUDGET, kitFree, LAND_KIT_SPOTS, LANDMARK_LIGHT, LANDMARK_PARTS, LANDMARK_SHEET, LK_SHEETS, ON_FIELD, SEAT_MARGIN, type LkKind } from "../client/src/landKit";
 import { allObjects } from "../shared/quests";
+import { cityAt } from "../shared/capitals";
 
 // Land identity (settlement network step 3): kit props (client, walk-through) and landmarks (shared, solid)
 const MW = GROUND[0].length;
@@ -227,7 +228,9 @@ test("landmarks: solid boxes on open ground in their area and land, blocking mov
       for (let ty = Math.floor(y) - 1; ty <= Math.floor(y + h); ty++) for (let tx = Math.floor(x) - 1; tx <= Math.floor(x + w); tx++) {
         const g = GROUND[ty][tx], o = OBJECTS[ty][tx];
         assert.ok(g !== T.WATER && g !== T.COBBLE && g !== T.BRIDGE && !HIGHWAY_TILES.has(ty * MW + tx), `${l.id}: road or water at ${tx},${ty}`);
-        assert.ok(o === EMPTY || NATURE.has(o), `${l.id}: built object at ${tx},${ty}`);
+        // (a city's wall may stand in the ring, owner's default for Hearthhold, settlement network step 5: the windmill stays
+        // where it stood, 0.6 tiles off the east wall; tests/hearthhold.test.ts keeps a body's way open between them)
+        assert.ok(o === EMPTY || NATURE.has(o) || !!cityAt(tx, ty), `${l.id}: built object at ${tx},${ty}`);
       }
       for (const p of [...PORTAL_SPOTS.map((q) => [q.x + 0.5, q.y + 0.5]), ...SIGNPOSTS.map((q) => [q.x + 0.5, q.y + 0.5]), ...[...NPCS, ...CHESTS, ...HOLDS, ...MUSTERS].map((q) => [q.x / TILE, q.y / TILE])])
         assert.ok(Math.hypot(p[0] - (x + w / 2), p[1] - (y + h / 2)) > 3, `${l.id}: too close to a stone, post, NPC, chest or fort at ${p}`);

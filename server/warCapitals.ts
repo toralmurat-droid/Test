@@ -2,11 +2,12 @@
  * The clans' capital cities on the server (W7, shared/capitals.ts has the plan, rules and numbers): who the city gate
  * and the city's waystone let in, the oath at the altar, the leader's one-time rank rewards, binding the city as home
  * and the respawn that uses it. State is the hero's plain Player.home / capPaid (saved, never synced: the "city"
- * message carries it to its owner). TownRoom calls in through the small CapitalsHost below; no per-tick work.
+ * message carries it to its owner). TownRoom calls in through the small CapitalsHost below; no per-tick work (a city in
+ * its land has walk-in gates: server/cityGates.ts watches them and refuses through `refuse`).
  */
 import { TILE } from "../shared/constants";
 import { actAt } from "../shared/act2";
-import { CITY, CITY_TEMPLATE, cityAdmits, cityAt, cityOf, cityPx, cityRoleNear, cityText, cityTitle, cityTile, rankRewardGold, type City } from "../shared/capitals";
+import { CITY, CITY_TEMPLATE, cityAdmits, type CityAdmit, cityAt, cityOf, cityPx, cityRoleNear, cityText, cityTitle, cityTile, rankRewardGold, type City } from "../shared/capitals";
 import { underground } from "../shared/dungeon";
 import { isSolidAt } from "../shared/map";
 import { isDecorSolidAt } from "../shared/npcs";
@@ -70,11 +71,16 @@ export class WarCapitals {
     if (!p) return false;
     const why = admitOf(p, city, now);
     if (why === "ok") return true;
-    if (now - (this.noted.get(id) ?? 0) > 3000) {
-      this.noted.set(id, now);
-      this.h.note(id, cityLine(why === "war" ? CITY_LINES.shutWar : CITY_LINES.shutWanted, { city: cityText(city).name, clan: CLANS[city.clan].name }));
-    }
+    this.refuse(id, city, why, now);
     return false;
+  }
+
+  /** Tells a hero why `city`'s gate stays shut (at most one note per 3 s): at war, Wanted, or below CITY.minLevel ("level"). */
+  refuse(id: string, city: City, why: Exclude<CityAdmit, "ok"> | "level", now = Date.now()) {
+    if (now - (this.noted.get(id) ?? 0) <= 3000) return;
+    this.noted.set(id, now);
+    const line = why === "war" ? CITY_LINES.shutWar : why === "wanted" ? CITY_LINES.shutWanted : CITY_LINES.shutLevel;
+    this.h.note(id, cityLine(line, { city: cityText(city).name, clan: CLANS[city.clan].name, level: CITY.minLevel }));
   }
 
   /** The hero left the room. */

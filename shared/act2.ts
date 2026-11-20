@@ -51,8 +51,9 @@ export const WAYGATES: Waygate[] = [
     { id: `crown_${c.from}`, ...px(crownGateTile(c)), to: `crownway_${c.from}`, label: `Go back through ${c.name.replace(/^The /, "the ")} home to ${c.land}` },
   ]),
   // the clans' capitals (W7, shared/capitals.ts): the city gate beside the seat ("citygate_<clan>") and the city's main
-  // gate inside its south wall ("cityexit_<clan>", heroes come out north of it, into the gate square)
-  ...CITIES.flatMap((c): Waygate[] => [
+  // gate inside its south wall ("cityexit_<clan>", heroes come out north of it, into the gate square). A city in its land
+  // (City.site, settlement network step 5) has none: heroes walk in through its gates (server/cityGates.ts keeps the rules)
+  ...CITIES.filter((c) => !c.site).flatMap((c): Waygate[] => [
     { id: `citygate_${c.clan}`, ...px(c.outer), to: `cityexit_${c.clan}`, label: cityText(c).enter },
     { id: `cityexit_${c.clan}`, ...px(cityTile(c, CITY_TEMPLATE.gate)), to: `citygate_${c.clan}`, label: cityText(c).leave, out: -2.4 },
   ]),

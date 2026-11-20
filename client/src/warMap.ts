@@ -347,7 +347,7 @@ function drawCityGates(g: CanvasRenderingContext2D, d: WarMapData, v: WarMapView
     g.fillStyle = "#1a1008"; g.fillRect(-k, 0, 2 * k, h / 2); // the arch
     g.fillStyle = "#ffe8a3"; g.fillRect(-w / 2, -h / 2, w, k); // gilt top
     if (!mini) {
-      const text = `${cityText(c).name} gate`;
+      const text = c.site ? cityText(c).name : `${cityText(c).name} gate`; // a city in its land is the place itself
       g.font = `13px ${PF}`; g.textAlign = "center"; g.textBaseline = "middle";
       const tw = Math.ceil(g.measureText(text).width) + 8;
       g.fillStyle = "rgba(13,10,7,0.92)"; g.fillRect(-tw / 2, 12, tw, 16);

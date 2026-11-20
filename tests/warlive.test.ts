@@ -75,7 +75,7 @@ test("war view: compact snapshot and territory lookup", () => {
   assert.equal(v.owner.length, TERRITORIES.length);
   assert.deepEqual(v.sieges, [[3, CLAN_KEYS.indexOf("redfang"), 100 + 5 * WAR.tickMs]]);
   const t = TERRITORIES[0];
-  assert.equal(territoryAt(t.x + 1, t.y + 1)?.id, t.id);
+  assert.equal(territoryAt(t.x + t.w - 2, t.y + t.h - 2)?.id, t.id); // (its north-west corner lies under Hearthhold's walls: no territory there)
   assert.equal(territoryAt(-5, -5), undefined);
 });
 

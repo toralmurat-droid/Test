@@ -4,7 +4,7 @@ import { MOORSGATE_MOORS } from "./moors";
 import { REDPASS_BADLANDS } from "./badlands";
 import { MAW_LEDGE_RECT, SINKWAY_SINKHOLES, SR } from "./sinkholes";
 import { CR, crownGateTile, CROWNWAYS, THRONE_HALL } from "./crown";
-import { CITIES, CITY } from "./capitals";
+import { CITIES, CITY, cityGates, cityText } from "./capitals";
 import { AREAS, isSafeZone, isSolidAt, OBJECTS, T, VILLAGE } from "./map";
 import { LANDMARK_SOLIDS } from "./landmarks";
 import { CAMP_POSTS, campMobs } from "./bandits";
@@ -38,7 +38,8 @@ export const NO_MOB_AREAS = ["Saltmere", "Kel Ashar", "The Sunstone Circle", "Th
   "The Rustwater Post", "The Red Pass", // Act 4: the outpost (walls and all) and the Red Pass's arrival clearing
   "Ropewell", "The Sinkway", // Act 5: the outpost (walls and all) and the Sinkway's arrival clearing
   "Tollcross", ...CROWNWAYS.map((c) => c.name), // Act 6: the Truce Market and the five Crownways' daises on the rim
-  ...VILLAGES.map((v) => v.name)]; // the villages along the highways (settlement network step 4, shared/villages.ts)
+  ...VILLAGES.map((v) => v.name), // the villages along the highways (settlement network step 4, shared/villages.ts)
+  ...CITIES.filter((c) => c.site).map((c) => cityText(c).name)]; // the cities in their lands, walls and apron (step 5, shared/cityLand.ts)
 const NO_MOB_RECTS = NO_MOB_AREAS.flatMap((n) => AREAS.filter((a) => a.name === n)).map((a) => ({ x0: a.x - 2, y0: a.y - 2, x1: a.x + a.w + 2, y1: a.y + a.h + 2 }));
 /** True where monsters may not go (pixel coords). */
 export function noMobsAt(px: number, py: number): boolean {
@@ -282,9 +283,11 @@ function claimedByArea(name: string, tx: number, ty: number): boolean {
   for (const a of list) if (inRect(a, tx, ty)) return true;
   return false;
 }
-/** True within CITY.gateClear tiles of a city's outer gate: spawn zones place nothing there, so a hero leaving a capital is not
+/** Every city's gates in its land (map tiles): a band city's outer gate, a city in its land's three walk-in gates (just outside). */
+const CITY_GATE_SPOTS = CITIES.flatMap((c) => (c.site ? cityGates(c).map((g) => g.out) : [c.outer]));
+/** True within CITY.gateClear tiles of a city's gate in its land: spawn zones place nothing there, so a hero leaving a capital is not
  * met by a pack (wandering monsters may still come by). */
-export const nearCityGate = (tx: number, ty: number) => CITIES.some((c) => Math.hypot(tx - c.outer.x, ty - c.outer.y) < CITY.gateClear);
+export const nearCityGate = (tx: number, ty: number) => CITY_GATE_SPOTS.some((g) => Math.hypot(tx - g.x, ty - g.y) < CITY.gateClear);
 /** True when tile (tx, ty), padded by half a tile for the body, touches a solid landmark box (shared/landmarks.ts). */
 export const underLandmark = (tx: number, ty: number) =>
   LANDMARK_SOLIDS.some(([x, y, w, h]) => tx + 1.5 > x && tx - 0.5 < x + w && ty + 1.5 > y && ty - 0.5 < y + h);

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { TILE } from "../shared/constants";
-import { CITIES, CITY, cityAt, cityAtPx, cityNpcPx, cityText, cityTitle } from "../shared/capitals";
+import { CITIES, CITY, CITY_TEMPLATE, cityAt, cityAtPx, cityGates, cityNpcPx, cityText, cityTile, cityTitle } from "../shared/capitals";
 import { waygateById } from "../shared/act2";
 import { portalById } from "../shared/portals";
 import { pairOf, setWarPairs, _resetWarRelations, FEUD } from "../shared/war/feuds";
@@ -15,7 +15,7 @@ const at = (p: any, x: number, y: number) => { p.x = x; p.y = y; p.moving = fals
 /** In front of a city NPC (px). */
 const before = (role: "leader" | "quartermaster" | "oathkeeper" | "trainer") => { const n = cityNpcPx(W, role); return { x: n.x, y: n.y + TILE * 0.8 }; };
 
-test("room: the Wardens' city gate admits the right heroes, its waystone the same; the way out is always open", async () => {
+test("room: Hearthhold's south gate admits the right heroes, its waystone the same; the way out is always open", async () => {
   const srv = await startRoom();
   try {
     const c = await srv.join();
@@ -23,9 +23,16 @@ test("room: the Wardens' city gate admits the right heroes, its waystone the sam
     c.onMessage("chat", (m: any) => { if (!m.id) notes.push(m.text); });
     await wait(300);
     const room = srv.room, pid = c.sessionId, p = room.state.players.get(pid), client = room.clients.getById(pid);
-    const out = waygateById("citygate_wardens")!, inn = waygateById("cityexit_wardens")!;
-    // lastHurt: Wardens war troops near Goldenreach may strike a hero sworn to a clan at war while the test waits (the gate refuses heroes in a fight)
-    const tryGate = () => { at(p, out.x, out.y); p.lastHurt = 0; p.dead = false; p.hp = p.maxHp; p.gateNoteAt = 0; room.caps.noted.clear(); room.useWaygate(client); return !!cityAtPx(p.x, p.y); };
+    // Hearthhold stands in its land (settlement network step 5): a hero walks up from outside the south gate into its gap,
+    // and the gate ward (server/cityGates.ts) lets them in or puts them back (tests/hearthhold-room.test.ts: every gate)
+    const S = cityGates(W).find((g) => g.side === "south")!, px = (t: { x: number; y: number }) => ({ x: (t.x + 0.5) * TILE, y: (t.y + 0.5) * TILE });
+    const out = px(S.out), inn = px(cityTile(W, { x: 25, y: 37 }));
+    const tryGate = () => {
+      p.dead = false; p.hp = p.maxHp; room.caps.noted.clear();
+      at(p, out.x, out.y); room.gateWard.tick();
+      at(p, out.x, out.y - TILE); room.gateWard.tick();
+      return !!cityAtPx(p.x, p.y);
+    };
     // below Lv 5 the gate is barred
     p.level = 4;
     assert.equal(tryGate(), false, "Lv 4 stays outside");
@@ -33,10 +40,10 @@ test("room: the Wardens' city gate admits the right heroes, its waystone the sam
     p.level = 5;
     assert.equal(tryGate(), true, "Lv 5, unsworn: in");
     assert.equal(cityAtPx(p.x, p.y), W);
-    // out again through the city's own gate
-    at(p, inn.x, inn.y); room.useWaygate(client);
+    // out again through the gate: nobody stops a hero leaving
+    at(p, inn.x, inn.y); room.gateWard.tick(); at(p, out.x, out.y); room.gateWard.tick();
     assert.equal(cityAtPx(p.x, p.y), undefined, "out through the city gate");
-    assert.ok(Math.hypot(p.x - out.x, p.y - out.y) < 3 * TILE, "back beside the city gate at Goldenreach");
+    assert.ok(Math.hypot(p.x - out.x, p.y - out.y) < TILE, "outside the south gate");
     // a hero sworn to a clan at war with the Wardens is refused, with a note; at peace, let in
     p.clan = "redfang"; p.clanAt = 1;
     setWarPairs([pairOf("redfang", "wardens")]);
@@ -62,8 +69,11 @@ test("room: the Wardens' city gate admits the right heroes, its waystone the sam
     assert.equal(travel(), true, "own sworn: the waystone takes them");
     _resetWarRelations();
     // nobody is thrown out when the war changes, and the way out works for anyone
+    at(p, inn.x, inn.y); room.gateWard.tick();
     p.clan = "redfang"; setWarPairs([pairOf("redfang", "wardens")]);
-    at(p, inn.x, inn.y); room.useWaygate(client);
+    room.gateWard.tick();
+    assert.equal(cityAtPx(p.x, p.y), W, "a war does not throw anyone out");
+    at(p, out.x, out.y); room.gateWard.tick();
     assert.equal(cityAtPx(p.x, p.y), undefined, "an enemy inside can always leave");
     _resetWarRelations();
     await c.leave();
@@ -180,8 +190,8 @@ test("room: home and capPaid are saved and restored, old and broken saves load w
     room.restore(p, { ...structuredClone(save), clan: "veiled" });
     assert.equal(p.home, undefined, "a home in another clan's city is dropped on load");
     // logging out inside the city saves Act 1: the hero logs back in at Oakvale
-    const g = waygateById("cityexit_wardens")!;
-    at(p, g.x, g.y - 3 * TILE);
+    const g = cityTile(W, CITY_TEMPLATE.gate);
+    at(p, (g.x + 0.5) * TILE, (g.y - 2.5) * TILE);
     assert.ok(cityAt(Math.floor(p.x / TILE), Math.floor(p.y / TILE)));
     assert.equal(room.snapshot(p).act, 1);
     await c.leave();

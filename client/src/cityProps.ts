@@ -1,6 +1,7 @@
-import type { CityPropKind } from "../../shared/capitals";
+import type { CityGate, CityPropKind } from "../../shared/capitals";
+import { TILE } from "../../shared/constants";
 import { CLANS, type ClanKey } from "../../shared/war/clans";
-import { hsh, IsoPaint, mat, ramp, type Mat, type V3 } from "./isoPaint";
+import { dith, hsh, IsoPaint, mat, ramp, type Mat, type V3 } from "./isoPaint";
 import { BRASSR, dummy, IRONR, ROPER, STONER, WOODR, wood } from "./isoProps";
 import type Phaser from "phaser";
 import type { Pen } from "./worldProps";
@@ -251,4 +252,185 @@ export function cityPropTextures(scene: Phaser.Scene, clan: ClanKey) {
     tex.refresh();
     tex.setFilter(1 /* Phaser.Textures.FilterMode.NEAREST */);
   }
+}
+
+// ---- gatehouses --------------------------------------------------------------------------------------------
+/**
+ * Oblique version of the iso painter for the gatehouses: ground stays square (screen x = u, y = v) and height lifts
+ * straight up, so a gate that runs along the wall lines up with the flat wall tiles. Only top and front (+v) faces are seen.
+ * Screen point of (u, v, z): x = ox + u, y = oy + v - z. Nearer to the viewer = larger v + z.
+ */
+class FrontPaint extends IsoPaint {
+  private zq: Float32Array;
+  constructor(p: Pen, private w: number, private h: number, ox: number, oy: number) { super(p, w, h, ox, oy); this.zq = new Float32Array(w * h).fill(-1e9); }
+  x(u: number, _v: number) { return this.ox + u; }
+  y(_u: number, v: number, z: number) { return this.oy + v - z; }
+  plot(u: number, v: number, z: number, c: number | undefined, bias = 0) {
+    if (c === undefined) return false;
+    const x = Math.round(this.x(u, v) - 0.5), y = Math.round(this.y(u, v, z) - 0.5);
+    if (x < 0 || y < 0 || x >= this.w || y >= this.h) return false;
+    const d = v + z + bias, i = y * this.w + x;
+    if (d < this.zq[i]) return false;
+    this.zq[i] = d; this.p.px(x, y, c);
+    return true;
+  }
+  shadow(u: number, v: number, r: number, a = 0.4) {
+    const cx = this.x(u, v), cy = this.y(u, v, 0);
+    for (let y = Math.floor(cy - r * 0.5); y <= cy + r * 0.5; y++) for (let x = Math.floor(cx - r); x <= cx + r; x++) {
+      const dx = (x - cx) / r, dy = (y - cy) / (r * 0.5);
+      if (dx * dx + dy * dy <= 1 && dith(x, y) < 0.7 && x >= 0 && y >= 0 && x < this.w && y < this.h && this.zq[y * this.w + x] < -1e8) this.p.px(x, y, 0x000000, a);
+    }
+  }
+}
+
+const GT = 96, GW = 44, GSPRING = 46, GCROWN = 64, GLINTEL = 88, GTOWER = 96; // tower height, arch (half-width, springing, crown), lintel top
+/** Running-bond stone courses with a little tone noise: for the vertical faces of towers and the arch wall. */
+const brickWall = (bias = 0): Mat => (l, s, _t, x, y) => {
+  const row = Math.floor(y / 5), xo = x + (row & 1) * 5, col = Math.floor(xo / 10);
+  const mortar = y % 5 === 0 || xo % 10 === 0;
+  const edge = s < 0.05 ? 0.1 : s > 0.95 ? -0.12 : 0;
+  return ramp(PAL.stone, l + bias + edge + (hsh(col, row, 13) - 0.5) * 0.2 - (mortar ? 0.2 : 0), x, y);
+};
+/** Crenellations round a rectangle's edges at height z (merlons 7 wide, 5 gaps; `sides` false = front and back only). */
+function merlons(g: IsoPaint, u0: number, u1: number, v0: number, v1: number, z: number, sides: boolean) {
+  const n = Math.max(1, Math.round((u1 - u0 - 7) / 12));
+  for (let i = 0; i <= n; i++) {
+    const u = u0 + ((u1 - u0 - 7) * i) / n;
+    g.box(u, u + 7, v1 - 5, v1, z, z + 7, brickWall(0.05));
+    g.box(u, u + 7, v0, v0 + 5, z, z + 7, stone(0.0), 3);
+  }
+  if (!sides) return;
+  const m = Math.max(1, Math.round((v1 - v0 - 17) / 12));
+  for (let i = 1; i <= m; i++) {
+    const v = v0 + 5 + ((v1 - v0 - 17) * i) / (m + 1);
+    g.box(u0, u0 + 5, v, v + 7, z, z + 7, stone(0.0), 3); g.box(u1 - 5, u1, v, v + 7, z, z + 7, stone(0.0), 7);
+  }
+}
+/** One gate tower on the wall: plinth, brick shaft, trim band, arrow slits, crenellated top, a pennant and a hanging banner. */
+function gateTower(g: IsoPaint, uc: number, v0: number, v1: number, TH = GTOWER) {
+  const u0 = uc - 20, u1 = uc + 20;
+  g.shadow(uc, v1 + 2, 30, 0.4);
+  g.box(u0 - 2, u1 + 2, v0, v1 + 1, 0, 7, stone(-0.18), 3);
+  g.box(u0, u1, v0, v1, 7, TH, brickWall(), 3);
+  g.box(u0 - 1.5, u1 + 1.5, v0, v1 + 1.5, TH - 14, TH - 10, mat(PAL.trim, -0.05), 3); // clan trim band
+  g.box(u0 - 1.5, u1 + 1.5, v0, v1 + 1.5, TH - 2, TH, stone(0.15), 3); // corbel course under the parapet
+  for (const du of [-14, 14]) g.quad([uc + du - 1.6, v1 + 0.1, TH - 20], [3.2, 0, 0], [0, 0, -Math.min(18, TH - 30)], (_l, _s, t, x, y) => ramp([0x050403, 0x120e0a, 0x241c14], t < 0.1 ? 0.8 : 0.3, x, y));
+  merlons(g, u0, u1, v0, v1, TH, true);
+  // pennant on a brass-tipped staff in the tower's back corner
+  g.rod([uc + 8, v0 + 9, TH], [uc + 8, v0 + 9, TH + 26], 0.55, wood(WOODR, 0, 24));
+  g.blob([uc + 8, v0 + 9, TH + 27], 1, 1, 1, brass(0.05));
+  g.quad([uc + 8.5, v0 + 9, TH + 24], [13, 0, 0], [0, 0, -8], (l, s, t, x, y) => (s > 1 - Math.abs(t - 0.5) * 1.1 ? undefined : ramp(t < 0.12 || t > 0.88 ? PAL.trim : PAL.cloth, l + 0.1, x, y)), (s) => Math.sin(s * 3) * 0.8);
+  // banner hung from a crossbar high on the front
+  const bz = TH - 18, bv = v1 + 1.2;
+  g.rod([uc - 10, bv, bz + 1], [uc + 10, bv, bz + 1], 0.8, wood(WOODR, 0.05, 20));
+  for (const du of [-10.4, 10.4]) g.blob([uc + du, bv, bz + 1], 1.1, 1.1, 1.1, brass(0.05));
+  const W = 15, H = Math.min(46, TH - 24);
+  g.quad([uc - W / 2, bv + 0.4, bz], [W, 0, 0], [0, 0, -H], (l, s, t, x, y) => {
+    const m = Math.abs(s - 0.5) * 2;
+    if (t > 1 - 0.16 * (1 - m)) return undefined;
+    if (m > 0.88 || t < 0.05 || t > 0.9 - 0.16 * (1 - m)) return ramp(PAL.trim, l * 0.9 + 0.05, x, y);
+    const ft = (t - 0.22) / 0.5;
+    if (ft > 0 && ft < 1 && m < 0.42 * Math.pow(Math.sin(Math.PI * Math.pow(ft, 0.8)), 0.9)) return ramp(PAL.trim, l + 0.15, x, y); // hearth-flame
+    return ramp(PAL.cloth, l + (hsh(Math.floor(s * 30), Math.floor(t * 70), 5) - 0.5) * 0.06 + t * 0.05, x, y);
+  }, (s, t) => Math.sin(t * 2.6 + s * 1.2) * (0.2 + 1.2 * t));
+}
+
+/** South gatehouse (gate runs along u, a 3-tile gap): two towers, a round-headed arch in a crenellated lintel, a raised portcullis behind it. */
+function gatehouseS(p: Pen) {
+  const g = new FrontPaint(p, 180, 176, 90, 168), A = GW;
+  gateTower(g, -A - 20 + 4, -34, 0); gateTower(g, A + 20 - 4, -34, 0);
+  // lintel wall: brick face with the arch cut out (voussoir ring), then its parapet
+  g.quad([-A, -2, 0], [2 * A, 0, 0], [0, 0, GLINTEL], (l, s, t, x, y) => {
+    const u = -A + s * 2 * A, z = t * GLINTEL, top = GSPRING + (GCROWN - GSPRING) * Math.sqrt(Math.max(0, 1 - (u / A) ** 2));
+    if (z < top) return undefined;
+    if (z < top + 6) {
+      const ang = Math.atan2(z - GSPRING, u) / (Math.PI / 11);
+      if (z < GSPRING) return ramp(PAL.stone, l + 0.18 - (Math.floor(z / 8) * 8 === Math.floor(z) ? 0.2 : 0), x, y);
+      return ramp(PAL.stone, l + 0.2 - (ang - Math.floor(ang) < 0.1 ? 0.22 : 0), x, y);
+    }
+    if (z > GLINTEL - 5 && z < GLINTEL - 1) return ramp(PAL.trim, l, x, y);
+    return brickWall()(l, s, t, x, y);
+  });
+  g.box(-A, A, -32, -2, GLINTEL - 1, GLINTEL, stone(0.12), 1);
+  merlons(g, -A, A, -32, -2, GLINTEL, false);
+  // keystone shield with the clan's trim over the arch
+  g.box(-5, 5, -2.6, -1.9, GCROWN + 6, GCROWN + 17, mat(PAL.trim, 0), 2);
+  g.box(-2, 2, -2.7, -1.9, GCROWN + 9, GCROWN + 14, mat(PAL.cloth, 0.05), 2);
+  // portcullis, raised: its lowest teeth hang into the arch
+  const bars = (l: number, s: number, t: number, x: number, y: number) => {
+    const u = -42 + s * 84, z = 44 + t * 40, ph = ((u + 42) % 8 + 8) % 8, d = Math.abs(ph - 4);
+    if (d < 1.1) return ramp(IRONR, l * 1.05 - 0.1 + (z < 49 ? 0.25 : 0), x, y);
+    if (Math.abs(z - 58) < 1.3 || Math.abs(z - 72) < 1.3) return ramp(IRONR, l - 0.1, x, y);
+    return undefined;
+  };
+  g.quad([-42, -16, 44], [84, 0, 0], [0, 0, 40], bars);
+  g.rod([-42, -16, 61], [42, -16, 61], 0.5, metal(-0.1)); // chain cross-bar
+}
+
+/** Side gatehouse (west / east wall, the gate runs along v, a 3-tile gap): two towers joined by a crenellated arch walk, seen from the south. */
+function gatehouseW(p: Pen) {
+  const g = new FrontPaint(p, 60, 268, 30, 176);
+  const TW = 62;
+  gateTower(g, 0, -82, -46, TW); gateTower(g, 0, 46, 82, TW);
+  // the arch's springers reach out from both towers over the road (the road itself stays open under them), and a raised portcullis
+  // shows its iron teeth below the northern one
+  for (const [v0, v1] of [[-46, -36], [36, 46]] as const) {
+    g.box(-11, 11, v0, v1, TW - 14, TW, brickWall(0.04), 3);
+    g.box(-12, 12, v0, v1 + 0.5, TW - 16, TW - 13, mat(PAL.trim, -0.05), 3);
+  }
+  g.quad([-10, -35.5, TW - 16], [20, 0, 0], [0, 0, -9], (l, s, t, x, y) => {
+    const ph = ((s * 20) % 5 + 5) % 5, d = Math.abs(ph - 2.5);
+    return d < 0.9 && t < 0.5 + 0.5 * (1 - d / 0.9) * 0 + 0.55 - (d / 0.9) * 0.3 ? ramp(IRONR, l * 1.05 - 0.1, x, y) : t < 0.16 ? ramp(IRONR, l - 0.15, x, y) : undefined;
+  });
+}
+
+/** Frame metrics of the two gatehouse sheets: the anchor is the foot (south front) of the building, texels. */
+export const GATEHOUSES = {
+  south: { w: 180, h: 176, ox: 90, oy: 168, draw: gatehouseS },
+  side: { w: 60, h: 268, ox: 30, oy: 258, draw: gatehouseW },
+};
+export const gatehouseKey = (side: CityGate["side"], clan: ClanKey = "wardens") => `gatehouse_${clan}_${side === "south" ? "south" : "side"}`;
+
+/** One gatehouse sheet as RGBA bytes with the 1px outline (the preview tool uses it too). */
+export function bakeGatehouse(side: CityGate["side"], clan: ClanKey = "wardens"): Uint8ClampedArray {
+  const { w, h, draw } = GATEHOUSES[side === "south" ? "south" : "side"], buf = new Uint32Array(w * h);
+  PAL = PALS[clan];
+  const px = (x: number, y: number, c: number, a = 1) => {
+    x = Math.round(x); y = Math.round(y);
+    if (x < 0 || y < 0 || x >= w || y >= h) return;
+    const i = y * w + x, o = buf[i];
+    if (a >= 1 || !(o >>> 24)) { buf[i] = ((a >= 1 ? 255 : Math.round(a * 255)) << 24 | c) >>> 0; return; }
+    const mix = (sh: number) => Math.round(((o >> sh) & 255) * (1 - a) + ((c >> sh) & 255) * a) << sh;
+    buf[i] = (0xff000000 | mix(16) | mix(8) | mix(0)) >>> 0;
+  };
+  draw({ px } as Pen);
+  const solid = (x: number, y: number) => x >= 0 && y >= 0 && x < w && y < h && buf[y * w + x] >>> 24 > 140;
+  const out = new Uint8ClampedArray(w * h * 4);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    let v = buf[y * w + x];
+    if (!solid(x, y) && (solid(x - 1, y) || solid(x + 1, y) || solid(x, y - 1) || solid(x, y + 1))) v = (0xe0 << 24 | OUTLINE) >>> 0;
+    const j = (y * w + x) * 4;
+    out[j] = (v >> 16) & 255; out[j + 1] = (v >> 8) & 255; out[j + 2] = v & 255; out[j + 3] = v >>> 24;
+  }
+  return out;
+}
+
+/**
+ * Paints a city gate's gatehouse (cosmetic, client-only, no collision): two towers on the wall tiles flanking the 3-tile gap, a
+ * crenellated arch over it with a raised portcullis and clan banners in the clan's colours. The south gate faces down; the
+ * west and east gates share one sheet seen from the south. Returns the sprite so the caller can destroy it with the city.
+ * `gate.tiles` are map tiles; the sprite sits at the building's foot, depth by foot y like the city props.
+ */
+export function paintGatehouse(scene: Phaser.Scene, gate: CityGate, clan: string): Phaser.GameObjects.Image {
+  const ck = (clan in PALS ? clan : "wardens") as ClanKey, key = gatehouseKey(gate.side, ck), a = GATEHOUSES[gate.side === "south" ? "south" : "side"];
+  if (!scene.textures.exists(key)) {
+    const tex = scene.textures.createCanvas(key, a.w, a.h)!, ctx = tex.getContext(), img = ctx.createImageData(a.w, a.h);
+    img.data.set(bakeGatehouse(gate.side, ck)); ctx.putImageData(img, 0, 0);
+    tex.refresh();
+    tex.setFilter(1 /* Phaser.Textures.FilterMode.NEAREST */);
+  }
+  const t = gate.tiles, mid = t[Math.floor(t.length / 2)];
+  // south: centred on the gap, foot at the wall row's bottom edge; side: centred on the wall column, foot at the south tower's front
+  const x = (mid.x + 0.5) * TILE, y = gate.side === "south" ? (mid.y + 1) * TILE : (mid.y + 0.5) * TILE + 82;
+  return scene.add.image(x, y, key).setOrigin(a.ox / a.w, a.oy / a.h).setDepth(y);
 }
