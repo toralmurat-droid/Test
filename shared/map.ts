@@ -1063,8 +1063,12 @@ function buildWorld() {
   // ---------- 16. Act 2: the desert, in its own band under the rock (shared/desert.ts) ----------
   const desert = buildDesert(T, ground, objects, EMPTY);
   for (const k of desert.roads) roads.add(k);
-  /** Puts a post beside the road on the nearest free tile within 3 of (p.x, p.y) whose row `rowOk` allows (the desert's trails, the highways). */
-  const placePost = (p: { x: number; y: number; to: string[] }, rowOk: (y: number) => boolean) => {
+  /**
+   * Puts a post beside the road on the nearest free tile within 3 of (p.x, p.y) whose row `rowOk` allows (the desert's
+   * trails, the highways). `before`: keeps what the tile was (the highways' posts: chests and siege sites read the map
+   * as it was before them, so a post never moves one).
+   */
+  const placePost = (p: { x: number; y: number; to: string[] }, rowOk: (y: number) => boolean, before?: Map<number, { g: number; o: number }>) => {
     let best: [number, number] | undefined, bd = Infinity;
     for (let j = -3; j <= 3; j++) for (let i = -3; i <= 3; i++) {
       const x = p.x + i, y = p.y + j;
@@ -1073,7 +1077,10 @@ function buildWorld() {
       for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (roads.has((y + dy) * MAP_W + x + dx)) byRoad = true;
       if (byRoad && Math.hypot(i, j) < bd) { bd = Math.hypot(i, j); best = [x, y]; }
     }
-    if (best) { objects[best[1]][best[0]] = T.SIGNPOST; posts.push({ x: best[0], y: best[1], to: p.to }); }
+    if (!best) return;
+    const [x, y] = best, k = y * MAP_W + x;
+    if (before && !before.has(k)) before.set(k, { g: ground[y][x], o: objects[y][x] });
+    objects[y][x] = T.SIGNPOST; posts.push({ x, y, to: p.to });
   };
   for (const p of desert.posts) placePost(p, inDesertRow); // a post beside the trail, on the nearest free tile
   // the Undercity's well-shaft in Kharsun: a ring of old paving round the black hole (shared/dungeon.ts UNDER_SHAFT)
@@ -1132,7 +1139,7 @@ function buildWorld() {
   const highwayBefore = new Map<number, { g: number; o: number }>(), highways = carveHighways(ground, objects, roads, T, EMPTY, skip, undefined, highwayBefore);
   for (const h of HIGHWAYS) {
     const { y0, h: rows } = LAND_ROWS[h.land];
-    for (const p of h.posts ?? []) placePost({ x: p.x, y: p.y + y0, to: p.to }, (y) => y >= y0 && y < y0 + rows);
+    for (const p of h.posts ?? []) placePost({ x: p.x, y: p.y + y0, to: p.to }, (y) => y >= y0 && y < y0 + rows, highwayBefore);
   }
   return { ground, objects, areas, posts, roads, broken, makeshift, highways, highwaySkip: skip, highwayBefore };
 }

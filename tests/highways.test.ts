@@ -13,6 +13,8 @@ const roads = WORLD.roads;
 const inBox = (x: number, y: number, b: { x0: number; x1: number; y0: number; y1: number }) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1;
 const skipped = (x: number, y: number) => HIGHWAY_SKIP.some((b) => inBox(x, y, b));
 const NAT = new Set<number>([...NATURE, T.CACTUS, T.BONES]);
+/** What a highway paves with: cobbles, or the Crown's flagstones, rubble and marble. */
+const PAVED = new Set<number>([T.COBBLE, T.FLAGS, T.RUBBLE, T.MARBLE]);
 const oak = HIGHWAYS.find((h) => h.land === 1)!;
 
 /** 8-way flood over road tiles from tile k. */
@@ -91,8 +93,9 @@ test("highways: only nature cleared and open ground paved, all inside HIGHWAY_MA
     assert.ok(HIGHWAY_MASK.has(k), `${x},${y}: inside the mask`);
     assert.ok(b.g !== T.WATER && b.g !== T.BRIDGE, `${x},${y}: no water or bridge turned to ground`);
     assert.ok(b.o === EMPTY || NAT.has(b.o) || b.o === T.STUMP, `${x},${y}: only nature cleared (was ${b.o})`);
+    if (o === T.SIGNPOST) { assert.ok(WORLD.posts.some((p) => p.x === x && p.y === y), `${x},${y}: a highway's post`); continue; }
     assert.equal(o, EMPTY);
-    assert.ok(g === b.g || g === T.COBBLE, `${x},${y}: ground kept or paved`);
+    assert.ok(g === b.g || PAVED.has(g), `${x},${y}: ground kept or paved`);
   }
   // the carve on made-up land: what it paves, what it clears, what it leaves alone
   const land = LAND_ROWS[oak.land], { core, verge } = highwayTiles(oak);
@@ -146,6 +149,7 @@ test("highways: a signpost at each fork, naming the seat and the main town; port
       assert.ok(post, `${h.name}: the post by ${p.x},${p.y} stands`);
       assert.ok(Math.max(Math.abs(post.x - p.x), Math.abs(post.y - p.y - y0)) <= 3, "within 3 tiles of its spot");
       assert.equal(OBJECTS[post.y][post.x], T.SIGNPOST);
+      assert.equal(WORLD.highwayBefore.get(post.y * MAP_W + post.x)?.o, EMPTY, "kept as open ground on the map before the highways (chests and siege sites never see it)");
       assert.ok([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([i, j]) => roads.has((post.y + j) * MAP_W + post.x + i)), "beside the road");
       const s = SIGNPOSTS.find((o) => o.x === post.x && o.y === post.y)!;
       assert.ok(s.dirs.length >= 2 && s.dirs.some((d) => d.name.includes(h.town) || d.name.includes(h.seat)), `${post.x},${post.y}: a board points home (${s.dirs.map((d) => d.name).join(" | ")})`);

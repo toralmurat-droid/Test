@@ -110,6 +110,8 @@ function hash(x: number, y: number, seed: number) {
   h = Math.imul(h ^ (h >>> 13), 1274126177);
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
+/** The old kings' road paving at a local tile: flagstones, patched with rubble here and there (the land highways pave the Crown's gaps with it too). */
+export const crownPaving = (x: number, y: number, T: { FLAGS: number; RUBBLE: number }) => (hash(x, y, 1401) < 0.86 ? T.FLAGS : T.RUBBLE);
 const smooth = (t: number) => t * t * (3 - 2 * t);
 function noise(x: number, y: number, scale: number, seed: number) {
   const fx = x / scale, fy = y / scale;
@@ -179,7 +181,7 @@ export function buildCrown(T: CrownTiles, ground: number[][], objects: number[][
   /** A road tile: the old kings' flagstones, cracked and patched with rubble, clear of whatever stood there. */
   const road = (x: number, y: number, t?: number) => {
     if (!inBand(x, y)) return;
-    setG(x, y, t ?? (getG(x, y) === T.MARBLE ? T.MARBLE : hash(x, y, 1401) < 0.86 ? T.FLAGS : T.RUBBLE));
+    setG(x, y, t ?? (getG(x, y) === T.MARBLE ? T.MARBLE : crownPaving(x, y, T)));
     setO(x, y, EMPTY); open(x, y);
     roads.add((y + Y0) * W + x);
   };

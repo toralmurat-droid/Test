@@ -1,6 +1,6 @@
 import { MAP_W, type Act } from "./constants";
 import { LAND_ROWS } from "./borders";
-import type { TileBox } from "./crown";
+import { crownPaving, type TileBox } from "./crown";
 
 /**
  * Land highways (settlement network step 2b): each land's main road, 3 cobbled tiles wide, a tier above the 1-tile dirt
@@ -15,7 +15,15 @@ import type { TileBox } from "./crown";
  * there it rides the existing streets and gates.
  * Pure data plus the carve: no map.ts import, so the map can call it (like borders.ts).
  */
-export interface HighwayLeg { from: string; to: string; pts: readonly [number, number][] }
+export interface HighwayLeg {
+  from: string; to: string; pts: readonly [number, number][];
+  /**
+   * The old streets it rides through a town or village break off (round the Sunscar's oases, the camps' sand between the
+   * tents, Tollcross's square above the Crown's north road): inside the skip boxes, pave its middle line one tile wide
+   * where the ground is open, so the way stays whole. Never set on a leg through a city gate's or a capital fort's box.
+   */
+  join?: boolean;
+}
 export interface Highway {
   land: Act; name: string; legs: readonly HighwayLeg[];
   /** The seat's and the main town's AREAS names: every fork's signpost names both (the way home). */
@@ -24,6 +32,8 @@ export interface Highway {
   towns: readonly string[];
   /** Signposts at its forks and settlement exits (local tiles; placed on the nearest free tile beside the road). */
   posts?: readonly { x: number; y: number; to: string[] }[];
+  /** "crown": the Crown's own flagstones and rubble (crown.ts crownPaving) instead of cobbles; what is paved already stays. */
+  paving?: "crown";
 }
 
 /** Tiles each side of the middle line: the paved core is 2 * HALF + 1 wide. */
@@ -117,26 +127,31 @@ export const HIGHWAY_MASK: Set<number> = (() => {
 /** The boxes the carve leaves alone: a capital fort's (see CAPITAL_FORTS). The map adds its towns, villages and city gates. */
 export const fortSkipBoxes = (): TileBox[] => CAPITAL_FORTS.map(([x, y]) => ({ x0: x - FORT_SKIP, x1: x + FORT_SKIP, y0: y - FORT_SKIP, y1: y + FORT_SKIP }));
 
-type HighwayT = { COBBLE: number; WATER: number; BRIDGE: number; TREE: number; PINE: number; BUSH: number; ROCK: number; STUMP: number; CACTUS: number; BONES: number };
+type HighwayT = { COBBLE: number; WATER: number; BRIDGE: number; TREE: number; PINE: number; BUSH: number; ROCK: number; STUMP: number; CACTUS: number; BONES: number; FLAGS: number; RUBBLE: number; MARBLE: number };
 
 /**
  * Cuts the highways into the built map (shared/map.ts, after the border roads; tests pass `lands` to cut one band).
- * Core: cobbles, nature cleared, every tile a road. Verge: nature cleared only. Nothing changes inside `skip`, on water or
- * a bridge, or under any object that is not nature. Returns the paved core tiles (and keeps what each changed tile was in
- * `before`). Deterministic, no randomness.
+ * Core: cobbles (the Crown's paving there), nature cleared, every tile a road. Verge: nature cleared only. Nothing changes
+ * inside `skip` (but a `join` leg's middle line), on water or a bridge, or under any object that is not nature. Returns the
+ * paved tiles (and keeps what each changed tile was in `before`). Deterministic, no randomness.
  */
 export function carveHighways(ground: number[][], objects: number[][], roads: Set<number>, T: HighwayT, EMPTY: number, skip: readonly TileBox[], lands?: readonly Act[], before?: Map<number, { g: number; o: number }>): Set<number> {
   const nature = new Set<number>([T.TREE, T.PINE, T.BUSH, T.ROCK, T.STUMP, T.CACTUS, T.BONES]), paved = new Set<number>();
   const skipped = (x: number, y: number) => skip.some((b) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1);
   for (const h of HIGHWAYS) {
     if (lands && !lands.includes(h.land)) continue;
-    const { core, verge } = highwayTiles(h);
-    for (const [set, pave] of [[verge, false], [core, true]] as const) for (const k of [...set].sort((a, b) => a - b)) {
+    const { core, verge } = highwayTiles(h), y0 = LAND_ROWS[h.land].y0, paving = new Set<number>([T.FLAGS, T.RUBBLE, T.MARBLE]);
+    const joins = new Set<number>();
+    for (const leg of h.legs) if (leg.join) for (const k of legLine(h, leg)) if (skipped(k % MAP_W, Math.floor(k / MAP_W))) joins.add(k);
+    for (const [set, pave, inSkip] of [[verge, false, false], [core, true, false], [joins, true, true]] as const) for (const k of [...set].sort((a, b) => a - b)) {
       const x = k % MAP_W, y = Math.floor(k / MAP_W), g = ground[y][x], o = objects[y][x];
-      if (skipped(x, y) || g === T.WATER || g === T.BRIDGE || (o !== EMPTY && !nature.has(o))) continue;
+      if (skipped(x, y) !== inSkip || g === T.WATER || g === T.BRIDGE || (o !== EMPTY && !nature.has(o))) continue;
+      if (inSkip && roads.has(k)) continue; // a street already: ride it as it is
       if (before && !before.has(k) && (o !== EMPTY || pave)) before.set(k, { g, o });
       objects[y][x] = EMPTY;
-      if (pave) { ground[y][x] = T.COBBLE; roads.add(k); paved.add(k); }
+      if (!pave) continue;
+      ground[y][x] = h.paving === "crown" ? (paving.has(g) ? g : crownPaving(x, y - y0, T)) : T.COBBLE;
+      roads.add(k); paved.add(k);
     }
   }
   return paved;
