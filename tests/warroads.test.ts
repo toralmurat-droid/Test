@@ -62,8 +62,8 @@ test("war roads: a reversed road is the road reversed; built once and cached", (
   assert.equal(warRoad(a, a + 1000), undefined, "no road between lands that do not border");
 });
 
-test("war roads: each waygate link has two legs (Hold to gate, gate to Hold), ending near the gates; reversed it is walked back", () => {
-  assert.equal(LAND_LINKS.length, 9, "the four land gates and the five Crownways");
+test("war roads: each border-road link has two legs (Hold to the road's edge, edge to Hold), ending near the edge tiles; reversed it is walked back", () => {
+  assert.equal(LAND_LINKS.length, 10, "the ten walkable border roads (shared/borders.ts)");
   for (const l of LAND_LINKS) {
     const legs = linkLegs(l.a, l.b), what = l.link.name;
     assert.ok(legs, `${what}: legs`);
@@ -71,8 +71,8 @@ test("war roads: each waygate link has two legs (Hold to gate, gate to Hold), en
     assert.deepEqual(l1.pts[0], holdGate(l.a), `${what}: leg 1 from a's Hold gate`);
     assert.deepEqual(l2.pts.at(-1), holdGate(l.b), `${what}: leg 2 to b's Hold gate`);
     const e1 = l1.pts.at(-1)!, s2 = l2.pts[0];
-    assert.ok(Math.hypot(e1.x / TILE - l.link.pa.x, e1.y / TILE - l.link.pa.y) <= ROAD_SEARCH.gateReach + 1, `${what}: leg 1 ends by the near gate`);
-    assert.ok(Math.hypot(s2.x / TILE - l.link.pb.x, s2.y / TILE - l.link.pb.y) <= ROAD_SEARCH.gateReach + 1, `${what}: leg 2 starts by the far gate`);
+    assert.ok(Math.hypot(e1.x / TILE - l.link.pa.x, e1.y / TILE - l.link.pa.y) <= ROAD_SEARCH.gateReach + 1, `${what}: leg 1 ends by the road's near edge`);
+    assert.ok(Math.hypot(s2.x / TILE - l.link.pb.x, s2.y / TILE - l.link.pb.y) <= ROAD_SEARCH.gateReach + 1, `${what}: leg 2 starts by the road's far edge`);
     checkRoad(l1, [l.a], `${what} leg 1`); checkRoad(l2, [l.b], `${what} leg 2`);
     const back = linkLegs(l.b, l.a)!;
     assert.deepEqual(back.legs[0].pts, [...l2.pts].reverse()); assert.deepEqual(back.legs[1].pts, [...l1.pts].reverse());

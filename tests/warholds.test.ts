@@ -9,7 +9,7 @@ import { HOLD_TIERS } from "../shared/war/holdTiers";
 import { garrisonSpots, TROOP } from "../shared/war/patrols";
 import { newWar, sackHold, targetsOf, WAR, warTick, type WarState } from "../shared/war/rules";
 import { HOLDS } from "../shared/war/standards";
-import { TERRITORIES } from "../shared/war/territories";
+import { TERRITORIES, territoryByName } from "../shared/war/territories";
 
 test("holdSack: the banner is the fort's middle cell (a courtyard in every clan's plan), the guard posts lie in the reach", () => {
   for (const h of HOLDS) {
@@ -91,13 +91,20 @@ test("sackHold: -8 Control (half for an unsworn or out-of-reach sacker); a siege
   assert.equal(sackHold(s, t, s.owner[t], false), undefined, "the holder's own clan");
   assert.equal(sackHold(s, -1, k, false), undefined); assert.equal(sackHold(s, 1.5, k, false), undefined);
   // a capital loses Control but never gets a siege (capitals never fall)
-  const cap = TERRITORIES.find((x) => x.capitalOf && CLAN_KEYS.some((c) => targetsOf(s, c).includes(x.id)))!;
-  const by = CLAN_KEYS.find((c) => targetsOf(s, c).includes(cap.id))!;
+  // (one capital per clan, deep in its homeland since 2026-11-20: a land next to the Wardens' seat falls to Redfang first)
+  const cap = territoryByName("Goldenreach Farms")!, by = "redfang" as const;
+  const next = cap.near.find((n) => !TERRITORIES[n].capitalOf && !TERRITORIES[n].haven)!;
+  s.owner[next] = by;
+  assert.ok(cap.capitalOf === "wardens" && targetsOf(s, by).includes(cap.id), "the capital is in reach");
   s.control[cap.id] = 20;
   assert.deepEqual(sackHold(s, cap.id, by, false), { control: 12 });
   assert.equal(s.siege[cap.id], null);
   s.control[cap.id] = 3;
   assert.equal(sackHold(s, cap.id, by, false)!.control, 0, "never below 0");
+  // a heartland haven is never sacked at all
+  const haven = TERRITORIES.find((x) => x.haven)!, was = s.control[haven.id];
+  assert.equal(sackHold(s, haven.id, by, false), undefined, `${haven.name} is a haven`);
+  assert.equal(s.control[haven.id], was);
 });
 
 test("holdSack: the clients' holds message is read safely", () => {

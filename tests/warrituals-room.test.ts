@@ -18,7 +18,10 @@ const V: ClanKey = "veiled";
 const PICK = (() => {
   const s = newWar(), site = ritualSite(s)!;
   const foe = CLAN_KEYS.find((k) => k !== V && targetsOf(s, k).includes(site.t));
-  const out = CLAN_KEYS.find((k) => k !== V && k !== foe && s.owner[site.t] !== k && !targetsOf(s, k).includes(site.t));
+  // the outsider is at war with the Veiled elsewhere (one can strike the other's land), so its heroes may fight the
+  // acolytes at all: since 2026-11-20 the Wardens share no front with the Veiled (tests/warfeuds.test.ts)
+  const fronts = (k: ClanKey) => targetsOf(s, k).some((t) => s.owner[t] === V) || targetsOf(s, V).some((t) => s.owner[t] === k);
+  const out = CLAN_KEYS.find((k) => k !== V && k !== foe && s.owner[site.t] !== k && !targetsOf(s, k).includes(site.t) && fronts(k));
   if (!foe || !out) throw new Error("no clans for the ritual land");
   return { t: site.t, foe, out };
 })();

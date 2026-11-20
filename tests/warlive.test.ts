@@ -237,7 +237,8 @@ test("live war (W4 review B1): with no players the server war plays exactly the 
   const { COLUMN } = await import("../shared/war/marches");
   const { warPhase } = await import("../shared/war/view");
   const { BATTLE } = await import("../shared/war/battles");
-  const t0 = 10_000_000_000_000, N = 300, battlesWere = BATTLE.live;
+  // (a start whose 300 ticks see columns meet: on the road-front map of 2026-11-20 the old 10_000_000_000_000 had none)
+  const t0 = 12_000_000_000_000, N = 300, battlesWere = BATTLE.live;
   BATTLE.live = false; // (W5 battles off: they move the war with no players too, tests/warbattles-room.test.ts checks them)
   const run = async (check: boolean) => {
     _resetWar(saved(t0));

@@ -34,12 +34,12 @@ function golden(battle?: BattleOutcome[]): string {
 }
 
 test("battles: warTick with no battle plays exactly as before W5 (golden), and an empty or invalid battle list changes nothing", () => {
-  assert.equal(golden(), "524f2911");
-  assert.equal(golden([]), "524f2911");
+  assert.equal(golden(), "d99bf815");
+  assert.equal(golden([]), "d99bf815");
   const junk = [{ kind: "duel", t: 1, att: "redfang", def: "wardens", result: "att", lostA: 0.5, lostB: 0.5 }, { kind: "pitched", t: 999, att: "redfang", def: "wardens", result: "att", lostA: 0, lostB: 1 },
     { kind: "pitched", t: 1, att: "redfang", def: "redfang", result: "att", lostA: 0, lostB: 1 }, { kind: "pitched", t: 1.5, att: "redfang", def: "wardens", result: "def", lostA: 1, lostB: 0 },
     { kind: "pitched", t: 1, att: "nobody", def: "wardens", result: "def", lostA: 1, lostB: 0 }] as unknown as BattleOutcome[];
-  assert.equal(golden(junk), "524f2911");
+  assert.equal(golden(junk), "d99bf815");
 });
 
 function warAt(ticks: number, seed = 11): { s: WarState; minds: ReturnType<typeof newMinds>; rnd: () => number } {

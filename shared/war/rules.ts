@@ -107,9 +107,9 @@ export function newWar(): WarState {
 }
 
 export const phaseOf = (tick: number) => tick % WAR.phases; // 0 noon, 1 dusk, 2 night
-/** Land that is fought over: the heartland havens (territories.ts haven) never count toward a clan's share of the war. */
+/** Land that is fought over (foughtCount: how many such territories; writs.ts shares it): the heartland havens (territories.ts haven) never count toward a clan's share of the war. */
 const fought = (i: number) => !TERRITORIES[i]?.haven;
-const foughtCount = (owner: readonly (ClanKey | undefined)[]) => owner.reduce((n, _, i) => n + (fought(i) ? 1 : 0), 0) || 1;
+export const foughtCount = (owner: readonly (ClanKey | undefined)[]) => owner.reduce((n, _, i) => n + (fought(i) ? 1 : 0), 0) || 1;
 export const landOf = (s: Pick<WarState, "owner">, k: ClanKey) => s.owner.reduce((n, o, i) => n + (o === k && fought(i) ? 1 : 0), 0);
 /** The clan holding more than WAR.leaderShare of the land, if any. */
 export function leaderOf(s: WarState): ClanKey | undefined {

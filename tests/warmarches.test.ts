@@ -25,7 +25,7 @@ test("marches: warTick with deployments extracted plays exactly as before (golde
   const json = JSON.stringify({ s, pressure }, (_k, v) => (typeof v === "number" ? Number(v.toFixed(6)) : v));
   let h = 2166136261;
   for (let i = 0; i < json.length; i++) { h ^= json.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
-  assert.equal(h.toString(16), "fdda4621");
+  assert.equal(h.toString(16), "2d8a6865");
 });
 
 test("marches: deployments is pure and gives warTick's pressure; a march mult scales only that clan's army attack there", () => {

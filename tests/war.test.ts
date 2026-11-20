@@ -11,9 +11,9 @@ function rng(seed: number) { return () => { seed = (seed * 1103515245 + 12345) &
 
 test("war map: every capital is a territory, borders are two-way, and every territory is reachable", () => {
   for (const [n, c] of capitalsOf(builtRegions(TERRITORIES))) assert.equal(territoryByName(n)?.capitalOf, c.clan, `${c.clan} capital ${n}`);
-  // every homeland built, so no forward capital is left: the Host, Redfang and the Hide-Kin hold their seats at home,
-  // the Host and Redfang also an Oakvale foothold; the Wardens also the Cairnwatch garrison's Grey Ring
-  const caps: Record<string, string[]> = { wardens: ["moors", "oakvale", "sunscar"], redfang: ["badlands", "oakvale"], host: ["moors", "oakvale"], hidekin: ["sinkholes"], veiled: ["oakvale", "sunscar"] };
+  // every homeland built, so no forward capital is left; one capital per clan, each in its own homeland (coherence
+  // review 2026-11-20: the footholds and the Grey Ring garrison are ordinary territories)
+  const caps: Record<string, string[]> = { wardens: ["oakvale"], redfang: ["badlands"], host: ["moors"], hidekin: ["sinkholes"], veiled: ["sunscar"] };
   for (const k of CLAN_KEYS) assert.deepEqual(TERRITORIES.filter((t) => t.capitalOf === k).map((t) => t.region).sort(), caps[k], k);
   assert.ok(!TERRITORIES.some((t) => t.forward), "no forward capitals remain");
   for (const t of TERRITORIES) {
