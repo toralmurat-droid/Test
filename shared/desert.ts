@@ -67,6 +67,16 @@ export interface DesertTiles {
   CAMPFIRE: number; RUIN: number; GRAVE: number; DOOR: number; SIGNPOST: number; HAY: number;
   CLIFF: number; PALM: number; ADOBE: number; ADOBE_WALL: number; TENT: number; BONES: number;
 }
+/**
+ * Which of the desert's CLIFF tiles are the dune sea round its rim rather than sandstone mountains (local tiles, row
+ * y * MAP_W + x): 1 for the outer ring of the band and any hill-pocket that is not a ridge or mesa. Filled by buildDesert;
+ * the map itself is unchanged (the tiles stay CLIFF, so collisions and pathing are the same), only the client draws
+ * these as 3D-shaded dunes instead of rock (Murat 2026-11-19). Tiles the border roads carve open are no longer CLIFF.
+ */
+export const DESERT_DUNES = new Uint8Array(MAP_W * DESERT_H);
+/** True when the CLIFF tile at map (x, y) in the desert band is a dune, not rock. */
+export const isDesertDune = (x: number, y: number) => inDesertRow(y) && x >= 0 && x < MAP_W && DESERT_DUNES[(y - DESERT_Y0) * MAP_W + x] === 1;
+
 export interface DesertArea { name: string; x: number; y: number; w: number; h: number; mobs?: MobKind[] }
 
 /**
@@ -137,6 +147,7 @@ export function buildDesert(T: DesertTiles, ground: number[][], objects: number[
     const d = Math.min(x, y, W - 1 - x, H - 1 - y);
     if (d < 7 + noise(x, y, 9, 511) * 9 + noise(x, y, 3, 512) * 2) cliff[y * W + x] = 1;
   }
+  const rim = cliff.slice(); // the outer ring: the dune sea (DESERT_DUNES)
   const ridge = (pts: [number, number][], r: number, seed: number) => {
     for (let i = 0; i < pts.length - 1; i++) {
       const [ax, ay] = pts[i], [bx, by] = pts[i + 1];
@@ -180,6 +191,8 @@ export function buildDesert(T: DesertTiles, ground: number[][], objects: number[
   clearDisk(SANCTUM.x + SANCTUM.w / 2, SANCTUM.y + SANCTUM.h / 2, SANCTUM.w / 2 + 4, SANCTUM.h / 2 + 4);
   clearDisk(FURNACE.x + 0.5, FURNACE.y + 0.5, FURNACE.r + 4, FURNACE.r + 3);
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (cliff[y * W + x]) setO(x, y, T.CLIFF);
+  // dunes: the ring, plus anything later filled in that is not a ridge or mesa (those are the rock: cliff && !rim)
+  for (let i = 0; i < W * H; i++) DESERT_DUNES[i] = rim[i] || !cliff[i] ? 1 : 0;
 
   // ---------- 4. Oases: still water, a green rim, date palms ----------
   const oasis = (cx: number, cy: number, rx: number, ry: number, seed: number) => {

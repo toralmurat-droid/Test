@@ -3,7 +3,7 @@
  * bands (design: riven-marches-map.png). Each built land is a slot round the Crown of the Marches (warTableLayout.ts),
  * every territory a cell of its land tinted in its holder's colours (nearest-territory cells, front lines in ember
  * where two clans meet), capitals and holds as markers, the ways between lands as dashed lines, the clans' banners
- * standing in their homelands, a legend on the right. Murat 2026-11-16: a pulsing "You are here" marker with your land
+ * standing on their home capitals, a legend on the right. Murat 2026-11-16: a pulsing "You are here" marker with your land
  * lit, the ways drawn as gate pairs, and a click on a territory shows the route to it (warRoute.ts) both as a gold path and
  * as steps in the side panel, so the table and the zone map speak of the same places. Cosmetic: it draws the server's
  * "war" snapshot and nothing else.
@@ -300,20 +300,19 @@ export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, font: stri
     for (const s of route) for (const n of [s.from, s.to]) { const [x, y] = P(n); g.fillStyle = "#000"; g.fillRect(Math.round(x) - 4, Math.round(y) - 4, 8, 8); g.fillStyle = "#ffd166"; g.fillRect(Math.round(x) - 3, Math.round(y) - 3, 6, 6); }
   }
 
-  // banners of the homelands
+  // the home clans' banners, standing on their capitals (the pole's foot just above the capital's marker, the clan's name over the cloth, drawn later on top)
+  const sz = Math.max(8, Math.round(15 * u)), capH = Math.round(sz * 1.5) >> 1;
+  const bs = Math.max(1, Math.round((100 * u) / 36)), bannerAt = new Map<ClanKey, [number, number]>();
   for (const s of SLOTS) {
-    if (!s.banner) continue;
-    const b = bannerArt(s.banner.clan), bs = Math.max(1, Math.round(ds * 1.1)), bx = Math.round(mx + s.banner.x * u - 10 * bs), by = Math.round(my + s.banner.y * u - 18 * bs);
+    const cap = s.banner && TERRITORIES.find((t) => t.region === s.key && t.capitalOf === s.banner!.clan);
+    if (!cap) continue;
+    const [cx, cy] = P(cap.id), b = bannerArt(s.banner!.clan), bx = Math.round(cx - 10 * bs), by = Math.round(cy - capH - 2 - 36 * bs);
+    bannerAt.set(s.banner!.clan, [cx, by - 12]); // where its name plate goes
     g.fillStyle = "rgba(0,0,0,0.35)"; g.fillRect(bx + 3, by + 3, 20 * bs, 36 * bs);
     g.drawImage(b, bx, by, 20 * bs, 36 * bs);
-    g.textAlign = "center"; g.font = `13px ${font}`;
-    const label = TAG[s.banner.clan], lw = g.measureText(label).width + 10;
-    g.fillStyle = "rgba(10,8,6,0.85)"; g.fillRect(Math.round(bx + 10 * bs - lw / 2), by + 36 * bs + 3, Math.round(lw), 17);
-    text(label, bx + 10 * bs, by + 36 * bs + 12, GOLD); g.textAlign = "left";
   }
 
   // territories: holds and capitals in holder colours
-  const sz = Math.max(8, Math.round(15 * u));
   reach = Math.max(16, sz);
   spots = [];
   for (const t of TERRITORIES) {
@@ -379,12 +378,22 @@ export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, font: stri
     }); else text(sub, px + 7, py + h - 11, "#8a8470", 11);
   }
 
+  // the banners' names, over their cloth and over the markers round them
+  g.textAlign = "center"; g.font = `13px ${font}`;
+  for (const [k, [x, y]] of bannerAt) {
+    const lw = g.measureText(TAG[k]).width + 10;
+    g.fillStyle = "rgba(10,8,6,0.85)"; g.fillRect(Math.round(x - lw / 2), Math.round(y - 8), Math.round(lw), 17);
+    text(TAG[k], x, y + 1, GOLD);
+  }
+  g.textAlign = "left";
+
   // the ways' names, on top of everything on the map; a name that would sit on another is moved down
   const placed: [number, number, number, number][] = []; // x, y, w, h of every label already down
   for (const s of SLOTS) { // the land plates and banner names are in the way too
     const px = mx + s.plate[0] * u, py = my + s.plate[1] * u;
     placed.push([px + 60, py + 17, 120, 34]);
-    if (s.banner) placed.push([mx + s.banner.x * u, my + s.banner.y * u + 18 * Math.max(1, Math.round(ds * 1.1)) + 12, 90, 17]);
+    const ba = s.banner && bannerAt.get(s.banner.clan);
+    if (ba) placed.push([ba[0], ba[1], 110, 17]);
   }
   for (const w of WAYS) {
     const hot0 = onRoute.has(w.id), asked = hovered === w.a || hovered === w.b || ui.sel === w.a || ui.sel === w.b;
