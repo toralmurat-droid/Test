@@ -15,6 +15,7 @@ import { MOB_COMBAT, mobBody } from "../shared/combat";
 import { SLOW_MOB } from "../shared/powers";
 import { underground } from "../shared/dungeon";
 import { isSafeZone } from "../shared/map";
+import { inVillage } from "../shared/wrath";
 import { blocked, moveStep } from "../shared/movement";
 import { CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import { fortDetour } from "../shared/war/holdRoutes";
@@ -98,6 +99,8 @@ export interface FightGround {
   post?(now: number): { x: number; y: number }; guard?: boolean;
   /** A courtyard archer on its wall post: it never steps off it and hunts no wild monster (only what it fights or what hit it). */
   perch?: boolean;
+  /** How far (px) a soldier who is not an archer looks for a foe (unset: WAR_TROOPS.aggroPx; a battle's lines see across the field). */
+  sightPx?: number;
 }
 export const newFighter = (clan: ClanKey, officer: boolean, role: TroopRole = "foot", mod?: { hp: number; dmg: number }): Fighter =>
   ({ clan, officer, role: officer ? "foot" : role, ...(mod && !officer && role !== "foot" ? { mod } : {}), nextPick: 0, near: false, nextRush: 0, rushUntil: 0, rushHit: false, nextThrow: 0, throwing: false, nextShot: 0, aimUntil: 0, charge: newCharge(), braceUntil: 0,
@@ -147,10 +150,23 @@ export class WarTroops {
    * safe square: allies and neutrals can't touch them, so nobody starts a fight by a stray Blizzard (the client's
    * attack cursor reads the same stance).
    */
-  canHurt(heroId: string, m: TroopMob): boolean {
+  canHurt(heroId: string, m: TroopMob, strike = false): boolean {
     const tr = parseTroop(m.weapon);
     if (!tr) return true;
-    return this.stance(tr.clan, heroId) === "enemy" && !isSafeZone(m.x, m.y);
+    if (isSafeZone(m.x, m.y)) return false;
+    const st = this.stance(tr.clan, heroId);
+    return st === "enemy" || (strike && st === "neutral" && !tr.object && this.mayProvoke(heroId)); // (carts, rams and tunnel mouths: only for heroes the clan fights)
+  }
+
+  /**
+   * Murat 2026-11-20 ("if a character does zone damage this should damage soldiers from clans and mark the character:
+   * PvE and clan battles should not be distinct"): a hero's own blows and area damage (`strike`) also hurt the soldiers (not carts, rams or tunnel mouths)
+   * of a clan that leaves them alone, and that blow is a provocation (TownRoom.hitTarget: WarFeuds.struckNeutral): of
+   * oath level, off safe ground, never their own clan. Monster-picking (summons, chain arcs) still skips such soldiers.
+   */
+  private mayProvoke(heroId: string): boolean {
+    const p = this.h.hero(heroId);
+    return !!p && !p.dead && p.level >= STANDARD.minLevel && !isSafeZone(p.x, p.y) && !inVillage(p.x, p.y);
   }
 
   /**
@@ -435,14 +451,17 @@ export class WarTroops {
    * land that no hero they leave alone is fighting, or whatever hit it.
    */
   private pick(m: TroopMob, id: string, tr: Fighter, g: FightGround, now: number): string {
-    const W = WAR_TROOPS, R = tr.role === "archer" ? bowRange(g.perch).sightPx : W.aggroPx; // (an archer sees farther, from a wall farther still)
+    const W = WAR_TROOPS, R = tr.role === "archer" ? Math.max(bowRange(g.perch).sightPx, g.sightPx ?? 0) : g.sightPx ?? W.aggroPx; // (an archer sees farther, from a wall farther still)
     const tether = tr.role === "pike" && !!g.post, C = TROOP_ROLE.pike.call; // (a pike with a post or a column place: only foes it can reach from its tether, or one it sallies at)
     let best = "", bs = 0;
+    const near = [...this.h.mobsInBox(m.x, m.y, R)];
+    const gang = new Map<string, number>(); // foes already taken by soldiers of its own side (WAR_TROOPS.gangPen)
+    for (const [oid, o] of near) if (oid !== id && o.kind === "trooper" && o.target && !o.dead && parseTroop(o.weapon)?.clan === tr.clan) gang.set(o.target, (gang.get(o.target) ?? 0) + 1);
     const consider = (tid: string, x: number, y: number, bonus: number, wanted = false) => {
       const d = Math.hypot(x - m.x, y - m.y), hated = tid === m.hateId ? m.hate : 0, call = called(tr, tid, now); // (a hero a pike called it onto)
       if (d >= Math.max((hated > 0 ? R * 2 : R) * (wanted ? FEUD.sight : 1), call ? C.sightPx : 0) || offLimits(x, y) || !(wanted && g.far ? g.far(x, y) : g.leash(x, y))) return;
       if (shunned(tr, tid, now) || (tether && !call && !pikeHolds(g, x, y, now))) return; // (a target it gave up on: TROOP_ROLE.giveUp)
-      const s = Math.max(0.05, 1 - d / R) + bonus + hated + (call ? C.bonus : 0) + (tid === m.target ? W.stick : 0);
+      const s = Math.max(0.05, 1 - d / R) + bonus + hated + (call ? C.bonus : 0) + (tid === m.target ? W.stick : 0) - (bonus === W.troopBonus ? W.gangPen * (gang.get(tid) ?? 0) : 0);
       if (s > bs) { bs = s; best = tid; }
     };
     for (const [pid, p] of this.h.heroes()) {
@@ -452,7 +471,7 @@ export class WarTroops {
       consider(pid, p.x, p.y, W.heroBonus, wanted); // a soldier goes for the enemy hero first
     }
     const hated = m.hateId && m.hate > 0 ? this.h.mob(m.hateId) : undefined; // (the only one it sees from twice as far)
-    for (const [oid, o] of hated ? [...this.h.mobsInBox(m.x, m.y, R), [m.hateId, hated] as [string, TroopMob]] : this.h.mobsInBox(m.x, m.y, R)) {
+    for (const [oid, o] of hated ? [...near, [m.hateId, hated] as [string, TroopMob]] : near) {
       if (oid === id || o.dead || o.hidden) continue;
       if (g.perch && !shotClear(m.x, m.y, o.x, o.y)) continue; // a courtyard archer only goes for what it can shoot from its wall
       if (o.kind === "trooper") { const k = parseTroop(o.weapon); if (k && k.clan !== tr.clan && !k.object) consider(oid, o.x, o.y, W.troopBonus); continue; } // (carts and rams are for heroes to wreck)
@@ -501,9 +520,22 @@ export class WarTroops {
     if (now >= f.nextPick) {
       f.nextPick = now + WAR_TROOPS.pickMs;
       f.near = this.seen(m, WAR_TROOPS.livePx);
-      m.target = f.near ? this.pick(m, id, f, g, now) : "";
+      m.target = !f.near ? "" : this.locked(m, f) ? m.target : this.pick(m, id, f, g, now);
     }
     return false;
+  }
+
+  /**
+   * Is the soldier locked onto its foe (WAR_TROOPS.lockPx): a blow, rush, aimed shot or charge under way, or the foe (a
+   * monster or a trooper) at arm's length? It then keeps it (fight() still drops a foe that is no longer fair game).
+   */
+  private locked(m: TroopMob, f: Fighter): boolean {
+    if (!m.target) return false;
+    if (m.windUntil || f.rushHit || f.aimUntil || f.throwing || f.charge.phase === 1 || f.charge.phase === 2) return true;
+    const t = this.h.mob(m.target);
+    if (!t || t.dead || t.hidden) return false;
+    const reach = MOB_ATTACK_RANGE + mobBody(t.kind as MobKind) + (f.role === "pike" ? TROOP_ROLE.pike.reach : 0);
+    return Math.hypot(t.x - m.x, t.y - m.y) <= reach + WAR_TROOPS.lockPx;
   }
 
   /**
@@ -516,7 +548,7 @@ export class WarTroops {
     const t = tp ?? tm;
     const far = !!tp && !!g.far && wantedTier(tp.feud, tr.clan, now) > 0; // a Wanted hero is chased past the usual leash
     if (m.target && (!t || (tp && (tp.dead || this.stance(tr.clan, m.target) !== "enemy" || this.h.hidden(m.target, now) || (g.foe && !g.foe(tp))))
-      || (tm && (tm.dead || tm.hidden)) || offLimits(t.x, t.y) || !(far ? g.far!(t.x, t.y) : g.leash(t.x, t.y)))) { m.target = ""; m.windUntil = 0; m.winding = false; }
+      || (tm && (tm.dead || tm.hidden)) || offLimits(t.x, t.y) || !(far ? g.far!(t.x, t.y) : g.leash(t.x, t.y)))) { m.target = ""; m.windUntil = 0; m.winding = false; tr.nextPick = 0; } // (its foe fell or left: it looks for the next one at once)
     const sally = tr.role === "pike" && called(tr, m.target, now); // (a pike with no one to call runs its foe down: TROOP_ROLE.pike.call)
     if (tr.role === "pike" && m.target && t && !sally && !pikeHolds(g, t.x, t.y, now)) { m.target = ""; m.windUntil = 0; m.winding = false; } // a pike keeps its place
     if (m.target && t && !sally && (g.perch || (g.guard && tr.role === "pike")) && giveUpStep(tr, m.target, this.outOfReach(m, tr, g, tm, t), now)) { m.target = ""; m.windUntil = 0; m.winding = false; } // (TROOP_ROLE.giveUp)
@@ -581,12 +613,30 @@ export class WarTroops {
   }
 
   /** One step toward (gx, gy) at `pace` px/s, never into the safe squares, the stockade or monster-free ground. */
-  walk(m: TroopMob, gx: number, gy: number, dt: number, pace: number) {
+  walk(m: TroopMob, gx: number, gy: number, dt: number, pace: number, now = Date.now()) {
     const to = fortDetour(m.x, m.y, gx, gy), dx = to.x - m.x, dy = to.y - m.y, d = Math.hypot(dx, dy); // round a Hold's walls, not into them
-    const r = moveStep(m.x, m.y, dirInput(dx, dy), dt, Math.min(pace, d / Math.max(dt, 1e-3)));
+    const sp = Math.min(pace, d / Math.max(dt, 1e-3));
+    let r = moveStep(m.x, m.y, dirInput(dx, dy), dt, sp);
+    if (d > 4 && Math.hypot(r.x - m.x, r.y - m.y) < sp * dt * WAR_TROOPS.unstick.minShare) r = this.steer(m, dx / d, dy / d, dt, sp, now) ?? r; // (a tree or a rock in the way: round it)
     if (!offLimits(r.x, r.y)) { m.x = r.x; m.y = r.y; m.moving = r.moving; } else m.moving = false;
     m.homeX = m.x; m.homeY = m.y;
     m.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up");
+  }
+
+  /** Which way each soldier last steered round something, and until when it keeps that side (WAR_TROOPS.unstick). */
+  private steering = new WeakMap<TroopMob, { side: 1 | -1; until: number }>();
+  /**
+   * A soldier blocked head-on (walk): the first of 45 and 90 degrees off its way, its kept side first, that makes a fair
+   * step and is not off-limits. Undefined: boxed in (it waits; the crowd pass or its next pick frees it).
+   */
+  private steer(m: TroopMob, ux: number, uy: number, dt: number, sp: number, now: number) {
+    const U = WAR_TROOPS.unstick, k = this.steering.get(m), first: 1 | -1 = k && now < k.until ? k.side : (Math.round(m.x + m.y) & 1 ? 1 : -1);
+    for (const a of [Math.PI / 4, Math.PI / 2]) for (const side of [first, -first as 1 | -1]) {
+      const c = Math.cos(a * side), s = Math.sin(a * side), vx = ux * c - uy * s, vy = ux * s + uy * c;
+      const r = moveStep(m.x, m.y, dirInput(vx, vy), dt, sp);
+      if (Math.hypot(r.x - m.x, r.y - m.y) >= sp * dt * U.minShare && !offLimits(r.x, r.y)) { this.steering.set(m, { side, until: now + U.sideMs }); return r; }
+    }
+    return undefined;
   }
 
   /** At its place: a guard looks out from the Hold, a marcher along the route. */

@@ -2314,8 +2314,8 @@ export class TownRoom extends Room<TownState> {
   }
 
   /** May this hero hurt that monster? The one gate for every hero blow: summons (canHurtSummon) and clan troopers (WarTroops.canHurt). */
-  private canHurtMob(heroId: string, m: Mob): boolean {
-    return m.owner ? this.canHurtSummon(heroId, m) : m.kind !== "trooper" || (this.warTroops.canHurt(heroId, m) && this.towns.canHurt(heroId, m)); // (a town's gate guard: never from town ground, server/warTowns.ts)
+  private canHurtMob(heroId: string, m: Mob, strike = false): boolean {
+    return m.owner ? this.canHurtSummon(heroId, m) : m.kind !== "trooper" || (this.warTroops.canHurt(heroId, m, strike) && this.towns.canHurt(heroId, m)); // (a town's gate guard: never from town ground, server/warTowns.ts)
   }
 
   /**
@@ -5713,7 +5713,7 @@ export class TownRoom extends Room<TownState> {
     });
     // Only the monsters in the squares around (bodies < 64 px), not the thousands on the map
     for (const [mid, m] of this.state.mobs.inBox(x, y, mobPad ? r + 64 : r)) {
-      if (me && !this.canHurtMob(exclude, m)) continue; // own / group / protected heroes' summons, own clan's troops
+      if (me && !this.canHurtMob(exclude, m, true)) continue; // own / group / protected heroes' summons, own clan's troops (a neutral clan's soldiers are caught in it: hitTarget)
       if (!m.dead && !m.hidden && Math.hypot(m.x - x, m.y - y) <= r + (mobPad ? mobPad(m) : 0)) out.push(mid);
     }
     return out;
@@ -5813,7 +5813,8 @@ export class TownRoom extends Room<TownState> {
     }
     const m = this.state.mobs.get(targetId);
     if (!m || m.dead) return;
-    if (a && !this.canHurtMob(attackerId, m)) return;
+    if (a && !this.canHurtMob(attackerId, m, true)) return;
+    if (a && m.kind === "trooper") { const k = parseTroop(m.weapon)?.clan; if (k && this.warTroops.stance(k, attackerId) === "neutral") this.feuds.struckNeutral(attackerId, k); } // (a blow on a clan that left them alone: a provocation)
     if (a && m.kind === "trooper") { this.warTroops.hit(attackerId, m, targetId); this.caravans.hit(attackerId, targetId); this.sieges.hit(attackerId, targetId); this.tunnels.hit(attackerId, targetId); this.rituals.hit(attackerId, targetId); this.marches.hit(attackerId, targetId); this.battles.hit(attackerId, targetId); this.towns.hit(attackerId, targetId); const tc = parseTroop(m.weapon)?.clan; if (tc) this.feuds.struck(attackerId, tc); } // an enemy hero's blow (a grudge with its clan starts over): the trooper (and a caravan's escort) turns on them
     if (m.owner && a) dmg = Math.max(1, Math.round(dmg / SUMMON.pvp.hp)); // a hero's blow on someone's creature (SUMMON.pvp)
     const def = mobDef(m);
