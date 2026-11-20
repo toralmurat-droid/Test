@@ -95,6 +95,7 @@ test("carry: take-up locks skills, attacks still work, the lantern blocks portal
     // control: with qlock off the same portal works
     A.qlock = false; A.x = P1.x; A.y = P1.y; a.send("travel", { to: P2.id }); await wait(250);
     assert.ok(Math.hypot(A.x - P1.x, A.y - P1.y) > 100, "travel works without the lantern");
+    A.level = 30; // (the Sunscar's waygate opens at level 30)
     A.x = g.x; A.y = g.y; A.lastHurt = 0; a.send("waygate"); await wait(250);
     assert.ok(Math.hypot(A.x - g.x, A.y - g.y) > 100, "the waygate works without the lantern");
     await a.leave();

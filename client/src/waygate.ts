@@ -1,5 +1,6 @@
 import Phaser from "phaser";
-import { gateOpen, homelandGate, isBadlandsGate, isCrownGate, isSunGate, isMoorsGate, isSinkholesGate, WAYGATE_RANGE, waygateArrival, waygateById, WAYGATES, type Waygate } from "../../shared/act2";
+import { gateBand, gateOpen, homelandGate, isBadlandsGate, isCrownGate, isMoorsGate, isSinkholesGate, WAYGATE_RANGE, waygateArrival, waygateById, WAYGATES, type Waygate } from "../../shared/act2";
+import { ACT2_LEVEL } from "../../shared/constants";
 import type { Quester } from "../../shared/quests";
 import { moorgateTexture, MOORGATE_FRAMES } from "./moorsArt";
 import { redPassTexture, REDPASS_FRAMES } from "./badlandsArt";
@@ -98,9 +99,9 @@ export class WaygateLayer {
     if (this.near && at) {
       const open = openOf(at);
       const home = homelandGate(at); // the moors' and the badlands' gates open by hero level
-      const sunLocked = isSunGate(at) && !!home && (me?.level ?? 0) >= home.level; // strong enough, Act 2 still locked
-      const shut = isCrownGate(at) ? (sunLocked ? "The road is barred until the Hollow King and the Hide-Mother fall" : "The road is barred") : isSinkholesGate(at) ? "The Sinkway is caved in" : isBadlandsGate(at) ? "The Red Pass is held shut" : isMoorsGate(at) ? "The Moorgate is shut" : "The waygate is cold";
-      const html = `<kbd>E</kbd> ${open ? at.label : shut}${!open && home && (at.id === "moorsgate" || at.id === "redpass" || at.id === "sinkway" || (isCrownGate(at) && !sunLocked)) ? ` <span class="why">Opens at level ${home.level}</span>` : ""}`;
+      const shut = isCrownGate(at) ? "The road is barred" : isSinkholesGate(at) ? "The Sinkway is caved in" : isBadlandsGate(at) ? "The Red Pass is held shut" : isMoorsGate(at) ? "The Moorgate is shut" : "The waygate is cold";
+      const band = gateBand(at), need = home ? home.level : at.id === "oakvale" ? ACT2_LEVEL.min : undefined; // every land opens by hero level (coherence review 2026-11-20)
+      const html = `<kbd>E</kbd> ${open ? at.label : shut}${open && band ? ` <span class="why">${band}</span>` : ""}${!open && need ? ` <span class="why">Opens at level ${need}</span>` : ""}`;
       if (this.prompt.innerHTML !== html) this.prompt.innerHTML = html;
     }
     const dest = ahead && waygateById(ahead.to);
