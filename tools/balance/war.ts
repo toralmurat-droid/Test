@@ -31,7 +31,7 @@
  * without players; a zeal run only reports.
  *
  * `--sack=<clan|all>[:perDay]`: that clan's heroes (or every clan's alike) sack perDay Holds a war day (W2b, spread
- * evenly over the day) at its main target when the war lets it attack there and no siege is announced: rules.ts sackHold
+ * evenly over the day) at its main target when the war lets it attack there, it has a fort and no siege is announced: rules.ts sackHold
  * (Control, maybe a siege) and HOLD_SACK.sackValor valor that tick, as the live game does. Reports only, like zeal.
  *
  * Reports per clan the average and worst share of the land, how often any clan held more than WAR.leaderShare for over
@@ -69,6 +69,7 @@ import { clashLosses, COLUMN, marchesOf, marchMult, plansOf } from "../../shared
 import { tunnelStrikes } from "../../shared/war/tunnels";
 import { deployments, foughtCount, landOf, newWar, nightRaid, phaseOf, rallyClan, sackHold, targetsOf, WAR, warTick, type TickExtra } from "../../shared/war/rules";
 import { HOLD_SACK } from "../../shared/war/holdSack";
+import { holdOf } from "../../shared/war/standards";
 import { BATTLE, battleOutcome, siteForces, isDecisive, meetSite, newBattle, pickMeetings, pickPitched, pitchedTicks, virtualBattle, type BattleSite } from "../../shared/war/battles";
 import type { BattleKind, BattleOutcome } from "../../shared/war/rules";
 import { TERRITORIES } from "../../shared/war/territories";
@@ -234,9 +235,9 @@ function play(clever?: ClanKey): Result {
           for (const k of ZEAL) { const t = orders[k].attack[0]?.t; if (t !== undefined) extra.valor[t][k] = ZEAL_V; }
         }
         const due = SACK.length ? Math.floor(((i + 1) * SACK_PER_DAY) / WAR.ticksPerDay) - Math.floor((i * SACK_PER_DAY) / WAR.ticksPerDay) : 0;
-        for (let n = 0; n < due; n++) for (const k of SACK) { // heroes sack the Hold of the clan's main target
+        for (let n = 0; n < due; n++) for (const k of SACK) { // heroes sack the Hold of the clan's main target (a fortified land only: standards.ts holdOf)
           const t = orders[k].attack[0]?.t;
-          if (t === undefined || !targetsOf(s, k).includes(t)) continue;
+          if (t === undefined || !targetsOf(s, k).includes(t) || !holdOf(t)) continue;
           const r = sackHold(s, t, k, false);
           if (!r) continue;
           sacks++; if (r.siege) sackSieges++;

@@ -10,6 +10,7 @@
  * and pass each tick on to their rooms, their heroes' valor reaching the owner through a queue per server. A save of a
  * newer version (shared/war/api.ts) is never written over: shown read-only when it allows, else hidden.
  */
+import { holdOf } from "../shared/war/standards";
 import { TILE } from "../shared/constants";
 import { CLANS, CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import { newMinds, type Mind } from "../shared/war/doctrine";
@@ -179,7 +180,7 @@ export function migrateWar(saved: Saved, oldNames: readonly string[], names: rea
   for (let i = 0; i < names.length; i++) {
     const t = ts.find((x) => x.name === names[i]), cap = t?.capitalOf ?? t?.haven; // (a heartland haven goes home too: coherence review 2026-11-20)
     if (cap && state.owner[i] !== cap) { state.owner[i] = cap; state.control[i] = 100; state.siege[i] = null; }
-    if (cap && state.fallen) state.fallen[i] = 0; // (a capital never stands fallen)
+    if (state.fallen && (cap || (t && !holdOf(t.id)))) state.fallen[i] = 0; // (a capital never stands fallen; a land left without a fort has no ruin to show or reclaim)
   }
   const to = new Map<number, number>();
   from.forEach((o, i) => { if (o !== undefined) to.set(o, i); });
@@ -994,12 +995,14 @@ export function attachWar(room: { broadcast(type: string, msg: unknown): void })
     let townLines = 0;
     for (const e of events) {
       if (e.kind === "town") { townNews(room, e, ++townLines); continue; } // (W6: Herald capped per tick, sfx, the "towns" message)
-      room.broadcast("chat", { id: "", name: "Herald", text: e.text });
       if (e.kind === "grow") { // a hammer chord where the Hold grew (client/src/sfx.ts hold_grow); no leader line, no horn
         const at = bannerSpot(e.t);
-        if (at) room.broadcast("sfx", { ev: "hold_grow", t: e.t, x: Math.round(at.x), y: Math.round(at.y), by: e.by, tier: e.tier ?? 1 });
+        if (!at) continue; // a land without a fort (standards.ts HOLD_SITES): nothing rose to announce (the war log keeps it)
+        room.broadcast("chat", { id: "", name: "Herald", text: e.text });
+        room.broadcast("sfx", { ev: "hold_grow", t: e.t, x: Math.round(at.x), y: Math.round(at.y), by: e.by, tier: e.tier ?? 1 });
         continue;
       }
+      room.broadcast("chat", { id: "", name: "Herald", text: e.text });
       if (e.kind === "fall" || e.kind === "claim") { // the fort comes down (or a new banner rises over the ruin): a sound there (client/src/sfx.ts)
         const at = bannerSpot(e.t);
         if (at) room.broadcast("sfx", { ev: e.kind === "fall" ? "hold_fell" : "hold_claimed", t: e.t, x: Math.round(at.x), y: Math.round(at.y), by: e.by, from: e.from });

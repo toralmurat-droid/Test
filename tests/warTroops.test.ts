@@ -8,7 +8,7 @@ import { newMinds } from "../shared/war/doctrine";
 import { garrisonCount, garrisonSpots, patrolCount, patrolOf, TROOP, TROOP_LOOK, troopLook } from "../shared/war/patrols";
 import { atWar, _resetWarRelations, setWarRelations } from "../shared/war/feuds";
 import { newWar, targetsOf } from "../shared/war/rules";
-import { STANDARD } from "../shared/war/standards";
+import { holdOf, STANDARD } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
 import { parseTroop, troopLevel, troopName, troopStance, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
 import { _resetWar, warState } from "../server/war";
@@ -85,22 +85,24 @@ function fake() {
 const hero = (x: number, y: number, o: Partial<TroopHero> = {}): TroopHero => ({ name: "H" + Math.random(), level: 30, x, y, dead: false, renown: 0, ...o });
 /** A land with a patrol far from both safe squares (its neighbours may wake too). */
 const LAND = TERRITORIES.find((t) => patrolOf(t.id) && t.act === 1 && !t.capitalOf && Math.hypot(t.cx - (SAFE_ZONE.x + SAFE_ZONE.w / 2), t.cy - (SAFE_ZONE.y + SAFE_ZONE.h / 2)) > 60)!;
+/** The same, fortified (standards.ts holdOf: only a fort fields guards). */
+const FORT = TERRITORIES.find((t) => patrolOf(t.id) && holdOf(t.id) && !t.capitalOf && Math.hypot(t.cx - (SAFE_ZONE.x + SAFE_ZONE.w / 2), t.cy - (SAFE_ZONE.y + SAFE_ZONE.h / 2)) > 60)!;
 const troopsOf = (mobs: Map<string, TroopMob>, t: number, wt: WarTroops) => (wt._land(t)?.slots ?? []).filter((s) => s.id && mobs.has(s.id)).map((s) => mobs.get(s.id)!);
 
 test("WarTroops: a land wakes near a hero with its column and guards, sleeps sleepMs after the hero left", () => {
   _resetWar({ v: 1, state: newWar(), minds: newMinds(), next: Date.now() + 1e9, log: [] });
-  const { wt, mobs, heroes } = fake(), gate = patrolOf(LAND.id)!.pts[0], t0 = 1_000_000;
+  const { wt, mobs, heroes } = fake(), gate = patrolOf(FORT.id)!.pts[0], t0 = 1_000_000;
   heroes.set("a", hero(gate.x, gate.y));
   wt.tick(t0);
-  const want = patrolCount(100) + holdGuards(LAND.id, 100, holdTier(warState()!, LAND.id)); // (W3: a fresh Hold is an outpost)
-  const mine = troopsOf(mobs, LAND.id, wt);
+  const want = patrolCount(100) + holdGuards(FORT.id, 100, holdTier(warState()!, FORT.id)); // (W3: a fresh Hold is an outpost)
+  const mine = troopsOf(mobs, FORT.id, wt);
   assert.equal(mine.length, want, "full strength at control 100");
-  assert.ok(mine.every((m) => parseTroop(m.weapon)?.clan === warState()!.owner[LAND.id]), "the holder's men");
+  assert.ok(mine.every((m) => parseTroop(m.weapon)?.clan === warState()!.owner[FORT.id]), "the holder's men");
   assert.equal(mine.filter((m) => parseTroop(m.weapon)!.officer).length, 2, "one officer leads the column, one the guards");
   assert.ok(wt.count <= WAR_TROOPS.maxTroops);
   heroes.get("a")!.y = 1e7; // gone far away (off every land)
   wt.tick(t0 + WAR_TROOPS.sleepMs - 1000);
-  assert.equal(troopsOf(mobs, LAND.id, wt).length, want, "still there for a while");
+  assert.equal(troopsOf(mobs, FORT.id, wt).length, want, "still there for a while");
   wt.tick(t0 + WAR_TROOPS.sleepMs + 1000);
   assert.equal(wt.count, 0, "every land asleep");
   assert.equal(mobs.size, 0, "their monsters are gone");

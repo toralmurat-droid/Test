@@ -7,6 +7,7 @@ import { TERRITORIES } from "../shared/war/territories";
 import { territoryAt, warView } from "../shared/war/view";
 import { _resetWar, addValor, onWar, step, warLog, warNow, warState, warTowns, type SavedWar } from "../server/war";
 import { townCounts } from "../shared/war/towns";
+import { holdOf } from "../shared/war/standards";
 import type { Kv } from "../server/store";
 
 const memKv = () => { const m = new Map<string, string>(); const kv: Kv = { get: async (k) => (m.has(k) ? JSON.parse(m.get(k)!) : undefined), set: async (k, v) => { m.set(k, JSON.stringify(v)); } }; return { kv, m }; };
@@ -146,6 +147,7 @@ test("attachWar (W3): Holds built up to a camp or a fortress: a few Herald lines
   const grew = warLog().filter((e) => e.kind === "grow");
   assert.ok(grew.length >= 1 && grew.length <= 3, `${grew.length} announced (a new war raises every camp at once: a few only)`);
   for (const e of grew) {
+    if (!holdOf(e.t)) { assert.ok(!sent.some(([t, m]) => (t === "chat" && m.text === e.text) || (t === "sfx" && m.t === e.t)), "no fort there: no Herald line, no chord"); continue; }
     assert.equal(e.by, e.from);
     assert.equal(e.by, warNow()!.owner[e.t] !== undefined ? CLAN_KEYS[warNow()!.owner[e.t]] : undefined);
     assert.equal(e.tier, 1);

@@ -4,7 +4,7 @@ import { CLANS, type ClanKey } from "../../shared/war/clans";
 import {
   atWar, FEUD, feudFromView, grudgeActive, ptsOf, setWarPairs, WANTED_TIERS, wantedTier, type FeudState, type WantedMarks,
 } from "../../shared/war/feuds";
-import { HOLDS, STANDARD } from "../../shared/war/standards";
+import { holdOf, STANDARD } from "../../shared/war/standards";
 import { parseTroop, TROOP_SHORT, troopStance, type TroopStance } from "../../shared/war/troops";
 import { territoryAt } from "../../shared/war/view";
 import { isSafeZone } from "../../shared/map";
@@ -129,7 +129,7 @@ export class WarFeud {
     if (best) return best;
     // a Hold: only its middle (the banner and the cells round it), never the whole fort
     const tx = Math.floor(w.x / TILE), ty = Math.floor(w.y / TILE), land = territoryAt(tx, ty);
-    const hold = land && HOLDS.find((x) => x.t === land.id), r = 1.5 * TILE;
+    const hold = land && holdOf(land.id), r = 1.5 * TILE;
     if (!hold || Math.abs(hold.x - w.x) > r || Math.abs(hold.y - w.y) > r) return undefined;
     const clan = this.holderOf(land!.id);
     return clan && this.stance(clan) === "neutral" ? { clan, msg: { hold: land!.id } } : undefined;

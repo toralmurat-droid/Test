@@ -20,12 +20,13 @@ import { _resetWar, _setWarRole, warNow, warState } from "../server/war";
 import { _resetHolds } from "../server/warHolds";
 import { _resetHoldWorks } from "../server/warHoldWorks";
 
+/** A fortified land (standards.ts HOLD_SITES: Act 1 has none on a front now) a clan at war with its holder may attack. */
 const PICK = (() => {
   const s = newWar();
   _resetWar({ v: 1, state: s, minds: newMinds(), next: Date.now() + 1e9, log: [] });
   for (const t of TERRITORIES) {
     const b = bannerSpot(t.id);
-    if (!b || !canFall(t.id) || t.act !== 1 || !patrolOf(t.id) || isSafeZone(b.x, b.y)) continue;
+    if (!b || !canFall(t.id) || !patrolOf(t.id) || isSafeZone(b.x, b.y)) continue;
     if (Math.hypot(t.cx - (SAFE_ZONE.x + SAFE_ZONE.w / 2), t.cy - (SAFE_ZONE.y + SAFE_ZONE.h / 2)) < 60) continue;
     const own = s.owner[t.id], foe = CLAN_KEYS.find((k) => k !== own && atWar(k, own) && targetsOf(s, k).includes(t.id));
     if (foe) return { t: t.id, own, foe };
