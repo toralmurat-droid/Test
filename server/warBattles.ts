@@ -56,7 +56,7 @@ export interface BattleHost {
  */
 interface Place { id: string; f: Fighter; captain: boolean; fallen?: true; g?: FightGround; /** Its spot, once worked out (the field's lines never move). */ at?: { x: number; y: number } }
 /** The battle this room has live: its places per side, the axis and centre, the ground. */
-interface Live { b: Battle; places: [Place[], Place[]]; ax: { x: number; y: number }; c: { x: number; y: number }; long: number; g: FightGround; lastSeen: number; nextReserve: number; nextScore: number }
+interface Live { /** When the lines woke (they close from there: BATTLE.advanceMs). */ woke: number; b: Battle; places: [Place[], Place[]]; ax: { x: number; y: number }; c: { x: number; y: number }; long: number; g: FightGround; lastSeen: number; nextReserve: number; nextScore: number }
 
 const SIDES = [0, 1] as const;
 
@@ -216,11 +216,11 @@ export class WarBattles {
     const n = Math.hypot(ax.x, ax.y) || 1; ax = { x: ax.x / n, y: ax.y / n };
     if (!f && !(n > 0)) ax = { x: 1, y: 0 };
     const c = { x: b.x, y: b.y }, long = (f ? Math.max(f.w, f.h) : BATTLE.fieldLong) * TILE;
-    const l: Live = { b, places: [[], []], ax, c, long, lastSeen: now, nextReserve: 0, nextScore: now + BATTLE.scoreMs, g: { leash: () => false, hunt: () => false } };
-    l.g = { leash: (x, y) => Math.hypot(x - c.x, y - c.y) <= long, hunt: () => false }; // (wild monsters only when they strike first)
+    const l: Live = { woke: now, b, places: [[], []], ax, c, long, lastSeen: now, nextReserve: 0, nextScore: now + BATTLE.scoreMs, g: { leash: () => false, hunt: () => false } };
+    l.g = { leash: (x, y) => Math.hypot(x - c.x, y - c.y) <= long, hunt: () => false, sightPx: BATTLE.sightTiles * TILE }; // (wild monsters only when they strike first)
     for (const side of SIDES) for (let i = 0; i < BATTLE.perSide; i++) {
       const clan = side ? b.b : b.a, f = newFighter(clan, i < BATTLE.captains, battleRole(clan, i)); // (front line foot and pikes, riders on its wings, archers behind)
-      l.places[side].push({ id: "", f, captain: i < BATTLE.captains, g: f.role === "foot" ? undefined : { leash: l.g.leash, hunt: l.g.hunt, post: () => this.postOf(l, side, i) } });
+      l.places[side].push({ id: "", f, captain: i < BATTLE.captains, g: f.role === "foot" ? undefined : { leash: l.g.leash, hunt: l.g.hunt, sightPx: l.g.sightPx, post: (t) => this.postOf(l, side, i, t) } });
     }
     this.live = l;
     this.fill(l, now, true);
@@ -282,10 +282,16 @@ export class WarBattles {
   }
   private bannerPts(l: Live) { return [0, 1, 2].map((i) => battleBannerAt(l.b, i)); }
 
-  /** Place i of a side: two lines across the axis, the attackers on the near side, captains in the middle of the rear line. */
-  private postOf(l: Live, side: 0 | 1, i: number): { x: number; y: number } {
-    const pl = l.places[side][i];
-    return pl ? (pl.at ??= this.spotOf(l, side, i)) : this.spotOf(l, side, i); // (cached: a pike's tether asks every turn)
+  /**
+   * Place i of a side now: two lines across the axis, the attackers on the near side, captains in the middle of the rear
+   * line; from waking the lines march in toward the centre (BATTLE.advanceMs, meetTiles; archers half as far).
+   */
+  private postOf(l: Live, side: 0 | 1, i: number, now = Date.now()): { x: number; y: number } {
+    const pl = l.places[side][i], at = pl ? (pl.at ??= this.spotOf(l, side, i)) : this.spotOf(l, side, i); // (cached: a pike's tether asks every turn)
+    const k = Math.min(1, Math.max(0, (now - l.woke) / BATTLE.advanceMs)), go = k * (BATTLE.lineGapTiles - BATTLE.meetTiles) * TILE * (pl?.f.role === "archer" ? 0.5 : 1);
+    if (go <= 0) return at;
+    const sgn = side ? 1 : -1, x = at.x - l.ax.x * sgn * go, y = at.y - l.ax.y * sgn * go; // (toward the centre)
+    return !roadOffLimits(x, y) && !blocked(x, y) ? { x, y } : at;
   }
   /** postOf worked out: its role shifts an archer behind and a rider out on the wing (ROLE_FORM). */
   private spotOf(l: Live, side: 0 | 1, i: number): { x: number; y: number } {
@@ -322,7 +328,7 @@ export class WarBattles {
     if (!s || !l) { this.mobs.delete(id); this.h.remove(id); return; }
     const pl = l.places[s.side][s.i], f = pl.f, g = pl.g ?? l.g;
     if (this.soldiers.think(m, id, f, g, now)) return;
-    const post = this.postOf(l, s.side, s.i), face = dirOf(l.ax.x * (s.side ? -1 : 1), l.ax.y * (s.side ? -1 : 1));
+    const post = this.postOf(l, s.side, s.i, now), face = dirOf(l.ax.x * (s.side ? -1 : 1), l.ax.y * (s.side ? -1 : 1));
     if (!f.near) { // nobody to see it: it keeps its place in the line (cheap)
       if (!roadOffLimits(post.x, post.y)) { m.x = m.homeX = post.x; m.y = m.homeY = post.y; }
       m.moving = false; m.windUntil = 0; m.winding = false; m.dir = face;

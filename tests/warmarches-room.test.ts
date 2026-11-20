@@ -73,9 +73,9 @@ test("columns (room): a column wakes near a hero, officer first, in its clan's c
     men.forEach((x: any, i: number) => { assert.equal(x.kind, "trooper"); const role = i === 0 ? "foot" : planRole(PICK.k, "column", i); assert.equal(x.weapon, troopWeapon(PICK.k, i === 0, false, false, false, role)); assert.equal(x.maxHp, troopStats(PICK.k, x.level, i === 0, role, squadMod("column", role)).hp); assert.equal(parseTroop(x.weapon)!.officer, i === 0); });
     assert.ok(men.every((x: any) => Math.hypot(x.x - q.x, x.y - q.y) < 5 * TILE), "in formation round the anchor");
     assert.ok(sent.some(([t, msg]) => t === "sfx" && msg.ev === "column_march" && msg.clan === PICK.k), "drums");
-    // allies and unsworn heroes can't touch it
+    // allies can't touch it (an unsworn hero's blow lands and provokes: tests/warfeuds-room.test.ts)
     const s1 = men[1], hp0 = s1.hp, xp0 = p.xp;
-    for (const clan of [undefined, PICK.k]) {
+    for (const clan of [PICK.k]) {
       p.clan = clan; p.x = s1.x; p.y = s1.y;
       room.hitTarget(id, lv.men[1], 500, [0, 0], { basic: true });
       assert.equal(s1.hp, hp0, `${clan ?? "unsworn"}: 0 damage`);

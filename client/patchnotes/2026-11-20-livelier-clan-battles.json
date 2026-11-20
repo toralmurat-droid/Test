@@ -1,0 +1,11 @@
+{
+  "date": "2026-11-20",
+  "pr": 554,
+  "title": "Livelier clan battles",
+  "changes": [
+    "In big battles the two lines now march in and clash in the middle, and the wings and second rank join the fight instead of standing back.",
+    "Soldiers stay on the foe they are fighting instead of turning from one to the next, and spread along the front instead of piling onto one man.",
+    "Soldiers walk round trees and rocks instead of getting stuck against them.",
+    "Your area damage and blows now hit the soldiers of any clan but your own: striking a clan that left you alone makes its soldiers fight you, as provoking does."
+  ]
+}

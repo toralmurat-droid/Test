@@ -180,7 +180,7 @@ test("sieges (room): only enemy-sworn heroes hurt siege troopers (no XP); unswor
     wild();
     const [did, d] = side("def")[0];
     const hp0 = d.hp, xp0 = p.xp;
-    for (const clan of [undefined, DEF]) {
+    for (const clan of [DEF]) { // (an unsworn hero's blow lands and provokes: tests/warfeuds-room.test.ts)
       p.clan = clan; p.x = d.x + 20; p.y = d.y;
       room.hitTarget(id, did, 500, [0, 0], { basic: true });
       room.hitTarget(id, did, 500, [0, 0], { skill: true });
