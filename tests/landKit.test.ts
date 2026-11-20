@@ -8,8 +8,9 @@ import { LANDMARKS, LANDMARK_SOLIDS } from "../shared/landmarks";
 import { CHESTS } from "../shared/chests";
 import { SIEGE_SITES } from "../shared/siege";
 import { HOLDS, MUSTERS } from "../shared/war/standards";
-import { CAPITAL_FORTS } from "../shared/highways";
-import { buildLandKit, inSeat, KIT_BUDGET, kitFree, LAND_KIT_SPOTS, LANDMARK_SHEET, LK_SHEETS, ON_FIELD, type LkKind } from "../client/src/landKit";
+import { CAPITAL_FORTS, FORT_SKIP, HIGHWAYS, legLine } from "../shared/highways";
+import { bodySolidAt } from "../shared/movement";
+import { buildLandKit, IN_PEN, inSeat, KIT_BUDGET, kitFree, LAND_KIT_SPOTS, LANDMARK_LIGHT, LANDMARK_SHEET, LK_SHEETS, ON_FIELD, SEAT_MARGIN, type LkKind } from "../client/src/landKit";
 
 // Land identity (settlement network step 3): kit props (client, walk-through) and landmarks (shared, solid)
 const MW = GROUND[0].length;
@@ -26,7 +27,7 @@ test("every kit prop stands in its area and its land, and passes the keep-clear 
     const at = `${s.kind} at ${tx},${ty}`;
     assert.ok(a && tx >= a.x && tx < a.x + a.w && ty >= a.y && ty < a.y + a.h, `${at}: outside ${s.area}`);
     assert.equal(actOfTile(tx, ty), s.land, `${at}: wrong land`);
-    assert.ok(kitFree(tx, ty, [], 0, ON_FIELD.has(s.kind)), `${at}: not clear`);
+    assert.ok(kitFree(tx, ty, [], 0, ON_FIELD.has(s.kind), IN_PEN.has(s.kind)), `${at}: not clear`);
   }
 });
 
@@ -38,7 +39,8 @@ test("kit props keep off roads, water and highways, and clear of NPCs, signposts
     for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
       const g = GROUND[ty + j][tx + i];
       assert.ok(g !== T.WATER && g !== T.COBBLE && g !== T.BRIDGE && g !== T.MARBLE && !HIGHWAY_TILES.has((ty + j) * MW + tx + i), `${at}: by a road or water`);
-      assert.ok(OBJECTS[ty + j][tx + i] === EMPTY || NATURE.has(OBJECTS[ty + j][tx + i]), `${at}: against a built object`);
+      const o = OBJECTS[ty + j][tx + i], penSide = IN_PEN.has(s.kind) && (o === T.FENCE || o === T.FENCE_V || o === T.PALISADE || o === T.HAY);
+      assert.ok(o === EMPTY || NATURE.has(o) || penSide, `${at}: against a built object`);
     }
     assert.equal(OBJECTS[ty][tx], EMPTY, `${at}: on an object`);
     assert.ok(!near(x, y, NPCS, 2.5, true), `${at}: by an NPC`);
@@ -51,10 +53,46 @@ test("kit props keep off roads, water and highways, and clear of NPCs, signposts
   }
 });
 
-test("no kit prop in a clan seat: a capital fort's box + 12", () => {
+test("no kit prop in a clan seat: a capital fort's box + SEAT_MARGIN", () => {
+  const R = FORT_SKIP + SEAT_MARGIN;
+  assert.equal(R, 16, "the seats' margin (step 5 builds there): change it on purpose");
   for (const [fx, fy] of CAPITAL_FORTS) for (const s of LAND_KIT_SPOTS) {
     const [tx, ty] = tileOf(s.x, s.y);
-    assert.ok(Math.abs(tx - fx) > 16 || Math.abs(ty - fy) > 16, `${s.kind} at ${tx},${ty} in the seat at ${fx},${fy}`);
+    assert.ok(Math.abs(tx - fx) > R || Math.abs(ty - fy) > R, `${s.kind} at ${tx},${ty} in the seat at ${fx},${fy}`);
+  }
+});
+
+test("each land done so far has its kit and its landmark: Oakvale, the moors, the badlands", () => {
+  const ids = LANDMARKS.map((l) => l.id);
+  for (const id of ["windmill", "beacon", "headframe"]) assert.ok(ids.includes(id), `no ${id}`);
+  const kinds = (land: number) => new Set(LAND_KIT_SPOTS.filter((s) => s.land === land).map((s) => s.kind));
+  for (const k of ["lk_peat_stack", "lk_peat_bank", "lk_way_cairn"] as const) assert.ok(kinds(3).has(k), `moors: no ${k}`);
+  for (const k of ["lk_longhorn", "lk_trough", "lk_ore_cart"] as const) assert.ok(kinds(4).has(k), `badlands: no ${k}`);
+  // the drovers' pen: longhorns and the trough inside it, between its fence row (y 875) and the palisade (y 879)
+  const pen = LAND_KIT_SPOTS.filter((s) => s.area === "The Rustwater Post" && IN_PEN.has(s.kind));
+  assert.ok(pen.some((s) => s.kind === "lk_longhorn") && pen.some((s) => s.kind === "lk_trough"), "Rustwater's pen is empty");
+  for (const s of pen) { const [tx, ty] = tileOf(s.x, s.y); assert.ok(tx >= 238 && tx <= 244 && ty >= 876 && ty <= 878, `${s.kind} at ${tx},${ty}: out of the pen`); }
+  // the ore carts stand by the headframe
+  const hf = LANDMARKS.find((l) => l.id === "headframe")!;
+  for (const s of LAND_KIT_SPOTS.filter((q) => q.kind === "lk_ore_cart")) assert.ok(Math.hypot(s.x / TILE - hf.x, s.y / TILE - hf.y) < 9, "an ore cart far from the Cinnabar Pits");
+});
+
+test("way-cairns stand beside the Moors Highway, off its paving", () => {
+  const h = HIGHWAYS.find((q) => q.land === 3)!, mid = h.legs.flatMap((leg) => legLine(h, leg));
+  const cairns = LAND_KIT_SPOTS.filter((s) => s.kind === "lk_way_cairn");
+  assert.ok(cairns.length >= 8, `only ${cairns.length} way-cairns`);
+  for (const s of cairns) {
+    const [tx, ty] = tileOf(s.x, s.y), d = Math.min(...mid.map((k) => Math.hypot((k % MW) - tx, Math.floor(k / MW) - ty)));
+    assert.ok(d >= 2.5 && d <= 6, `way-cairn at ${tx},${ty}: ${d.toFixed(1)} tiles from the highway`);
+  }
+});
+
+test("a landmark that shines has a fire on its sheet: only the beacon, lit from above its foot", () => {
+  assert.deepEqual(Object.keys(LANDMARK_LIGHT), ["beacon"]);
+  for (const [id, g] of Object.entries(LANDMARK_LIGHT)) {
+    const s = LK_SHEETS[LANDMARK_SHEET[id]];
+    assert.ok(s && s.frames > 1, `${id}: no animated fire to light from`);
+    assert.ok(g.lift > 20 && g.lift * 1.5 < s.oy, `${id}: the glow is not up at the fire`);
   }
 });
 
@@ -80,6 +118,10 @@ test("every kit kind and landmark has a sheet size and a baked sheet of that siz
   }
 });
 
+test("no land-kit sheet is in NPC_DECOR (siege works, tunnels and rituals read it)", () => {
+  assert.ok(!NPC_DECOR.some((d) => d.prop.startsWith("lk_")));
+});
+
 test("landmarks: solid boxes on open ground in their area and land, blocking movement, not NPC_DECOR", () => {
   assert.equal(LANDMARK_SOLIDS.length, LANDMARKS.filter((l) => l.solid).length);
   for (const l of LANDMARKS) {
@@ -87,7 +129,7 @@ test("landmarks: solid boxes on open ground in their area and land, blocking mov
     assert.ok(a && l.x >= a.x && l.x < a.x + a.w && l.y >= a.y && l.y < a.y + a.h, `${l.id}: outside ${l.area}`);
     assert.equal(actOfTile(Math.floor(l.x), Math.floor(l.y)), l.land, `${l.id}: wrong land`);
     assert.ok(LANDMARK_SHEET[l.id], `${l.id}: no art`);
-    assert.ok(!NPC_DECOR.some((d) => d.prop === l.id || d.prop.startsWith("lk_")), "landmarks stay out of NPC_DECOR");
+    assert.ok(!NPC_DECOR.some((d) => d.prop === l.id || d.prop === LANDMARK_SHEET[l.id] || (l.solid && d.solid && d.solid.every((v, i) => v === l.solid![i]))), `${l.id}: in NPC_DECOR`);
     if (!l.solid) continue;
     const [x, y, w, h] = l.solid;
     // the box and a ring of one tile round it: open ground, no road, water, highway or built object
@@ -138,6 +180,7 @@ test("chests, siege sites, forts and musters did not move (digests from the comm
 
 test("no monster spawns inside a landmark's solid box (it could never step out)", async () => {
   const { SPAWN_ZONES, randomPointInZone, underLandmark } = await import("../shared/spawns");
+  assert.equal(LANDMARK_SOLIDS.length, LANDMARKS.length, "every landmark is solid, so every one is checked here");
   for (const [x, y, w, h] of LANDMARK_SOLIDS) {
     for (let ty = Math.floor(y); ty < y + h; ty++) for (let tx = Math.floor(x); tx < x + w; tx++) assert.ok(underLandmark(tx, ty), `tile ${tx},${ty} under a landmark`);
     const zones = SPAWN_ZONES.filter((z) => x + w > z.x && x < z.x + z.w && y + h > z.y && y < z.y + z.h);
@@ -147,5 +190,20 @@ test("no monster spawns inside a landmark's solid box (it could never step out)"
       const px = p.x / TILE, py = p.y / TILE;
       assert.ok(!(px > x - 0.5 && px < x + w + 0.5 && py > y - 0.5 && py < y + h + 0.5), `${z.name} spawned at ${px},${py} inside a landmark`);
     }
+  }
+});
+
+test("monsters put down by the room (budded, raised, called, a champion's blink, an ambush landing) can't land in a landmark", async () => {
+  // server/TownRoom.ts tests those points with bodySolidAt (what movement treats as solid), not the map's isSolidAt
+  const { findHideSpot, underLandmark } = await import("../shared/spawns");
+  for (const [x, y, w, h] of LANDMARK_SOLIDS) {
+    for (const [fx, fy] of [[0.05, 0.05], [0.5, 0.5], [0.95, 0.95], [0.05, 0.95], [0.95, 0.05]]) {
+      const px = (x + w * fx) * TILE, py = (y + h * fy) * TILE;
+      assert.ok(bodySolidAt(px, py), `${px / TILE},${py / TILE}: open to a body`);
+      assert.ok(!isSolidAt(px, py), "the map alone does not block it (the case this guards)");
+    }
+    // a tree ambusher's step-out spot never falls under one
+    const s = findHideSpot("rattler", (x + w / 2) * TILE, (y + h / 2) * TILE, 8, new Set(), [T.TREE, T.PINE, T.ROCK, T.CACTUS, T.BARROW, T.BONE_PILE, T.GRAVE]);
+    if (s) assert.ok(!underLandmark(Math.floor(s.outX / TILE), Math.floor(s.outY / TILE)), "hide spot steps out under a landmark");
   }
 });

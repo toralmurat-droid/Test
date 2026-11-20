@@ -5,6 +5,12 @@ import { holdWallPx } from "./war/holdWalls";
 
 /** Map tiles, the props around the village traders (shared/npcs.ts) and the walls of the clan Holds as held now (shared/war/holdWalls.ts). */
 const isSolidAt = (x: number, y: number) => mapSolidAt(x, y) || isDecorSolidAt(x, y) || holdWallPx(x, y);
+/**
+ * What movement treats as solid, for code that puts a body down at a point (a monster budded, raised or called, a
+ * champion's blink): the map alone misses the landmarks (shared/landmarks.ts) and the capitals' props, and a body put
+ * inside one could never step out.
+ */
+export const bodySolidAt = isSolidAt;
 
 /** True when a hero's feet box at (x, y) overlaps a wall, water or a solid prop. */
 export function blocked(x: number, y: number): boolean {

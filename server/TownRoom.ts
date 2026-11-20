@@ -53,7 +53,7 @@ import type { SoundFx } from "../shared/skills";
 import { sellPrice, shopBuys, shopFuses, shopWithForged } from "../shared/shops";
 import { BLOB_KINDS, CHAINS, CROWN_CHAIN, packQuest, chainDone, chainOpen, chainState, cleanMentor, inZone, isBlob, type MentorState, npcPresent, QuestState, questFinished, questStep, stepFor, stepGoal, Summon, type BossVoice, TUT_CHAIN, TUT_QUESTS, USE_RANGE } from "../shared/quests";
 import { bossHallAt, findHideSpot, HIDE, type HideSpot, MOTHER_KEEP_OUT, noMobsAt, spawnPoint, SPAWN_ZONES, villageDist, zoneCap } from "../shared/spawns";
-import { blocked, moveStep } from "../shared/movement";
+import { blocked, bodySolidAt, moveStep } from "../shared/movement";
 import { NIGHT_RAID, raiderByKey, raiderIgnores, RAIDERS } from "../shared/raiders";
 import { SLOTS_BY_ZONE, WORK_SLOTS } from "../shared/siege";
 import { DAY_CYCLE_MS, dayFrac, isUndeadNight, NIGHT_BOSSES, UNDEAD_NIGHT } from "../shared/daynight";
@@ -679,7 +679,7 @@ export class TownRoom extends Room<TownState> {
       s.speed = speed; s.range = range; s.radius = radius; s.damage = dmg;
       this.state.projectiles.set(`s${++this.shotSeq}`, s);
     },
-    canStand: (x, y) => !isSolidAt(x, y) && !isSafeZone(x, y) && !noMobsAt(x, y),
+    canStand: (x, y) => !bodySolidAt(x, y) && !isSafeZone(x, y) && !noMobsAt(x, y),
   });
   /** The Hide-Kin's own moves (server/hidekin.ts): burrow, stitch, the worms in the pits. */
   private hidekin = new HideKin({
@@ -693,7 +693,7 @@ export class TownRoom extends Room<TownState> {
       const m = this.state.mobs.get(fromId);
       this.damagePlayer(pid, dmg, `${m ? mobDef(m).name : "?"}'s ${what}`, push, kb, { atkLevel: m?.level, from: fromId, stunMs });
     },
-    canStand: (x, y) => !isSolidAt(x, y) && !isSafeZone(x, y) && !noMobsAt(x, y),
+    canStand: (x, y) => !bodySolidAt(x, y) && !isSafeZone(x, y) && !noMobsAt(x, y),
     hideNow: (m, id, radius) => {
       const s = findHideSpot(m.kind, m.x, m.y, radius, this.takenSpots(m as Mob));
       if (!s) return false;
@@ -715,7 +715,7 @@ export class TownRoom extends Room<TownState> {
       const m = this.state.mobs.get(fromId);
       this.damagePlayer(pid, dmg, `${m ? mobDef(m).name : "?"}'s ${what}`, push, kb, { atkLevel: m?.level, from: fromId, ...o });
     },
-    canStand: (m, x, y) => { const h = bossHallAt(Math.floor(x / TILE), Math.floor(y / TILE)); return !isSolidAt(x, y) && !isSafeZone(x, y) && !noMobsAt(x, y) && (!h || h === SPAWN_ZONES[m.zone]?.name); },
+    canStand: (m, x, y) => { const h = bossHallAt(Math.floor(x / TILE), Math.floor(y / TILE)); return !bodySolidAt(x, y) && !isSafeZone(x, y) && !noMobsAt(x, y) && (!h || h === SPAWN_ZONES[m.zone]?.name); },
     clearLine: (x0, y0, x1, y1) => { const n = Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 8); for (let i = 1; i <= n; i++) if (isSolidAt(x0 + (x1 - x0) * i / n, y0 + (y1 - y0) * i / n)) return false; return true; },
     say: (id, lines) => this.bossSay(id, lines),
     provoke: (m, heroId) => { const o = m as Mob; o.target = heroId; o.foe = ""; o.nextAggro = Date.now() + AGGRO.everyMs; this.addHate(o, heroId, 0); },
@@ -1895,7 +1895,7 @@ export class TownRoom extends Room<TownState> {
     for (const a of [0, 0.7, -0.7, 1.4, -1.4]) {
       const c = Math.cos(a), sn = Math.sin(a), ux = (dx * c - dy * sn) / d, uy = (dx * sn + dy * c) / d;
       const x = p.x + ux * AMBUSH.landGap, y = p.y + uy * AMBUSH.landGap;
-      if (!isSolidAt(x - 5, y - 5) && !isSolidAt(x + 5, y + 5) && !isSolidAt(x - 5, y + 5) && !isSolidAt(x + 5, y - 5) && this.canStep(m, x, y)) { lx = x; ly = y; break; }
+      if (!bodySolidAt(x - 5, y - 5) && !bodySolidAt(x + 5, y + 5) && !bodySolidAt(x - 5, y + 5) && !bodySolidAt(x + 5, y - 5) && this.canStep(m, x, y)) { lx = x; ly = y; break; }
     }
     m.flyX0 = m.x; m.flyY0 = m.y; m.flyX = lx; m.flyY = ly; m.flyMs = AMBUSH.flightMs; m.flyUntil = now + AMBUSH.flightMs;
     m.target = heroId; m.foe = ""; m.nextAggro = now + AGGRO.everyMs * 2;
@@ -1956,7 +1956,7 @@ export class TownRoom extends Room<TownState> {
     for (let i = 0; i < 8; i++) {
       const a = Math.random() * Math.PI * 2, r = 8 + Math.random() * spread;
       const x = mother.x + Math.cos(a) * r, y = mother.y + Math.sin(a) * r;
-      if (isSolidAt(x, y) || isSafeZone(x, y)) continue;
+      if (bodySolidAt(x, y) || isSafeZone(x, y)) continue;
       const c = new Mob();
       c.kind = "blobling"; c.zone = -1; c.mother = motherId;
       c.x = c.homeX = x; c.y = c.homeY = y;
@@ -2960,7 +2960,7 @@ export class TownRoom extends Room<TownState> {
     for (let i = 0; i < 10; i++) {
       const a = Math.random() * Math.PI * 2, r = 10 + Math.random() * spread;
       const x = n.x + Math.cos(a) * r, y = n.y + Math.sin(a) * r;
-      if (isSolidAt(x, y) || isSafeZone(x, y) || noMobsAt(x, y)) continue;
+      if (bodySolidAt(x, y) || isSafeZone(x, y) || noMobsAt(x, y)) continue;
       const c = new Mob();
       c.kind = "skeleton"; c.weapon = rollSkeletonWeapon(); c.zone = -1; c.mother = necroId;
       c.x = c.homeX = x; c.y = c.homeY = y;
@@ -4356,7 +4356,7 @@ export class TownRoom extends Room<TownState> {
     for (let i = 0; i < 12; i++) {
       const a = Math.random() * Math.PI * 2, r = 30 + Math.random() * 30;
       const x = chief.x + Math.cos(a) * r, y = chief.y + Math.sin(a) * r;
-      if (isSolidAt(x, y) || isSafeZone(x, y) || noMobsAt(x, y)) continue;
+      if (bodySolidAt(x, y) || isSafeZone(x, y) || noMobsAt(x, y)) continue;
       const c = new Mob();
       c.kind = kind; c.weapon = weapon; c.zone = -1; c.mother = chiefId; c.camp = true; c.post = -1;
       c.x = c.homeX = x; c.y = c.homeY = y;
