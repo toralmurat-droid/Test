@@ -25,7 +25,8 @@ import { atWar } from "../shared/war/feuds";
 import { STANDARD } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
 import { parseTroop, troopLevel, troopStance } from "../shared/war/troops";
-import { ACT_FATE_MS, addValor, sackAct, strikeHold, warActFate, warNow, warRole, warSacked, warState } from "./war";
+import { ACT_FATE_MS, addValor, holdClaim, warClaimQueued, sackAct, strikeHold, warActFate, warFallen, warNow, warRole, warSacked, warState } from "./war";
+import { HOLD_FALL } from "../shared/war/holdFall";
 import { boonRenown, crownCredit, keyOf } from "./warCrown";
 import type { SiegeHero } from "./warSieges";
 import type { TroopMob } from "./warTroops";
@@ -56,7 +57,8 @@ const sacks = new Map<number, { tick: number; by: number }>();
 /** Tests: forget every sack. */
 export function _resetHolds() { sacks.clear(); }
 
-interface Raise extends SackRaise { hero: string; t: number; lastStep: number; hurtAt: number }
+/** `claim`: a banner over a fallen Hold's ruin (shared/war/holdFall.ts): it claims the land for the raiser's clan. */
+interface Raise extends SackRaise { hero: string; t: number; lastStep: number; hurtAt: number; claim?: ClanKey }
 /** A follower's sack waiting for the war's owner (Ages): who gets what once it counts. */
 interface Waiting { act: string; id: string; t: number; clan?: ClanKey; holder: ClanKey; valor: number; heroes: string[]; gold: number; at: number }
 
@@ -92,6 +94,7 @@ export class WarHolds {
     if (TERRITORIES[t].reckoningOnly) return `${TERRITORIES[t].name} is not won by sacking: it changes hands only at a Reckoning.`;
     if (underground(p.y) || Math.hypot(p.x - at.x, p.y - at.y) > HOLD_SACK.useTiles * TILE) return "Stand at the banner in the middle of the Hold.";
     if (isSafeZone(p.x, p.y) || inVillage(p.x, p.y)) return "Not here: blood is never spilled on safe ground.";
+    if (warFallen(t)) return this.whyClaim(id, p, t, now);
     const holder = CLAN_KEYS[v.owner[t]];
     if (!holder) return "Nobody holds this Hold.";
     const st = troopStance(holder, p, now);
@@ -103,6 +106,22 @@ export class WarHolds {
     if (this.h.guardsAlive(t, (x, y) => inSackReach(t, x, y)) > 0 || this.h.guardsDue(t) > 0) return "Its guards still stand: cut them down first.";
     if (this.defenders(t, holder, now, false) > 0) return `A hero sworn to ${CLANS[holder].name} stands watch here.`;
     return "";
+  }
+
+  /** Why hero `id` may not claim fallen land t's ruin now ("" when they may): a sworn hero, nobody else raising, no hero of another clan watching. */
+  private whyClaim(id: string, p: HoldHero, t: number, now: number): string {
+    if (!p.clan) return "This Hold has fallen. Only a hero sworn to a clan can claim it: swear an oath first.";
+    if (warClaimQueued(t)) return "A banner already flies over this ruin: the heralds carry the news to the war.";
+    for (const [oid, r] of this.raises) if (r.t === t && oid !== id) return "Another hero is raising a banner here.";
+    if (this.rivals(t, p.clan, now) > 0) return "Heroes of another clan contest this ruin: drive them off first.";
+    return "";
+  }
+
+  /** Active heroes of oath level sworn to a clan other than `clan` within fallen land t's reach (they contest a claim). */
+  private rivals(t: number, clan: ClanKey, now: number): number {
+    let n = 0;
+    for (const [, o] of this.h.heroes()) if (!o.dead && o.clan && o.clan !== clan && o.level >= STANDARD.minLevel && now - o.lastAct <= STANDARD.idleMs && !underground(o.y) && inSackReach(t, o.x, o.y)) n++;
+    return n;
   }
 
   /**
@@ -133,7 +152,7 @@ export class WarHolds {
     if (err) return err;
     const p = this.h.hero(id)!;
     if (this.raises.get(id)?.t === t) return ""; // (already raising here)
-    this.raises.set(id, { hero: id, t, progress: 0, paused: false, lastStep: now, hurtAt: p.lastHurt });
+    this.raises.set(id, { hero: id, t, progress: 0, paused: false, lastStep: now, hurtAt: p.lastHurt, ...(warFallen(t) && p.clan ? { claim: p.clan } : {}) });
     this.h.send(id, "sack", { t, progress: 0, state: "raise" } satisfies SackMsg);
     this.tell(now, true);
     return "";
@@ -159,6 +178,7 @@ export class WarHolds {
     for (const [id, r] of this.raises) {
       const p = this.h.hero(id), at = bannerSpot(r.t), holder = v ? CLAN_KEYS[v.owner[r.t]] : undefined;
       if (!p || p.dead) { this.raises.delete(id); continue; }
+      if (r.claim) { this.claimStep(id, p, r, now); continue; }
       if (!v || !holder || !at || underground(p.y) || Math.hypot(p.x - at.x, p.y - at.y) > HOLD_SACK.useTiles * TILE * 1.5) { this.stop(id, "You left the banner."); continue; }
       if (troopStance(holder, p, now) !== "enemy") { this.stop(id, `${CLANS[holder].name} are not your enemies any more.`); continue; }
       if (v.sieges.some((s) => s[0] === r.t)) { this.stop(id, "A siege is announced here: fight for it at the fronts."); continue; }
@@ -174,6 +194,41 @@ export class WarHolds {
     }
     this.settle(now);
     this.tell(now);
+  }
+
+  /** One step of a banner going up over a fallen Hold's ruin: heroes of another clan in the reach hold it up, a blow starts it over. */
+  private claimStep(id: string, p: HoldHero, r: Raise, now: number) {
+    const at = bannerSpot(r.t), clan = r.claim!;
+    if (!at || underground(p.y) || Math.hypot(p.x - at.x, p.y - at.y) > HOLD_SACK.useTiles * TILE * 1.5) { this.stop(id, "You left the banner."); return; }
+    if (p.clan !== clan) { this.stop(id, "You are no longer sworn to the clan you raised this banner for."); return; }
+    if (!warFallen(r.t) || warClaimQueued(r.t)) { this.stop(id, "The ruin was claimed already."); return; }
+    const hurt = p.lastHurt > r.hurtAt;
+    r.hurtAt = p.lastHurt;
+    const dt = now - r.lastStep, was = r.paused;
+    r.lastStep = now;
+    const step = sackStep(r, dt, this.rivals(r.t, clan, now), hurt);
+    if (step === "done") { this.claimed(id, p, r, clan, now); return; }
+    if (step !== "raise" || r.paused !== was) this.h.send(id, "sack", { t: r.t, progress: r.progress, state: r.paused ? "paused" : "raise" } satisfies SackMsg);
+    else this.h.send(id, "sack", { t: r.t, progress: Math.round(r.progress * 100) / 100, state: "raise" } satisfies SackMsg);
+  }
+
+  /** The banner is up over the ruin: the land is the raiser's clan's (server/war.ts holdClaim), valor there, renown for its sworn heroes in the reach. */
+  private claimed(id: string, p: HoldHero, r: Raise, clan: ClanKey, now: number) {
+    this.raises.delete(id);
+    const land = TERRITORIES[r.t].name;
+    if (!holdClaim(r.t, clan, p.name, now)) { this.stop(id, "The war cannot hear of it now: try again in a moment."); return; }
+    this.h.send(id, "sack", { t: r.t, progress: 1, state: "done" } satisfies SackMsg);
+    if (warRole() === "follower") { this.h.send(id, "chat", { id: "", name: "Herald", text: `Your banner flies over the ruin of ${land}. The heralds carry the news to the war.` }); this.tell(now, true); return; }
+    addValor(r.t, clan, HOLD_FALL.claimValor);
+    const st = warState(), heroes = this.sharers(id, r.t, clan);
+    for (const [hid, o] of heroes) {
+      const was = rankOf(o.renown);
+      o.renown += HOLD_FALL.claimRenown * rallyRenown(st, clan) * boonRenown(clan);
+      const rank = rankOf(o.renown);
+      if (rank > was) this.h.ranked?.(hid, RENOWN_RANKS[rank].name);
+    }
+    this.h.send(id, "chat", { id: "", name: "Herald", text: `You claimed the ruin of ${land} for ${the(CLANS[clan].name)}: +${HOLD_FALL.claimValor} valor. A new outpost rises, and its barracks will send out soldiers again.` });
+    this.tell(now, true);
   }
 
   /** Ages: the sacks this room queued that the war's owner applied are paid (the war chest, renown); dropped ones are told. */

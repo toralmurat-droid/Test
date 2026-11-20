@@ -14,6 +14,7 @@ import { TROOP, type Patrol } from "./patrols";
 import { atWar, grudgeActive, type FeudState } from "./feuds";
 import { isClan, STANDARD } from "./standards";
 import { TERRITORIES } from "./territories";
+import { parseWork, type WorkKind } from "./holdFall";
 
 export const WAR_TROOPS = {
   /** Master switch: off, no land ever wakes (the cosmetic client squads stay). */
@@ -269,9 +270,9 @@ export function troopStats(k: ClanKey, level: number, officer = false, role: Tro
 }
 
 /** What a trooper is: a fighting soldier or officer, or an object heroes wreck (a supply cart, a siege ram: shared/war/works.ts, a Hide-Kin tunnel mouth: shared/war/tunnels.ts). */
-export type TroopPart = "soldier" | "officer" | "cart" | "ram" | "mouth";
+export type TroopPart = "soldier" | "officer" | "cart" | "ram" | "mouth" | "work";
 /** The suffix each part carries on its clan key in Mob.weapon. */
-const PART_MARK: Record<TroopPart, string> = { soldier: "", officer: "*", cart: "^", ram: "#", mouth: "~" };
+const PART_MARK: Record<Exclude<TroopPart, "work">, string> = { soldier: "", officer: "*", cart: "^", ram: "#", mouth: "~" };
 const MARK_PART: Record<string, TroopPart> = { "*": "officer", "^": "cart", "#": "ram", "~": "mouth" };
 /** The suffix a soldier's role carries (foot: none). Only a soldier has one, and one at most. */
 export const ROLE_MARK: Record<TroopRole, string> = { foot: "", archer: ")", rider: ">", pike: "|" };
@@ -292,11 +293,13 @@ export const troopWeapon = (k: ClanKey, officer = false, cart = false, ram = fal
  * `officer`/`cart` are kept for older callers; `role` is set only on a soldier marked with one (absent: foot, so an
  * older weapon string parses exactly as it did): read it as `role ?? "foot"`.
  */
-export interface TroopInfo { clan: ClanKey; part: TroopPart; officer: boolean; cart: boolean; object: boolean; role?: Exclude<TroopRole, "foot"> }
+/** `work`: a Hold's work (shared/war/holdFall.ts: "<clan>%<code>", part "work"): which one. */
+export interface TroopInfo { clan: ClanKey; part: TroopPart; officer: boolean; cart: boolean; object: boolean; role?: Exclude<TroopRole, "foot">; work?: WorkKind }
 
 /** A trooper's clan, part and role from its Mob.weapon (carts and rams are troopers too, so every trooper gate applies), or undefined for anything else. */
 export function parseTroop(w: unknown): TroopInfo | undefined {
   if (typeof w !== "string") return undefined;
+  if (w.includes("%")) { const h = parseWork(w); return h && { clan: h.clan, part: "work", officer: false, cart: false, object: true, work: h.kind }; } // a Hold's work (holdFall.ts)
   const last = w.slice(-1), role = MARK_ROLE[last];
   const part: TroopPart = MARK_PART[last] ?? "soldier";
   const k = part === "soldier" && !role ? w : w.slice(0, -1);

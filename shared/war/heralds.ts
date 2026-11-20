@@ -130,8 +130,9 @@ export function leaderLine(k: ClanKey, moment: WarMoment, land: string, foe: Cla
 }
 
 /** Who speaks for an event, and in which mood: the defender calls to arms, the winner boasts. */
-export function eventVoice(kind: "siege" | "flip" | "held" | "sack", by: ClanKey, from: ClanKey): { k: ClanKey; foe: ClanKey; moment: WarMoment } {
-  if (kind === "sack") return { k: from, foe: by, moment: "sacked" }; // the holder answers a sack of its Hold
+export function eventVoice(kind: "siege" | "flip" | "held" | "sack" | "fall" | "claim", by: ClanKey, from: ClanKey): { k: ClanKey; foe: ClanKey; moment: WarMoment } {
+  if (kind === "sack" || kind === "fall") return { k: from, foe: by, moment: "sacked" }; // the holder answers a sack (or the fall) of its Hold
+  if (kind === "claim") return { k: by, foe: from, moment: "took" }; // the claimer boasts over a fallen Hold
   return kind === "siege" ? { k: from, foe: by, moment: "besieged" } : kind === "flip" ? { k: by, foe: from, moment: "took" } : { k: from, foe: by, moment: "held" };
 }
 

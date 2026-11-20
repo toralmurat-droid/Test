@@ -13,7 +13,8 @@ import { spanText } from "../../shared/war/crown";
 import "./warPlaque.css";
 
 /** `sack`: a hero sacked the Hold of t (server/warHolds.ts); `by` is the holder itself when the hero was unsworn. */
-export interface WarEv { kind: "siege" | "flip" | "held" | "sack"; t: number; by: ClanKey; from: ClanKey }
+/** `fall`: the Hold of t fell (shared/war/holdFall.ts); `claim`: clan `by` claimed its ruin. */
+export interface WarEv { kind: "siege" | "flip" | "held" | "sack" | "fall" | "claim"; t: number; by: ClanKey; from: ClanKey }
 /** Server "warraid": the Night Raiders struck these lands of the clan they hunt (server/war.ts attachWar). */
 export interface WarRaid { clan: ClanKey; ts: number[] }
 
@@ -35,6 +36,8 @@ export class WarNotice {
     const land = TERRITORIES[e.t]?.name ?? "?", by = CLANS[e.by]?.name ?? "?";
     if (e.kind === "siege") return `Siege! ${by} march on ${land}. ${Math.round((WAR.siegeWarnTicks * WAR.tickMs) / 60_000)} min to the walls.`;
     if (e.kind === "flip") return `${land} falls to ${by}!`;
+    if (e.kind === "fall") return `The Hold of ${land} has fallen! Any clan may claim its ruin.`;
+    if (e.kind === "claim") return `${by} claim the ruin of ${land}!`;
     if (e.kind === "sack") return e.by === e.from ? `The Hold of ${land} is sacked!` : `${by} sack the Hold of ${land}!`;
     return `${land} holds against ${by}!`;
   }

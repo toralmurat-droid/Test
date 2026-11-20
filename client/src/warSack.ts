@@ -22,6 +22,10 @@ export interface SackHost {
   /** Is a siege announced at territory t (the "war" snapshot)? */
   besieged(t: number): boolean;
   send(type: string, msg?: unknown): void;
+  /** Has territory t's Hold fallen (the "war" snapshot: shared/war/holdFall.ts)? Its ruin is claimed with the same banner. */
+  fallen?(t: number): boolean;
+  /** The clan this hero is sworn to (undefined: unsworn). */
+  myClan?(): ClanKey | undefined;
 }
 
 /** The hero's own banner as the server last told ("sack"). */
@@ -79,6 +83,10 @@ export class WarSack {
 
   /** A line for the war plaque while the hero stands in land t ("" when nothing). */
   line(t: number): string {
+    if (this.h.fallen?.(t)) {
+      const r = this.holds.raising.find((x) => x[0] === t);
+      return r ? `A banner is going up over the ruin: ${r[1]}%${r[2] ? " (contested)" : ""}` : "The Hold has fallen: any clan may claim its ruin";
+    }
     const by = this.sackedMap.get(t);
     if (by !== undefined) return `Hold sacked${CLAN_KEYS[by] ? ` by ${CLANS[CLAN_KEYS[by]].name}` : ""}: guards down until the next war tick`;
     const r = this.holds.raising.find((x) => x[0] === t);
@@ -87,23 +95,27 @@ export class WarSack {
 
   /** Every frame: the prompt at a hostile Hold's banner, the hero's progress bar, the creak of banners going up near. */
   update(me: { x: number; y: number } | undefined, blocked: boolean, now = Date.now()) {
-    let near: number | undefined, reckon = false;
+    let near: number | undefined, reckon = false, ruin: number | undefined;
     if (me && !blocked) for (const hd of HOLDS) {
       const at = bannerSpot(hd.t), k = this.h.holder(hd.t);
       if (!at || !k || Math.hypot(at.x - me.x, at.y - me.y) > HOLD_SACK.useTiles * TILE) continue;
       // the Crown Keep is never sacked (server/warHolds.ts): a note instead of the prompt
       if (TERRITORIES[hd.t]?.reckoningOnly) { reckon = this.h.stance(k) !== "ally"; break; }
+      if (this.h.fallen?.(hd.t)) { ruin = hd.t; if (this.h.myClan?.()) near = hd.t; break; } // a fallen Hold: any sworn hero claims its ruin
       if (this.h.stance(k) === "enemy" && !this.h.besieged(hd.t) && !this.sackedMap.has(hd.t)) near = hd.t;
       break;
     }
     this.near = near;
-    this.prompt.classList.toggle("open", (near !== undefined || reckon) && !this.mine);
-    const k = near !== undefined ? this.h.holder(near) : undefined;
-    const html = reckon ? "The Crown Keep falls only at a Reckoning" : near !== undefined && k ? `<kbd>E</kbd> Raise your banner over the ${CLANS[k].name} Hold` : "";
+    this.prompt.classList.toggle("open", (near !== undefined || reckon || ruin !== undefined) && !this.mine);
+    const k = near !== undefined ? this.h.holder(near) : undefined, mine = this.h.myClan?.();
+    const html = reckon ? "The Crown Keep falls only at a Reckoning"
+      : ruin !== undefined ? (mine ? `<kbd>E</kbd> Claim this fallen Hold for ${CLANS[mine].name}` : "This Hold has fallen: swear to a clan to claim it")
+      : near !== undefined && k ? `<kbd>E</kbd> Raise your banner over the ${CLANS[k].name} Hold` : "";
     if (this.prompt.innerHTML !== html) this.prompt.innerHTML = html;
     // the hero's own banner: progress in the pixel font, or why not
     const m = this.mine, err = now < this.errUntil ? this.err : "";
-    const text = m ? (m.state === "done" ? "Your banner flies over the Hold!" : m.state === "paused" ? `Held up: defenders in the Hold · ${Math.round(m.progress * 100)}%` : `Raising your banner · ${Math.round(m.progress * 100)}%`) : err;
+    const claim = !!m && !!this.h.fallen?.(m.t);
+    const text = m ? (m.state === "done" ? (claim ? "The ruin is yours!" : "Your banner flies over the Hold!") : m.state === "paused" ? `Held up: ${claim ? "another clan contests the ruin" : "defenders in the Hold"} · ${Math.round(m.progress * 100)}%` : `${claim ? "Claiming the ruin" : "Raising your banner"} · ${Math.round(m.progress * 100)}%`) : err;
     const key = `${text}|${m?.state ?? ""}|${m ? Math.round(m.progress * 100) : ""}`;
     if (key !== this.shown) {
       this.shown = key;

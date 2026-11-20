@@ -32,5 +32,7 @@ body #warnotice { position: relative; box-sizing: border-box; max-width: 100%; t
   border: 18px solid transparent; border-image: var(--wf-gold) 9 fill / 18px / 0 repeat; image-rendering: pixelated; padding: 0 8px;
   color: #ffd98a; text-shadow: 2px 2px #050302; font: 18px var(--pixel-font); -webkit-font-smoothing: none; pointer-events: none; }
 body #warnotice.siege { border-image-source: var(--wf-blood); color: #ffb08a; }
+body #warnotice.fall { border-image-source: var(--wf-blood); color: #ffc69a; } /* a Hold fell (shared/war/holdFall.ts) */
+body #warnotice.claim { color: #ffe8a3; }
 body #warnotice.reckon { color: #ffe8a3; } /* the Reckoning (server/warCrown.ts): the gold frame, a brighter gold */
 body #warnotice[hidden] { display: none; }

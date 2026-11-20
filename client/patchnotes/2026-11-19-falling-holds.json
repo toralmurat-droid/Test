@@ -1,0 +1,11 @@
+{
+  "date": "2026-11-19",
+  "pr": 549,
+  "title": "Holds can fall",
+  "changes": [
+    "Every clan Hold now has a barracks where its soldiers come out, plus supply stores, weapon racks, towers and gates. The bigger the Hold, the more of them it has.",
+    "Wreck the barracks and no new soldiers come out. Each thing you wreck earns your clan valor and you renown. Wrecked works are rebuilt after 15 minutes.",
+    "Wreck everything and the Hold falls: its walls come down, its soldiers are gone and its land gives its old clan nothing.",
+    "Any hero sworn to a clan can claim a fallen Hold by raising their banner at its middle. The land becomes their clan's, a new outpost rises and its barracks sends out soldiers again."
+  ]
+}

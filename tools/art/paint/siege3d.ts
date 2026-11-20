@@ -25,7 +25,7 @@ export const gold = () => dk(GOLD, 0.45, 1.35, { spec: 1, shine: 26 });
 
 // ---------------------------------------------------------------- transforms of whole prim lists
 /** Prims moved by `fwd` (world -> model inverse) with their boxes refit through `inv`'s forward map. */
-function remap(ps: Prim[], fwd: (p: V3) => V3, inv: (p: V3) => V3): Prim[] {
+export function remap(ps: Prim[], fwd: (p: V3) => V3, inv: (p: V3) => V3): Prim[] {
   return ps.map((p) => {
     const lo: V3 = [Infinity, Infinity, Infinity], hi: V3 = [-Infinity, -Infinity, -Infinity];
     for (let c = 0; c < 8; c++) { const q = fwd([c & 1 ? p.hi[0] : p.lo[0], c & 2 ? p.hi[1] : p.lo[1], c & 4 ? p.hi[2] : p.lo[2]]); for (let i = 0; i < 3; i++) { lo[i] = Math.min(lo[i], q[i]); hi[i] = Math.max(hi[i], q[i]); } }
@@ -33,13 +33,13 @@ function remap(ps: Prim[], fwd: (p: V3) => V3, inv: (p: V3) => V3): Prim[] {
   });
 }
 /** Tip prims about the axis through `o`: `pitch` about y (+ lifts the front), `roll` about x (+ lifts the right side). */
-function tip(ps: Prim[], o: V3, pitch: number, roll = 0): Prim[] {
+export function tip(ps: Prim[], o: V3, pitch: number, roll = 0): Prim[] {
   const cp = Math.cos(pitch), sp = Math.sin(pitch), cr = Math.cos(roll), sr = Math.sin(roll);
   const fwd = (p: V3): V3 => { let x = p[0] - o[0], y = p[1] - o[1], z = p[2] - o[2]; [x, z] = [x * cp - z * sp, x * sp + z * cp]; [y, z] = [y * cr - z * sr, y * sr + z * cr]; return [x + o[0], y + o[1], z + o[2]]; };
   const inv = (p: V3): V3 => { let x = p[0] - o[0], y = p[1] - o[1], z = p[2] - o[2]; [y, z] = [y * cr + z * sr, -y * sr + z * cr]; [x, z] = [x * cp + z * sp, -x * sp + z * cp]; return [x + o[0], y + o[1], z + o[2]]; };
   return remap(ps, fwd, inv);
 }
-function shiftModel(m: Model, dx: number): Model {
+export function shiftModel(m: Model, dx: number): Model {
   const mv = (p: V3): V3 => [p[0] + dx, p[1], p[2]];
   return { ...m, prims: remap(m.prims, mv, (p) => [p[0] - dx, p[1], p[2]]), eyes: m.eyes?.map((e) => ({ ...e, p: mv(e.p) })), halos: m.halos?.map((h) => ({ ...h, p: mv(h.p) })), shadow: { ...m.shadow, x: m.shadow.x + dx } };
 }
@@ -257,7 +257,7 @@ function debris(P: Prim[], eyes: NonNullable<Model["eyes"]>, halos: NonNullable<
 }
 
 /** A ring round the x axis (girths, straps, iron bands on a log). */
-const ringX = (c: V3, R: number, r: number, m: Mat): Prim => custom([c[0] - r - 0.5, c[1] - R - r - 0.5, c[2] - R - r - 0.5], [c[0] + r + 0.5, c[1] + R + r + 0.5, c[2] + R + r + 0.5], (x, y, z) => Math.hypot(Math.hypot(y - c[1], z - c[2]) - R, x - c[0]) - r, m, { k: 0.05 });
+export const ringX = (c: V3, R: number, r: number, m: Mat): Prim => custom([c[0] - r - 0.5, c[1] - R - r - 0.5, c[2] - R - r - 0.5], [c[0] + r + 0.5, c[1] + R + r + 0.5, c[2] + R + r + 0.5], (x, y, z) => Math.hypot(Math.hypot(y - c[1], z - c[2]) - R, x - c[0]) - r, m, { k: 0.05 });
 
 const dirOf = (f: number): Dir => (f === 12 || f === 13 ? "right" : f < 6 ? (["down", "up", "right"] as Dir[])[f >> 1] : (["down", "up", "right"] as Dir[])[(f - 6) % 3]);
 
