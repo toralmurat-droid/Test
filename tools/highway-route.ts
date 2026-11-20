@@ -44,7 +44,7 @@ const LEGS: Record<number, { from: string; to: string; via: P[] }[]> = {
     { from: "Kel Ashar", to: "The Dune Road", via: [[131, 410], [48, 445], [42, 450]] },
   ],
   3: [
-    { from: "Marrowkeep Gate", to: "The Host's Muster", via: [[242, 675], [251, 680]] },
+    { from: "Marrowkeep Gate", to: "The Host's Muster", via: [[255, 641], [254, 654], [253, 660], [248, 665], [248, 678], [250, 680]] },
     { from: "The Host's Muster", to: "The Mourning Road", via: [[251, 680], [257, 702]] },
     { from: "The Host's Muster", to: "Cairnwatch", via: [[251, 680], [166, 697], [138, 693], [89, 704]] },
     { from: "Cairnwatch", to: "The Eastmarch Pass", via: [[77, 714], [52, 720]] },

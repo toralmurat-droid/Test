@@ -39,6 +39,8 @@ export const RETIRED_LEGS: readonly { land: Act; pts: readonly [number, number][
   { land: 1, pts: [[52, 57], [52, 21], [44, 16], [36, 16], [35, 17]] },
   // the Red Badlands: the first stretch from Scarwall's old gate dais down to Fangrock (the leg starts at its south gate now)
   { land: 4, pts: [[26, 44], [47, 63]] },
+  // the Grey Barrow Moors: the stub from Marrowkeep's old gate dais west of the Host's Muster down to the fork below it
+  { land: 3, pts: [[242, 79], [249, 85], [250, 84]] },
 ];
 /** Signposts the moves took away (local tiles of their land): the King's Highway's post where it met the North Meadow road (now inside Hearthhold's walls). */
 export const RETIRED_POSTS: readonly { land: Act; x: number; y: number }[] = [{ land: 1, x: 50, y: 20 }];
@@ -86,6 +88,15 @@ export const CITY_LAND: Partial<Record<ClanKey, CityLandFit>> = {
     // the walls close the foot of the Thornspire's eastern valley (x 254..276), which opened onto the dunes at row 404: a
     // way two tiles wide along the north wall through the cliff knot and down the west wall to the dunes trail
     ways: [{ x0: 228, x1: 276, y0: 402, y1: 403 }, { x0: 228, x1: 229, y0: 402, y1: 431 }],
+  },
+  // Marrowkeep: a few tiles of track out of the west gate towards the Nine Widows road, its post beside them (the road's
+  // own post stood inside the walls: the carve drops it). The track stops short of the road: joined, it makes a fork the
+  // forts read as a junction, and the Hollow Mounds' fort would move to Kingsbarrow. The south gate is on the highway, its
+  // post is the highway's (shared/highways.ts); no east gate (the crags)
+  host: {
+    roads: [[[229, 627], [228, 627], [228, 629]]],
+    trims: [],
+    posts: [{ x: 227, y: 629, to: ["Marrowkeep", "The Nine Widows", "The Host's Muster"] }],
   },
 };
 

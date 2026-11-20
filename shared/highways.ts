@@ -105,18 +105,22 @@ export const HIGHWAYS: readonly Highway[] = [
     { x: 69, y: 66, to: ["The Veiled Sanctum", "Kel Ashar", "Dustrider Camp", "Jackal Springs"] }, // Dustrider Camp's east way in
     { x: 67, y: 141, to: ["The Veiled Sanctum", "Kel Ashar", "Palmshade Oasis"] }, // Palmshade Oasis' east way in
   ] },
-  // The Grey Barrow Moors: from Marrowkeep's gate east to the Host's Muster, south to the Mourning Road; from the Muster
+  // The Grey Barrow Moors: from Marrowkeep's south gate (settlement network step 5; the old stub from its gate dais is
+  // retired: shared/cityLand.ts RETIRED_LEGS) down Kingsbarrow's east edge and west of the Host's war camp to the fork
+  // below the Muster (kept three tiles off the stump at 251,72: cleared, it would draw the Muster's fort to the highway),
+  // south to the Mourning Road; from the Muster
   // down the old road west past the Drowned Hollow and Blackwater Fen to Cairnwatch, and out of its south gate to the
   // Eastmarch Pass and south-east along the flagged way to Thane's Rest and the Ashen Pass (a fork below Blackwater Fen
   // instead, the plan's, would be a new junction: its fort would go to Blackwater Fen and the Hollow Mounds lose theirs)
   { land: 3, name: "The Moors Highway", seat: "The Host's Muster", town: "Cairnwatch", towns: ["Cairnwatch"], legs: [
-    { from: "Marrowkeep Gate", to: "The Host's Muster", pts: [[242, 79], [249, 85], [250, 84]] },
+    { from: "Marrowkeep Gate", to: "The Host's Muster", pts: [[255, 45], [254, 63], [248, 69], [248, 82], [250, 84]] },
     { from: "The Host's Muster", to: "The Mourning Road", pts: [[250, 84], [246, 91], [250, 95], [250, 99], [257, 106]] },
     { from: "The Host's Muster", to: "Cairnwatch", pts: [[250, 84], [249, 87], [244, 92], [240, 94], [227, 97], [224, 99], [220, 100], [220, 101], [217, 101], [213, 104], [209, 105], [204, 104], [201, 108], [191, 105], [186, 105], [183, 103], [170, 100], [142, 98], [134, 96], [132, 96], [131, 98], [117, 98], [96, 105], [94, 108], [89, 108]] },
     { from: "Cairnwatch", to: "The Eastmarch Pass", pts: [[77, 118], [75, 120], [73, 121], [69, 122], [65, 123], [64, 124], [52, 124]] },
     { from: "Cairnwatch", to: "The Ashen Pass", pts: [[78, 121], [80, 120], [84, 123], [93, 126], [102, 130], [110, 138], [115, 146], [117, 143], [121, 142], [126, 137], [140, 137], [146, 144]] },
   ], posts: [
-    { x: 246, y: 85, to: ["The Host's Muster", "Cairnwatch", "The Drowned Hollow"] }, // below the Muster: Marrowkeep's gate, the Mourning Road, the way west
+    { x: 257, y: 47, to: ["Marrowkeep", "The Host's Muster", "Cairnwatch"] }, // under Marrowkeep's south gate
+    { x: 246, y: 85, to: ["Marrowkeep", "The Host's Muster", "Cairnwatch", "The Drowned Hollow"] }, // below the Muster: Marrowkeep's leg, the Mourning Road, the way west
     { x: 245, y: 94, to: ["The Host's Muster", "Cairnwatch", "The Weeping Stones"] }, // where the Mourning leg leaves the old road
     { x: 81, y: 123, to: ["The Host's Muster", "Cairnwatch", "Thane's Rest", "The Moorgate"] }, // below Cairnwatch's south gate: the Eastmarch and Thane's Rest
     { x: 138, y: 135, to: ["The Host's Muster", "Cairnwatch", "Thane's Rest"] }, // Thane's Rest, above the Ashen Pass

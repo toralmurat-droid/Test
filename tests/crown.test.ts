@@ -171,7 +171,8 @@ test("crown: every homeland's Crownway dais is open ground joined to its land, c
   // The clans' cities in their lands (settlement network step 5, shared/cityLand.ts CITY_MASK: box, apron, gate roads and
   // posts, retired highway legs) and their old gate daises (OLD_CITY_GATES) too: each land re-hashed with them masked on
   // the map before its city moved, the same with and without it (the badlands' with Scarwall, step 5 PR 2; the Sunscar's
-  // with Duskveil and its highway leg, PR 3: "55c973c2..." before).
+  // with Duskveil and its highway leg, PR 3: "55c973c2..." before; the moors' with Marrowkeep, its new leg and the retired
+  // stub, PR 4: "3975c6c0..." before).
   const hash = (y0: number, y1: number, B: TileBox) => {
     const boxes = [B, ...CITIES.map((c) => c.outerBox), ...Object.values(OLD_CITY_GATES), ...BORDER_BOXES]; // (the border roads, shared/borders.ts, cut only inside theirs)
     const h = createHash("sha256"), inB = (x: number, y: number) => boxes.some((b) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1)
@@ -181,7 +182,7 @@ test("crown: every homeland's Crownway dais is open ground joined to its land, c
   };
   const box = (from: string) => CROWNWAYS.find((c) => c.from === from)!.box;
   assert.equal(hash(DESERT_Y0, DESERT_Y0 + DESERT_H, box("sunscar")), "ae3ceabdb4deb508093b609cfefce614d7327b18f1f65d1882cd3a1567d2cf15", "the Sunscar");
-  assert.equal(hash(MOORS_Y0, MOORS_Y0 + MOORS_H, box("moors")), "3975c6c0a2d061a7f984743cd53b3ea1cb9c11fa03f45889ed4a9bd9f508e9f0", "the moors");
+  assert.equal(hash(MOORS_Y0, MOORS_Y0 + MOORS_H, box("moors")), "a2da11999516cec4387d97e1c9f821ff8c46456d410b83eec2f5eb52db565562", "the moors");
   assert.equal(hash(BADLANDS_Y0, BADLANDS_Y0 + BADLANDS_H, box("badlands")), "e1eec094bea2c76867ffd1b66142ab951b55ca637d7861cafa7fcbc243ac5045", "the badlands");
   assert.equal(hash(SINKHOLES_Y0, SINKHOLES_Y0 + SINKHOLES_H, box("sinkholes")), "0fc7776c1db9d2af5660678a1fb586964ba5e864ce8a37687770a58a5eba24d0", "the sinkholes");
 });

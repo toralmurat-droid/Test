@@ -753,7 +753,7 @@ export function isoStanding(scene: Phaser.Scene, objects: number[][]): number[][
       if (ty < BADLANDS_Y0 || ty >= BADLANDS_Y0 + BADLANDS_H) { out[ty][tx] = -1; continue; } // the solid rock strips round the badlands: ground paints them
       if (isoBadlands(scene, t, tx, ty, at, bd)) { out[ty][tx] = -1; continue; }
     } else if (ty >= M0 && (ty < MOORS_Y0 || ty >= MOORS_Y0 + MOORS_H)) { out[ty][tx] = -1; continue; } // the solid rock strips round the moors: ground paints them
-    else if (ty >= M0 && isoMoors(scene, t, tx, ty, at, md)) { out[ty][tx] = -1; continue; }
+    else if (ty >= M0 && !cityAt(tx, ty) && isoMoors(scene, t, tx, ty, at, md)) { out[ty][tx] = -1; continue; }
     if ((ty >= WORLD_H && ty < DESERT_Y0) || (ty >= DESERT_Y0 + DESERT_H && ty < M0)) { out[ty][tx] = -1; continue; } // the Mawdeep's rock: cave walls (dungeon.ts), not rocks; then solid rock to the desert
     if (ty >= DESERT_Y0 && ty < M0 && isoDesert(scene, t, tx, ty, at, cd)) { out[ty][tx] = -1; continue; }
     const cx = (tx + 0.5) * TILE, cy = (ty + 0.5) * TILE;

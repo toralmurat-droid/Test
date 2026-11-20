@@ -90,7 +90,7 @@ export const CITY_TEXT: Partial<Record<ClanKey, CityText>> = {
     name: "Marrowkeep",
     waystone: "Marrowkeep",
     enter: "Pass the city gate into Marrowkeep, seat of the Ossuary Host",
-    leave: "Go out through the city gate to the Host's Muster",
+    leave: "Go out through the south gate onto the Moors Highway",
     districts: { gate: "Marrowkeep Gate Yard", market: "The Bone Market", barracks: "The Muster Hall", hall: "The Hall of Rolls", keep: "The Ossuary Keep", houses: "Marrowkeep Rows" },
     npcs: {
       leader: ["Lord-Ossuary Varric Ashgrave", "Keeper of the Host's Rolls"],
@@ -112,6 +112,9 @@ export const CITY_TEXT: Partial<Record<ClanKey, CityText>> = {
       "Swear to the Host and the ink will not fade. Break it, and the ink does not forget.",
       "Heroes under level five are not yet worth the writing. Return when you have lived a little.",
       "The gate is shut to the Host's enemies. The roll has their names.",
+      "Marrowkeep stands in the Moors now, north of Kingsbarrow. The Barrow-King sleeps just below our south wall. Do not wake him.",
+      "The Moors Highway runs south from our gate to the Host's Muster, and on to Cairnwatch. Keep to the stones.",
+      "The west gate gives onto a short track toward the Nine Widows road. Mind the mist, and mind the widows.",
     ],
   },
   // The Redfang Compact's Scarwall (Act 4): a warlord's stockade, loud, greedy and loyal to its own
