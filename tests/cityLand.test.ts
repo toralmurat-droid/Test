@@ -27,13 +27,14 @@ import { blocked } from "../shared/movement";
 import { BOARDS } from "../shared/bounty";
 import { cityClear, clearOfCities, POSTS } from "../shared/bandits";
 import { FANGROCK } from "../shared/badlands";
+import { CAVE_MOUTHS, HIDEHALL, HIDEHALL_BURROWS, SR } from "../shared/sinkholes";
 import { KINGS_MOUND } from "../shared/moors";
 
 /**
  * The clans' cities in their homelands (settlement network step 5, shared/capitals.ts City.site, shared/cityLand.ts), one
  * table row per city that has moved: Hearthhold north of Goldenreach Farms (Oakvale's lands), Duskveil in the Sunscar's
  * Saffron Dunes east of Mirage Wells, Marrowkeep on the moor north of Kingsbarrow, Scarwall on the badlands plain north
- * of Fangrock. The rules every moved city keeps run over the table; what is one city's own is in its own
+ * of Fangrock, Deepden on the sinkholes' back way west of Hidehall: all five, the band holds none (tests/capitals.test.ts). The rules every moved city keeps run over the table; what is one city's own is in its own
  * test below. The room side (the gate ward, the hand-off) is in tests/cityLand-room.test.ts.
  */
 type Pt = { x: number; y: number };
@@ -84,6 +85,15 @@ const rows: Row[] = [
     roads: [["south", 50, 857, 50, "Fangrock's east gate (the seat)"], ["south", 221, 872, -1, "the Rustwater Post"], ["east", 34, 822, -1, "the south gate, through the city"]],
     over: ["Gallows Canyon", "The Red Badlands"], territory: [[61, 808, "Gallows Canyon"], [65, 812, "Gallows Canyon"]],
   },
+  {
+    clan: "hidekin", land: 5, box: { x: 162, y: 1083, w: 52, h: 40 }, outer: { x: 187, y: 1123 },
+    gates: { south: [186, 187, 188].map((x) => ({ x, y: 1122 })), west: [1108, 1109, 1110].map((y) => ({ x: 162, y })), east: [1108, 1109, 1110].map((y) => ({ x: 213, y })) },
+    seed: () => tileOf(waygateArrival(waygateById("sinkholes")!)), highway: ["east"],
+    roads: [["east", 207, 1063, 60, "the fork on the Great Maw road"], ["east", 248, 1089, -1, "Hidehall's north gate (the seat)"], ["east", 116, 1000, -1, "Ropewell"],
+      ["east", 229, 1106, 25, "Hidehall's west gate down the back way"], ["south", 214, 1109, 45, "the east gate, round the south-east corner"],
+      ["west", 214, 1109, 60, "the east gate, along the back way through the city"]],
+    over: ["The Pitfields", "The Mawdeep Sinkholes"], territory: [[161, 1109, "The Pitfields"], [158, 1100, "The Pitfields"]],
+  },
 ];
 const cityOfRow = (r: Row) => CITIES.find((c) => c.clan === r.clan)!;
 const fnv = (s: string) => { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(16); };
@@ -121,12 +131,12 @@ const roadTo = (d: Int32Array, x: number, y: number, r = 6) => {
   return best;
 };
 
-test("cities in their lands: the table covers every city with a site; the band cities keep their plots", () => {
+test("cities in their lands: the table covers every city, each with a site (none is left in the band)", () => {
   assert.deepEqual(inLandCities().map((c) => c.clan), rows.map((r) => r.clan));
-  for (const c of CITIES) if (!c.site) { assert.deepEqual(plotBox(c), stripBox(c.plot)); assert.equal(c.sideGates, undefined); }
-  // the old gate daises: one per clan, fixed (the land hash tests mask them for good)
+  assert.deepEqual(inLandCities(), [...CITIES]);
+  // the old gate daises: one per clan, fixed (the land hash tests mask them for good), none of them a city's box now
   assert.deepEqual(Object.keys(OLD_CITY_GATES).sort(), CITIES.map((c) => c.clan).sort());
-  for (const c of CITIES) if (!c.site) assert.deepEqual(OLD_CITY_GATES[c.clan], c.outerBox, `${c.clan}: the dais box is its outerBox while it is in the band`);
+  for (const c of CITIES) assert.notDeepEqual(OLD_CITY_GATES[c.clan], c.outerBox, `${c.clan}: its outerBox is its walls now`);
 });
 
 for (const r of rows) {
@@ -316,8 +326,8 @@ test("cities in their lands: forts, musters, chests, siege sites, landmarks, que
   let n = 0;
   for (const b of BORDERS) for (const e of [b.a, b.b]) { const [x, y] = endPath(e)[0]; if (HOLDS.some((h) => Math.hypot(h.x / TILE - x, h.y / TILE - y) <= 30)) n++; }
   assert.equal(n, 14);
-  // the digests taken on the map before the moves (default branch after #571; the same after Hearthhold, Scarwall, Duskveil
-  // and Marrowkeep)
+  // the digests taken on the map before the moves (default branch after #571; the same after Hearthhold, Scarwall, Duskveil,
+  // Marrowkeep and Deepden)
   assert.equal(digest(HOLDS, (h) => [h.t, Math.round(h.x), Math.round(h.y)]), "25:9caa51d");
   assert.deepEqual(HOLDS.filter((h) => h.site === "capital").map((h) => [h.x / TILE, h.y / TILE]), [[26.5, 58.5], [241.5, 355.5], [271.5, 671.5], [27.5, 867.5], [248.5, 1105.5]], "the capital forts");
   assert.equal(digest(MUSTERS, (h) => [h.t, Math.round(h.x), Math.round(h.y)]), "72:82341353");
@@ -327,9 +337,11 @@ test("cities in their lands: forts, musters, chests, siege sites, landmarks, que
   assert.equal(digest(LANDMARKS, (l) => [l.id, l.x, l.y, l.solid ?? null]), "6:4b449bf7");
   assert.equal(digest(allObjects(), (o) => [o.id, Math.round(o.x), Math.round(o.y)]), "213:663e782a");
   // every stone but the moved cities' waystones ("41:f8dc4b3" with Duskveil's, before it moved; "40:b1394a39" with
-  // Marrowkeep's; the base map without it hashes the same)
-  assert.equal(digest(PORTAL_SPOTS.filter((p) => !inLandCities().some((c) => p.id === `city_${c.clan}`)), (p) => [p.id, p.x, p.y]), "39:77de2ae2");
-  assert.equal(digest(POSTS, (p) => [p.kind ?? "", p.role, p.at, p.route ?? null]), "95:7b83c3b", "every camp post where it was");
+  // Marrowkeep's, "39:77de2ae2" with Deepden's; the base map without it hashes the same)
+  assert.equal(digest(PORTAL_SPOTS.filter((p) => !inLandCities().some((c) => p.id === `city_${c.clan}`)), (p) => [p.id, p.x, p.y]), "38:fbf63943");
+  // every camp post where it was ("95:7b83c3b" before Deepden), but Hidehall's two burrow Delvers on the back way (dropped:
+  // the camp's last posts, no index moved) and its two west-gate patrols (kept to its gate's apron): tests below
+  assert.equal(digest(POSTS, (p) => [p.kind ?? "", p.role, p.at, p.route ?? null]), "93:b124168d");
   for (const c of CHESTS) assert.ok(!cityAt(Math.floor(c.x / TILE), Math.floor(c.y / TILE)), `${c.id}: not inside the walls`);
 });
 
@@ -493,4 +505,57 @@ test("Duskveil: the Thornspire's eastern valley, closed at its foot by the north
   assert.ok(walk(valley, { x: 219, y: 416 }) <= 1.3 * 64, "Mirage Wells' east shore");
   const south = walk(valley, { x: 255, y: 446 });
   assert.ok(south > 0 && south <= 2 * 58, `the south gate: ${south} steps`);
+});
+
+test("Deepden: on the sinkholes' back way west of Hidehall, through its west and east gates; the highway from the east gate to the Great Maw road", () => {
+  const D = CITIES.find((c) => c.clan === "hidekin")!, B = plotBox(D), G = cityGates(D), y0 = LAND_ROWS[5].y0;
+  const inBox = (x: number, y: number) => x >= B.x && y >= B.y && x < B.x + B.w && y < B.y + B.h;
+  assert.deepEqual(D.sideGates, ["west", "east"]);
+  const Wg = G.find((g) => g.side === "west")!, E = G.find((g) => g.side === "east")!;
+  assert.deepEqual([Wg.out, E.out], [{ x: 161, y: 1109 }, { x: 214, y: 1109 }]);
+  assert.equal(areaAt((Wg.out.x + 0.5) * TILE, (Wg.out.y + 0.5) * TILE), "The Pitfields", "the Pitfields outside the west gate");
+  // the back way runs on through the city: west gate to east gate on road, along the cross street
+  assert.ok(roadTo(roadSteps(Wg.out.x, Wg.out.y), E.out.x, E.out.y, 0) > 0, "the west gate to the east gate on road");
+  // the leg from the east gate up to the fork on the old road east of the Great Maw, where the old road goes on to Hidehall
+  // (the rest of the old leg, renamed) and west to Ropewell; the stub from the old gate dais retired
+  const h = HIGHWAYS.find((o) => o.land === 5)!, mine = h.legs.find((l) => l.from === "Deepden Gate")!;
+  assert.equal(mine.to, "The Great Maw road");
+  assert.deepEqual(mine.pts[0], [E.out.x, E.out.y - y0]);
+  assert.deepEqual(h.legs.find((l) => l.from === "The Great Maw road" && l.to === "Hidehall")!.pts, [[207, 99], [232, 102], [235, 103], [241, 110], [243, 117], [248, 125]]);
+  assert.deepEqual(mine.pts.at(-1), [207, 99]);
+  assert.deepEqual(h.legs.find((l) => l.from === "Hidehall" && l.to === "Ropewell")!.pts[0], [207, 99]);
+  assert.equal(h.legs.filter((l) => l.from.startsWith("Deepden")).length, 1);
+  assert.ok(RETIRED_LEGS.some((l) => l.land === 5 && JSON.stringify(l.pts) === JSON.stringify([[206, 111], [207, 99]])), "the old stub retired");
+  // out of sight of Hidehall's lookouts (they see 7.5 tiles: a hero on the leg's highway is 15+ away), its fort unmoved
+  const lookouts = POSTS.filter((p) => p.role === "lookout");
+  for (const k of legLine(h, mine)) {
+    const x = k % MAP_W, y = Math.floor(k / MAP_W);
+    for (const p of lookouts) assert.ok(Math.hypot(p.at[0] - x, p.at[1] - y) > 7.5 + 2, `the leg at ${x},${y} in sight of the lookout at ${p.at}`);
+  }
+  for (const p of lookouts) for (const g of G) assert.ok(Math.hypot(p.at[0] - g.out.x, p.at[1] - g.out.y) >= 15, `lookout at ${p.at} by the ${g.side} gate`);
+  assert.deepEqual(HOLDS.filter((o) => o.site === "capital" && o.anchor === "Hidehall").map((o) => [o.x / TILE, o.y / TILE]), [[248.5, 1105.5]]);
+  assert.ok(HIDEHALL.x - (B.x + B.w) >= 15, "Hidehall's palisade 15+ tiles east of the east wall");
+  // Hidehall's garrison trimmed by hand: the two burrows on the back way have no Delver (the camp's last posts, so no other
+  // index moved), the burrow by the east gate is cleared with the apron; the west-gate patrols keep to the gate's apron
+  const camp = POSTS.filter((p) => p.camp === 3);
+  assert.equal(camp.filter((p) => p.role === "ambusher").length, 4);
+  for (const [x, y] of HIDEHALL_BURROWS.slice(4)) assert.ok(!POSTS.some((p) => p.at[0] === x && p.at[1] === SR(y + 1)), `no Delver at the burrow ${x},${y}`);
+  assert.equal(camp.at(-1)!.role, "ambusher");
+  assert.notEqual(OBJECTS[SR(144)][214], T.BURROW, "the burrow at the east gate's mouth is gone");
+  for (let y = E.out.y - 1; y <= E.out.y + 1; y++) assert.ok(!isSolidTile(E.out.x, y), `the east gate's mouth free at ${y}`);
+  assert.deepEqual(camp.filter((p) => p.route && p.at[0] === HIDEHALL.x - 1).map((p) => p.route), [[[229, 1106], [224, 1107]], [[229, 1107], [224, 1108]]]);
+  // the cave mouth above the north wall stays, outside the apron
+  assert.ok(CAVE_MOUTHS.some((c) => c.x === 176 && c.y === 116));
+  for (let x = 175; x <= 177; x++) assert.equal(OBJECTS[SR(116)][x], T.CAVE, `the cave mouth at ${x}`);
+  assert.ok(SR(116) < B.y - CITY_APRON);
+  // the south gate's dirt road east along the apron and up the east side to the back way, its post by the gate
+  for (let x = 187; x <= 215; x++) assert.ok(WORLD.roads.has(1124 * MAP_W + x), `the south road at ${x},1124`);
+  assert.ok(!inBox(215, 1124) && GROUND[1124][200] === T.DIRT);
+  // the posts: the east gate's names Deepden and Hidehall; the fork's reads three roads, Deepden on a board of its own
+  const ep = SIGNPOSTS.find((p) => p.x === 217 && p.y === 1111)!;
+  assert.ok(ep.dirs.some((d) => d.name.includes("Deepden")) && ep.dirs.some((d) => d.name.includes("Hidehall")), ep.dirs.map((d) => d.name).join(" | "));
+  const fork = SIGNPOSTS.find((p) => p.x === 209 && p.y === 1065)!;
+  assert.equal(fork.dirs.length, 3, fork.dirs.map((d) => d.name).join(" | "));
+  assert.ok(fork.dirs.some((d) => d.name === "Deepden") && fork.dirs.some((d) => d.name.includes("Hidehall")) && fork.dirs.some((d) => d.name.includes("Ropewell")), fork.dirs.map((d) => d.name).join(" | "));
+  assert.ok(!SIGNPOSTS.some((p) => p.x === 210 && p.y === 1061), "the fork's old spot");
 });

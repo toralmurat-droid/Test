@@ -12,6 +12,8 @@ import type { WinRect } from "./houseSalt";
 import { SALT_BUILDINGS } from "../../shared/saltmere";
 import { SALT_PERCHES, SALT_SMOKE } from "./saltmereReg";
 import { VILLAGES } from "../../shared/villages";
+import { cityAt } from "../../shared/capitals";
+import { CITY_LOOK } from "./cityArt";
 
 /**
  * Iso buildings (phase 4 polish): whole houses with walls and a pitched roof, and the materials used for
@@ -594,6 +596,9 @@ function sliced(scene: Phaser.Scene, key: string, X0: number, Y0: number, X1: nu
   left: number, topY: number, cw: number, ch: number, fade: boolean, fadeTo?: number) {
   const b: Building = { X0, Y0, X1, Y1, strips: [], left, right: left + cw, top: topY, bottom: topY + ch, faded: false, fadeTo };
   const SW = 8;
+  // Deepden's houses take the Hide-Kin tint (cityArt.ts) so the moss-green sinkholes houses read as a clan city; other cities keep their own look.
+  const c = cityAt(Math.floor((X0 + X1) / 2 / TILE), Math.floor((Y0 + Y1) / 2 / TILE));
+  const city = c?.clan === "hidekin" ? c : undefined;
   const front = P(X1, Y1).x; // screen x of the front corner
   for (let x = 0; x < cw; x += SW) {
     const sx = left + x + SW / 2;
@@ -602,6 +607,7 @@ function sliced(scene: Phaser.Scene, key: string, X0: number, Y0: number, X1: nu
     const s = P(wx, wy);
     const img = scene.add.image(wx, wy, key).setOrigin((s.x - left) / cw, (s.y - topY) / ch).setDepth(wy + 0.5);
     img.setCrop(x, 0, Math.min(SW, cw - x), ch);
+    if (city) img.setTint(CITY_LOOK[city.clan].wall);
     b.strips.push(staticObj(scene, img));
   }
   if (fade) BUILDINGS.push(b);

@@ -15,7 +15,8 @@ import { TITLES } from "./cosmetics";
  * builds them there): heroes walk in through open gates (south, and west and east where the land allows: `sideGates`) on
  * the land's roads, and a gate ward (server/cityGates.ts) keeps W7's entry rules. Hearthhold stands in Oakvale's
  * north-west, Scarwall in the Red Badlands' north-west, Duskveil in the Sunscar's Saffron Dunes, Marrowkeep in the Grey
- * Barrow Moors north of Kingsbarrow; their strip plots stay rock until all five have moved.
+ * Barrow Moors north of Kingsbarrow, Deepden in the Mawdeep Sinkholes on the back way west of Hidehall. All five have
+ * moved: the band's plots are rock (the band itself stays, empty, until a cleanup removes it).
  *
  * Every city is the same plan (CITY_TEMPLATE, local tiles 0..w-1 x 0..h-1, the gate in the south wall) dressed in its
  * clan's style (walls, roofs, ground): gate square with the waystone and the stash, market with the quartermaster,
@@ -176,8 +177,9 @@ export const CITIES: readonly City[] = [
   },
   // The Ossuary Host's Marrowkeep: on the moor north of Kingsbarrow (settlement network step 5), its back to the band's
   // northern crags, the Barrow-King's Mound just below its south wall. The highway runs from its south gate down
-  // Kingsbarrow's east edge to the fork below the Host's Muster; its west gate opens onto the Nine Widows road (no east
-  // gate: the crags). Its old city gate stood on the heather west of the Muster (shared/cityLand.ts OLD_CITY_GATES).
+  // Kingsbarrow's east edge to the fork below the Host's Muster; a short track leaves its west gate towards the Nine Widows
+  // road and stops five tiles short of it (joined, the fork would move a fort: shared/cityLand.ts) (no east gate: the
+  // crags). Its old city gate stood on the heather west of the Muster (shared/cityLand.ts OLD_CITY_GATES).
   // Black stone and bone.
   {
     clan: "host", act: 3, plot: 2, outer: { x: 255, y: 641 }, outerBox: { x0: 230, x1: 281, y0: 601, y1: 640 }, site: { x: 230, y: 601 }, sideGates: ["west"],
@@ -193,10 +195,13 @@ export const CITIES: readonly City[] = [
     style: { wall: "PALISADE", roof: "ROOF_RED", roof2: "ROOF_THATCH", street: "CLAY", ground: ["SAND", "GRAVEL", "CLAY"], yard: "GRAVEL" },
     sprites: { leader: "cap_redfang_leader", quartermaster: "steward_redfang", oathkeeper: "cap_redfang_oathkeeper", trainer: "cap_redfang_trainer" },
   },
-  // The Hide-Kin's Deepden: its city gate stands in the mossy hollow north-west of Hidehall, off the back way and out of
-  // sight of the warren's posts, patrols and burrow ambushers (24 tiles and more). Hide roofs, a palisade, moss and earth.
+  // The Hide-Kin's Deepden: in the Mawdeep Sinkholes on the back way west of Hidehall (settlement network step 5), the
+  // Pitfields' eastern edge. The back way runs through it, in at the west gate and out at the east gate, 15 tiles short of
+  // Hidehall's west gate; the highway leaves the east gate north to the Great Maw road; a dirt road runs from the south
+  // gate round the south-east corner to the east gate. Its old city gate stood in the mossy hollow north-west of Hidehall
+  // (shared/cityLand.ts OLD_CITY_GATES). Hide roofs, a palisade, moss and earth.
   {
-    clan: "hidekin", act: 5, plot: 4, outer: { x: 206, y: 1080 }, outerBox: { x0: 201, x1: 211, y0: 1076, y1: 1085 },
+    clan: "hidekin", act: 5, plot: 4, outer: { x: 187, y: 1123 }, outerBox: { x0: 162, x1: 213, y0: 1083, y1: 1122 }, site: { x: 162, y: 1083 }, sideGates: ["west", "east"],
     style: { wall: "PALISADE", roof: "ROOF_THATCH", roof2: "ROOF_THATCH", street: "COBBLE", ground: ["MOSS", "GRASS_DARK", "TALL_GRASS"], yard: "DIRT" },
     sprites: { leader: "cap_hidekin_leader", quartermaster: "steward_hidekin", oathkeeper: "cap_hidekin_oathkeeper", trainer: "cap_hidekin_trainer" },
   },

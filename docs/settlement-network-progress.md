@@ -322,6 +322,12 @@ Roadmap: client/src/roadmap.ts, "Settlement network".
   Widows road (joined, the fork becomes a junction and the Hollow Mounds' fort moves to Kingsbarrow). Three war roads
   re-route round the walls; war sim unchanged. Client: moors painter skipped inside cities.
 
+- PR 5 Deepden (PR #576, branch `claude/deepden-in-land`): site {162,1083} on the back way west of Hidehall, south,
+  west and east gates; new highway leg "Deepden Gate -> The Great Maw road" (the rest renamed "The Great Maw road ->
+  Hidehall", fork post moved); Hidehall's two burrow Delvers by the city dropped and two west patrols shortened; war
+  roads unchanged. The old city strip is now empty rock (map-metrics row "Old cities' band (rock)"). Client: sinkholes
+  painter skipped inside cities, Deepden's houses take the Hide-Kin tint. Step 5 done: all five cities in their homelands.
+
 ## Next
 - Step 3 optional follow-ups: working townsfolk for Millbrook, Cairnwatch, the Rustwater Post,
   Ropewell and Tollcross (plan Q5); the small props left out (spare millstone, turf drying rack, creels, tailings heap,

@@ -59,7 +59,8 @@ const LEGS: Record<number, { from: string; to: string; via: P[] }[]> = {
     { from: "The Rustwater Post", to: "The Red Road", via: [[246, 872], [271, 876]] },
   ],
   5: [
-    { from: "Deepden Gate", to: "Hidehall", via: [[206, 1075], [207, 1064], [214, 1064], [236, 1068], [248, 1089]] },
+    { from: "Deepden Gate", to: "The Great Maw road", via: [[214, 1109], [215, 1091], [217, 1082], [207, 1063]] },
+    { from: "The Great Maw road", to: "Hidehall", via: [[207, 1063], [214, 1064], [236, 1068], [248, 1089]] },
     { from: "Hidehall", to: "The Dune Road", via: [[236, 1068], [238, 1067]] },
     { from: "Hidehall", to: "Ropewell", via: [[207, 1064], [166, 1056], [137, 1050], [116, 1000]] },
     { from: "The Great Maw", to: "Tunneltop", via: [[158, 1046], [192, 1034]] },

@@ -143,13 +143,16 @@ export const HIGHWAYS: readonly Highway[] = [
     { x: 237, y: 101, to: ["Fangrock", "The Rustwater Post", "The Saltlick Flats"] }, // below the Rustwater Post's south gate
     { x: 250, y: 95, to: ["Fangrock", "The Rustwater Post", "The Red Pass"] }, // the Red Road east of the Post
   ] },
-  // The Mawdeep Sinkholes: from Deepden's gate north to the old road east of the Great Maw, east to the Dune Road pass and
+  // The Mawdeep Sinkholes: from Deepden's east gate (settlement network step 5; the old stub from its gate dais is retired:
+  // shared/cityLand.ts RETIRED_LEGS) up the city's east wall and through the old gate's hollow north to the old road east
+  // of the Great Maw (17 tiles and more from Hidehall's west towers: their lookouts see 7.5), east to the Dune Road pass and
   // down into Hidehall's north gate; west along that road and round the Maw's north rim (a fork up to Tunneltop) and north
   // to Ropewell's south gate; out of its east gate to the Deep Road and its west gate into Hollowbrook Dells, south past
   // the Old Warren (round its west side, not through the burrows) to the Fen's cave road and the Rattler's Way; and down
   // the Fen trail to Mosslight Fen
   { land: 5, name: "The Sinkholes Highway", seat: "Hidehall", town: "Ropewell", towns: ["Hidehall", "Ropewell", "Tunneltop"], legs: [
-    { from: "Deepden Gate", to: "Hidehall", pts: [[206, 111], [207, 99], [232, 102], [235, 103], [241, 110], [243, 117], [248, 125]] },
+    { from: "Deepden Gate", to: "The Great Maw road", pts: [[214, 145], [215, 144], [215, 127], [217, 125], [217, 118], [210, 115], [207, 112], [207, 99]] },
+    { from: "The Great Maw road", to: "Hidehall", pts: [[207, 99], [232, 102], [235, 103], [241, 110], [243, 117], [248, 125]] },
     { from: "Hidehall", to: "The Dune Road", pts: [[236, 104], [238, 103]] },
     { from: "Hidehall", to: "Ropewell", pts: [[207, 99], [193, 96], [189, 97], [186, 95], [166, 92], [165, 88], [160, 83], [155, 81], [144, 81], [141, 82], [137, 86], [122, 62], [122, 56], [119, 53], [119, 47], [117, 45], [116, 36]] },
     { from: "The Great Maw", to: "Tunneltop", pts: [[158, 82], [192, 70]] },
@@ -157,7 +160,8 @@ export const HIGHWAYS: readonly Highway[] = [
     { from: "Ropewell", to: "The Rattler's Way", pts: [[104, 28], [104, 29], [99, 31], [91, 31], [87, 33], [78, 32], [77, 33], [64, 33], [54, 35], [53, 40], [57, 44], [57, 46], [54, 57], [48, 58], [45, 62], [46, 66], [45, 79], [35, 77], [30, 73]] },
     { from: "The Rattler's Way", to: "Mosslight Fen", pts: [[45, 79], [48, 80], [49, 84], [44, 102], [44, 112]] },
   ], posts: [
-    { x: 210, y: 97, to: ["Hidehall", "Ropewell", "The Great Maw"] }, // where Deepden's leg meets the old road
+    { x: 216, y: 147, to: ["Deepden", "Hidehall", "Ropewell", "The Great Maw"] }, // outside Deepden's east gate, where the back way goes on to Hidehall
+    { x: 210, y: 101, to: ["Deepden", "Hidehall", "Ropewell", "The Great Maw"] }, // where Deepden's leg meets the old road (south-east of the fork: three boards)
     { x: 241, y: 106, to: ["Hidehall", "Ropewell", "Tunneltop"] }, // below the Dune Road fork, on the way down to Hidehall (off the Hollows' war patch)
     { x: 161, y: 80, to: ["Hidehall", "Ropewell", "Tunneltop", "The Great Maw"] }, // on the Maw's rim, the way up to Tunneltop
     { x: 131, y: 29, to: ["Hidehall", "Ropewell", "Rootfall Slopes"] }, // outside Ropewell's east gate

@@ -748,7 +748,7 @@ export function isoStanding(scene: Phaser.Scene, objects: number[][]): number[][
       if (isoCrown(scene, t, tx, ty, at, kd)) { out[ty][tx] = -1; continue; }
     } else if (ty >= S0) { // the sinkholes band
       if (ty < SINKHOLES_Y0 || ty >= SINKHOLES_Y0 + SINKHOLES_H) { out[ty][tx] = -1; continue; } // the solid rock strips round the sinkholes: ground paints them
-      if (isoSinkholes(scene, t, tx, ty, at, sd)) { out[ty][tx] = -1; continue; }
+      if (!cityAt(tx, ty) && isoSinkholes(scene, t, tx, ty, at, sd)) { out[ty][tx] = -1; continue; } // (not inside Deepden: its walls and roofs are drawn below, in the clan's tint)
     } else if (ty >= B0) { // the badlands band
       if (ty < BADLANDS_Y0 || ty >= BADLANDS_Y0 + BADLANDS_H) { out[ty][tx] = -1; continue; } // the solid rock strips round the badlands: ground paints them
       if (isoBadlands(scene, t, tx, ty, at, bd)) { out[ty][tx] = -1; continue; }

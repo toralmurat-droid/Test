@@ -41,6 +41,9 @@ export const RETIRED_LEGS: readonly { land: Act; pts: readonly [number, number][
   { land: 4, pts: [[26, 44], [47, 63]] },
   // the Grey Barrow Moors: the stub from Marrowkeep's old gate dais west of the Host's Muster down to the fork below it
   { land: 3, pts: [[242, 79], [249, 85], [250, 84]] },
+  // the Mawdeep Sinkholes: the stub from Deepden's old gate dais north-west of Hidehall up to the old road east of the Maw
+  // (the leg from its east gate takes the same hollow, so the stub's upper tiles are paved again)
+  { land: 5, pts: [[206, 111], [207, 99]] },
 ];
 /** Signposts the moves took away (local tiles of their land): the King's Highway's post where it met the North Meadow road (now inside Hearthhold's walls). */
 export const RETIRED_POSTS: readonly { land: Act; x: number; y: number }[] = [{ land: 1, x: 50, y: 20 }];
@@ -98,6 +101,14 @@ export const CITY_LAND: Partial<Record<ClanKey, CityLandFit>> = {
     trims: [],
     posts: [{ x: 227, y: 629, to: ["Marrowkeep", "The Nine Widows", "The Host's Muster"] }],
   },
+  // Deepden: the back way runs through it (its cross street), so the west gate's road is a step onto the back way; a dirt
+  // road from the south gate east along the apron and up the east side to the back way by the east gate, posts beside
+  // both. The east gate is on the highway, its post is the highway's (shared/highways.ts)
+  hidekin: {
+    roads: [[[161, 1109], [161, 1110]], [[187, 1123], [187, 1124], [215, 1124], [215, 1110]]],
+    trims: [],
+    posts: [{ x: 159, y: 1107, to: ["Deepden", "The Pitfields", "Hidehall"] }, { x: 189, y: 1124, to: ["Deepden", "Hidehall"] }],
+  },
 };
 
 /**
@@ -154,7 +165,7 @@ export const CITY_MASK: Set<number> = (() => {
   return s;
 })();
 
-type CityLandT = CityTiles & { TREE: number; PINE: number; BUSH: number; STUMP: number; CACTUS: number; BONES: number; PALM: number; FENCE: number; FENCE_V: number; FIELD: number; BRIDGE: number };
+type CityLandT = CityTiles & { TREE: number; PINE: number; BUSH: number; STUMP: number; CACTUS: number; BONES: number; PALM: number; BURROW: number; FENCE: number; FENCE_V: number; FIELD: number; BRIDGE: number };
 
 /**
  * Builds every city with a `site` into its land (shared/map.ts section 22b): cuts back the fields in the way (`natural`:
@@ -170,8 +181,9 @@ export function carveCitiesInLand(T: CityLandT, ground: number[][], objects: num
   const areas: CityArea[] = [], newPosts: { x: number; y: number; to: string[] }[] = [];
   const was = new Map<number, { g: number; o: number }>();
   for (const k of CITY_MASK) { const x = k % MAP_W, y = Math.floor(k / MAP_W); if (ground[y]?.[x] !== undefined) was.set(k, { g: ground[y][x], o: objects[y][x] }); }
-  // what the apron and the gate roads clear: the highway's nature (shared/highways.ts carveHighways) and the oases' palms
-  const nature = new Set<number>([T.TREE, T.PINE, T.BUSH, T.ROCK, T.STUMP, T.CACTUS, T.BONES, T.PALM]);
+  // what the apron and the gate roads clear: the highway's nature (shared/highways.ts carveHighways), the oases' palms and
+  // the sinkholes' burrow mounds (Hidehall's ambush burrow by Deepden's east gate: its Delver is gone, shared/bandits.ts)
+  const nature = new Set<number>([T.TREE, T.PINE, T.BUSH, T.ROCK, T.STUMP, T.CACTUS, T.BONES, T.PALM, T.BURROW]);
   for (const c of CITIES) {
     if (!c.site || (lands && !lands.includes(c.act))) continue;
     const b = plotBox(c), fit = CITY_LAND[c.clan], inBox = (x: number, y: number) => x >= b.x && y >= b.y && x < b.x + b.w && y < b.y + b.h;

@@ -1,12 +1,13 @@
 import { test } from "node:test";
 import { carveBorders } from "../shared/borders";
 import { carveHighways } from "../shared/highways";
-import { CITIES, cityGateDais } from "../shared/capitals";
+import { carveCitiesInLand } from "../shared/cityLand";
+import { CITIES, cityAt, cityGateDais } from "../shared/capitals";
 import assert from "node:assert/strict";
 import {
   ACT_LEVEL, actMobLevel, actOfTile, actSpecialLevel, BADLANDS_H, BADLANDS_Y0, CROWN_Y0, MAP_H, MAP_W, SINKHOLES_H, SINKHOLES_LEVEL, SINKHOLES_Y0, TILE, WORLD_H, inCitiesBand,
 } from "../shared/constants";
-import { AREAS, EMPTY, GROUND, HIGHWAY_POSTS, HIGHWAY_SKIP, isSafeZone, isSolidAt, isSolidTile, OBJECTS, randomSpawn, T, TILE_COUNT, NATURE } from "../shared/map";
+import { AREAS, CITY_POSTS, EMPTY, GROUND, HIGHWAY_POSTS, HIGHWAY_SKIP, isSafeZone, isSolidAt, isSolidTile, OBJECTS, randomSpawn, T, TILE_COUNT, NATURE } from "../shared/map";
 import {
   buildSinkholes, CAVE_MOUTHS, GREAT_MAW, HIDEHALL, inSinkholesRow, ROPEWELL, ROPEWELL_SQUARE, SINK_LANDS, SINKGATE, SINKS, SINKWAY_BOX,
   SINKWAY_OAKVALE, SINKWAY_SINKHOLES, SR, WARRENS,
@@ -50,7 +51,9 @@ test("sinkholes: a band of its own under the badlands, built the same every time
     const r = buildSinkholes(T, g, o, EMPTY);
     for (const c of CITIES) if (c.act === 5) cityGateDais(c, T, g, o, EMPTY, (t) => NATURE.has(t)); // the capital's city gate (W7), cut in after the land
     carveBorders(g, o, new Set(), T, EMPTY); // the border roads (shared/borders.ts), cut last
-    const rd = new Set(r.roads); carveHighways(g, o, rd, T, EMPTY, HIGHWAY_SKIP, [5]); for (const p of HIGHWAY_POSTS) o[p.y][p.x] = T.SIGNPOST; // the land highway and its posts (shared/highways.ts), after them
+    const rd = new Set(r.roads);
+    carveCitiesInLand(T, g, o, EMPTY, rd, [...r.posts], () => T.GRASS_DARK, undefined, [5]); for (const p of CITY_POSTS) o[p.y][p.x] = T.SIGNPOST; // Deepden (shared/cityLand.ts, settlement network step 5) and its posts, after them
+    carveHighways(g, o, rd, T, EMPTY, HIGHWAY_SKIP, [5]); for (const p of HIGHWAY_POSTS) o[p.y][p.x] = T.SIGNPOST; // the land highway and its posts (shared/highways.ts), after them
     carveVillages(g, o, rd, T, EMPTY, () => [], undefined, VILLAGES.filter((v) => v.land === 5).map((v) => v.id)); // its villages (shared/villages.ts), last
     return { g: g.slice(S0, S1), o: o.slice(S0, S1), areas: r.areas, roads: [...r.roads], posts: r.posts };
   };
@@ -68,7 +71,8 @@ test("sinkholes: a band of its own under the badlands, built the same every time
   // the Great Maw is a pit (the Maw-Father's ledge down in its middle, tests/sinkholes-zones.test.ts), every sink a pit or black water
   assert.equal(OBJECTS[SR(GREAT_MAW.y)][GREAT_MAW.x - GREAT_MAW.rx + 3], T.PIT);
   assert.equal(OBJECTS[SR(GREAT_MAW.y)][GREAT_MAW.x + GREAT_MAW.rx - 3], T.PIT);
-  for (const s of SINKS) assert.ok(s.flooded ? GROUND[SR(s.y)][s.x] === T.WATER : OBJECTS[SR(s.y)][s.x] === T.PIT, `sink at ${s.x},${s.y}`);
+  for (const s of SINKS) if (!cityAt(s.x, SR(s.y))) assert.ok(s.flooded ? GROUND[SR(s.y)][s.x] === T.WATER : OBJECTS[SR(s.y)][s.x] === T.PIT, `sink at ${s.x},${s.y}`); // (Deepden is built over the pond at 205,150)
+  assert.equal(SINKS.filter((s) => cityAt(s.x, SR(s.y))).length, 1, "one sink under a city");
   for (const c of CAVE_MOUTHS) for (let i = -1; i <= 1; i++) assert.equal(OBJECTS[SR(c.y)][c.x + i], T.CAVE, `cave mouth at ${c.x},${c.y}`);
   // the new tiles stay in the sinkholes band (and the capitals' band)
   for (let y = 0; y < MAP_H; y++) if (!inSinkholesRow(y) && !inCitiesBand(y)) for (let x = 0; x < MAP_W; x++) { // the capitals (W7) lay their streets in the lands' own ground tiles
