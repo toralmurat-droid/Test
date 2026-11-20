@@ -868,7 +868,7 @@ function isoDesert(scene: Phaser.Scene, t: number, tx: number, ty: number, at: (
     return true;
   }
   const isHouse = (x: number, y: number) => { const n = id(at(x, y)); return n === T.ADOBE || (n === T.DOOR && y >= DESERT_Y0); };
-  if (t === T.ADOBE || (t === T.DOOR && !cityAt(tx, ty))) { // a door in Duskveil's timber walls is a plain door block (drawn below), not a mud-brick one
+  if (t === T.ADOBE || (t === T.DOOR && !cityAt(tx, ty))) { // a door in the walls of Duskveil's houses is a plain door block (drawn below), not a mud-brick one
     const faces = (isHouse(tx, ty + 1) ? 0 : 1) | (isHouse(tx + 1, ty) ? 0 : 2);
     const edges = (isHouse(tx, ty - 1) ? 0 : 1) | (isHouse(tx + 1, ty) ? 0 : 2) | (isHouse(tx, ty + 1) ? 0 : 4) | (isHouse(tx - 1, ty) ? 0 : 8);
     // the house's north-west corner names it, so its tint and upper storey are the same on every tile
