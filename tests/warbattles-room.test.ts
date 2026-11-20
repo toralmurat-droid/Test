@@ -152,6 +152,12 @@ test("battles (room): the lines wake near a hero in slots of their own; only swo
     const lv = room.battles._live();
     assert.ok(lv, "a hero on the field: the battle wakes");
     assert.ok(b.begun);
+    // the lines march in from waking (BATTLE.advanceMs) and close near the centre: a foot soldier's place moves in
+    { const i = lv.places[0].findIndex((x: any) => x.id && !x.captain && x.f.role === "foot"), c = { x: b.x, y: b.y };
+      const p0 = room.battles.postOf(lv, 0, i, lv.woke), p1 = room.battles.postOf(lv, 0, i, lv.woke + BATTLE.advanceMs);
+      const along = (q: { x: number; y: number }) => Math.abs((q.x - c.x) * lv.ax.x + (q.y - c.y) * lv.ax.y) / TILE;
+      assert.ok(along(p0) >= BATTLE.lineGapTiles - 0.01, "at first on its line");
+      assert.ok(along(p1) <= BATTLE.meetTiles + 0.01 || p1 === lv.places[0][i].at, `then in the clash (${along(p1).toFixed(2)} tiles from the centre)`); }
     const per = Math.min(BATTLE.perSide, b.men0[0]);
     assert.equal(lv.places[0].filter((x: any) => x.id).length, per);
     assert.ok(room.battles.count <= BATTLE.extraTroops);
@@ -159,9 +165,9 @@ test("battles (room): the lines wake near a hero in slots of their own; only swo
     assert.ok(troopers <= WAR_TROOPS.maxTroops + BATTLE.extraTroops, `${troopers} troopers in the room`);
     const cap0 = lv.places[0].find((x: any) => x.captain).id, capMob = room.state.mobs.get(cap0);
     assert.match(capMob.title, /, captain$/);
-    // stance gates: unsworn, ally, under the oath level: no damage
+    // stance gates: ally, under the oath level: no damage (an unsworn hero's blow lands and provokes: tests/warfeuds-room.test.ts)
     const sol = lv.places[0].find((x: any) => x.id && !x.captain).id, m0 = room.state.mobs.get(sol), hp0 = m0.hp;
-    for (const [clan, lvl] of [[undefined, 30], [SITE.a, 30], [SITE.b, STANDARD.minLevel - 1]] as [ClanKey | undefined, number][]) {
+    for (const [clan, lvl] of [[SITE.a, 30], [SITE.b, STANDARD.minLevel - 1]] as [ClanKey | undefined, number][]) {
       p.clan = clan; p.level = lvl; p.x = m0.x; p.y = m0.y;
       room.hitTarget(id, sol, 500, [0, 0], { basic: true });
       assert.equal(m0.hp, hp0, `${clan ?? "unsworn"} at level ${lvl}: no damage`);

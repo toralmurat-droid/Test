@@ -2314,8 +2314,8 @@ export class TownRoom extends Room<TownState> {
   }
 
   /** May this hero hurt that monster? The one gate for every hero blow: summons (canHurtSummon) and clan troopers (WarTroops.canHurt). */
-  private canHurtMob(heroId: string, m: Mob): boolean {
-    return m.owner ? this.canHurtSummon(heroId, m) : m.kind !== "trooper" || (this.warTroops.canHurt(heroId, m) && this.towns.canHurt(heroId, m)); // (a town's gate guard: never from town ground, server/warTowns.ts)
+  private canHurtMob(heroId: string, m: Mob, strike = false): boolean {
+    return m.owner ? this.canHurtSummon(heroId, m) : m.kind !== "trooper" || (this.warTroops.canHurt(heroId, m, strike) && this.towns.canHurt(heroId, m)); // (a town's gate guard: never from town ground, server/warTowns.ts)
   }
 
   /**
@@ -5730,7 +5730,8 @@ export class TownRoom extends Room<TownState> {
   // ---- Combat -------------------------------------------------------------
 
   /** All live, hittable targets (players and mobs) within `r` of (x,y), except `exclude`. */
-  private targetsAround(x: number, y: number, r: number, exclude: string, mobPad?: (m: Mob) => number): string[] {
+  /** `strike` (default): area damage and blows also catch a neutral clan's soldiers (canHurtMob); false when a skill picks one foe. */
+  private targetsAround(x: number, y: number, r: number, exclude: string, mobPad?: (m: Mob) => number, strike = true): string[] {
     const out: string[] = [];
     const me = this.state.players.get(exclude);
     this.state.players.forEach((t, tid) => {
@@ -5740,7 +5741,7 @@ export class TownRoom extends Room<TownState> {
     });
     // Only the monsters in the squares around (bodies < 64 px), not the thousands on the map
     for (const [mid, m] of this.state.mobs.inBox(x, y, mobPad ? r + 64 : r)) {
-      if (me && !this.canHurtMob(exclude, m)) continue; // own / group / protected heroes' summons, own clan's troops
+      if (me && !this.canHurtMob(exclude, m, strike)) continue; // own / group / protected heroes' summons, own clan's troops (a neutral clan's soldiers are caught in it: hitTarget)
       if (!m.dead && !m.hidden && Math.hypot(m.x - x, m.y - y) <= r + (mobPad ? mobPad(m) : 0)) out.push(mid);
     }
     return out;
@@ -5840,7 +5841,8 @@ export class TownRoom extends Room<TownState> {
     }
     const m = this.state.mobs.get(targetId);
     if (!m || m.dead) return;
-    if (a && !this.canHurtMob(attackerId, m)) return;
+    if (a && !this.canHurtMob(attackerId, m, true)) return;
+    if (a && m.kind === "trooper") { const k = parseTroop(m.weapon)?.clan; if (k && this.warTroops.stance(k, attackerId) === "neutral") this.feuds.struckNeutral(attackerId, k); } // (a blow on a clan that left them alone: a provocation)
     if (a && m.kind === "trooper") { this.warTroops.hit(attackerId, m, targetId); this.caravans.hit(attackerId, targetId); this.sieges.hit(attackerId, targetId); this.tunnels.hit(attackerId, targetId); this.rituals.hit(attackerId, targetId); this.marches.hit(attackerId, targetId); this.battles.hit(attackerId, targetId); this.towns.hit(attackerId, targetId); const tc = parseTroop(m.weapon)?.clan; if (tc) this.feuds.struck(attackerId, tc); } // an enemy hero's blow (a grudge with its clan starts over): the trooper (and a caravan's escort) turns on them
     if (m.owner && a) dmg = Math.max(1, Math.round(dmg / SUMMON.pvp.hp)); // a hero's blow on someone's creature (SUMMON.pvp)
     const def = mobDef(m);
@@ -7081,7 +7083,7 @@ export class TownRoom extends Room<TownState> {
   private portalShot(a: Player, id: string, s: Projectile) {
     const off = aimOf(a);
     let best: { x: number; y: number } | undefined, bd = Infinity;
-    for (const e of this.host.enemies(a.x, a.y, s.range, id)) {
+    for (const e of this.host.enemies(a.x, a.y, s.range, id, true)) {
       const t = this.state.players.get(e) ?? this.state.mobs.get(e);
       if (!t) continue;
       const dx = t.x - a.x, dy = t.y - a.y, d = Math.hypot(dx, dy) || 1;
@@ -7136,9 +7138,9 @@ export class TownRoom extends Room<TownState> {
       const p = this.state.players.get(id);
       return !!p && !p.dead && Date.now() >= p.stunUntil && !p.broken;
     },
-    enemies: (x, y, r, of) => {
+    enemies: (x, y, r, of, pick) => {
       const now = Date.now();
-      return this.targetsAround(x, y, r, of).filter((tid) => {
+      return this.targetsAround(x, y, r, of, undefined, !pick).filter((tid) => {
         const t = this.state.players.get(tid);
         return !t || (!isSafeZone(t.x, t.y) && now >= t.invulnUntil);
       });

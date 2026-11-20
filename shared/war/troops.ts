@@ -43,7 +43,16 @@ export const WAR_TROOPS = {
   /** Score bonuses when picking a foe: an enemy hero comes first, then a trooper of another clan, then wild monsters. */
   heroBonus: 0.5, troopBonus: 0.3,
   /** Score kept by the current target (no flicker between two equal foes). */
-  stick: 0.3,
+  stick: 0.45,
+  /** Murat 2026-11-20 (battles read as confused): a soldier locked in melee with its foe (within its reach + this, px), or
+   * with a blow, rush, aimed shot or charge under way, keeps that foe and does not look round for another... */
+  lockPx: 14,
+  /** ...and when picking, each soldier of its own side already on a foe costs that foe this much score (troopers only:
+   * the lines pair off along the front instead of piling onto a few men while others stand idle). */
+  gangPen: 0.18,
+  /** Walking into a tree or a rock with less than this share of the step made, a soldier steers round it (45 then 90
+   * degrees, the same side for `sideMs` so it does not dither) instead of pushing on the spot. */
+  unstick: { minShare: 0.35, sideMs: 900 },
   /** Out of formation by more than this (px), a trooper hurries back at its full speed instead of the march pace. */
   slackPx: 24,
   /** Back in formation, a trooper walks at the column's pace times this (a little quicker, to catch up). */

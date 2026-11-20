@@ -122,8 +122,10 @@ export interface SkillHost {
   unit(id: string): Unit | undefined;
   /** Can act: alive, not stunned or dizzy. */
   canAct(id: string): boolean;
-  /** Live, hittable enemies of `id` within r of (x, y). */
-  enemies(x: number, y: number, r: number, of: string): string[];
+  /** Live, hittable enemies of `id` within r of (x, y). `pick`: the skill chooses one foe (a chain hop, a nearest target, a
+   * link) rather than hitting an area: soldiers of a clan that leaves the hero alone are skipped (only area damage and
+   * the hero's own blows catch them, server/warTroops.ts canHurt `strike`). */
+  enemies(x: number, y: number, r: number, of: string, pick?: boolean): string[];
   hit(attacker: string, target: string, dmg: number, push: [number, number], o: HitOpts): void;
   /** `from`: who heals (a party buff or aura cast by someone else); missing = the unit itself or nobody in particular. */
   heal(id: string, amount: number, from?: string): void;
@@ -548,7 +550,7 @@ export function linkTarget(h: SkillHost, id: string, range: number): string | un
   const [ax, ay] = h.aim(id);
   const px = u.x + ax * range * 0.5, py = u.y + ay * range * 0.5;
   let best: string | undefined, bd = Infinity;
-  for (const e of h.enemies(u.x, u.y, range, id)) {
+  for (const e of h.enemies(u.x, u.y, range, id, true)) {
     const t = h.unit(e)!;
     const d = Math.hypot(t.x - px, t.y - py);
     if (d < bd) { bd = d; best = e; }
@@ -585,7 +587,7 @@ export function fangTarget(h: SkillHost, id: string, range: number): string | un
   const [ax, ay] = h.aim(id);
   const px = u.x + ax * range * 0.5, py = u.y + ay * range * 0.5;
   let best: string | undefined, bd = Infinity;
-  for (const e of h.enemies(u.x, u.y, range, id)) {
+  for (const e of h.enemies(u.x, u.y, range, id, true)) {
     if (h.flesh && !h.flesh(e)) continue;
     const t = h.unit(e)!;
     const d = Math.hypot(t.x - px, t.y - py);
@@ -920,7 +922,7 @@ function doMove(h: SkillHost, id: string, s: SkillDef, m: MoveDef, power: number
         h.later(i * every, () => {
           const me = live(h, id);
           if (!me) return;
-          const all = h.enemies(me.x, me.y, m.dist, id);
+          const all = h.enemies(me.x, me.y, m.dist, id, true);
           const pick = all.filter((x) => x !== prev);
           const tid = (pick.length ? pick : all)[Math.floor(Math.random() * (pick.length || all.length))];
           if (!tid) return;
@@ -947,7 +949,7 @@ function behind(h: SkillHost, id: string, tid: string) {
 
 function nearest(h: SkillHost, id: string, x: number, y: number, r: number): string | undefined {
   let best: string | undefined, bd = Infinity;
-  for (const e of h.enemies(x, y, r, id)) {
+  for (const e of h.enemies(x, y, r, id, true)) {
     const t = h.unit(e)!;
     const d = Math.hypot(t.x - x, t.y - y);
     if (d < bd) { bd = d; best = e; }
@@ -1043,7 +1045,7 @@ function chain(h: SkillHost, owner: string, from: string, hops: number, dmg: num
   const pts: [number, number][] = [[f0.x, f0.y]];
   let cur = f0;
   for (let i = 0; i < hops; i++) {
-    const next = h.enemies(cur.x, cur.y, 72, owner).filter((x) => !done.has(x))
+    const next = h.enemies(cur.x, cur.y, 72, owner, true).filter((x) => !done.has(x))
       .sort((a, b) => { const A = h.unit(a)!, B = h.unit(b)!; return Math.hypot(A.x - cur.x, A.y - cur.y) - Math.hypot(B.x - cur.x, B.y - cur.y); })[0];
     if (!next) break;
     done.add(next);
