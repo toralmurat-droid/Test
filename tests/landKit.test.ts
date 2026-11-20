@@ -135,3 +135,17 @@ test("chests, siege sites, forts and musters did not move (digests from the comm
   assert.equal(d(HOLDS, (h) => [h.t, Math.round(h.x), Math.round(h.y)]), "25:9caa51d");
   assert.equal(d(MUSTERS, (h) => [h.t, Math.round(h.x), Math.round(h.y)]), "72:82341353");
 });
+
+test("no monster spawns inside a landmark's solid box (it could never step out)", async () => {
+  const { SPAWN_ZONES, randomPointInZone, underLandmark } = await import("../shared/spawns");
+  for (const [x, y, w, h] of LANDMARK_SOLIDS) {
+    for (let ty = Math.floor(y); ty < y + h; ty++) for (let tx = Math.floor(x); tx < x + w; tx++) assert.ok(underLandmark(tx, ty), `tile ${tx},${ty} under a landmark`);
+    const zones = SPAWN_ZONES.filter((z) => x + w > z.x && x < z.x + z.w && y + h > z.y && y < z.y + z.h);
+    assert.ok(zones.length, "the landmark stands in a monster zone (the case this guards)");
+    for (const z of zones) for (let i = 0; i < 20000; i++) {
+      const p = randomPointInZone(z);
+      const px = p.x / TILE, py = p.y / TILE;
+      assert.ok(!(px > x - 0.5 && px < x + w + 0.5 && py > y - 0.5 && py < y + h + 0.5), `${z.name} spawned at ${px},${py} inside a landmark`);
+    }
+  }
+});
