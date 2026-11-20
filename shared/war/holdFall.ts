@@ -21,7 +21,7 @@ import { CLANS, CLAN_KEYS, type ClanKey } from "./clans";
 import { fortOf, type HoldFort } from "./holdWalls";
 import type { HoldTier } from "./holdTiers";
 import { HOLDS } from "./standards";
-import { TERRITORIES } from "./territories";
+import { TERRITORIES, warProof } from "./territories";
 
 export type WorkKind = "barracks" | "stores" | "rack" | "tower" | "gate";
 /** Props stand in the courtyard; fortifications are parts of the fort itself (their art is the fort's: the client draws only a ruin once wrecked). */
@@ -75,10 +75,10 @@ export const workNoun = (k: ClanKey, kind: WorkKind) => NAMES[k][kind];
 /** One work of a Hold: its index (stable for the fort), kind and spot (px, its feet). */
 export interface HoldWork { i: number; kind: WorkKind; x: number; y: number }
 
-/** Can territory t's Hold fall at all (a Hold, not a capital, not Reckoning-only ground)? */
+/** Can territory t's Hold fall at all (a Hold, not a capital, not Reckoning-only ground, not a heartland haven)? */
 export function canFall(t: number): boolean {
   const tr = TERRITORIES[t];
-  return HOLD_FALL.live && !!tr && !tr.capitalOf && !tr.reckoningOnly && HOLDS.some((h) => h.t === t);
+  return HOLD_FALL.live && !!tr && !tr.capitalOf && !warProof(tr) && HOLDS.some((h) => h.t === t);
 }
 
 const cache = new Map<string, HoldWork[]>();
