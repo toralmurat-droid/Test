@@ -39,7 +39,7 @@ test("WAYS: the four land links, five Crownways and ten border roads, each end i
   assert.equal(roads.length, 10);
   assert.ok(roads.every((w) => TERRITORIES[w.a].region !== CROWN_LAND), "into the Crown, never out of it");
   assert.equal(roads.find((w) => w.name === "The Eastmarch Pass")!.req, "Lv 20");
-  assert.equal(roads.find((w) => w.name === "The Ashen Pass")!.req, "after Act 1's bosses");
+  assert.equal(roads.find((w) => w.name === "The Ashen Pass")!.req, "Lv 30");
   for (const w of WAYS) assert.notEqual(TERRITORIES[w.a].region, TERRITORIES[w.b].region);
   const crown = WAYS.filter((w) => !w.id.startsWith("road_") && TERRITORIES[w.b].region === CROWN_LAND);
   assert.deepEqual(crown.map((w) => w.id), CROWNWAYS.map((c) => `crownway_${c.from}`));
@@ -47,7 +47,7 @@ test("WAYS: the four land links, five Crownways and ten border roads, each end i
     const w = crown.find((x) => x.name === c.name)!, g = crownGateTile(c);
     assert.equal(TERRITORIES[w.a].region, c.from, `${c.name} starts in ${c.from}`);
     assert.deepEqual(w.tb, g);
-    assert.equal(w.req, c.from === "sunscar" ? "Lv 40, after Act 1's bosses" : "Lv 40");
+    assert.equal(w.req, "Lv 40");
     assert.equal(hereAt(g.x, g.y + 2).node, w.b, `${c.name}: the approach you arrive in`);
   }
 });

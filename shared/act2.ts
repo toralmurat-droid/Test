@@ -1,4 +1,4 @@
-import { ACT_LEVEL, actOfTile, BADLANDS_LEVEL, CROWN_LEVEL, MOORS_LEVEL, PLAYER_RADIUS, SINKHOLES_LEVEL, TILE, type Act } from "./constants";
+import { ACT_LEVEL, ACT2_LEVEL, actOfTile, BADLANDS_LEVEL, CROWN_LEVEL, MOORS_LEVEL, PLAYER_RADIUS, SINKHOLES_LEVEL, TILE, type Act } from "./constants";
 import { CHAINS, chainDone, type Quester } from "./quests";
 import { KEL_MARKET, D, WAYGATE_DESERT, WAYGATE_OAKVALE } from "./desert";
 import { CAIRN_SQUARE, MOORSGATE_MOORS, MOORSGATE_OAKVALE, MR } from "./moors";
@@ -94,8 +94,15 @@ export const isCrownGate = (g: Waygate) => homelandGate(g)?.act === 6;
 /** The chains that must be finished: the Hollow Crown (Ostrevar) and the Hide Rite (the Hide-Mother). */
 export const ACT2_KEYS = ["crown", "beast"] as const;
 const chainIx = (id: string) => CHAINS.findIndex((c) => c.id === id);
-/** True once the hero has beaten both of the first zone's last bosses (their quests handed in). */
-export function act2Open(p: Quester | undefined): boolean {
+/**
+ * True once the hero may enter the Sunscar: hero level only, like every other land (coherence review, Murat
+ * 2026-11-20; it used to want both of Act 1's last bosses). Its story chain, the Second Sun, still waits for them.
+ */
+export function act2Open(p: (Quester & { level?: number }) | undefined): boolean {
+  return (p?.level ?? 0) >= ACT2_LEVEL.min;
+}
+/** True once both of the first zone's last bosses are beaten (their quests handed in): the Second Sun's story opens. */
+export function act1Finished(p: Quester | undefined): boolean {
   return ACT2_KEYS.every((k) => { const c = chainIx(k); return c >= 0 && chainDone(p, c); });
 }
 /** What is still missing, for the "the gate is cold" note. */
@@ -113,15 +120,22 @@ export const gateOpen = (g: Waygate, p: (Quester & { level: number }) | undefine
   const cg = cityGateOf(g);
   if (cg) return cg.inner || (!!p && p.level >= CITY.minLevel); // a capital's own gate always lets heroes out
   const h = homelandGate(g);
-  return h ? !!p && p.level >= h.level && (!isSunGate(g) || act2Open(p)) : act2Open(p);
+  return h ? !!p && p.level >= h.level : act2Open(p); // (the Sun Gate's Lv 40 is past the Sunscar's own Lv 30)
 };
+/** A land's level band as signs show it ("Lv 30-50"): from what it asks to its strongest foes. */
+export const landBand = (act: Act) => `Lv ${ACT_LEVEL[act].min}-${ACT_LEVEL[act].special}`;
+/** The level band of the land gate `g` leads into (undefined for a city gate). */
+export function gateBand(g: Waygate): string | undefined {
+  const to = waygateById(g.to);
+  return to && !cityGateOf(g) ? landBand(actOfTile(Math.floor(to.x / TILE), Math.floor(to.y / TILE))) : undefined;
+}
+
 /** The note a hero gets at a cold gate. */
 export function gateColdNote(g: Waygate, p: Quester | undefined): string {
   if (cityGateOf(g)) return cityLine(CITY_LINES.shutLevel, { level: CITY.minLevel });
   const h = homelandGate(g);
-  if (h && (!isSunGate(g) || ((p as { level?: number } | undefined)?.level ?? 0) < h.level)) return `${h.shut} Return at level ${h.level}.`;
-  const miss = act2Missing(p);
-  return `The waygate's stones are cold. It will wake when ${miss.join(" and ")} ${miss.length > 1 ? "are" : "is"} beaten.`;
+  if (h) return `${h.shut} Return at level ${h.level}.`;
+  return `The waygate's stones are cold. Return at level ${ACT2_LEVEL.min}.`;
 }
 /** Whether a hero saved in act `act` may log back in there (else Oakvale): the act's gate must still be awake for them. */
 export function actOpen(act: number, p: (Quester & { level: number }) | undefined): boolean {
@@ -135,7 +149,6 @@ export function actOpen(act: number, p: (Quester & { level: number }) | undefine
 export const borderOpen = (to: BorderEnd, p: (Quester & { level: number }) | undefined) => actOpen(to.land, p);
 /** The note a hero gets walking into a border road's mist while it is shut for them. */
 export function borderShutNote(b: Border, to: BorderEnd): string {
-  if (to.land === 2) return `The mist of ${b.name.replace(/^The /, "the ")} will not part until Ostrevar the Hollow King and the Hide-Mother of the Mawdeep are beaten.`;
   return `The mist of ${b.name.replace(/^The /, "the ")} will not part. ${LAND_NAMES[to.land].replace(/^t/, "T")} wants level ${ACT_LEVEL[to.land].min}.`;
 }
 

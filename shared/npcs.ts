@@ -57,32 +57,32 @@ export const NPCS: Npc[] = [
   { id: "saltarmourer", name: "Dorran", title: "Armour merchant", sprite: "saltarmourer", x: 141.5 * TILE, y: 183.7 * TILE, dir: "down", shop: "saltarmourer" },
   // ---- Kel Ashar, the oasis town of the Sunscar (Act 2, shared/desert.ts): round its market and spring
   // Sefa keeps the town's spring and remembers the old stories; Captain Rakhim holds the south gate (shared/quests.ts SUN_QUESTS)
-  { id: "wellkeeper", name: "Sefa", title: "Well-Keeper", sprite: "wellkeeper", x: 145.3 * TILE, y: D(110.5) * TILE, dir: "right", where: "Kel Ashar (Act 2 desert), at the spring in the market" },
-  { id: "sandcaptain", name: "Captain Rakhim", title: "Captain of the Sand Watch", sprite: "sandcaptain", x: 149.6 * TILE, y: D(120.8) * TILE, dir: "down", where: "Kel Ashar (Act 2 desert), inside the south gate" },
+  { id: "wellkeeper", name: "Sefa", title: "Well-Keeper", sprite: "wellkeeper", x: 145.3 * TILE, y: D(110.5) * TILE, dir: "right", where: "Kel Ashar (the Sunscar), at the spring in the market" },
+  { id: "sandcaptain", name: "Captain Rakhim", title: "Captain of the Sand Watch", sprite: "sandcaptain", x: 149.6 * TILE, y: D(120.8) * TILE, dir: "down", where: "Kel Ashar (the Sunscar), inside the south gate" },
   { id: "spicetrader", name: "Zahra", title: "Spice and potion trader", sprite: "spicetrader", x: 142.5 * TILE, y: D(106.8) * TILE, dir: "down", shop: "spicetrader" },
   { id: "sandarmourer", name: "Idris", title: "Armour merchant", sprite: "sandarmourer", x: 152.4 * TILE, y: D(112.6) * TILE, dir: "down", shop: "sandarmourer" },
   { id: "desertsmith", name: "Oren", title: "Bladesmith", sprite: "desertsmith", x: 155.5 * TILE, y: D(106.6) * TILE, dir: "down", shop: "desertsmith" },
   // ---- Cairnwatch, the Cairn Wardens' hill-fort in the Grey Barrow Moors (Act 3, shared/moors.ts): round its square
   // (sprites: existing sheets until tools/art paints cairncaptain / moorarmourer / moorherbalist)
   // the wardens' captain stands before their hall: the moors' quest chain starts with her
-  { id: "cairncaptain", name: "Warden-Captain Edra Vane", title: "Captain of the Cairn Wardens", sprite: "cairncaptain", x: 68.5 * TILE, y: MR(106.75) * TILE, dir: "down", where: "Cairnwatch (Act 3 moors), before the Wardens' Hall" },
-  { id: "moorherbalist", name: "Mother Ysolde", title: "Herbwife", sprite: "moorherbalist", x: 77.5 * TILE, y: MR(106.75) * TILE, dir: "down", shop: "moorherbalist", where: "Cairnwatch (Act 3 moors), at her stall on the square" },
-  { id: "moorarmourer", name: "Gorm", title: "Armour merchant", sprite: "moorarmourer", x: 84.5 * TILE, y: MR(111.6) * TILE, dir: "left", shop: "moorarmourer", where: "Cairnwatch (Act 3 moors), by the armoury" },
+  { id: "cairncaptain", name: "Warden-Captain Edra Vane", title: "Captain of the Cairn Wardens", sprite: "cairncaptain", x: 68.5 * TILE, y: MR(106.75) * TILE, dir: "down", where: "Cairnwatch (the Grey Barrow Moors), before the Wardens' Hall" },
+  { id: "moorherbalist", name: "Mother Ysolde", title: "Herbwife", sprite: "moorherbalist", x: 77.5 * TILE, y: MR(106.75) * TILE, dir: "down", shop: "moorherbalist", where: "Cairnwatch (the Grey Barrow Moors), at her stall on the square" },
+  { id: "moorarmourer", name: "Gorm", title: "Armour merchant", sprite: "moorarmourer", x: 84.5 * TILE, y: MR(111.6) * TILE, dir: "left", shop: "moorarmourer", where: "Cairnwatch (the Grey Barrow Moors), by the armoury" },
   // ---- The Rustwater Post, the drovers' and salt-miners' waystation in the Red Badlands (Act 4, shared/badlands.ts): round its
   // square (placeholder names; own sheets from tools/art).
   // The Post's marshal stands before his hall: the badlands' quest chain starts with him
-  { id: "rustmarshal", name: "Marshal Hesk Varro", title: "Marshal of the Rustwater Post", sprite: "rustmarshal", x: 226.5 * TILE, y: BR(87.75) * TILE, dir: "down", where: "the Rustwater Post (Act 4 badlands), before the marshal's hall" },
-  { id: "rustarmourer", name: "Corra Flint", title: "Armour merchant", sprite: "rustarmourer", x: 232.5 * TILE, y: BR(87.75) * TILE, dir: "down", shop: "rustarmourer", where: "the Rustwater Post (Act 4 badlands), before the armoury" },
-  { id: "rusthealer", name: "Old Sal", title: "Healer", sprite: "rusthealer", x: 236.5 * TILE, y: BR(87.75) * TILE, dir: "down", shop: "rusthealer", where: "the Rustwater Post (Act 4 badlands), at her stall on the square" },
+  { id: "rustmarshal", name: "Marshal Hesk Varro", title: "Marshal of the Rustwater Post", sprite: "rustmarshal", x: 226.5 * TILE, y: BR(87.75) * TILE, dir: "down", where: "the Rustwater Post (the Red Badlands), before the marshal's hall" },
+  { id: "rustarmourer", name: "Corra Flint", title: "Armour merchant", sprite: "rustarmourer", x: 232.5 * TILE, y: BR(87.75) * TILE, dir: "down", shop: "rustarmourer", where: "the Rustwater Post (the Red Badlands), before the armoury" },
+  { id: "rusthealer", name: "Old Sal", title: "Healer", sprite: "rusthealer", x: 236.5 * TILE, y: BR(87.75) * TILE, dir: "down", shop: "rusthealer", where: "the Rustwater Post (the Red Badlands), at her stall on the square" },
   // ---- Ropewell, the trappers' and rope-makers' lodge in the Mawdeep Sinkholes (Act 5, shared/sinkholes.ts): before their
   // halls on the square (placeholder names; own sheets from tools/art).
   // The Lodge-Warden stands before his hall: the sinkholes' quest chain starts with him
-  { id: "ropewarden", name: "Lodge-Warden Brannoc Tull", title: "Warden of Ropewell", sprite: "ropewarden", x: 108.5 * TILE, y: SR(23.75) * TILE, dir: "down", where: "Ropewell (Act 5 sinkholes), before the Lodge-Warden's hall" },
-  { id: "ropearmourer", name: "Hesta Coil", title: "Armour merchant", sprite: "ropearmourer", x: 114.5 * TILE, y: SR(23.75) * TILE, dir: "down", shop: "ropearmourer", where: "Ropewell (Act 5 sinkholes), before the armoury" },
-  { id: "ropehealer", name: "Mother Fennick", title: "Herb-wife", sprite: "ropehealer", x: 119.5 * TILE, y: SR(23.75) * TILE, dir: "down", shop: "ropehealer", where: "Ropewell (Act 5 sinkholes), at her stall on the square" },
+  { id: "ropewarden", name: "Lodge-Warden Brannoc Tull", title: "Warden of Ropewell", sprite: "ropewarden", x: 108.5 * TILE, y: SR(23.75) * TILE, dir: "down", where: "Ropewell (the Mawdeep Sinkholes), before the Lodge-Warden's hall" },
+  { id: "ropearmourer", name: "Hesta Coil", title: "Armour merchant", sprite: "ropearmourer", x: 114.5 * TILE, y: SR(23.75) * TILE, dir: "down", shop: "ropearmourer", where: "Ropewell (the Mawdeep Sinkholes), before the armoury" },
+  { id: "ropehealer", name: "Mother Fennick", title: "Herb-wife", sprite: "ropehealer", x: 119.5 * TILE, y: SR(23.75) * TILE, dir: "down", shop: "ropehealer", where: "Ropewell (the Mawdeep Sinkholes), at her stall on the square" },
   // ---- Tollcross, the Truce Market the Heralds' College keeps outside the Crown Keep's north gate (Act 6, shared/crown.ts):
   // the Herald-Marshal stands at the head of the square; the Crown's quest chain (The Riven Throne) starts with her
-  { id: "crownherald", name: "Herald-Marshal Ysmay Corrant", title: "Herald-Marshal of the College", sprite: "crownherald", x: 143.5 * TILE, y: CR(42.75) * TILE, dir: "down", where: "Tollcross (Act 6, the Crown of the Marches), at the head of the Truce Market's square" },
+  { id: "crownherald", name: "Herald-Marshal Ysmay Corrant", title: "Herald-Marshal of the College", sprite: "crownherald", x: 143.5 * TILE, y: CR(42.75) * TILE, dir: "down", where: "Tollcross (the Crown of the Marches), at the head of the Truce Market's square" },
   // ---- Zone quest givers (Murat 2026-11-10: "more zone quests, real exploration arcs"): each lives out in their zone and
   // starts a short arc there that moves on through it and ends out in the field (shared/quests.ts ZONE_ARCS)
   { id: "huntsman", name: "Huntmaster Bryn", title: "Hunter", sprite: "huntsman", ...standNear(28, 18), dir: "left", where: "the Hunter's Camp, north-west of Oakvale" },
@@ -90,13 +90,13 @@ export const NPCS: Npc[] = [
   { id: "forester", name: "Ylva", title: "Forester", sprite: "forester", ...standNear(198, 22), dir: "left", where: "the glade in the middle of Thornwood" },
   { id: "beachcomber", name: "Nell", title: "Beachcomber", sprite: "beachcomber", ...standNear(112, 192), dir: "down", where: "the Saltwind Coast, west of Saltmere" },
   { id: "prospector", name: "Dagna", title: "Prospector", sprite: "prospector", ...standNear(250, 137), dir: "left", where: "the north edge of the Stormbreak Crags" },
-  { id: "caravaneer", name: "Hamid", title: "Caravan master", sprite: "caravaneer", ...standNear(91, 368), dir: "down", where: "Jackal Springs (Act 2), north-west of Kel Ashar" },
-  { id: "hermit", name: "Old Tamsin", title: "Hermit", sprite: "hermit", ...standNear(80, 404), dir: "right", where: "the Red Wastes (Act 2), west of the Sunstone" },
-  { id: "dunescout", name: "Leyla", title: "Scout of the camel-clans", sprite: "dunescout", ...standNear(200, 438), dir: "left", where: "the edge of the Saffron Dunes (Act 2), east of Kel Ashar" },
-  { id: "defector", name: "Nasrin", title: "Runaway adept", sprite: "defector", ...standNear(224, 398), dir: "down", where: "the foot of the Thornspire Heights (Act 2), by Mirage Wells" },
+  { id: "caravaneer", name: "Hamid", title: "Caravan master", sprite: "caravaneer", ...standNear(91, 368), dir: "down", where: "Jackal Springs (the Sunscar), north-west of Kel Ashar" },
+  { id: "hermit", name: "Old Tamsin", title: "Hermit", sprite: "hermit", ...standNear(80, 404), dir: "right", where: "the Red Wastes (the Sunscar), west of the Sunstone" },
+  { id: "dunescout", name: "Leyla", title: "Scout of the camel-clans", sprite: "dunescout", ...standNear(200, 438), dir: "left", where: "the edge of the Saffron Dunes (the Sunscar), east of Kel Ashar" },
+  { id: "defector", name: "Nasrin", title: "Runaway adept", sprite: "defector", ...standNear(224, 398), dir: "down", where: "the foot of the Thornspire Heights (the Sunscar), by Mirage Wells" },
   // the deep dungeons' quest givers, at their doors (shared/dungeon.ts)
   { id: "monk", name: "Brother Aldric", title: "Last of the Lamplighters", sprite: "monk", ...standNear(47, 145), dir: "left", where: "the ruined mausoleum on Barrow Downs, at the crypt stair" },
-  { id: "tombrobber", name: "Zahir", title: "Tomb-robber", sprite: "tombrobber", ...standNear(61, 483), dir: "left", where: "the old well in Kharsun, the Buried City (Act 2)" },
+  { id: "tombrobber", name: "Zahir", title: "Tomb-robber", sprite: "tombrobber", ...standNear(61, 483), dir: "left", where: "the old well in Kharsun, the Buried City (the Sunscar)" },
   // ---- The quest concepts (docs/quest-concepts-progress.md); some only stand there for some heroes (shared/quests.ts npcPresent)
   // the Empty Grave: the sexton at Gravemoor's north gate, three mourners along the wall who won't go in among the dead
   { id: "sexton", name: "Amos", title: "Sexton of Gravemoor", sprite: "sexton", ...standNear(199, 123), dir: "down", where: "Gravemoor Cemetery, at the north gate" },

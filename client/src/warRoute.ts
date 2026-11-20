@@ -11,7 +11,7 @@
  */
 import { cityAt } from "../../shared/capitals";
 import { HOMELAND_GATES } from "../../shared/act2";
-import { inDeepRow, UNDER_END, WORLD_H } from "../../shared/constants";
+import { ACT2_LEVEL, inDeepRow, UNDER_END, WORLD_H } from "../../shared/constants";
 import { CROWNWAYS } from "../../shared/crown";
 import { BORDERS, edgeTile } from "../../shared/borders";
 import { PORTAL_SPOTS } from "../../shared/map";
@@ -78,7 +78,7 @@ const LAND_ACT: Record<string, number> = { moors: 3, badlands: 4, sinkholes: 5, 
 /** What a gate into `land` asks for, as short text ("Lv 25", or the Sunscar's two bosses). */
 export function gateReq(land: string): string {
   const lv = LAND_ACT[land] ? actLevel(LAND_ACT[land]) : undefined;
-  return lv ? `Lv ${lv}` : "after Act 1's bosses";
+  return lv ? `Lv ${lv}` : `Lv ${ACT2_LEVEL.min}`;
 }
 
 /** The ways are the war map's land links (regions.ts REGION_LINKS, the Crownways among them: id `crownway_<land>`). */
@@ -86,7 +86,7 @@ export const WAYS: Way[] = REGION_LINKS.flatMap((l): Way[] => {
   const a = nearestIn(l.a, l.pa.x, l.pa.y), b = nearestIn(l.b, l.pb.x, l.pb.y);
   if (!a || !b) return [];
   const cw = l.b === CROWN_LAND ? CROWNWAYS.find((c) => c.name === l.name) : undefined;
-  if (cw) return [{ id: `crownway_${cw.from}`, name: l.name, a: a.id, b: b.id, ta: l.pa, tb: l.pb, req: cw.from === "sunscar" ? `${gateReq(CROWN_LAND)}, after Act 1's bosses` : gateReq(CROWN_LAND) }];
+  if (cw) return [{ id: `crownway_${cw.from}`, name: l.name, a: a.id, b: b.id, ta: l.pa, tb: l.pb, req: gateReq(CROWN_LAND) }];
   return [{ id: l.name, name: l.name, a: a.id, b: b.id, ta: l.pa, tb: l.pb, req: gateReq(l.b) }];
 });
 
@@ -95,7 +95,7 @@ export const WAYS: Way[] = REGION_LINKS.flatMap((l): Way[] => {
  * to the land that asks more (`b`), so `req` reads the right way round. They come after the gates.
  */
 const ACT_LAND: Record<number, string> = { 1: "oakvale", 2: "sunscar", 3: "moors", 4: "badlands", 5: "sinkholes", 6: "crown" };
-const ORDER = [1, 3, 4, 5, 2, 6]; // by what the land asks: Oakvale, Lv 20, Lv 25, Lv 30, Act 1's bosses, Lv 40
+const ORDER = [1, 3, 4, 5, 2, 6]; // by what the land asks: Oakvale, Lv 20, Lv 25, Lv 30, Lv 30, Lv 40
 WAYS.push(...BORDERS.flatMap((r): Way[] => {
   const [lo, hi] = ORDER.indexOf(r.a.land) <= ORDER.indexOf(r.b.land) ? [r.a, r.b] : [r.b, r.a];
   const [lx, ly] = edgeTile(lo), [hx, hy] = edgeTile(hi);

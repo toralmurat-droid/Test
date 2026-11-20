@@ -94,7 +94,7 @@ export class QuestLog {
       } else if (c === SUN_CHAIN && qid === 0 && q.questStage === 0 && !chainOpen(p, c) && tutorialDone(p)) {
         // The desert story is still locked: say how to get there (Murat 2026-11-08: "where is Rakhim?")
         const g = npcById(next!.giver);
-        hints.push(`${ch.name} (Act 2): defeat ${act2Missing(p).join(" and ")} to wake the waygate south of Oakvale. ${g?.name} waits on the other side (${g?.where}).`);
+        hints.push(`${ch.name} (the Sunscar): defeat ${act2Missing(p).join(" and ")} to begin it. ${g?.name} waits beyond the waygate south of Oakvale (${g?.where}).`);
       }
     });
     return hints;

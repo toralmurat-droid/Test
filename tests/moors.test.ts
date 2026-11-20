@@ -118,7 +118,8 @@ test("moors: levels 20-35 from the moorgate; gates; each act keeps its own board
   assert.equal(g.to, "moors");
   assert.equal(gateOpen(g, { level: 19 } as never), false);
   assert.equal(gateOpen(g, { level: 20 } as never), true);
-  assert.equal(gateOpen(waygateById("oakvale")!, { level: 50 } as never), false, "the Sunscar's gate still wants its bosses");
+  assert.equal(gateOpen(waygateById("oakvale")!, { level: 29 } as never), false, "the Sunscar's gate wants level 30");
+  assert.equal(gateOpen(waygateById("oakvale")!, { level: 30 } as never), true, "by level only (coherence review 2026-11-20)");
   assert.equal(WAYGATES.filter((w) => !cityGateOf(w)).length, 18, "the Sunscar's, the moors', the badlands' and the sinkholes' pairs, the Crown's five (and the capitals' city gates)");
   // respawns and logins land in the act's own place (death in the moors: Cairnwatch's square)
   for (const act of [1, 2, 3]) { const q = actSpawn(act, randomSpawn); assert.equal(actAt(q.y, q.x), act, `act ${act} spawn`); }

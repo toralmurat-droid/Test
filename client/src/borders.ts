@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { TILE } from "../../shared/constants";
 import { BORDERS, crossTo, edgeTile, LAND_NAMES, otherEnd, outward, SEAM, type Border, type BorderEnd } from "../../shared/borders";
-import { borderOpen } from "../../shared/act2";
+import { borderOpen, landBand } from "../../shared/act2";
 import type { Quester } from "../../shared/quests";
 import { isoX, isoY, IsoView } from "./iso";
 import type { MapMarker } from "./minimap";
@@ -47,7 +47,7 @@ export class BorderLayer {
   markers(): MapMarker[] {
     return BORDERS.flatMap((b) => [b.a, b.b].map((e) => {
       const [x, y] = edgeTile(e), [ox, oy] = outward(e.side);
-      return { x: (x + 0.5 - ox * 2) * TILE, y: (y + 0.5 - oy * 2) * TILE, glyph: "◆", color: "#e8dcc0", road: true, label: `${b.name} (to ${LAND_NAMES[otherEnd(b, e).land]})`, fogged: true };
+      return { x: (x + 0.5 - ox * 2) * TILE, y: (y + 0.5 - oy * 2) * TILE, glyph: "◆", color: "#e8dcc0", road: true, label: `${b.name} (to ${LAND_NAMES[otherEnd(b, e).land]}, ${landBand(otherEnd(b, e).land)})`, fogged: true };
     }));
   }
 

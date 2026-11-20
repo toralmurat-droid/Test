@@ -84,8 +84,9 @@ test("borders: a road into a land opens like its gates, going home is always ope
   assert.equal(borderOpen(b.a, { level: 1 } as never), true, "home to Oakvale");
   assert.equal(borderShutNote(b, b.b), "The mist of the Eastmarch Pass will not part. The Grey Barrow Moors wants level 20.");
   const sun = BORDERS.find((o) => o.id === "ashenpass")!;
-  assert.equal(borderOpen(sun.b, { level: 50, quests: {} } as never), false, "the Sunscar wants Act 1's last bosses");
-  assert.match(borderShutNote(sun, sun.b), /Ostrevar/);
+  assert.equal(borderOpen(sun.b, { level: 29, quests: {} } as never), false, "the Sunscar wants level 30");
+  assert.equal(borderOpen(sun.b, { level: 30, quests: {} } as never), true, "by level only, no bosses (coherence review 2026-11-20)");
+  assert.match(borderShutNote(sun, sun.b), /wants level 30/);
 });
 
 test("room: a hero walks the Eastmarch Pass into the moors at Lv 20, and is stopped at Lv 19", async () => {

@@ -1108,7 +1108,7 @@ const RAKHIM = ["sandcaptain", "Captain Rakhim", "Kel Ashar's south gate"] as co
  * drying. The Circle is back: they pay the Dustrider raiders, drive sun-glass sigils into the oases to drink them, dig
  * Kharsun's cisterns for the old water-script, brand the camel-folk to serve them, and carry it all up to the Furnace.
  * Sefa the Well-Keeper knows the old stories; Captain Rakhim of the Sand Watch trusts no one who comes out of the gate.
- * The chain opens once the first zone's last bosses are down (the same as the waygate, shared/act2.ts) and climbs
+ * The chain opens once the first zone's last bosses are down (shared/act2.ts act1Finished; the waygate itself opens by level since 2026-11-20) and climbs
  * from Lv 30 by the Sunstone to the Veiled Sanctum at Lv 44, and its finale at the Sun Furnace (Lv 46): Ishael, the Sunwright.
  */
 export const SUN_QUESTS: QuestDef[] = [
@@ -3021,7 +3021,7 @@ export const tutorialDone = (p: Quester | undefined) =>
 /** Can this chain offer new quests yet? Every story waits for the guided first quest. */
 export const chainOpen = (p: Quester | undefined, c: number) =>
   c === TUT_CHAIN || (tutorialDone(p) && (c !== CROWN_CHAIN || STORY_CHAINS.every((s) => storyDone(p, s)))
-    && (c !== SUN_CHAIN || (chainDone(p, CROWN_CHAIN) && chainDone(p, BEAST_CHAIN))) // the Second Sun: once the waygate is awake (shared/act2.ts)
+    && (c !== SUN_CHAIN || (chainDone(p, CROWN_CHAIN) && chainDone(p, BEAST_CHAIN))) // the Second Sun: once Act 1's last bosses are down (shared/act2.ts act1Finished)
     && (!CHAINS[c]?.needs || CHAINS[c].needs!(p))); // an arc that follows another story (QuestChain.needs)
 export const BEAST_CHAIN = 5;
 /** The Redfang Debt (Two Letters follows it). */

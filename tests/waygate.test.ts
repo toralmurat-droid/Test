@@ -16,6 +16,7 @@ test("waygate: crosses only when used, never by walking into it", async () => {
     await wait(200);
     const room = srv.room, p = room.state.players.get(c.sessionId);
     for (const id of ["tutorial", "crown", "beast"]) room.qset(p, CHAINS.findIndex((ch) => ch.id === id), { questId: CHAINS.find((ch) => ch.id === id)!.quests.length, questStage: 0, questCount: 0 });
+    p.level = 30; // the Sunscar opens at level 30
     const oak = WAYGATES.find((g) => g.id === "oakvale")!;
     p.x = oak.x; p.y = oak.y; // standing right in the gate
     await wait(600);
