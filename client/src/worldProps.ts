@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { STD3D, STD3D_KEYS } from "./standard3d";
 import { staticObj } from "./staticChunks";
 import { TILE } from "../../shared/constants";
 import { AREAS, BARNS, EMPTY, GROUND, HOLLOW, HOLLOW_WARDS, OBJECTS, SIGNPOSTS, T, VILLAGE, WRECK } from "../../shared/map";
@@ -83,6 +84,7 @@ export const BAKED_PROPS: Record<string, [number, number]> = {
 };
 export function preloadBakedProps(scene: Phaser.Scene) {
   for (const [k, [w, h]] of Object.entries(BAKED_PROPS)) if (!scene.textures.exists(k)) scene.load.spritesheet(k, `assets/hd/props/${k}.png`, { frameWidth: w, frameHeight: h });
+  for (const k of STD3D_KEYS) if (!scene.textures.exists(k)) scene.load.spritesheet(k, `assets/hd/props/${k}.png`, { frameWidth: STD3D.w, frameHeight: STD3D.h }); // clan war standards (warStandards.ts)
 }
 
 /** Paints `frames` frames side by side, outlines each silhouette, and registers the spritesheet texture. */
