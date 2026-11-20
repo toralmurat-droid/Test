@@ -79,6 +79,15 @@ export const CITY_LAND: Partial<Record<ClanKey, CityLandFit>> = {
     trims: [],
     posts: [{ x: 253, y: 446, to: ["Duskveil", "Mirage Wells", "Kel Ashar"] }],
   },
+  // Marrowkeep: a few tiles of track out of the west gate towards the Nine Widows road, its post beside them (the road's
+  // own post stood inside the walls: the carve drops it). The track stops short of the road: joined, it makes a fork the
+  // forts read as a junction, and the Hollow Mounds' fort would move to Kingsbarrow. The south gate is on the highway, its
+  // post is the highway's (shared/highways.ts); no east gate (the crags)
+  host: {
+    roads: [[[229, 627], [228, 627], [228, 629]]],
+    trims: [],
+    posts: [{ x: 227, y: 629, to: ["Marrowkeep", "The Nine Widows", "The Host's Muster"] }],
+  },
 };
 
 /**

@@ -14,8 +14,8 @@ import { TITLES } from "./cosmetics";
  * Settlement network step 5: one by one the cities leave the band and stand in their homelands (`site`, shared/cityLand.ts
  * builds them there): heroes walk in through open gates (south, and west and east where the land allows: `sideGates`) on
  * the land's roads, and a gate ward (server/cityGates.ts) keeps W7's entry rules. Hearthhold stands in Oakvale's
- * north-west, Scarwall in the Red Badlands' north-west, Duskveil in the Sunscar's Saffron Dunes; their strip plots stay
- * rock until all five have moved.
+ * north-west, Scarwall in the Red Badlands' north-west, Duskveil in the Sunscar's Saffron Dunes, Marrowkeep in the Grey
+ * Barrow Moors north of Kingsbarrow; their strip plots stay rock until all five have moved.
  *
  * Every city is the same plan (CITY_TEMPLATE, local tiles 0..w-1 x 0..h-1, the gate in the south wall) dressed in its
  * clan's style (walls, roofs, ground): gate square with the waystone and the stash, market with the quartermaster,
@@ -174,10 +174,13 @@ export const CITIES: readonly City[] = [
     style: { wall: "ADOBE_WALL", roof: "ROOF_SLATE", roof2: "ROOF_THATCH", street: "COBBLE", ground: ["SAND", "DIRT", "RUBBLE"], yard: "DIRT" },
     sprites: { leader: "cap_veiled_leader", quartermaster: "steward_veiled", oathkeeper: "cap_veiled_oathkeeper", trainer: "cap_veiled_trainer" },
   },
-  // The Ossuary Host's Marrowkeep: its city gate stands on the heather west of the Host's Muster, a dozen tiles from the
-  // war camp, outside every territory (Kingsbarrow is north, the Drowned Hollow south-west). Black stone and bone.
+  // The Ossuary Host's Marrowkeep: on the moor north of Kingsbarrow (settlement network step 5), its back to the band's
+  // northern crags, the Barrow-King's Mound just below its south wall. The highway runs from its south gate down
+  // Kingsbarrow's east edge to the fork below the Host's Muster; its west gate opens onto the Nine Widows road (no east
+  // gate: the crags). Its old city gate stood on the heather west of the Muster (shared/cityLand.ts OLD_CITY_GATES).
+  // Black stone and bone.
   {
-    clan: "host", act: 3, plot: 2, outer: { x: 236, y: 674 }, outerBox: { x0: 231, x1: 241, y0: 670, y1: 679 },
+    clan: "host", act: 3, plot: 2, outer: { x: 255, y: 641 }, outerBox: { x0: 230, x1: 281, y0: 601, y1: 640 }, site: { x: 230, y: 601 }, sideGates: ["west"],
     style: { wall: "WALL_STONE", roof: "ROOF_SLATE", roof2: "ROOF_SLATE", street: "COBBLE", ground: ["HEATHER", "GRASS_DARK", "RUBBLE"], yard: "DIRT" },
     sprites: { leader: "cap_host_leader", quartermaster: "steward_host", oathkeeper: "cap_host_oathkeeper", trainer: "cap_host_trainer" },
   },
