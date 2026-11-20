@@ -2,7 +2,6 @@ import Phaser from "phaser";
 import { ART_K as K } from "../../shared/constants";
 import { dropHiRes, hiResTexture } from "./smooth";
 import { dith as dith1, hash, OUT, stoneCol, vnoise, type Px } from "./shrineArt";
-import { PORTALS } from "../../shared/portals";
 
 /** Ordered dither on the coarse 2x2-cell pixel (see chunky()), so each final pixel is one clean tone. */
 const dith = (x: number, y: number) => dith1(x >> 1, y >> 1);
@@ -16,7 +15,7 @@ const dith = (x: number, y: number) => dith1(x >> 1, y >> 1);
  * show as side faces, and it faces the arrival side (world +y, screen down-left).
  *   "portal_lit_<v>_<mask>": 8 animated frames: a slow fire-swirl fills the ring.
  *   "portal_cold_<v>_<mask>": one frame: a dormant ring, the opening empty (not found yet).
- * The ring has one block per portal; a block's rune burns once that portal is woken (bit k of mask = PORTALS[k]).
+ * The ring has one block per portal; a block's rune burns once that portal is woken (bit k of mask = stone k of its land, shared/portals.ts PORTAL_LANDS).
  */
 
 const W = 128, H = 184, CX = 64, BY = 140; // cells; BY = the platform's centre on the ground (the sprite's feet)
@@ -29,10 +28,12 @@ const PL = { a: 23, b: 9, z: 16 }; // plinth half-extents and height, on top of 
 const ZP = ZTOP2 + PL.z; // plinth top
 const RO = 37, RI = 23, DEPTH = 6; // ring outer / inner radius, half thickness (world y)
 const ZC = ZP + RO - 6; // ring centre height: its foot sinks into the plinth
-/** One voussoir per portal stone in the land (Murat 2026-11-04): block k burns once this hero has woken portal
- * (V + k) % BLOCKS, so the keystone at the top is always this stone's own portal. */
-const BLOCKS = PORTALS.length;
-/** Which stone is being painted (0..PORTALS-1): every portal wears differently (Murat 2026-11-04: "too perfect"). */
+/** One voussoir per portal stone of this stone's land (Murat 2026-11-04, by land since 2026-11-19): block b burns once
+ * this hero has woken the land's stone (KEY + b) % BLOCKS, so the keystone at the top is always this stone's own portal.
+ * A land with few stones still gets MIN_BLOCKS blocks (the spare ones never burn). Set per stone by paintPortal. */
+const MIN_BLOCKS = 6;
+let BLOCKS = MIN_BLOCKS, KEY = 0, STONES = 0;
+/** Which stone is being painted (its index in PORTALS): every portal wears differently (Murat 2026-11-04: "too perfect"). */
 let V = 0;
 const hv = (a: number, b: number, s: number) => hash(a, b, s + V * 1013);
 const nv = (x: number, y: number, s: number) => vnoise(x, y, 999, s + V * 131);
@@ -104,9 +105,9 @@ function isoBox(px: Px, z0: number, A: number, B: number, h: number, tone: numbe
   }
 }
 
-function paintPortal(g: CanvasRenderingContext2D, f: number, N: number, lit: boolean, variant: number, mask: number) {
-  V = variant;
-  const woke = (bi: number) => (mask >> ((variant + bi) % BLOCKS)) & 1;
+function paintPortal(g: CanvasRenderingContext2D, f: number, N: number, lit: boolean, variant: number, ring: PortalRing) {
+  V = variant; KEY = ring.key; STONES = ring.stones; BLOCKS = Math.max(MIN_BLOCKS, ring.stones);
+  const woke = (bi: number) => { const k = (KEY + bi) % BLOCKS; return k < STONES ? (ring.mask >> k) & 1 : 0; };
   // painted one colour per cell on a scratch canvas, then coarsened to the decor's chunkier pixel (chunky() below)
   const cv = document.createElement("canvas");
   cv.width = W; cv.height = H;
@@ -347,18 +348,20 @@ function chunky(o: CanvasRenderingContext2D): HTMLCanvasElement {
 }
 
 export const PORTAL_FRAMES = 8;
+/** A stone's ring: `stones` in its land, its own index `key` among them, and `mask` (bit k = the land's stone k is woken). */
+export interface PortalRing { key: number; stones: number; mask: number }
 /**
- * Builds stone `v`'s art, each worn its own way, for the set of woken portals `mask`: "portal_lit_<v>_<mask>" (animated,
+ * Builds stone `v`'s art, each worn its own way, for its ring `ring`: "portal_lit_<v>_<mask>" (animated,
  * anim "portal_spin_<v>_<mask>") or "portal_cold_<v>_<mask>". Painted on demand, so only the stones a hero actually sees
  * cost anything. Returns the "<v>_<mask>" id.
  */
-export function portalTexture(scene: Phaser.Scene, v: number, lit: boolean, mask: number) {
-  const N = PORTAL_FRAMES, id = `${v}_${mask}`;
+export function portalTexture(scene: Phaser.Scene, v: number, lit: boolean, ring: PortalRing) {
+  const N = PORTAL_FRAMES, id = `${v}_${ring.mask}`;
   if (lit && !scene.textures.exists(`portal_lit_${id}`)) {
-    hiResTexture(scene, `portal_lit_${id}`, PORTAL_FW * K, PORTAL_FH * K, N, 4, (g, f) => { g.scale(K, K); paintPortal(g, f, N, true, v, mask); });
+    hiResTexture(scene, `portal_lit_${id}`, PORTAL_FW * K, PORTAL_FH * K, N, 4, (g, f) => { g.scale(K, K); paintPortal(g, f, N, true, v, ring); });
     scene.anims.create({ key: `portal_spin_${id}`, frames: scene.anims.generateFrameNumbers(`portal_lit_${id}`, { start: 0, end: N - 1 }), frameRate: 8, repeat: -1 });
   }
-  if (!lit && !scene.textures.exists(`portal_cold_${id}`)) hiResTexture(scene, `portal_cold_${id}`, PORTAL_FW * K, PORTAL_FH * K, 1, 4, (g) => { g.scale(K, K); paintPortal(g, 0, N, false, v, mask); });
+  if (!lit && !scene.textures.exists(`portal_cold_${id}`)) hiResTexture(scene, `portal_cold_${id}`, PORTAL_FW * K, PORTAL_FH * K, 1, 4, (g) => { g.scale(K, K); paintPortal(g, 0, N, false, v, ring); });
   return id;
 }
 
