@@ -46,15 +46,19 @@ export const CAPITAL_FORTS: readonly [number, number][] = [[26, 58], [241, 355],
 export const FORT_SKIP = 4;
 
 export const HIGHWAYS: readonly Highway[] = [
-  // Oakvale: from Hearthhold's gate at Goldenreach Farms along the West Road to Oakvale; north to Hunter's Camp, east to
+  // Oakvale: from Hearthhold's south gate (settlement network step 5: the city stands north of Goldenreach Farms) west under
+  // its walls and down the old line to the West Road and Goldenreach, and east to Oakvale's north gate; from its west gate
+  // to Hunter's Camp (the legs from the old city gate at Goldenreach and up the West Road through the city's ground are
+  // retired: shared/cityLand.ts RETIRED_LEGS). From Goldenreach along the West Road to Oakvale; east to
   // Millbrook Mill, south-west to the Red Road, south to Stonecrag Quarry, then over the quarry bridge to the Old Ruins,
   // Greywatch Keep and the Eastmarch Pass (the Ruins bridge on the King's Road stays broken), and round the Sunken Lake
   // to Saltmere and along the coast to the Greenward Road (up to the old spur down to the pass: paved, its cleared verge
   // would pull Saltwind Coast's fort east of the river and cut the clans' Brinewood road)
   { land: 1, name: "The King's Highway", seat: "Goldenreach Farms", town: "Oakvale", towns: ["Oakvale", "Millbrook Mill", "Hunter's Camp", "Saltmere"], legs: [
-    { from: "Hearthhold Gate", to: "Goldenreach Farms", pts: [[18, 53], [19, 56], [27, 56], [30, 58]] },
+    { from: "Hearthhold Gate", to: "Goldenreach Farms", pts: [[66, 42], [56, 42], [52, 46], [52, 57]] },
     { from: "Goldenreach Farms", to: "Oakvale", pts: [[30, 58], [37, 61], [44, 61], [49, 58], [59, 58], [64, 60]] },
-    { from: "Goldenreach Farms", to: "Hunter's Camp", pts: [[52, 57], [52, 21], [44, 16], [36, 16], [35, 17]] },
+    { from: "Hearthhold Gate", to: "Oakvale", pts: [[66, 42], [77, 42], [79, 44], [79, 46]] },
+    { from: "Hearthhold", to: "Hunter's Camp", pts: [[40, 27], [37, 22], [35, 17]] },
     { from: "Oakvale", to: "Millbrook Mill", pts: [[96, 60], [95, 57], [100, 52], [104, 50]] },
     { from: "Oakvale", to: "The Red Road", pts: [[63, 60], [64, 62], [55, 72], [44, 71], [41, 72], [35, 77], [32, 85], [42, 97], [35, 104], [32, 110], [29, 113], [22, 113], [14, 121]] },
     { from: "Oakvale", to: "Stonecrag Quarry", pts: [[80, 74], [86, 82], [88, 88], [92, 94], [95, 95]] },
@@ -64,8 +68,9 @@ export const HIGHWAYS: readonly Highway[] = [
     { from: "Old Ruins", to: "The Eastmarch Pass", pts: [[139, 66], [146, 60], [157, 62], [169, 57], [202, 57], [203, 58], [206, 58], [220, 73], [222, 73], [223, 72], [228, 72], [246, 57]] },
   ], posts: [
     // forks: each names the seat and the main town (the way home) and what the other ways lead to
-    { x: 52, y: 56, to: ["Goldenreach Farms", "Oakvale", "Hunter's Camp"] }, // West Road, the turn north
-    { x: 50, y: 20, to: ["Goldenreach Farms", "Oakvale", "Hunter's Camp"] }, // where it meets the North Meadow road
+    { x: 52, y: 56, to: ["Goldenreach Farms", "Oakvale", "Hearthhold"] }, // West Road, the turn north
+    { x: 66, y: 44, to: ["Hearthhold", "Goldenreach Farms", "Oakvale"] }, // under Hearthhold's south gate
+    { x: 38, y: 29, to: ["Goldenreach Farms", "Oakvale", "Hearthhold", "Hunter's Camp"] }, // outside Hearthhold's west gate (the way home runs through the city)
     { x: 16, y: 119, to: ["Goldenreach Farms", "Oakvale"] }, // the Red Road's foot
     { x: 96, y: 126, to: ["Goldenreach Farms", "Oakvale", "Saltmere", "Sunken Lake"] }, // above the Sunken Lake
     { x: 110, y: 174, to: ["Goldenreach Farms", "Oakvale", "Saltmere", "Saltwind Coast"] }, // above Saltmere's bridge

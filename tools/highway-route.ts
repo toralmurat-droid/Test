@@ -20,9 +20,10 @@ type P = [number, number];
 /** Via points per leg (map tiles); each consecutive pair is routed. */
 const LEGS: Record<number, { from: string; to: string; via: P[] }[]> = {
   1: [
-    { from: "Hearthhold Gate", to: "Goldenreach Farms", via: [[18, 53], [30, 58]] },
+    { from: "Hearthhold Gate", to: "Goldenreach Farms", via: [[66, 42], [52, 46], [52, 57]] },
     { from: "Goldenreach Farms", to: "Oakvale", via: [[30, 58], [64, 60]] },
-    { from: "Goldenreach Farms", to: "Hunter's Camp", via: [[52, 57], [35, 20]] },
+    { from: "Hearthhold Gate", to: "Oakvale", via: [[66, 42], [79, 46]] },
+    { from: "Hearthhold", to: "Hunter's Camp", via: [[40, 27], [35, 17]] },
     { from: "Oakvale", to: "Millbrook Mill", via: [[96, 61], [104, 50]] },
     { from: "Oakvale", to: "The Red Road", via: [[63, 61], [14, 121]] },
     { from: "Oakvale", to: "Stonecrag Quarry", via: [[80, 74], [95, 95]] },
