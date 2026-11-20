@@ -217,8 +217,43 @@ Roadmap: client/src/roadmap.ts, "Settlement network".
     a save from before loads). map-metrics: 100% reachable.
   - Not done: villages in the other lands (PR 2), new art or sprites (owner: none), forts at village gates (owner: no).
 
+- Step 4, PR 2: villages in the Mawdeep Sinkholes and the Sunscar, on PR 1's framework (one commit for both lands, as
+  in PR 1: the fort and muster digests did not move).
+  - Villages (`shared/villages.ts`, appended): Windlass (the Pitfields) on the Great Maw's west rim, its path out to the
+    Maw's rim road a tile short of the highway, the gate on the highway at the fork; Hempfield (the Old Warren) beside the
+    highway west of the warren; Saltglass (the Glasswind Flats) above the Dune Road; Last Well (the Humpback Mesas) under
+    the Ashen Pass road. Windlass sits 2 tiles west of the plan's box (the rim road runs down that box's east column),
+    Saltglass 1 west (14 tiles off the Sunstone Circle). Last Well's highway lies north behind a crag, so the template
+    gets an optional `exit` (plan offsets): its path leaves the square's top corner and runs up the box's edge.
+  - Looks: the Sunscar's houses are Kel Ashar's mud-brick (new `roof: "adobe"`: every tile T.ADOBE but the door, no window
+    tiles; iso.ts isoDesert draws them, awning over the door; no wind-catchers, those stay Kel Ashar's). The sinkholes'
+    cottages (red tile at Windlass, thatch at Hempfield) wear the ropewright dress (rope nets on the roof, stilts and
+    braces) on the low cottage; the tall ropewright style stays Ropewell's. No new tiles or art.
+  - People: Liftmaster Corran and Nell Hawser (Ropewell's armour steps) at Windlass; Mother Brakken and Tam at Hempfield;
+    Salt-mistress Nadira and Rana at Saltglass; Old Hadiya and Samira (flasks) at Last Well; a reeve each. Existing
+    sprites, existing stock (no new item ids). Steward names for every clan.
+  - Quests (appended last in `SIDE_ARCS`): Frayed Anchors (splice 3 rope anchors, kill 6 delvers), Rooted Hemp (gather 3
+    hemp sheaves, drive off 6 quillbacks: `use` then `kill` like the others, not the plan's `collect` step), Sledges on the
+    Flats (search 3 salt sledges, kill 8 scorpions), Fouled Troughs (clear 3 troughs, drive off 6 camelfolk).
+  - War: four more `TOWNS` villages, `fort: false`, income 0.5 (13 capturable towns). No WAR_API bump.
+  - Saves: `ACCOUNT_API` 2 -> 3. PR 1 (2) was already merged and released, and its `cleanPortals` would drop the four new
+    stones from an account it writes (CLAUDE.md: new ids inside an existing save object). The quest fields are new
+    top-level fields (free). `ACCOUNT_MIN_READER` stays 1.
+  - Client: music lists (Kel Ashar's tune in the Sunscar's villages, the village tune in the sinkholes'); `VILLAGE_KIT`
+    appended (rope coils and a gantry on the Maw's rim at Windlass, coils at Hempfield, salt stacks and pans at Saltglass,
+    kneeling camels and a stack at Last Well): Sinkholes 7 -> 12, Sunscar 16 -> 22 props (budget 40).
+  - Tests: `tests/villages.test.ts` (the four boxes, mud-brick in the Sunscar, homes Kel Ashar and Ropewell, PR 1's stones,
+    towns, posts and arcs pinned unchanged, a bounty board by every stone, the gantry on a pit's rim);
+    `tests/villages-room.test.ts` (Saltglass's stone from Kel Ashar's, Sledges on the Flats to its reward; the old-save
+    test covers all nine). The Sunscar's and the sinkholes' band hashes in tests/crown.test.ts re-taken with the larger
+    mask: the same on the map before and after (no tile outside VILLAGE_MASK moved). map-metrics: 100% reachable.
+  - Numbers: war sim with towns (9 -> 13 towns) within noise: land 25.8 / 16.9 / 22.2 / 18.0 / 17.1%, 4.86 changes a war
+    day (4.85), no clan over 30% for 3+ days; the sinkholes' villages go to the hidekin, the Sunscar's to the veiled.
+    Bench tickAvg 4.15-5.64 ms before, 4.07-4.16 after; 22 fewer monsters (the no-mob rects).
+  - Not done: the optional third villages (Pulley Cross, Halfway Khan: owner, no), new art or sprites (owner: none).
+
 ## Next
-- Step 4, PR 2: villages in the other lands, on the same framework.
+- Step 4, PR 3: villages in the Crown of the Marches and Oakvale, on the same framework.
 - Step 3 optional follow-ups (none blocks step 4): working townsfolk for Millbrook, Cairnwatch, the Rustwater Post,
   Ropewell and Tollcross (plan Q5); the small props left out (spare millstone, turf drying rack, creels, tailings heap,
   skulls on gateposts, rope ladders, hitching rails and water jars at the oases, herald shield boards); a light for the

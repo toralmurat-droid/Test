@@ -24,7 +24,7 @@ const C = (x: number, y: number) => ({ x: (x + 0.5) * TILE, y: (y + 0.5) * TILE 
 
 test("towns: the table (patrons exist and are not capitals, spots on free ground, gates off town ground and safe squares)", () => {
   // the highway villages (settlement network step 4, shared/villages.ts) after the first four, appended
-  assert.deepEqual(TOWN_IDS, ["saltmere", "rustwater", "ropewell", "millbrook", "turfhallow", "staithe", "barrowstead", "redlode", "hornstead"]);
+  assert.deepEqual(TOWN_IDS, ["saltmere", "rustwater", "ropewell", "millbrook", "turfhallow", "staithe", "barrowstead", "redlode", "hornstead", "windlass", "hempfield", "saltglass", "lastwell"]);
   assert.equal(new Set(TOWN_IDS).size, TOWNS.length);
   for (const n of ["Oakvale", "Cairnwatch", "Hunter's Camp", "Kel Ashar"]) assert.ok(!TOWNS.some((t) => t.area === n || t.name === n), `${n} is never capturable`);
   for (const t of TOWNS) {
@@ -95,7 +95,7 @@ test("towns: townPrice gives the holder's sworn 10% off, never a surcharge; the 
   assert.deepEqual(townCounts({ saltmere: { k: "wardens" }, ropewell: { k: "wardens" }, millbrook: { k: "host" } }), { wardens: 2, host: 1 });
   // the highway villages count half a town each (owner question Q1 of step 4: half the income); Millbrook stays whole
   assert.deepEqual(townCounts({ saltmere: { k: "wardens" }, turfhallow: { k: "wardens" }, redlode: { k: "host" }, hornstead: { k: "host" }, staithe: { k: "veiled" } }), { wardens: 1.5, host: 1, veiled: 0.5 });
-  assert.deepEqual(TOWNS.map((t) => townIncome(t)), [1, 1, 1, 1, 0.5, 0.5, 0.5, 0.5, 0.5]);
+  assert.deepEqual(TOWNS.map((t) => townIncome(t)), [1, 1, 1, 1, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]);
   assert.equal(townCount({ wardens: 1.5 }, "wardens"), 1.5);
   assert.equal(townCount({ wardens: 1.7 }, "wardens"), 1.5, "steps of a half");
   assert.equal(townCount({ wardens: 0.5 }, "wardens"), 0.5);

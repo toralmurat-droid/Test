@@ -1,7 +1,8 @@
 // Settlement network step 4 (shared/villages.ts): villages along the land highways. Their sites keep the survey's rules
 // (docs/settlement-network-progress.md), the carve stays inside VILLAGE_MASK and is deterministic, each village has its
 // cottages, square, stone, people, quest and war gate, and nothing that stood before moved: forts, musters, chests,
-// siege sites, landmarks, the older portal stones and the signposts.
+// siege sites, landmarks, the older portal stones and the signposts. PR 1 built the moors' and the badlands' villages, PR 2
+// the sinkholes' and the Sunscar's (appended after them: PR 1's stones, towns, arcs and posts keep their places).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { MAP_H, MAP_W, TILE, WORLD_H, actOfTile } from "../shared/constants";
@@ -25,6 +26,7 @@ import { roadPairs, warRoad } from "../shared/war/roads";
 import { allObjects, CHAINS, SIDE_ARCS, type QuestObject } from "../shared/quests";
 import { stepObjects } from "../shared/questSteps";
 import { SHOPS } from "../shared/shops";
+import { boardById } from "../shared/bounty";
 import { LAND_KIT_SPOTS } from "../client/src/landKit";
 
 const fnv = (s: string) => { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(16); };
@@ -39,10 +41,14 @@ const OLD_PORTALS = PORTAL_SPOTS.slice(0, PORTAL_SPOTS.length - VILLAGES.length)
 const villageNpc = (id: string) => VILLAGES.some((v) => [`steward_${v.id}`].includes(id)) || VILLAGES.some((v) => { const s = villageSpots(v); return NPCS.some((n) => n.id === id && [s.giver, s.folk].some((p) => Math.floor(n.x / TILE) === p.x && Math.floor(n.y / TILE) === p.y)); });
 const VILLAGE_ARCS = SIDE_ARCS.slice(SIDE_ARCS.length - VILLAGES.length);
 
-test("villages: PR 1 builds the moors' three and the badlands' two, as the plan names and places them", () => {
+test("villages: PR 1 builds the moors' three and the badlands' two, PR 2 the sinkholes' two and the Sunscar's two, as the plan names and places them", () => {
   assert.deepEqual(VILLAGES.map((v) => [v.id, v.name, v.land, v.x, v.y, v.w, v.h]), [
     ["turfhallow", "Turfhallow", 3, 90, 136, 12, 9], ["staithe", "Blackwater Staithe", 3, 176, 90, 12, 8], ["barrowstead", "Barrowstead", 3, 154, 152, 12, 9],
     ["redlode", "Redlode", 4, 157, 68, 12, 9], ["hornstead", "Hornstead", 4, 77, 109, 12, 9],
+    // PR 2. Windlass sits 2 tiles west of the plan's box (the Maw's rim road runs down the box's east column there);
+    // Saltglass 1 west (14 tiles off the Sunstone Circle)
+    ["windlass", "Windlass", 5, 123, 90, 12, 9], ["hempfield", "Hempfield", 5, 30, 54, 12, 9],
+    ["saltglass", "Saltglass", 2, 79, 124, 12, 9], ["lastwell", "Last Well", 2, 124, 58, 12, 9],
   ]);
   for (const v of VILLAGES) {
     const b = villageBox(v);
@@ -112,7 +118,10 @@ test("villages: the carve stays inside VILLAGE_MASK, clears only nature, never w
 
 test("villages: three cottages in the land's look round a flagged square, a centrepiece, a path to the road and a signpost", () => {
   for (const v of VILLAGES) {
-    const hs = villageHouses(v), roof = v.land === 3 ? T.ROOF_SLATE : [T.ROOF_RED, T.ROOF_THATCH], wall = v.land === 3 ? T.WALL_STONE : T.WALL_TIMBER;
+    // the land's look: slate over fieldstone on the moors, red tile or thatch over timber in the badlands and the sinkholes,
+    // Kel Ashar's mud-brick in the Sunscar (every tile T.ADOBE but the door)
+    const hs = villageHouses(v), roof = v.land === 3 ? T.ROOF_SLATE : v.land === 2 ? T.ADOBE : [T.ROOF_RED, T.ROOF_THATCH], wall = v.land === 3 ? T.WALL_STONE : v.land === 2 ? T.ADOBE : T.WALL_TIMBER;
+    assert.equal(v.roof === "adobe", v.land === 2, `${v.id}: mud-brick only in the Sunscar`);
     assert.equal(hs.length, 3);
     for (const h of hs) {
       for (let j = 0; j < h.h; j++) for (let i = 0; i < h.w; i++) {
@@ -148,7 +157,7 @@ test("villages: three cottages in the land's look round a flagged square, a cent
 
 test("villages: stone, people, gate and banners on free ground; each portal stone reaches its land's town on foot", () => {
   const free = (x: number, y: number) => !isSolidTile(x, y);
-  const homes: Record<number, string> = { 3: "cairnwatch", 4: "rustwater" };
+  const homes: Record<number, string> = { 2: "kelashar", 3: "cairnwatch", 4: "rustwater", 5: "ropewell" };
   for (const v of VILLAGES) {
     const s = villageSpots(v), g = villageGate(v), b = villageBox(v);
     for (const p of [s.portal, s.giver, s.folk, s.steward, ...s.banners, g]) assert.ok(free(p.x, p.y), `${v.id}: ${p.x},${p.y} free`);
@@ -171,11 +180,23 @@ test("villages: portal stones appended (ids = the villages'), grouped with their
   assert.deepEqual(PORTAL_SPOTS.slice(-VILLAGES.length).map((p) => p.id), VILLAGES.map((v) => v.id));
   for (const v of VILLAGES) {
     const p = PORTALS.find((q) => q.id === v.id)!, land = portalLand(p);
-    assert.equal(land.key, v.land === 3 ? "moors" : "badlands");
+    assert.equal(land.key, ({ 2: "sunscar", 3: "moors", 4: "badlands", 5: "sinkholes" } as Record<number, string>)[v.land]);
     assert.ok(land.portals.indexOf(p) >= land.portals.length - VILLAGES.filter((o) => o.land === v.land).length, `${v.id}: after its land's older stones`);
     assert.equal(p.name, v.name);
   }
   assert.equal(PORTAL_LANDS.reduce((n, l) => n + l.portals.length, 0), PORTALS.length);
+  // PR 1's five stones, towns, signposts and arcs keep their places and spots (PR 2's are appended after them)
+  assert.equal(digest(PORTAL_SPOTS.slice(OLD_PORTALS.length, OLD_PORTALS.length + 5), (p) => [p.id, p.x, p.y]), "5:9c72fc1e");
+  assert.equal(digest(TOWNS.slice(4, 9), (t) => [t.id, t.gate, t.steward, t.banners]), "5:934126b6");
+  assert.equal(digest(VILLAGE_POSTS.slice(0, 5), (p) => [p.x, p.y, p.to]), "5:dc5e0355");
+  assert.deepEqual(VILLAGE_ARCS.slice(0, 5).map((a) => a.id), ["turfhallow", "staithe", "barrowstead", "redlode", "hornstead"]);
+  // every village's stone brings its own bounty board, a few steps from it, on open ground
+  for (const v of VILLAGES) {
+    const b = boardById(v.id)!, s = villageSpots(v).portal;
+    assert.ok(b && b.name === `${v.name} Bounty Board`, `${v.id}: a bounty board`);
+    assert.ok(Math.hypot(b.x / TILE - (s.x + 0.5), b.y / TILE - (s.y + 0.5)) <= 5, `${v.id}: the board by the stone`);
+    assert.ok(!isSolidTile(Math.floor(b.x / TILE), Math.floor(b.y / TILE)), `${v.id}: the board on open ground`);
+  }
 });
 
 test("villages: forts, musters, chests, siege sites, landmarks and signposts stand where they stood (25 forts, 14 of 20 passes)", () => {
@@ -273,6 +294,13 @@ test("villages: their kit props stand round them, in their land", () => {
   const kinds = (id: string) => new Set(kit.filter((s) => s.village === id).map((s) => s.kind));
   assert.ok(kinds("turfhallow").has("lk_peat_stack") && kinds("turfhallow").has("lk_peat_bank"));
   assert.ok(kinds("redlode").has("lk_ore_cart") && kinds("hornstead").has("lk_longhorn") && kinds("hornstead").has("lk_trough"));
+  assert.ok(kinds("windlass").has("lk_rope_coil") && kinds("windlass").has("lk_gantry") && kinds("hempfield").has("lk_rope_coil"));
+  assert.ok(kinds("saltglass").has("lk_salt_stack") && kinds("saltglass").has("lk_salt_pan") && kinds("lastwell").has("lk_camel"));
+  // Windlass's gantry stands on the Maw's rim (a pit within 2 tiles)
+  for (const g of kit.filter((s) => s.village === "windlass" && s.kind === "lk_gantry")) {
+    const tx = Math.floor(g.x / TILE), ty = Math.floor(g.y / TILE);
+    assert.ok([-2, -1, 0, 1, 2].some((j) => [-2, -1, 0, 1, 2].some((i) => OBJECTS[ty + j][tx + i] === T.PIT)), "the gantry on a pit's rim");
+  }
   // the Staithe keeps the highway's way-cairn below its square
   assert.ok(LAND_KIT_SPOTS.some((s) => s.kind === "lk_way_cairn" && !s.village && gap(s.x / TILE, s.y / TILE, villageBox(VILLAGES[1])) <= 2), "the Staithe's way-cairn");
 });

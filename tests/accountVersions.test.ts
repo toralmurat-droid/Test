@@ -26,8 +26,9 @@ const saved = { oldie: acct("Oldie", { guild: "far", heroes: { wizard: hero } })
 fs.writeFileSync(process.env.SAVE_FILE, JSON.stringify(saved));
 
 test("accountAccess: missing av is 1; a newer account is read-only when minReader allows, else hidden", () => {
-  // 2 since settlement network step 4 (new portal ids: an older build's cleanPortals would drop the village stones)
-  assert.equal(ACCOUNT_API, 2);
+  // 2 since settlement network step 4 (new portal ids: an older build's cleanPortals would drop the village stones),
+  // 3 since its PR 2 (four more village stones, after PR 1's build was released)
+  assert.equal(ACCOUNT_API, 3);
   assert.equal(ACCOUNT_MIN_READER, 1, "older builds may still show the accounts");
   assert.equal(accountAccess({ name: "a" }), "write", "old saves (no av) are version 1");
   assert.equal(accountAccess({ av: null }), "write");
@@ -40,6 +41,7 @@ test("accountAccess: missing av is 1; a newer account is read-only when minReade
   assert.equal(accountAccess({ av: NEXT, minReader: "x" }), "hide", "an unusable minReader is the account's own version");
   assert.equal(accountAccess({ av: 2, minReader: 1 }, 2), "write", "the newer build writes its own");
   assert.equal(accountAccess({ av: 3, minReader: 2 }, 2), "read");
+  assert.equal(accountAccess({ av: 3, minReader: 1 }, 2), "read", "PR 1's build (2) shows this build's accounts, never writes them (it would drop the new village stones)");
   assert.equal(accountAccess({ av: "two" }), "hide", "an av that is no version: not ours");
   assert.equal(accountAccess({ av: 0 }), "hide");
   assert.equal(accountAccess(null), "hide");

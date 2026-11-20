@@ -57,6 +57,19 @@ const VILLAGE_FOLK: Record<VillageId, { land: string; giver: VillageNpc; folk: V
   hornstead: { land: "the Red Badlands",
     giver: { id: "rancher", name: "Tilly Hobb", title: "Rancher", sprite: "farmwife", where: "before the ranch house" },
     folk: { id: "drover", name: "Jory", title: "Drover", sprite: "peasant", where: "before the bunkhouse" } },
+  // PR 2: the Mawdeep Sinkholes and the Sunscar
+  windlass: { land: "the Mawdeep Sinkholes",
+    giver: { id: "liftmaster", name: "Liftmaster Corran", title: "Liftmaster", sprite: "labourer", where: "before the lift-men's hall" },
+    folk: { id: "windlassarmourer", name: "Nell Hawser", title: "Armour merchant", sprite: "merchant", shop: "windlass", where: "before her store" } },
+  hempfield: { land: "the Mawdeep Sinkholes",
+    giver: { id: "hempwife", name: "Mother Brakken", title: "Hemp-grower", sprite: "farmwife", where: "before the retting house" },
+    folk: { id: "hempcutter", name: "Tam", title: "Hemp-cutter", sprite: "peasant", where: "before his cottage" } },
+  saltglass: { land: "the Sunscar",
+    giver: { id: "saltmaster", name: "Salt-mistress Nadira", title: "Salt-mistress", sprite: "prospector", where: "before the salt-house" },
+    folk: { id: "saltcutter", name: "Rana", title: "Salt-cutter", sprite: "dunescout", where: "before her house" } },
+  lastwell: { land: "the Sunscar",
+    giver: { id: "wellwarden", name: "Old Hadiya", title: "Keeper of the Last Well", sprite: "wellkeeper", where: "before the well-house" },
+    folk: { id: "wellsutler", name: "Samira", title: "Caravan sutler", sprite: "spicetrader", shop: "lastwell", where: "before her house" } },
 };
 
 export const NPCS: Npc[] = [

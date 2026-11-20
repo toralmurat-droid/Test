@@ -14,7 +14,7 @@ import { LAND_ROWS } from "./borders";
  * `roads` tile): a new T-junction would make a junction fort anchor (standards.ts). Pure data plus the carve: no map.ts
  * import, so the map can call it (like highways.ts). Tiles are map x and the land's local y (like highways.ts).
  */
-export type VillageId = "turfhallow" | "staithe" | "barrowstead" | "redlode" | "hornstead";
+export type VillageId = "turfhallow" | "staithe" | "barrowstead" | "redlode" | "hornstead" | "windlass" | "hempfield" | "saltglass" | "lastwell";
 type Pt = { x: number; y: number };
 /** A cottage: roof rows over two rows of wall, a door in the middle of the front (bottom) wall. Box offsets. */
 export interface VillageHouse { dx: number; dy: number; w: number; h: number }
@@ -26,10 +26,15 @@ export interface Village {
   x: number; y: number; w: number; h: number;
   /** Mirrored: the square and the way out on the west side (the highway lies west). */
   mirror: boolean;
-  /** Roof tile kind (shared/map.ts T): the land's house look. */
-  roof: "slate" | "red" | "thatch";
+  /** Roof tile kind (shared/map.ts T): the land's house look ("adobe": the Sunscar's flat-roofed mud-brick, every tile T.ADOBE, no windows). */
+  roof: "slate" | "red" | "thatch" | "adobe";
   /** The square's centrepiece. */
   centre: "well" | "stone";
+  /**
+   * The way out of the box (plan offsets, unmirrored) when neither the plan's east nor its south one reaches the road
+   * (Last Well: the highway lies north behind a crag, so the path runs up the box's edge from the square's top corner).
+   */
+  exit?: { dx: number; dy: number };
   /** The dirt path out of the box to the highway (or the old road), local tiles; its last point is the first road tile. */
   spur: readonly [number, number][];
   /** The signpost beside the path where it meets the road (local tile). */
@@ -71,6 +76,19 @@ export const VILLAGES: readonly Village[] = [
     spur: [[166, 77], [166, 79]], post: { x: 165, y: 78 }, gate: { x: 166, y: 82 } },
   { id: "hornstead", name: "Hornstead", land: 4, patron: "Rattlesnake Gulch", x: 77, y: 109, w: 12, h: 9, mirror: true, roof: "thatch", centre: "well",
     spur: [[79, 118], [79, 120], [74, 120], [74, 122], [72, 122]], post: { x: 74, y: 123 }, gate: { x: 71, y: 125 } },
+  // The Mawdeep Sinkholes (PR 2): the lift-men's row on the Great Maw's west rim, its path out to the rim road just
+  // short of the highway (the gate stands on the highway at the fork), and the hemp fields for Ropewell's rope walk
+  // beside the highway west of the Old Warren
+  { id: "windlass", name: "Windlass", land: 5, patron: "The Pitfields", x: 123, y: 90, w: 12, h: 9, mirror: false, roof: "red", centre: "well",
+    spur: [[136, 96]], post: { x: 135, y: 97 }, gate: { x: 136, y: 85 } },
+  { id: "hempfield", name: "Hempfield", land: 5, patron: "The Old Warren", x: 30, y: 54, w: 12, h: 9, mirror: false, roof: "thatch", centre: "well",
+    spur: [[44, 60]], post: { x: 43, y: 61 }, gate: { x: 46, y: 58 } },
+  // The Sunscar (PR 2): the salt-cutters above the Dune Road on the Glasswind Flats, and the caravan well under the
+  // Ashen Pass road in the Humpback Mesas, both in Kel Ashar's mud-brick
+  { id: "saltglass", name: "Saltglass", land: 2, patron: "The Glasswind Flats", x: 79, y: 124, w: 12, h: 9, mirror: false, roof: "adobe", centre: "well",
+    spur: [[88, 136]], post: { x: 87, y: 135 }, gate: { x: 88, y: 137 } },
+  { id: "lastwell", name: "Last Well", land: 2, patron: "The Humpback Mesas", x: 124, y: 58, w: 12, h: 9, mirror: true, roof: "adobe", centre: "well",
+    exit: { dx: 11, dy: 4 }, spur: [[124, 54], [120, 54]], post: { x: 121, y: 55 }, gate: { x: 118, y: 53 } },
 ];
 
 /** Map row of a village's local row. */
@@ -99,7 +117,7 @@ export const villagePost = (v: Village) => ({ x: v.post.x, y: vy(v, v.post.y) })
 
 /** The path's tiles in map tiles, 4-connected, from the box's way out (its edge tile) to the road (the last point included). */
 export function spurTiles(v: Village): { x: number; y: number }[] {
-  const e = isEastExit(v) ? VILLAGE_PLAN.east : VILLAGE_PLAN.south, exit = vtile(v, e.dx, Math.min(v.h - 1, e.dy));
+  const e = v.exit ?? (isEastExit(v) ? VILLAGE_PLAN.east : VILLAGE_PLAN.south), exit = vtile(v, e.dx, Math.min(v.h - 1, e.dy));
   const pts: [number, number][] = [[exit.x, exit.y], ...v.spur.map(([x, y]): [number, number] => [x, vy(v, y)])], out: { x: number; y: number }[] = [];
   const push = (x: number, y: number) => { const l = out[out.length - 1]; if (!l || l.x !== x || l.y !== y) out.push({ x, y }); };
   for (let i = 0; i + 1 < pts.length; i++) {
@@ -131,14 +149,14 @@ export const VILLAGE_MASK: Set<number> = (() => {
 type VillageT = {
   WATER: number; BRIDGE: number; DIRT: number; FLAGS: number; TREE: number; PINE: number; BUSH: number; ROCK: number; STUMP: number; CACTUS: number; BONES: number;
   ROOF_SLATE: number; ROOF_RED: number; ROOF_THATCH: number; WALL_STONE: number; WINDOW_STONE: number; WALL_TIMBER: number; WINDOW_TIMBER: number; DOOR: number;
-  WELL: number; STANDING_STONE: number; CRATE: number; BARREL: number; HAY: number; SIGNPOST: number;
+  WELL: number; STANDING_STONE: number; CRATE: number; BARREL: number; HAY: number; SIGNPOST: number; ADOBE: number;
 };
 
 /**
  * Cuts the villages into the built map (shared/map.ts section 24, after the highways and their posts). Writes only inside
  * VILLAGE_MASK: clears the nature in each box, lays the square's flagstones, builds the cottages in the land's look (the
- * moors' slate over fieldstone, the badlands' red tile or thatch over timber), puts down the centrepiece and a few stores,
- * then the dirt path to the road (never on water, a bridge, a road or any object that is not nature; never added to
+ * moors' slate over fieldstone, the badlands' and the sinkholes' red tile or thatch over timber, the Sunscar's mud-brick),
+ * puts down the centrepiece and a few stores, then the dirt path to the road (never on water, a bridge, a road or any object that is not nature; never added to
  * `roads`) and its signpost. Keeps what each changed tile was in `before` (chests and siege sites read the map before).
  * Returns the signposts (map tiles) for the map's list. Deterministic, no randomness.
  */
@@ -156,13 +174,14 @@ export function carveVillages(ground: number[][], objects: number[][], roads: Re
     for (const [x, ly] of v.clear ?? []) if (nature.has(objects[vy(v, ly)][x])) setO(x, vy(v, ly), EMPTY);
     // the square, and dry ground under the houses
     for (let j = 0; j < P.square.h; j++) for (let i = 0; i < P.square.w; i++) { const t = vtile(v, P.square.dx + i, P.square.dy + j); setG(t.x, t.y, T.FLAGS); }
-    const [roof, wall, win] = v.roof === "slate" ? [T.ROOF_SLATE, T.WALL_STONE, T.WINDOW_STONE] : [v.roof === "red" ? T.ROOF_RED : T.ROOF_THATCH, T.WALL_TIMBER, T.WINDOW_TIMBER];
+    const [roof, wall, win] = v.roof === "slate" ? [T.ROOF_SLATE, T.WALL_STONE, T.WINDOW_STONE] : v.roof === "adobe" ? [T.ADOBE, T.ADOBE, T.ADOBE]
+      : [v.roof === "red" ? T.ROOF_RED : T.ROOF_THATCH, T.WALL_TIMBER, T.WINDOW_TIMBER];
     for (const h of villageHouses(v)) {
       for (let j = 0; j < h.h; j++) for (let i = 0; i < h.w; i++) { setG(h.x + i, h.y + j, T.DIRT); setO(h.x + i, h.y + j, j < h.h - 2 ? roof : wall); }
       const d = doorOf(h);
       setO(d.x, d.y, T.DOOR);
       if (d.y + 1 <= b.y1) setG(d.x, d.y + 1, T.DIRT); // a worn step before the door (inside the box)
-      for (const wx of [h.x + 1, h.x + h.w - 2]) if (wx !== d.x) setO(wx, d.y, win);
+      if (win !== T.ADOBE) for (const wx of [h.x + 1, h.x + h.w - 2]) if (wx !== d.x) setO(wx, d.y, win); // (mud-brick: no window tiles, like Kel Ashar's houses)
     }
     const s = villageSpots(v);
     setO(s.centre.x, s.centre.y, v.centre === "well" ? T.WELL : T.STANDING_STONE);

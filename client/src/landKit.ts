@@ -227,8 +227,8 @@ const villageAround = (id: string, r: number): [number, number, number, number] 
 /**
  * The villages along the highways (settlement network step 4) carry their land's kit: peat stacks by Turfhallow's and
  * the Staithe's cottages and cut banks outside Turfhallow, way-cairns round Barrowstead (the Staithe keeps the highway's
- * way-cairn below its square); ore carts by Redlode, longhorns and a trough round Hornstead. Placed after every other
- * kit, so the older spots never move.
+ * way-cairn below its square); ore carts by Redlode, longhorns and a trough round Hornstead; rope and a gantry at Windlass and
+ * Hempfield, salt and camels at Saltglass and Last Well. Placed after every other kit, so the older spots never move.
  */
 const VILLAGE_KIT: Place[] = [
   { area: "Turfhallow", kind: "lk_peat_stack", n: 1, gap: 3, village: "turfhallow" },
@@ -238,6 +238,16 @@ const VILLAGE_KIT: Place[] = [
   { area: "The Red Badlands", kind: "lk_ore_cart", n: 2, gap: 4, box: villageAround("redlode", 5), near: byVillage("redlode", 5, 1), village: "redlode" },
   { area: "The Red Badlands", kind: "lk_longhorn", n: 3, gap: 3, box: villageAround("hornstead", 6), near: byVillage("hornstead", 6, 2), village: "hornstead" },
   { area: "The Red Badlands", kind: "lk_trough", n: 1, box: villageAround("hornstead", 5), near: byVillage("hornstead", 5, 1), village: "hornstead" },
+  // PR 2 (appended, so PR 1's spots never move): rope coils on Windlass's square and a gantry on the Maw's rim beside it,
+  // coils of new rope at Hempfield; salt stacks and pans round Saltglass, kneeling camels and a stack at Last Well
+  { area: "Windlass", kind: "lk_rope_coil", n: 1, village: "windlass" },
+  { area: "The Mawdeep Sinkholes", kind: "lk_gantry", n: 1, box: villageAround("windlass", 6), near: (tx, ty) => byVillage("windlass", 6, 1)(tx, ty) && byObject(T.PIT, 2)(tx, ty), village: "windlass" },
+  { area: "Hempfield", kind: "lk_rope_coil", n: 1, village: "hempfield" },
+  { area: "The Mawdeep Sinkholes", kind: "lk_rope_coil", n: 1, box: villageAround("hempfield", 5), near: byVillage("hempfield", 5, 1), village: "hempfield" },
+  { area: "Saltglass", kind: "lk_salt_stack", n: 1, village: "saltglass" },
+  { area: "The Sunscar", kind: "lk_salt_pan", n: 2, gap: 4, box: villageAround("saltglass", 6), near: byVillage("saltglass", 6, 2), village: "saltglass" },
+  { area: "The Sunscar", kind: "lk_camel", n: 2, gap: 4, box: villageAround("lastwell", 5), near: byVillage("lastwell", 5, 1), village: "lastwell" },
+  { area: "The Sunscar", kind: "lk_salt_stack", n: 1, box: villageAround("lastwell", 4), near: byVillage("lastwell", 4, 1), village: "lastwell" },
 ];
 
 /** Way-cairns beside a land's highway: every CAIRN_EVERY tiles of each leg, on the first free tile 3-5 off either side. */
