@@ -21,6 +21,7 @@ const ROWS: { clan: City["clan"]; foe: "redfang" | "wardens"; stone: string; bli
   { clan: "veiled", foe: "redfang", stone: "mirage", blink: [[10.5, 40.5], [10.5, 36.5]] },
   { clan: "host", foe: "redfang", stone: "cairnwatch", blink: [[10.5, 40.5], [10.5, 36.5]] },
   { clan: "redfang", foe: "wardens", stone: "rustwater", blink: [[10.5, 40.5], [10.5, 36.5]] },
+  { clan: "hidekin", foe: "redfang", stone: "ropewell", blink: [[10.5, 40.5], [10.5, 36.5]] },
 ];
 const px = (t: { x: number; y: number }) => ({ x: (t.x + 0.5) * TILE, y: (t.y + 0.5) * TILE });
 const at = (p: any, x: number, y: number) => { p.x = x; p.y = y; p.moving = false; };

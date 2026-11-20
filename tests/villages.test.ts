@@ -183,10 +183,10 @@ test("villages: stone, people, gate and banners on free ground; each portal ston
 });
 
 test("villages: portal stones appended (ids = the villages'), grouped with their land; the older stones did not move", () => {
-  // the 29 older stones, as before step 4 ("29:6a70cae7"), but Hearthhold's, Scarwall's, Duskveil's and Marrowkeep's
-  // waystones, which moved with their cities (step 5; "28:8245c3f0" without Hearthhold's only, "27:76a98b7" without
-  // Scarwall's too, "26:d2f86d91" without Duskveil's too)
-  assert.equal(digest(OLD_PORTALS.filter((p) => !["city_wardens", "city_redfang", "city_veiled", "city_host"].includes(p.id)), (p) => [p.id, p.x, p.y]), "25:5455fae2");
+  // the 29 older stones, as before step 4 ("29:6a70cae7"), but the five cities' waystones, which moved with their cities
+  // (step 5; "28:8245c3f0" without Hearthhold's only, "27:76a98b7" without Scarwall's too, "26:d2f86d91" without Duskveil's
+  // too, "25:5455fae2" without Marrowkeep's too; the map before Deepden's move hashes the same without its stone)
+  assert.equal(digest(OLD_PORTALS.filter((p) => !["city_wardens", "city_redfang", "city_veiled", "city_host", "city_hidekin"].includes(p.id)), (p) => [p.id, p.x, p.y]), "24:b0d3fce7");
   assert.deepEqual(PORTAL_SPOTS.slice(-VILLAGES.length).map((p) => p.id), VILLAGES.map((v) => v.id));
   for (const v of VILLAGES) {
     const p = PORTALS.find((q) => q.id === v.id)!, land = portalLand(p);
@@ -232,11 +232,15 @@ test("villages: forts, musters, chests, siege sites, landmarks and signposts sta
   // highway's posts inside its walls (84,25 and 51,18: "88:1d1dbb68" with them) and put up three by its gates; Scarwall's
   // (step 5 PR 2) and Duskveil's (PR 3) took none and put up two by their gates each; Marrowkeep's (PR 4) took the Nine
   // Widows road's post inside its walls (230,635), moved the fork's below the Muster two tiles (245,681 -> 247,681: the
-  // highway round it changed) and put up two by its gates ("84:fd5e5ab5" on the map before it without those two old ones)
-  const moved = [[84, 25], [51, 18], [94, 25], [66, 44], [38, 28], [63, 807], [36, 824], [253, 446], [227, 427], [227, 629], [257, 643], [247, 681]];
+  // highway round it changed) and put up two by its gates ("84:fd5e5ab5" on the map before it without those two old ones);
+  // Deepden's (PR 5) took none, put up three by its gates (158,1108, 189,1123 and the highway's 217,1111) and moved the
+  // fork's post on the Great Maw road four rows (210,1061 -> 209,1065: there it reads the new leg as a road of its own;
+  // "83:30929f12" on the map before it without the old one)
+  const moved = [[84, 25], [51, 18], [94, 25], [66, 44], [38, 28], [63, 807], [36, 824], [253, 446], [227, 427], [227, 629], [257, 643], [247, 681],
+    [158, 1108], [189, 1123], [217, 1111], [209, 1065]];
   const old = SIGNPOSTS.filter((p) => !VILLAGE_POSTS.some((q) => q.x === p.x && q.y === p.y) && !moved.some(([x, y]) => p.x === x && p.y === y));
-  assert.equal(digest(old, (p) => [p.x, p.y]), "84:fd5e5ab5");
-  assert.equal(SIGNPOSTS.length - VILLAGE_POSTS.length, 94, "84 older posts, Hearthhold's three, Scarwall's, Duskveil's and Marrowkeep's two, the Muster's fork's");
+  assert.equal(digest(old, (p) => [p.x, p.y]), "83:30929f12");
+  assert.equal(SIGNPOSTS.length - VILLAGE_POSTS.length, 97, "83 older posts, Hearthhold's and Deepden's three, Scarwall's, Duskveil's and Marrowkeep's two, the Muster's and the Maw road's forks'");
   assert.equal(VILLAGE_POSTS.length, VILLAGES.length);
 });
 
