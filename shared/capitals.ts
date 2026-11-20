@@ -30,6 +30,8 @@ export const CITY = {
   minLevel: 5,
   /** Spawn zones place no monster within this many tiles of a city's outer gate (shared/spawns.ts; wanderers may still pass). */
   gateClear: 10,
+  /** The gate ward (server/cityGates.ts) watches heroes this many tiles round a city in its land (past any dash or blink). */
+  wardTiles: 16,
   /** Shop and trainer discount for heroes sworn to the city's clan (W6's town discount, shared/war/towns.ts TOWN.discount). */
   discount: 0.1,
   /** Gold the leader pays once per hero for each renown rank reached (index: shared/war/renown.ts RENOWN_RANKS; Sworn pays nothing). */

@@ -138,7 +138,8 @@ import { townAt, townPrice } from "../shared/war/towns";
 import { WarOaths } from "./warOaths";
 import { WarFeuds } from "./warFeuds";
 import { homeAfterOath, respawnAt, WarCapitals } from "./warCapitals";
-import { cityNpcRole, cityOfPortal, cityPrice, cityRoleNear, cleanCapPaid, cleanHome } from "../shared/capitals";
+import { CityGateWard } from "./cityGates";
+import { cityNpcRole, cityOfPortal, cityPrice, cityRoleNear, cleanCapPaid, cleanHome, relocateCitySpot } from "../shared/capitals";
 import { cleanFeud } from "../shared/war/feuds";
 import { WarWrits } from "./warWrits";
 import { cleanWrit } from "../shared/war/writs";
@@ -866,6 +867,12 @@ export class TownRoom extends Room<TownState> {
     award: (id, i) => { const p = this.state.players.get(id); return !!p && award(p, i); },
     sfx: (msg) => this.broadcast("sfx", msg),
   });
+  /** The walk-in gates of the cities in their lands (server/cityGates.ts): the capitals' entry rules at every gate. */
+  private gateWard = new CityGateWard({
+    heroes: () => this.state.players.entries(),
+    refuse: (id, city, why) => this.caps.refuse(id, city, why),
+    snap: (id, x, y) => this.broadcast("travel", { id, from: "", to: "", x: Math.round(x), y: Math.round(y), why: "gate" }),
+  });
 
   /** The Reckoning (server/warCrown.ts): the Herald's news, the notice, the pay of heroes who took part. */
   private reckoning = new WarCrown({
@@ -1426,7 +1433,7 @@ export class TownRoom extends Room<TownState> {
     this.warTroops.forget(client.sessionId); this.holds.forget(client.sessionId); this.caravans.forget(client.sessionId); this.sieges.forget(client.sessionId); this.tunnels.forget(client.sessionId); this.rituals.forget(client.sessionId); this.marches.forget(client.sessionId); this.battles.forget(client.sessionId); this.towns.forget(client.sessionId);
     this.oaths.leave(client.sessionId); // (after players.delete) the tabard goes for everyone
     this.feuds.forget(client.sessionId); this.feuds.leave(client.sessionId); // (likewise) the Wanted mark goes, the manhunters go home
-    this.caps.leave(client.sessionId);
+    this.caps.leave(client.sessionId); this.gateWard.leave(client.sessionId);
     this.unsummon(client.sessionId);
     this.dismissAll(client.sessionId);
     this.addrs.delete(client.sessionId);
@@ -1469,7 +1476,8 @@ export class TownRoom extends Room<TownState> {
 
   private resume(p: Player, s: LiveState) {
     const fin = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
-    if (fin(s.x) && fin(s.y) && !isSolidAt(s.x, s.y) && !isDecorSolidAt(s.x, s.y)) { p.x = s.x; p.y = s.y; }
+    const at = fin(s.x) && fin(s.y) ? relocateCitySpot(s.x, s.y) : undefined; // (in a city's old band plot: the same spot where it stands now)
+    if (at && !isSolidAt(at.x, at.y) && !isDecorSolidAt(at.x, at.y)) { p.x = at.x; p.y = at.y; }
     if (s.dir === "up" || s.dir === "down" || s.dir === "left" || s.dir === "right") p.dir = s.dir;
     if (fin(s.hp)) p.hp = Math.max(1, Math.min(p.maxHp, Math.round(s.hp)));
     if (fin(s.mana) && !usesGauge(p.cls)) { p.mana = Math.max(0, Math.min(p.maxMana, s.mana)); this.syncMana(p); } // a song gauge starts empty
@@ -3312,6 +3320,7 @@ export class TownRoom extends Room<TownState> {
       this.pickUp(p, pid);
       this.updateWrath(pid, p, now);
     });
+    this.gateWard.tick(now); // walked, rolled or blinked through a city's gate (server/cityGates.ts)
     this.qsteps.tick(now, dtMs); // carried lanterns, hold runs (server/questSteps.ts)
     this.tide.tick(now); // the Gloam Tide's march (server/tide.ts)
     this.rumours.tick(now); // rumours: reach steps, ambushers, walking up to Mags (server/rumours.ts)
