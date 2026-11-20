@@ -4,7 +4,7 @@
  * the land and territory it leads to, and shows the route to the picked territory as a card. Also the small text helpers
  * (wrap, card) the war table's side panel shares. Cosmetic: nothing here is sent to the server.
  */
-import { MAP_LINE } from "./mapLayers";
+import { MAP_KEY, MAP_LINE } from "./mapLayers";
 import { regionName } from "../../shared/war/regions";
 import { TERRITORIES } from "../../shared/war/territories";
 import { findRoute, hereAt, landOfNode, nodeName, routeLines, STONES, WAYS, type Here, type Step } from "./warRoute";
@@ -114,13 +114,13 @@ export function drawHereOnMap(g: CanvasRenderingContext2D, v: HereView): ExitRow
     if (lit) { g.strokeStyle = GOLD; g.lineWidth = 3; g.globalAlpha = 0.5 + 0.5 * pulse; g.beginPath(); g.arc(x, y, 16 + 4 * pulse, 0, Math.PI * 2); g.stroke(); g.globalAlpha = 1; }
     const where = regionName(landOfNode(there));
     const req = mine === w.a ? w.req : "";
-    chip(g, x, y + 30, [`${w.name}: to ${short(where)}`, `${nodeName(there)}${req ? " · " + req : ""}`], lit ? GOLD : "#96d7ff", v.font);
+    chip(g, x, y + 30, [`${w.name}: to ${short(where)}`, `${nodeName(there)}${req ? " · " + req : ""}`], lit ? GOLD : MAP_KEY.way, v.font);
   }
   for (const s of STONES) {
     if (!v.woken?.has(s.id) || v.ways === false) continue;
     const [x, y] = v.toScreen(s.tile.x + 0.5, s.tile.y + 0.5);
     if (!onScreen(x, y) || v.s < 2) continue;
-    chip(g, x, y + 22, [`Portal stone: ${s.name}`], "#ff9a3c", v.font);
+    chip(g, x, y + 22, [`Portal stone: ${s.name}`], MAP_KEY.stone, v.font);
   }
   const rows = v.exits === false ? [] : exitCard(g, v);
   // the route to the picked territory, as a card in the bottom-left corner
@@ -142,9 +142,9 @@ function exitsOf(v: HereView): Out[] {
   if (!land || !v.me) return out;
   for (const w of WAYS) for (const [mine, there, tile] of [[w.a, w.b, w.ta], [w.b, w.a, w.tb]] as const) {
     if (landOfNode(mine) !== land) continue;
-    out.push({ label: `${w.name} to ${short(regionName(landOfNode(there)))}`, sub: mine === w.a ? w.req : "", tx: tile.x + 0.5, ty: tile.y + 0.5, color: "#96d7ff" });
+    out.push({ label: `${w.name} to ${short(regionName(landOfNode(there)))}`, sub: mine === w.a ? w.req : "", tx: tile.x + 0.5, ty: tile.y + 0.5, color: MAP_KEY.way });
   }
-  for (const s of STONES) if (v.woken?.has(s.id) && landOfNode(s.node) === land) out.push({ label: `Portal stone: ${s.name}`, sub: "", tx: s.tile.x + 0.5, ty: s.tile.y + 0.5, color: "#ff9a3c" });
+  for (const s of STONES) if (v.woken?.has(s.id) && landOfNode(s.node) === land) out.push({ label: `Portal stone: ${s.name}`, sub: "", tx: s.tile.x + 0.5, ty: s.tile.y + 0.5, color: MAP_KEY.stone });
   return out.sort((a, b) => Math.hypot(a.tx - v.me!.x, a.ty - v.me!.y) - Math.hypot(b.tx - v.me!.x, b.ty - v.me!.y));
 }
 
