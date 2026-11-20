@@ -1,5 +1,6 @@
 {
   "date": "2026-11-20",
+  "patch": 344,
   "title": "Real weapon swings",
   "changes": [
     "Melee attacks are now full-body swings: the weapon winds up, the shoulders turn into the blow, the front foot steps in and the swing follows through, leaving a trail along the arc it cut.",
