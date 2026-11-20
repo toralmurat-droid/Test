@@ -67,7 +67,7 @@ import { setWarRelations } from "../../shared/war/feuds";
 import { atWar } from "../../shared/war/feuds";
 import { clashLosses, COLUMN, marchesOf, marchMult, plansOf } from "../../shared/war/marches";
 import { tunnelStrikes } from "../../shared/war/tunnels";
-import { deployments, landOf, newWar, nightRaid, phaseOf, rallyClan, sackHold, targetsOf, WAR, warTick, type TickExtra } from "../../shared/war/rules";
+import { deployments, foughtCount, landOf, newWar, nightRaid, phaseOf, rallyClan, sackHold, targetsOf, WAR, warTick, type TickExtra } from "../../shared/war/rules";
 import { HOLD_SACK } from "../../shared/war/holdSack";
 import { BATTLE, battleOutcome, siteForces, isDecisive, meetSite, newBattle, pickMeetings, pickPitched, pitchedTicks, virtualBattle, type BattleSite } from "../../shared/war/battles";
 import type { BattleKind, BattleOutcome } from "../../shared/war/rules";
@@ -149,6 +149,8 @@ function mulberry(a: number) {
 }
 
 const N = TERRITORIES.length;
+/** Land shares count fought land only (the heartland havens never change hands), as the game's own leaderOf does. */
+const F = foughtCount(TERRITORIES.map(() => undefined));
 interface Result {
   avg: Record<ClanKey, number>; worst: Record<ClanKey, number>; dominated: number; flips: number;
   /** Share of night ticks the Night Raiders rode against a clan; share of all ticks the war rallied for each clan. */
@@ -331,11 +333,11 @@ function play(clever?: ClanKey): Result {
         prev = s.owner.slice();
       }
       if (d < SETTLE_DAYS) continue;
-      const top = Math.max(...CLAN_KEYS.map((k) => landOf(s, k))) / N;
+      const top = Math.max(...CLAN_KEYS.map((k) => landOf(s, k))) / F;
       streak = top > WAR.leaderShare ? streak + 1 : 0;
       if (streak > STREAK_DAYS) dominated = true;
-      for (const k of CLAN_KEYS) { const sh = landOf(s, k) / N; avg[k] += sh; worst[k] = Math.max(worst[k], sh); }
-      days.push(CLAN_KEYS.map((k) => Math.round((landOf(s, k) / N) * 1e4) / 1e4));
+      for (const k of CLAN_KEYS) { const sh = landOf(s, k) / F; avg[k] += sh; worst[k] = Math.max(worst[k], sh); }
+      days.push(CLAN_KEYS.map((k) => Math.round((landOf(s, k) / F) * 1e4) / 1e4));
       if (TOWNS_ON) for (const t of TOWNS) townsHeld[towns[t.id].k]++;
       if (NEUTRAL.length) {
         const held = CLAN_KEYS.map((k) => NEUTRAL.filter((t) => s.owner[t] === k).length);

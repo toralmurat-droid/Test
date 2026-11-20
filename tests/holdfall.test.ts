@@ -13,10 +13,10 @@ import { warView } from "../shared/war/view";
 import { isSolidTile } from "../shared/map";
 import { TILE } from "../shared/constants";
 
-test("holdFall: every Hold that can fall has a barracks, its tier's props and fortifications; capitals have none", () => {
+test("holdFall: every Hold that can fall has a barracks, its tier's props and fortifications; capitals and heartland havens have none", () => {
   for (const h of HOLDS) {
     const t = TERRITORIES[h.t];
-    if (!canFall(h.t)) { assert.ok(t.capitalOf || t.reckoningOnly, `${t.name} cannot fall`); for (const k of CLAN_KEYS) assert.equal(holdWorks(h.t, k, 1).length, 0); continue; }
+    if (!canFall(h.t)) { assert.ok(t.capitalOf || t.reckoningOnly || t.haven, `${t.name} cannot fall`); for (const k of CLAN_KEYS) assert.equal(holdWorks(h.t, k, 1).length, 0); continue; }
     for (const k of CLAN_KEYS) for (const tier of HOLD_TIERS) {
       const w = holdWorks(h.t, k, tier), props = w.filter((x) => !isFortification(x.kind));
       assert.ok(barracksOf(w), `${t.name} ${k} ${tier}: a barracks`);

@@ -39,7 +39,8 @@ test("validator: a legal order set passes, cleaned", () => {
 test("validator: every illegal item is rejected and named", () => {
   const s = newWar(), legal = legalOf(s, K), own = s.owner.findIndex((o, i) => o === K && !TERRITORIES[i].capitalOf);
   const keep = TERRITORIES.find((t) => t.reckoningOnly)!.id, cap = TERRITORIES.find((t) => t.capitalOf && t.capitalOf !== K)!.id;
-  const far = TERRITORIES.findIndex((t, i) => s.owner[i] !== K && !t.capitalOf && !t.reckoningOnly && !targetsOf(s, K).includes(i));
+  const haven = TERRITORIES.find((t) => t.haven)!.id;
+  const far = TERRITORIES.findIndex((t, i) => s.owner[i] !== K && !t.capitalOf && !t.reckoningOnly && !t.haven && !targetsOf(s, K).includes(i));
   const bad = (raw: unknown, re: RegExp, day = 0) => {
     const v = validateCouncil(raw, s, K, day);
     assert.equal(v.ok, false, JSON.stringify(raw));
@@ -55,6 +56,7 @@ test("validator: every illegal item is rejected and named", () => {
   bad({ targets: [-1] }, /no territory/); bad({ targets: [TERRITORIES.length] }, /no territory/);
   bad({ targets: [keep] }, /Crown Keep/);
   bad({ targets: [cap] }, /capital/);
+  bad({ targets: [haven] }, /heartland haven/);
   bad({ targets: [own] }, /already yours/);
   assert.ok(far >= 0);
   bad({ targets: [far] }, /not a legal target/);

@@ -1,7 +1,7 @@
 /**
  * Siege battles (roadmap M2): while a siege is announced at a land and a hero is near, the room fields both sides as
  * real troopers (server/warSieges.ts) at the land's fronts: each standard and the Hold gate. Attackers march in from an
- * approach on the side facing the attacker's nearest land; defenders hold, scaled by Control like the patrols. A front
+ * approach on the side the attacker comes from (attackAxis); defenders hold, scaled by Control like the patrols. A front
  * changes holder only after one side has out-numbered the other for a while (troopers plus sworn heroes, heroes weigh
  * more), and a held front earns its holder valor once a minute, but only with a sworn hero of that clan there: troops
  * alone never move the war. Pure rules and numbers, the same for the server, the tests and the sims.
@@ -11,7 +11,7 @@ import { isSafeZone, isSolidAt } from "../map";
 import { noMobsAt } from "../spawns";
 import { inVillage } from "../wrath";
 import { patrolOf, patrolPos, troopShare, type Patrol } from "./patrols";
-import { TERRITORIES } from "./territories";
+import { LAND_LINKS, TERRITORIES } from "./territories";
 import type { RamView } from "./works";
 
 export const SIEGE_BATTLE = {
@@ -71,19 +71,26 @@ export function siegeFronts(t: number): Front[] {
 }
 
 /**
- * The unit vector (tile space) from land `t` toward the nearest land held by `atk` (`owner` may hold clan keys or
- * clan indexes, `atk` the same), or undefined when it holds none. The client's painted siege lines use it too.
+ * The unit vector (tile space) from land `t` toward where `atk` comes from (`owner` may hold clan keys or clan indexes,
+ * `atk` the same), or undefined when it holds no land. A war neighbour it holds wins: one in the same land by its middle,
+ * one across a border road by that road's crossing in t's land (lands lie in separate bands of the tile grid, so a
+ * foreign land's middle points nowhere a soldier walks). Else the nearest land it holds. The client's painted siege
+ * lines use it too.
  */
 export function attackAxis(owner: readonly unknown[], t: number, atk: unknown): { x: number; y: number } | undefined {
   const me = TERRITORIES[t];
   if (!me) return undefined;
   let best: { x: number; y: number } | undefined, bd = Infinity;
-  for (const u of TERRITORIES) {
-    if (u.id === t || owner[u.id] !== atk) continue;
-    const d = Math.hypot(u.cx - me.cx, u.cy - me.cy);
-    if (d < bd) { bd = d; best = { x: u.cx - me.cx, y: u.cy - me.cy }; }
+  const take = (x: number, y: number) => { const d = Math.hypot(x - me.cx, y - me.cy); if (d > 0 && d < bd) { bd = d; best = { x: x - me.cx, y: y - me.cy }; } };
+  for (const n of me.near) {
+    const u = TERRITORIES[n];
+    if (owner[n] !== atk) continue;
+    if (u.region === me.region) { take(u.cx, u.cy); continue; }
+    for (const p of LAND_LINKS) if (p.a === t && p.b === n) take(p.link.pa.x, p.link.pa.y); else if (p.b === t && p.a === n) take(p.link.pb.x, p.link.pb.y);
   }
-  return best && bd > 0 ? { x: best.x / bd, y: best.y / bd } : undefined;
+  if (!best) for (const u of TERRITORIES) if (u.id !== t && owner[u.id] === atk) take(u.cx, u.cy);
+  const b = best as { x: number; y: number } | undefined;
+  return b && bd > 0 ? { x: b.x / bd, y: b.y / bd } : undefined;
 }
 
 const offLimits = (x: number, y: number) => isSafeZone(x, y) || inVillage(x, y) || noMobsAt(x, y);

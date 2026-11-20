@@ -1,7 +1,7 @@
 /**
  * The lands of the Riven Marches (design: play.fmtpa.ch/design/riven-marches/, Murat 2026-11-14: one continent, the
  * acts are regions of it). Each land groups its territories on the war map: borders are drawn inside a land, and lands
- * meet only through REGION_LINKS (a waygate or a road). A land is built when at least one war territory lies in it.
+ * meet only through REGION_LINKS (the border roads). A land is built when at least one war territory lies in it.
  * The homelands of the Host, Redfang and Hide-Kin were planned before they were built: until one was, its clan held
  * forward capitals in the built lands, which turned into ordinary territories once the homeland (with its own capital)
  * was built. All three are built now, so no forward capital is held; the mechanism stays for the lands to come.
@@ -15,6 +15,7 @@ import { MOORSGATE_MOORS, MOORSGATE_OAKVALE } from "../moors";
 import { REDPASS_BADLANDS, REDPASS_OAKVALE } from "../badlands";
 import { SINKWAY_OAKVALE, SINKWAY_SINKHOLES } from "../sinkholes";
 import { crownGateTile, CROWNWAYS } from "../crown";
+import { BORDERS, edgeTile } from "../borders";
 import type { ClanKey } from "./clans";
 
 export type RegionKey = "oakvale" | "sunscar" | "moors" | "badlands" | "sinkholes" | "crown";
@@ -39,6 +40,12 @@ export interface Region {
   wards?: true;
   /** Zones that never change hands by war pressure (no attack, siege, sack or raid): they flip only at a Reckoning (Crown PR4). */
   reckoning?: string[];
+  /**
+   * The land's war-free heartland (coherence review, Murat 2026-11-20): its zones up to this monster level stay with the
+   * home clan for good, no clan may strike them, so new heroes level in peace and the war comes only to the rim. A zone
+   * at the end of a border road never is one (the road's front would be dead).
+   */
+  haven?: { maxLevel: number };
 }
 
 /** A way between two lands; pa / pb are its ends in each land (tiles): the territories nearest them border each other. */
@@ -50,26 +57,19 @@ export const REGIONS: Region[] = [
     { clan: "redfang", zone: "Redfang Hollow", forward: true },
     { clan: "host", zone: "Greywatch Keep", forward: true },
     { clan: "hidekin", zone: "Thornwood", forward: true },
-    { clan: "veiled", zone: "Cinder Scar" },
-    // Footholds (not forward: they stay with all the homelands built), like the Wardens' Grey Ring in the moors. With
-    // every forward capital stepped down Oakvale was the Wardens' and the Veiled's alone, and the Veiled grew to 27% of
-    // the war (docs/clan-war-progress.md NL-7): the Host's storm-watch on the crags and Redfang's landing on the strand.
-    { clan: "host", zone: "Stormbreak Crags" },
-    { clan: "redfang", zone: "Heronwreck Strand" },
-  ] },
+    // (Cinder Scar, the Stormbreak Crags and Heronwreck Strand were the Veiled's, Host's and Redfang's footholds here:
+    // gone with the coherence review, Murat 2026-11-20. Each clan keeps one capital, in its own homeland.)
+  ], haven: { maxLevel: 12 } },
   { key: "sunscar", name: "The Sunscar", compass: "SE", home: "veiled", contains: (x, y) => actOfTile(x, y) === 2, capitals: [
-    { clan: "wardens", zone: "Palmshade Oasis" },
     { clan: "redfang", zone: "Dustrider Camp", forward: true },
     { clan: "host", zone: "Kharsun, the Buried City", forward: true },
     { clan: "hidekin", zone: "The Humpback Mesas", forward: true },
     { clan: "veiled", zone: "The Veiled Sanctum" },
   ] },
-  // The Host's homeland (Act 3): its seat is the war camp on the far eastern moor; the Wardens' garrison at Cairnwatch
-  // holds the Grey Ring. Built, so Greywatch Keep and Kharsun
+  // The Host's homeland (Act 3): its seat is the war camp on the far eastern moor. Built, so Greywatch Keep and Kharsun
   // step down to ordinary territories (capitalsOf); whoever holds them keeps them.
   { key: "moors", name: "The Grey Barrow Moors", compass: "NE", home: "host", contains: (x, y) => actOfTile(x, y) === 3, capitals: [
     { clan: "host", zone: "The Host's Muster" },
-    { clan: "wardens", zone: "The Grey Ring" }, // the Cairnwatch garrison holds the ring by the outpost (like Palmshade Oasis in the Sunscar)
   ] },
   // Redfang's homeland (Act 4): its seat is Fangrock, the clan's stockade in the far west (Old Rourke's keep inside is a
   // lair, not a territory). Built, so Redfang Hollow and Dustrider Camp step down to ordinary territories (capitalsOf).
@@ -89,15 +89,30 @@ export const REGIONS: Region[] = [
   { key: "crown", name: "The Crown of the Marches", compass: "C", contains: (x, y) => actOfTile(x, y) === 6, capitals: [], wards: true, reckoning: ["The Crown Keep"] },
 ];
 
-/** Ways between lands. A link is live only while both of its lands are built. The waygate comes first (ids follow this order). */
-export const REGION_LINKS: RegionLink[] = [
+/**
+ * The gates between lands (waygates, passes, the Sinkway, the five Crownways). Since the coherence review (Murat
+ * 2026-11-20) they are travel shortcuts only: heroes route through them (client/src/warRoute.ts), the war does not.
+ */
+export const GATE_LINKS: RegionLink[] = [
   { a: "oakvale", b: "sunscar", name: "The Waygate", pa: WAYGATE_OAKVALE, pb: WAYGATE_DESERT },
   { a: "oakvale", b: "moors", name: "The Barrowgate", pa: MOORSGATE_OAKVALE, pb: MOORSGATE_MOORS },
   { a: "oakvale", b: "badlands", name: "The Red Pass", pa: REDPASS_OAKVALE, pb: REDPASS_BADLANDS },
   { a: "oakvale", b: "sinkholes", name: "The Sinkway", pa: SINKWAY_OAKVALE, pb: SINKWAY_SINKHOLES },
-  // the five Crownways (Act 6): each homeland's dais to its gate on the Crown's rim (appended: the older links keep their ids)
   ...CROWNWAYS.map((c): RegionLink => ({ a: c.from, b: "crown", name: c.name, pa: c.home, pb: crownGateTile(c) })),
 ];
+
+/** The land key of each act (shared/borders.ts names lands by act). */
+export const ACT_REGION: Record<number, RegionKey> = { 1: "oakvale", 2: "sunscar", 3: "moors", 4: "badlands", 5: "sinkholes", 6: "crown" };
+
+/**
+ * Ways between lands for the war: the walkable border roads (shared/borders.ts), so war fronts run where heroes walk
+ * (coherence review, Murat 2026-11-20). pa / pb are each road's edge tile in its land, where the crossing is. A link is
+ * live only while both of its lands are built. Order follows BORDERS.
+ */
+export const REGION_LINKS: RegionLink[] = BORDERS.map((b): RegionLink => {
+  const [ax, ay] = edgeTile(b.a), [bx, by] = edgeTile(b.b);
+  return { a: ACT_REGION[b.a.land], b: ACT_REGION[b.b.land], name: b.name, pa: { x: ax, y: ay }, pb: { x: bx, y: by } };
+});
 
 /** The land a tile lies in (built lands only). */
 export function regionOf(tx: number, ty: number, regions: readonly Region[] = REGIONS): Region | undefined {

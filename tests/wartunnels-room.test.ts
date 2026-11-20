@@ -15,12 +15,15 @@ import { _resetWar, _setWarOrders, _valorOf, step, warOrders, warState, warStrik
 import { _resetTunnels, WarTunnels } from "../server/warTunnels";
 
 const HK: ClanKey = "hidekin";
-/** An Act 1 tunnel target of the opening war away from Oakvale, with a clan that may not fight there. */
+/**
+ * A tunnel target of the opening war away from Oakvale, with a clan that may not fight there: an Act 1 one if there is
+ * any (since the fronts follow the border roads, 2026-11-20, the Hide-Kin no longer border Oakvale, so it is another land's).
+ */
 const PICK = (() => {
   const s = newWar();
-  for (const t of targetsOf(s, HK)) {
+  for (const act1 of [true, false]) for (const t of targetsOf(s, HK)) {
     const T = TERRITORIES[t], g = tunnelStrikes(s, { [HK]: { defend: 0.5, attack: [{ t, share: 1 }] } })[0];
-    if (!g || T.act !== 1 || T.capitalOf || Math.hypot(T.cx - (SAFE_ZONE.x + SAFE_ZONE.w / 2), T.cy - (SAFE_ZONE.y + SAFE_ZONE.h / 2)) < 60) continue;
+    if (!g || (act1 && T.act !== 1) || T.capitalOf || Math.hypot(T.cx - (SAFE_ZONE.x + SAFE_ZONE.w / 2), T.cy - (SAFE_ZONE.y + SAFE_ZONE.h / 2)) < 60) continue;
     const outsider = CLAN_KEYS.find((k) => k !== HK && k !== s.owner[t] && !targetsOf(s, k).includes(t));
     if (outsider) return { land: T, from: g.from, def: s.owner[t], outsider };
   }

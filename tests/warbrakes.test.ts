@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import { newMinds } from "../shared/war/doctrine";
-import { bordersOf, huntedClan, newWar, nightRaid, rallyClan, rallyRenown, targetsOf, WAR, warTick, type WarState } from "../shared/war/rules";
+import { bordersOf, huntedClan, landOf, newWar, nightRaid, rallyClan, rallyRenown, targetsOf, WAR, warTick, type WarState } from "../shared/war/rules";
 import { TERRITORIES } from "../shared/war/territories";
 import { warPhase, warView } from "../shared/war/view";
 import { writRally, WRIT } from "../shared/war/writs";
@@ -11,17 +11,18 @@ import { STANDARDS } from "../shared/war/standards";
 import { _resetWar, addValor, attachWar, raidLine, rallyLine, rallyTell, step, warNow, warState } from "../server/war";
 import { Presence, type WarHero } from "../server/warHeroes";
 
-const N = TERRITORIES.length;
-/** Owners with `k` holding `n` lands (non-capitals handed over from the others, capitals kept), the rest as at the start. */
+/** The fought land: the heartland havens never count toward a clan's share (rules.ts landOf, 2026-11-20). */
+const N = TERRITORIES.filter((t) => !t.haven).length;
+/** Owners with `k` holding `n` fought lands (non-capitals, non-havens handed over from the others), the rest as at the start. */
 function withLand(k: ClanKey, n: number): WarState {
   const s = newWar();
   for (const t of TERRITORIES) {
-    if (s.owner.filter((o) => o === k).length >= n) break;
-    if (s.owner[t.id] !== k && !t.capitalOf) s.owner[t.id] = k;
+    if (landOf(s, k) >= n) break;
+    if (s.owner[t.id] !== k && !t.capitalOf && !t.haven) s.owner[t.id] = k;
   }
   return s;
 }
-const count = (s: WarState, k: ClanKey) => s.owner.filter((o) => o === k).length;
+const count = (s: Pick<WarState, "owner">, k: ClanKey) => landOf(s, k);
 /**
  * A new war where the Hide-Kin have lost land to the Wardens just until the war rallies for them: the opening map is too
  * even for a Rally since the badlands joined (11/11/10/10/10), and one more land lifts them over the line again.
@@ -32,8 +33,14 @@ function rallyWar(): WarState {
   return s;
 }
 
-/** Owners only, from counts per clan in CLAN_KEYS order (the shares are what huntedClan / rallyClan read). */
-const split = (...n: number[]) => ({ owner: CLAN_KEYS.flatMap((k, i) => Array<ClanKey>(n[i]).fill(k)) });
+/**
+ * Owners only, from counts of fought land per clan in CLAN_KEYS order (the shares are what huntedClan / rallyClan read);
+ * the havens stay their home clan's and count for nobody.
+ */
+const split = (...n: number[]) => {
+  const fought = CLAN_KEYS.flatMap((k, i) => Array<ClanKey>(n[i]).fill(k));
+  return { owner: TERRITORIES.map((t) => t.haven ?? fought.shift()!) };
+};
 
 test("huntedClan: over leaderShare, or huntShare with a clear lead; never a close race", () => {
   assert.equal(huntedClan(newWar()), undefined, "the opening map has no runaway clan");
@@ -112,6 +119,7 @@ test("Rally: the weakest clan's valor pushes harder (still capped by valorCap), 
 test("writs: the rallied clan's writs pay WRIT.rallyClan more on top of the underdog bonus", () => {
   const s = rallyWar(), r = rallyClan(s)!;
   assert.ok(r);
+  // (fair share over fought land only: the havens never count, as in rallyClan)
   const fair = N / CLAN_KEYS.length, under = 1 + WRIT.rally * Math.max(0, 1 - count(s, r) / fair);
   assert.equal(writRally(s, r), under * WRIT.rallyClan);
   for (const k of CLAN_KEYS) if (k !== r) assert.equal(writRally(s, k), 1 + WRIT.rally * Math.max(0, 1 - count(s, k) / fair));
@@ -193,4 +201,15 @@ test("kill valor: a hero sworn to the rallied clan earns rallyRenown x renown fo
   const mine = earn(r);
   assert.ok(mine > 0);
   if (other) assert.ok(Math.abs(mine - earn(other) * WAR.rallyRenown) < 1e-9, "the Rally multiplies the same kill's renown");
+});
+
+test("income Rally: a fair share counts fought land only, so the havens give no extra Rally (review 2026-11-20)", () => {
+  const fair = Math.ceil(N / CLAN_KEYS.length), s = newWar();
+  for (const t of TERRITORIES) if (landOf(s, "wardens") > fair && s.owner[t.id] === "wardens" && !t.capitalOf && !t.haven) s.owner[t.id] = "redfang";
+  for (const t of TERRITORIES) if (landOf(s, "wardens") < fair && s.owner[t.id] !== "wardens" && !t.capitalOf && !t.haven) s.owner[t.id] = "wardens";
+  assert.equal(landOf(s, "wardens"), fair);
+  const run = () => warTick(JSON.parse(JSON.stringify(s)) as WarState, {}, { phase: 0 }).army.wardens;
+  const withRally = run(), w = WAR as { rally: number }, keep = w.rally;
+  w.rally = 0;
+  try { assert.equal(withRally, run(), "at a fair share of fought land the Rally adds nothing"); } finally { w.rally = keep; }
 });
