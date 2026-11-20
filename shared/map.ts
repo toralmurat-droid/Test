@@ -109,7 +109,7 @@ export const PORTAL_SPOTS = [
   // the clans' capitals (shared/capitals.ts): each city's waystone in its gate square, id `city_<clan>` (append only)
   ...CITIES.map((c) => ({ id: `city_${c.clan}`, name: cityText(c).waystone, ...cityTile(c, CITY_TEMPLATE.waystone) })),
   // More stones (Murat 2026-11-19: "more portal stones, grouped by territory"): every town and village gets one, and each
-  // land at least three, on the roads by its settlements and sights (append only: the ring blocks follow this order)
+  // land at least two, on the roads by its settlements and sights (append only: the ring blocks follow this order)
   { id: "millbrook", name: "Millbrook Mill", x: 104, y: 46 },
   { id: "huntcamp", name: "Hunter's Camp", x: 38, y: 20 },
   { id: "kelashar", name: "Kel Ashar", x: 125, y: D(108) },
