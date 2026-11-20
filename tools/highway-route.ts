@@ -41,6 +41,13 @@ const LEGS: Record<number, { from: string; to: string; via: P[] }[]> = {
     { from: "Jackal Springs", to: "The Sun Road", via: [[100, 365], [89, 364], [65, 366], [46, 368]] },
     { from: "Kel Ashar", to: "The Dune Road", via: [[131, 410], [48, 445], [42, 450]] },
   ],
+  3: [
+    { from: "Marrowkeep Gate", to: "The Host's Muster", via: [[242, 675], [251, 680]] },
+    { from: "The Host's Muster", to: "The Mourning Road", via: [[251, 680], [257, 702]] },
+    { from: "The Host's Muster", to: "Cairnwatch", via: [[251, 680], [166, 697], [138, 693], [89, 704]] },
+    { from: "Cairnwatch", to: "The Eastmarch Pass", via: [[77, 714], [52, 720]] },
+    { from: "Cairnwatch", to: "The Ashen Pass", via: [[78, 717], [117, 742], [145, 739], [146, 740]] },
+  ],
 };
 
 const W = MAP_W, roads = WORLD.roads, NAT = new Set<number>([...NATURE, T.CACTUS, T.BONES, T.STUMP]);

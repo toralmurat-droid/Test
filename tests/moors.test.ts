@@ -1,11 +1,12 @@
 import { test } from "node:test";
 import { carveBorders } from "../shared/borders";
+import { carveHighways } from "../shared/highways";
 import { CITIES, cityGateDais } from "../shared/capitals";
 import assert from "node:assert/strict";
 import {
   actMobLevel, actOfTile, actSpecialLevel, BADLANDS_Y0, DEEP_END, DESERT_Y0, MAP_H, MAP_W, MOORS_H, MOORS_LEVEL, MOORS_Y0, TILE, WORLD_H,
 } from "../shared/constants";
-import { EMPTY, GROUND, isSolidAt, isSolidTile, OBJECTS, randomSpawn, T, TILE_COUNT, NATURE } from "../shared/map";
+import { EMPTY, GROUND, HIGHWAY_POSTS, HIGHWAY_SKIP, isSolidAt, isSolidTile, OBJECTS, randomSpawn, T, TILE_COUNT, NATURE } from "../shared/map";
 import { buildMoors, inMoorsRow, MOORGATE, MOORS_OUTPOST, MOORSGATE_MOORS, MOORSGATE_OAKVALE, MR } from "../shared/moors";
 import { KEL_MARKET, D } from "../shared/desert";
 import { CRYPT_FLOORS, UNDER_FLOORS } from "../shared/dungeon";
@@ -42,6 +43,7 @@ test("moors: its own band under the deep band, built the same every time", () =>
     const r = buildMoors(T, g, o, EMPTY);
     for (const c of CITIES) if (c.act === 3) cityGateDais(c, T, g, o, EMPTY, (t) => NATURE.has(t)); // the capital's city gate (W7), cut in after the land
     carveBorders(g, o, new Set(), T, EMPTY); // the border roads (shared/borders.ts), cut last
+    carveHighways(g, o, new Set(r.roads), T, EMPTY, HIGHWAY_SKIP, [3]); for (const p of HIGHWAY_POSTS) o[p.y][p.x] = T.SIGNPOST; // the land highway and its posts (shared/highways.ts), after them
     return { g: g.slice(MOORS_Y0, MOORS_Y0 + MOORS_H), o: o.slice(MOORS_Y0, MOORS_Y0 + MOORS_H), areas: r.areas, roads: [...r.roads] };
   };
   const a = fresh(), b = fresh();

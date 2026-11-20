@@ -46,6 +46,7 @@ function root(h: Highway): number {
 const SPOTS: Record<number, (string | [string, number, number])[]> = {
   1: [["Goldenreach Farms (seat)", 30, 58], "oakvale", "farms", "millbrook", "huntcamp", "saltmere"],
   2: [["The Veiled Sanctum (seat)", 242, 353], "kelashar", "jackal", "palmshade", "mirage", ["Dustrider Camp", 51, 363]],
+  3: [["The Host's Muster (seat)", 262, 678], "cairnwatch", "blackwater", "thanesrest"],
 };
 
 test("highways: each land's highway joins its capital's gate to every settlement and border-road pass end on road", () => {
