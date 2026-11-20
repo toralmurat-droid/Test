@@ -2525,7 +2525,7 @@ export class TownScene extends Phaser.Scene {
   /** First run frame of a monster's sheet (mobs.json `run`), or -1; looked up once per texture. */
   private mobRunAt(e: Entity) {
     const key = e.sprite.texture.key;
-    if (e.runKey !== key) { e.runKey = key; e.runAt = this.cache.json.get("hd_mobs")?.[key]?.run ?? -1; if (e.sprite.texture.frameTotal <= (e.runAt ?? 0) + 3 * MOB_RUN_FRAMES) e.runAt = -1; }
+    if (e.runKey !== key) { e.runKey = key; e.runAt = this.cache.json.get("hd_mobs")?.[key.split("__")[0]]?.run ?? -1; // forged recolours (key__forgeId) copy the base sheet if (e.sprite.texture.frameTotal <= (e.runAt ?? 0) + 3 * MOB_RUN_FRAMES) e.runAt = -1; }
     return e.runAt!;
   }
   private ripFrame(e: Entity, now: number, dir: string): number {
@@ -3671,9 +3671,9 @@ export class TownScene extends Phaser.Scene {
         if (rip >= 0) e.sprite.setFrame(rip);
         else if (attackFrames && !p.dead && p.winding) e.sprite.setFrame(ATTACK_BASE[dir]);
         else if (attackFrames && !p.dead && now < (e.strikeUntil ?? 0)) e.sprite.setFrame(ATTACK_BASE[dir] + 1);
-        else if (moving && e.mob && !p.dead && this.mobRunAt(e) >= 0) {
-          // a humanoid monster with a run cycle (mobs.json run): 6 frames per facing, stepped at its real speed
-          const spd = runSpeed(e, dtMs, now);
+        else if (moving && e.mob && !p.dead && this.mobRunAt(e) >= 0 && (e.running = runSpeed(e, dtMs, now) > (e.running ? RUN_OFF : RUN_ON))) {
+          // a humanoid monster with a run cycle (mobs.json run): 6 frames per facing, stepped at its real speed (a slow amble keeps the old step)
+          const spd = e.runV!;
           e.runPh = ((e.runPh ?? 0) + (dtMs / 1000) * 3 * Math.min(1.6, Math.max(0.5, spd / RUN_DESIGN_SPEED))) % 1;
           e.sprite.setFrame(e.runAt! + RUN_DIR[dir] * MOB_RUN_FRAMES + Math.floor(e.runPh * MOB_RUN_FRAMES));
         } else e.sprite.setFrame(FRAME_BASE[dir] + step);
