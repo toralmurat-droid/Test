@@ -256,6 +256,8 @@ export function warTablePan(dx: number, dy: number) {
   clampView();
 }
 /** Back to the whole continent. */
+/** Zooms by `f` around the table's own centre (buttons and keys: the legend sits right of it). */
+export function warTableZoomCentre(f: number) { if (frame) warTableZoom(f, frame.x + frame.w / 2, frame.y + frame.h / 2); }
 export function warTableResetView() { view.z = 1; view.cx = WT_W / 2; view.cy = WT_H / 2; }
 export const warTableZoomed = () => view.z > 1;
 /** What the table says about the hero: where they stand, the territory they picked, the portal stones they may use. */
@@ -481,7 +483,7 @@ export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, font: stri
 
   g.restore(); // (the frame's clip)
   spots = spots.filter((p) => inFrame(p.x, p.y)); // only what can be seen can be picked
-  if (view.z > 1) { // how far in: a small plate in the frame's corner
+  if (view.z >= 1.05) { // how far in: a small plate in the frame's corner
     const zt = `Zoom x${view.z.toFixed(1)}`;
     g.font = `11px ${font}`; const zw = g.measureText(zt).width + 10;
     g.fillStyle = "rgba(10,8,6,0.85)"; g.fillRect(fx + fw - zw - 6, fy + fh - 22, zw, 16);

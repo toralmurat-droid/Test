@@ -8,7 +8,7 @@ import { ISO } from "./isoflag";
 import { pixelText } from "./pixeltext";
 import { clasp, frameBorderImage, plaque, FRAME } from "./mapframe";
 import type { WarColumns } from "./warColumns";
-import { drawWarTable, warTableOn, setWarTableOn, warTablePan, warTablePick, warTableResetView, warTableZoom } from "./warTable";
+import { drawWarTable, warTableOn, setWarTableOn, warTablePan, warTablePick, warTableResetView, warTableZoom, warTableZoomCentre, warTableZoomed } from "./warTable";
 import { drawHereOnMap, pickAt, type ExitRow } from "./warHere";
 import { hereAt, hereCaption, nodeTile } from "./warRoute";
 import type { WarTowns } from "./warTowns";
@@ -243,8 +243,8 @@ export class Minimap {
       b.addEventListener("mousedown", (ev) => ev.preventDefault());
       b.addEventListener("click", () => { b.blur(); act(); });
     };
-    zoomBtn(".wm-zin", () => this.zoomAt(1.5, this.big.width / 2, this.big.height / 2));
-    zoomBtn(".wm-zout", () => this.zoomAt(1 / 1.5, this.big.width / 2, this.big.height / 2));
+    zoomBtn(".wm-zin", () => warTableZoomCentre(1.5));
+    zoomBtn(".wm-zout", () => warTableZoomCentre(1 / 1.5));
     zoomBtn(".wm-zall", () => warTableResetView());
     this.bindMapInput();
     el.addEventListener("click", () => this.toggle(true));
@@ -707,7 +707,7 @@ export class Minimap {
       for (const k of this.held) { const d = PAN_KEYS[k]; if (d) { px += d[0]; py += d[1]; } }
       if (px || py) { const n = Math.hypot(px, py); this.pan((px / n) * PAN_SPEED * dt, (py / n) * PAN_SPEED * dt); }
       const zf = (this.held.has("+") ? 1 : 0) - (this.held.has("-") ? 1 : 0);
-      if (zf) this.zoomAt(Math.pow(ZOOM_SPEED, zf * dt), cw / 2, ch / 2);
+      if (zf) { if (this.tableUp) warTableZoomCentre(Math.pow(ZOOM_SPEED, zf * dt)); else this.zoomAt(Math.pow(ZOOM_SPEED, zf * dt), cw / 2, ch / 2); }
     }
     if (this.follow && me && this.cam) { this.cam.cx = me.x / TILE; this.cam.cy = me.y / TILE; }
     this.clampCam();
@@ -719,7 +719,7 @@ export class Minimap {
       this.big.style.cursor = "default"; this.warCursor = true;
       const here = this.caption(me);
       const over = this.hover ? warTablePick(this.hover.x, this.hover.y) : undefined;
-      this.big.style.cursor = over !== undefined ? "pointer" : "default";
+      this.big.style.cursor = over !== undefined ? "pointer" : this.ptrs.size && this.dragged ? "grabbing" : warTableZoomed() ? "grab" : "default"; // zoomed in: it can be dragged
       drawWarTable(g, this.war, PF, now, this.hover, { here, area: me ? areaAt(me.x, me.y) : undefined, sel: this.sel, woken: this.woken, ground: this.colors });
       return;
     }
