@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-20",
+  "patch": 347,
+  "pr": 559,
+  "title": "One map key everywhere",
+  "changes": [
+    "The zone map, the minimap and the war table now draw front lines, gates and border roads, and portal stones in the same colours.",
+    "The war table's key now shows portal stones too, and calls the ways between lands gates or roads."
+  ]
+}

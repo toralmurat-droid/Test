@@ -9,6 +9,7 @@
  * "war" snapshot and nothing else.
  */
 import { CLANS, CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
+import { MAP_KEY } from "./mapLayers";
 import { REGIONS } from "../../shared/war/regions";
 import { TERRITORIES } from "../../shared/war/territories";
 import type { WarView } from "../../shared/war/view";
@@ -37,7 +38,7 @@ const TAG: Record<ClanKey, string> = { wardens: "Wardens", redfang: "Redfang", h
 
 const UNIT = 4; // sheet units per art pixel
 const AW = WT_W / UNIT, AH = WT_H / UNIT;
-const PARCH = 0x2b231a, CROWN = 0x4b4740, VOID = 0x120e0a, INK = 0x0d0a07, GOLD = "#ffe8a3", EMBER = [0xf6b040, 0xd8782a];
+const PARCH = 0x2b231a, CROWN = 0x4b4740, VOID = 0x120e0a, INK = 0x0d0a07, GOLD = "#ffe8a3", EMBER = [parseInt(MAP_KEY.front.slice(1), 16), parseInt(MAP_KEY.frontDark.slice(1), 16)]; // (fronts as on the zone map: mapLayers.ts MAP_KEY)
 
 const PLACED = layoutTerritories(TERRITORIES);
 const POS = new Map(PLACED.map((p) => [p.id, p]));
@@ -374,11 +375,11 @@ export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, font: stri
     if (!ui.woken?.has(st.id)) continue;
     const [x, y] = P(st.node), dx = Math.round(x + sz * 0.6 + 5), dy = Math.round(y - sz * 0.6 - 5);
     g.fillStyle = "#000"; g.beginPath(); g.moveTo(dx, dy - 6); g.lineTo(dx + 6, dy); g.lineTo(dx, dy + 6); g.lineTo(dx - 6, dy); g.fill();
-    g.fillStyle = "#ff9a3c"; g.beginPath(); g.moveTo(dx, dy - 4); g.lineTo(dx + 4, dy); g.lineTo(dx, dy + 4); g.lineTo(dx - 4, dy); g.fill();
+    g.fillStyle = MAP_KEY.stone; g.beginPath(); g.moveTo(dx, dy - 4); g.lineTo(dx + 4, dy); g.lineTo(dx, dy + 4); g.lineTo(dx - 4, dy); g.fill();
   }
   // gates: a glyph on each end of every way, just off the territory towards the other end
   for (const w of WAYS) {
-    const dim = route ? !onRoute.has(w.id) : !mineWay(w), col = route && onRoute.has(w.id) ? "#ffd166" : dim ? "#6f8ea3" : "#96d7ff";
+    const dim = route ? !onRoute.has(w.id) : !mineWay(w), col = route && onRoute.has(w.id) ? "#ffd166" : dim ? "#6f8ea3" : MAP_KEY.way;
     for (const [me, other] of [[w.a, w.b], [w.b, w.a]] as const) {
       const [x, y] = P(me), [ox, oy] = P(other), d = Math.hypot(ox - x, oy - y) || 1, off = sz * 0.9 + 10;
       gateGlyph(g, Math.round(x + ((ox - x) / d) * off), Math.round(y + ((oy - y) / d) * off), 1, col);
@@ -513,7 +514,7 @@ export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, font: stri
       para(`${route.length} step${route.length === 1 ? "" : "s"}`, "#a39680", 11, 13);
       routeLines(route).forEach((l, i) => { para(`${i + 1}. ${l}`, "#d8c8a0", 11, 13, 4); });
     }
-  } else if (hn !== undefined) { para(tgt === hn ? "This is where you stand." : "Click a territory to see the way there.", "#a39680", 11, 13); if (tgt !== hn) para("The dotted lines are gates between lands.", "#a39680", 11, 13); }
+  } else if (hn !== undefined) { para(tgt === hn ? "This is where you stand." : "Click a territory to see the way there.", "#a39680", 11, 13); if (tgt !== hn) para("The dotted lines are gates and roads between lands.", "#a39680", 11, 13); }
   y += 6; g.fillStyle = "#3a2a1c"; g.fillRect(lx + 4, y - 3, lw - 12, 1); y += 10;
   if (!tight || y < bot - 150) { text("The Riven Marches", lx + 4, y, "#f6b040", 14); y += 15; }
   const rk = v.reck;
@@ -541,7 +542,8 @@ export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, font: stri
   key(() => { g.fillStyle = "#0d0a07"; g.fillRect(lx + 7, y - 6, 10, 10); g.strokeStyle = "#c9b27a"; g.lineWidth = 1; g.strokeRect(lx + 7.5, y - 5.5, 9, 9); }, "Hold");
   key(() => { g.fillStyle = "#0d0a07"; g.fillRect(lx + 6, y - 7, 13, 13); g.strokeStyle = "#ffd860"; g.lineWidth = 2; g.strokeRect(lx + 7, y - 6, 11, 11); }, "Capital (cannot fall)");
   key(() => { g.fillStyle = "#ffd860"; for (const [a, b, w, hh] of [[0, 3, 11, 3], [0, 0, 1, 3], [5, 0, 1, 3], [10, 0, 1, 3]]) g.fillRect(lx + 7 + a, y - 3 + b, w, hh); }, "Crown Keep (a Reckoning only)");
-  key(() => { gateGlyph(g, lx + 12, y, 1, "#96d7ff"); }, "Gate between lands");
+  key(() => { gateGlyph(g, lx + 12, y, 1, MAP_KEY.way); }, "Gate or road between lands");
+  key(() => { const dx = lx + 12, dy = y; g.fillStyle = "#000"; g.beginPath(); g.moveTo(dx, dy - 6); g.lineTo(dx + 6, dy); g.lineTo(dx, dy + 6); g.lineTo(dx - 6, dy); g.fill(); g.fillStyle = MAP_KEY.stone; g.beginPath(); g.moveTo(dx, dy - 4); g.lineTo(dx + 4, dy); g.lineTo(dx, dy + 4); g.lineTo(dx - 4, dy); g.fill(); }, "Portal stone (woken)");
   if (CITIES.length) key(() => { g.fillStyle = "#0d0a07"; g.fillRect(lx + 6, y - 7, 13, 13); g.fillStyle = hex(MAP[CITIES[0].clan]); g.fillRect(lx + 7, y - 6, 11, 11); g.fillStyle = "#0d0a07"; g.fillRect(lx + 11, y - 1, 3, 6); }, "City gate");
   key(() => { g.strokeStyle = `rgba(255,80,40,${0.5 + 0.5 * pulse})`; g.lineWidth = 2; g.strokeRect(lx + 6, y - 6, 12, 12); }, "Under siege");
   key(() => { g.strokeStyle = "rgba(200,110,255,0.9)"; g.lineWidth = 2; g.setLineDash([3, 2]); g.strokeRect(lx + 6, y - 6, 12, 12); g.setLineDash([]); }, "Struck by raiders");

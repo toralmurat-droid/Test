@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { MAP_KEY } from "./mapLayers";
 import { TILE } from "../../shared/constants";
 import { BORDERS, crossTo, edgeTile, LAND_NAMES, otherEnd, outward, SEAM, type Border, type BorderEnd } from "../../shared/borders";
 import { borderOpen, landBand } from "../../shared/act2";
@@ -47,7 +48,7 @@ export class BorderLayer {
   markers(): MapMarker[] {
     return BORDERS.flatMap((b) => [b.a, b.b].map((e) => {
       const [x, y] = edgeTile(e), [ox, oy] = outward(e.side);
-      return { x: (x + 0.5 - ox * 2) * TILE, y: (y + 0.5 - oy * 2) * TILE, glyph: "◆", color: "#e8dcc0", road: true, label: `${b.name} (to ${LAND_NAMES[otherEnd(b, e).land]}, ${landBand(otherEnd(b, e).land)})`, layer: "ways" };
+      return { x: (x + 0.5 - ox * 2) * TILE, y: (y + 0.5 - oy * 2) * TILE, glyph: "◆", color: MAP_KEY.way, road: true, label: `${b.name} (to ${LAND_NAMES[otherEnd(b, e).land]}, ${landBand(otherEnd(b, e).land)})`, layer: "ways" };
     }));
   }
 
