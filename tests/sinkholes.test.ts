@@ -19,6 +19,7 @@ import { baseLevelAt, SPAWN_ZONES } from "../shared/spawns";
 import { TERRITORIES } from "../shared/war/territories";
 import { regionOf } from "../shared/war/regions";
 import { startRoom, until, wait } from "./helpers/room";
+import { carveVillages, VILLAGES } from "../shared/villages";
 
 /** 4-way flood over free tiles from (sx, sy). */
 function flood(sx: number, sy: number) {
@@ -49,7 +50,8 @@ test("sinkholes: a band of its own under the badlands, built the same every time
     const r = buildSinkholes(T, g, o, EMPTY);
     for (const c of CITIES) if (c.act === 5) cityGateDais(c, T, g, o, EMPTY, (t) => NATURE.has(t)); // the capital's city gate (W7), cut in after the land
     carveBorders(g, o, new Set(), T, EMPTY); // the border roads (shared/borders.ts), cut last
-    carveHighways(g, o, new Set(r.roads), T, EMPTY, HIGHWAY_SKIP, [5]); for (const p of HIGHWAY_POSTS) o[p.y][p.x] = T.SIGNPOST; // the land highway and its posts (shared/highways.ts), after them
+    const rd = new Set(r.roads); carveHighways(g, o, rd, T, EMPTY, HIGHWAY_SKIP, [5]); for (const p of HIGHWAY_POSTS) o[p.y][p.x] = T.SIGNPOST; // the land highway and its posts (shared/highways.ts), after them
+    carveVillages(g, o, rd, T, EMPTY, () => [], undefined, VILLAGES.filter((v) => v.land === 5).map((v) => v.id)); // its villages (shared/villages.ts), last
     return { g: g.slice(S0, S1), o: o.slice(S0, S1), areas: r.areas, roads: [...r.roads], posts: r.posts };
   };
   const a = fresh(), b = fresh();

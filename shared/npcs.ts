@@ -7,6 +7,7 @@ import { SR } from "./sinkholes";
 import { CR } from "./crown";
 import { CITIES, CITY_SOLIDS, CITY_TEMPLATE, cityNpcId, cityNpcPx, cityShopId, cityText } from "./capitals";
 import { LANDMARK_SOLIDS } from "./landmarks";
+import { VILLAGES, villageSpots, type VillageId } from "./villages";
 
 /** Village NPCs: where they stand (feet, in pixels) and which sprite sheet they use. Server and client share this. */
 export interface Npc {
@@ -37,6 +38,26 @@ function standNear(tx: number, ty: number): { x: number; y: number } {
   }
   return { x: (tx + 0.5) * TILE, y: (ty + 0.6) * TILE };
 }
+
+type VillageNpc = Pick<Npc, "id" | "name" | "title" | "sprite" | "shop"> & { where: string };
+/** Who lives in each village (shared/villages.ts): its quest giver (shared/quests.ts SIDE_ARCS) and a townsperson or trader. */
+const VILLAGE_FOLK: Record<VillageId, { land: string; giver: VillageNpc; folk: VillageNpc }> = {
+  turfhallow: { land: "the Grey Barrow Moors",
+    giver: { id: "peatmaster", name: "Old Maddock", title: "Peat-master", sprite: "elder", where: "before the peat-master's hall" },
+    folk: { id: "turfcutter", name: "Wenna", title: "Turf-cutter", sprite: "peasant", where: "before her cottage" } },
+  staithe: { land: "the Grey Barrow Moors",
+    giver: { id: "staithewife", name: "Hedda Reed", title: "Staithe-mistress", sprite: "farmwife", where: "before the boat-hall" },
+    folk: { id: "eeltrapper", name: "Cobb", title: "Eel-trapper and flask-seller", sprite: "villager", shop: "staithe", where: "before his cottage" } },
+  barrowstead: { land: "the Grey Barrow Moors",
+    giver: { id: "barrowwarden", name: "Warden Osgar", title: "Barrow-warden", sprite: "watchman", where: "before the wardens' hall" },
+    folk: { id: "hostelkeeper", name: "Sister Elfreda", title: "Keeper of the mourners' hostel", sprite: "goodwife", where: "before the hostel" } },
+  redlode: { land: "the Red Badlands",
+    giver: { id: "foreman", name: "Foreman Brask", title: "Mine foreman", sprite: "labourer", where: "before the miners' hall" },
+    folk: { id: "lodearmourer", name: "Ilse Copperhand", title: "Armour merchant", sprite: "merchant", shop: "redlode", where: "before her forge" } },
+  hornstead: { land: "the Red Badlands",
+    giver: { id: "rancher", name: "Tilly Hobb", title: "Rancher", sprite: "farmwife", where: "before the ranch house" },
+    folk: { id: "drover", name: "Jory", title: "Drover", sprite: "peasant", where: "before the bunkhouse" } },
+};
 
 export const NPCS: Npc[] = [
   // Elder Rowan tends the bonfire in the middle of the market square
@@ -126,6 +147,17 @@ export const NPCS: Npc[] = [
   { id: "steward_rustwater", name: "Steward", title: "Town Steward", sprite: "steward_neutral", x: 228.5 * TILE, y: 875.6 * TILE, dir: "down" },
   { id: "steward_ropewell", name: "Steward", title: "Town Steward", sprite: "steward_neutral", x: 110.5 * TILE, y: 995.6 * TILE, dir: "down" },
   { id: "steward_millbrook", name: "Reeve", title: "Village Reeve", sprite: "steward_neutral", x: 110.5 * TILE, y: 48.6 * TILE, dir: "down" },
+  // ---- The villages along the highways (settlement network step 4, shared/villages.ts): the quest giver before the hall's
+  // door, a townsperson or trader before the cottage's, the reeve on the square (a town steward: W6, shared/war/towns.ts).
+  // Existing character sheets (no new art).
+  ...VILLAGES.flatMap((v): Npc[] => {
+    const s = villageSpots(v), f = VILLAGE_FOLK[v.id], where = (what: string) => `${v.name} (${f.land}), ${what}`;
+    return [
+      { ...f.giver, x: (s.giver.x + 0.5) * TILE, y: (s.giver.y + 0.75) * TILE, dir: "down", where: where(f.giver.where) },
+      { ...f.folk, x: (s.folk.x + 0.5) * TILE, y: (s.folk.y + 0.6) * TILE, dir: "down", where: where(f.folk.where) },
+      { id: `steward_${v.id}`, name: "Reeve", title: "Village Reeve", sprite: "steward_neutral", x: (s.steward.x + 0.5) * TILE, y: (s.steward.y + 0.6) * TILE, dir: "down" },
+    ];
+  }),
   // ---- The clans' capitals (W7, shared/capitals.ts): in each city the leader in the keep, the quartermaster in the
   // market (the city's shop, cap_<clan>), the oath-keeper at the altar and the trainer in the barracks yard
   ...CITIES.flatMap((c) => CITY_TEMPLATE.npcs.map((n): Npc => {

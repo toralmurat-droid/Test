@@ -11,11 +11,11 @@ import { inVillage } from "../shared/wrath";
 import { CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import { newMinds, scriptedOrders } from "../shared/war/doctrine";
 import { inSackReach } from "../shared/war/holdSack";
-import { newWar, WAR, warTick, type TickExtra } from "../shared/war/rules";
+import { newWar, townCount, WAR, warTick, type TickExtra } from "../shared/war/rules";
 import { TERRITORIES } from "../shared/war/territories";
 import { STEWARD_LINES, STEWARD_NAMES, stewardLine, stewardName } from "../shared/war/townText";
 import {
-  cleanTownsMsg, gatePosts, gatePx, keepOut, onTownGround, TOWN, TOWN_IDS, townAt, townCounts, townPatron, townPrice, TOWNS, townStep, townsView,
+  cleanTownsMsg, gatePosts, gatePx, keepOut, onTownGround, TOWN, TOWN_IDS, townAt, townCounts, townIncome, townPatron, townPrice, TOWNS, townStep, townsView,
 } from "../shared/war/towns";
 import { QUESTS } from "../shared/quests";
 import { _resetWar, _setTown, _stepTowns, _townsHeld, cleanTownSave, migrateWar, townClaim, townHeld, townsNow, warLog, warState, warTowns, type SavedWar } from "../server/war";
@@ -23,7 +23,8 @@ import { _resetWar, _setTown, _stepTowns, _townsHeld, cleanTownSave, migrateWar,
 const C = (x: number, y: number) => ({ x: (x + 0.5) * TILE, y: (y + 0.5) * TILE });
 
 test("towns: the table (patrons exist and are not capitals, spots on free ground, gates off town ground and safe squares)", () => {
-  assert.deepEqual(TOWN_IDS, ["saltmere", "rustwater", "ropewell", "millbrook"]);
+  // the highway villages (settlement network step 4, shared/villages.ts) after the first four, appended
+  assert.deepEqual(TOWN_IDS, ["saltmere", "rustwater", "ropewell", "millbrook", "turfhallow", "staithe", "barrowstead", "redlode", "hornstead"]);
   assert.equal(new Set(TOWN_IDS).size, TOWNS.length);
   for (const n of ["Oakvale", "Cairnwatch", "Hunter's Camp", "Kel Ashar"]) assert.ok(!TOWNS.some((t) => t.area === n || t.name === n), `${n} is never capturable`);
   for (const t of TOWNS) {
@@ -92,6 +93,14 @@ test("towns: townPrice gives the holder's sworn 10% off, never a surcharge; the 
   assert.deepEqual(cleanTownsMsg({ list: [{ id: "oakvale", k: 0 }, { id: "saltmere", k: 9 }, null, { id: "ropewell", k: 2, c: { by: "x" }, raise: 500 }] }), { list: [{ id: "ropewell", k: 2, raise: 100 }] });
   assert.deepEqual(cleanTownsMsg("junk"), { list: [] });
   assert.deepEqual(townCounts({ saltmere: { k: "wardens" }, ropewell: { k: "wardens" }, millbrook: { k: "host" } }), { wardens: 2, host: 1 });
+  // the highway villages count half a town each (owner question Q1 of step 4: half the income); Millbrook stays whole
+  assert.deepEqual(townCounts({ saltmere: { k: "wardens" }, turfhallow: { k: "wardens" }, redlode: { k: "host" }, hornstead: { k: "host" }, staithe: { k: "veiled" } }), { wardens: 1.5, host: 1, veiled: 0.5 });
+  assert.deepEqual(TOWNS.map((t) => townIncome(t)), [1, 1, 1, 1, 0.5, 0.5, 0.5, 0.5, 0.5]);
+  assert.equal(townCount({ wardens: 1.5 }, "wardens"), 1.5);
+  assert.equal(townCount({ wardens: 1.7 }, "wardens"), 1.5, "steps of a half");
+  assert.equal(townCount({ wardens: 0.5 }, "wardens"), 0.5);
+  const k: ClanKey = "redfang", inc = (n: number) => warTick(newWar(), {}, { towns: { [k]: n } }).army[k] - warTick(newWar(), {}, { towns: {} }).army[k];
+  assert.ok(Math.abs(inc(0.5) - WAR.townIncome * 0.5) < 1e-9 && Math.abs(inc(1) - WAR.townIncome) < 1e-9, "a held village adds half WAR.townIncome a tick");
 });
 
 test("towns: the save field is cleaned on load (missing: the lands' holders), a map change drops it, the same map keeps it", () => {

@@ -53,8 +53,8 @@ export const TOWN = {
   sendMs: 1000,
 };
 
-export { TOWNS, type Town, type TownId } from "./townSites";
-import { TOWNS, type Town, type TownId } from "./townSites";
+export { TOWNS, townIncome, type Town, type TownId } from "./townSites";
+import { TOWNS, townIncome, type Town, type TownId } from "./townSites";
 export const TOWN_IDS = TOWNS.map((t) => t.id);
 export const townById = (id: unknown): Town | undefined => TOWNS.find((t) => t.id === id);
 
@@ -102,7 +102,7 @@ export type TownChange = "contested" | "off" | "submitted";
  * the old holder kept the gate during that tick (a guard alive and an active defender at it). A land that changed hands
  * contests the town for TOWN.graceTicks; a contest is called off when the land goes back to the town's holder, starts
  * over when a third clan takes the land, gains a tick per tick held (at most TOWN.maxExt), and the town submits when
- * its time is up. Each held town adds WAR.townIncome to its holder's income (rules.ts TickExtra.towns). Pure: returns the new state and what happened.
+ * its time is up. Each held town adds WAR.townIncome (times its Town.income share) to its holder's income (rules.ts TickExtra.towns). Pure: returns the new state and what happened.
  */
 export function townStep(prev: TownState | undefined, owner: ClanKey, tick: number, held = false): { s: TownState; change?: TownChange } {
   if (!prev || !CLANS[prev.k]) return { s: { k: owner } };
@@ -158,9 +158,12 @@ export function cleanTownsMsg(m: unknown): TownsMsg {
   }
   return { list };
 }
-/** Held towns per clan (rules.ts TickExtra.towns): what the live war and the sim hand to warTick. */
+/**
+ * Held towns per clan (rules.ts TickExtra.towns): what the live war and the sim hand to warTick. Each counts its income
+ * share (Town.income): a highway village half a town, so the count may end in .5.
+ */
 export function townCounts(state: Partial<Record<string, TownState>>): Partial<Record<ClanKey, number>> {
   const out: Partial<Record<ClanKey, number>> = {};
-  for (const t of TOWNS) { const k = state[t.id]?.k; if (k && CLANS[k]) out[k] = (out[k] ?? 0) + 1; }
+  for (const t of TOWNS) { const k = state[t.id]?.k; if (k && CLANS[k]) out[k] = (out[k] ?? 0) + townIncome(t); }
   return out;
 }

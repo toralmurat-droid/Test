@@ -11,6 +11,7 @@ import { landRoof, landWalls, PEAT_SMOKE, type LandDress } from "./houseLand";
 import type { WinRect } from "./houseSalt";
 import { SALT_BUILDINGS } from "../../shared/saltmere";
 import { SALT_PERCHES, SALT_SMOKE } from "./saltmereReg";
+import { VILLAGES } from "../../shared/villages";
 
 /**
  * Iso buildings (phase 4 polish): whole houses with walls and a pitched roof, and the materials used for
@@ -131,6 +132,8 @@ interface LandLook { style?: HouseStyle; dress?: LandDress }
 const LAND_LOOK: Record<string, LandLook> = {
   Saltmere: { style: "fisher" }, "Millbrook Mill": { style: "mill" }, "Redfang Hollow": { style: "barracks" },
   Cairnwatch: { dress: "cairn" }, "The Rustwater Post": { dress: "drover" }, Ropewell: { style: "ropewright", dress: "ropewright" },
+  // the villages along the highways (settlement network step 4) wear their land's cottage dress
+  ...Object.fromEntries(VILLAGES.map((v) => [v.name, { dress: v.land === 3 ? "cairn" : "drover" } as LandLook])),
 };
 const lookAt = (x: number, y: number): LandLook | undefined => {
   const a = AREAS.find((r) => LAND_LOOK[r.name] && x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h);

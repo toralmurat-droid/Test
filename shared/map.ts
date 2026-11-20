@@ -2,6 +2,7 @@ import { MAP_H as FULL_H, MAP_W, PLAYER_RADIUS, TILE, UNDER_END, WORLD_H, type M
 import { CRYPT_DOOR, FLOORS, LAIRS, SEA_END, SHORTCUTS, SINKHOLE, UNDER_SHAFT, type Floor } from "./dungeon";
 import { carveBorders, LAND_ROWS } from "./borders";
 import { carveHighways, fortSkipBoxes, HIGHWAYS, highwayTiles } from "./highways";
+import { carveVillages, VILLAGES, villageBox, villageSpots } from "./villages";
 import { buildDesert, D, inDesertRow, KEL_MARKET, WAYGATE_OAKVALE } from "./desert";
 import { buildMoors, CAIRN_PORTAL, CAIRN_SQUARE, MOORSGATE_OAKVALE, MR } from "./moors";
 import { BR, buildBadlands, LEDGES, REDPASS_OAKVALE, RUSTWATER_PORTAL, RUSTWATER_SQUARE } from "./badlands";
@@ -125,7 +126,12 @@ export const PORTAL_SPOTS = [
   { id: "mosslight", name: "Mosslight Fen", x: 49, y: SR(113) },
   { id: "tollcross", name: "Tollcross", x: 140, y: CR(66) },
   { id: "pilgrims", name: "The Pilgrims' Way", x: 43, y: CR(28) },
+  // the villages along the highways (settlement network step 4, shared/villages.ts): a stone on each square, id = the
+  // village's (append only; the travel list groups them by land itself)
+  ...VILLAGES.map((v) => ({ id: v.id, name: v.name, ...villageSpots(v).portal })),
 ] as const;
+/** The stones the world generator clears a disk round early (section 13c): the villages' stand on their own carved squares. */
+const EARLY_STONES = PORTAL_SPOTS.slice(0, PORTAL_SPOTS.length - VILLAGES.length);
 export const REDFANG = { x: 240, y: 102, w: 24, h: 18 };
 export const REDFANG_TOWERS: [number, number][] = [[254, 103], [249, 118], [241, 108]];
 
@@ -889,7 +895,7 @@ function buildWorld() {
     curve([[SHRINE_SPOT.x + 2, SHRINE_SPOT.y - 1], [236, 66], [248, 56], [260, 47], [H.cx, H.cy + 7]], 1);
   }
   // ---------- 13c. The portal stones (shared/portals.ts): a little clearing round each ----------
-  for (const p of PORTAL_SPOTS) disk(p.x + 0.5, p.y + 0.5, 2.6, 2.2, (x, y) => { if (NATURE.has(objects[y][x])) setO(x, y, EMPTY); });
+  for (const p of EARLY_STONES) disk(p.x + 0.5, p.y + 0.5, 2.6, 2.2, (x, y) => { if (NATURE.has(objects[y][x])) setO(x, y, EMPTY); });
 
   // ---------- 13c'. The old waygate south of Oakvale (Act 2, shared/act2.ts): a cracked dais of old flagstones, a path to the South Road ----------
   {
@@ -1143,7 +1149,15 @@ function buildWorld() {
     const { y0, h: rows } = LAND_ROWS[h.land];
     for (const p of h.posts ?? []) placePost({ x: p.x, y: p.y + y0, to: p.to }, (y) => y >= y0 && y < y0 + rows, highwayBefore);
   }
-  return { ground, objects, areas, posts, roads, broken, makeshift, highways, highwaySkip: skip, highwayBefore, highwayPosts: posts.slice(firstHighwayPost) };
+  // ---------- 24. The villages (shared/villages.ts): cottages round a small square a short way off each land's highway,
+  // a dirt path out to the road (not a road: no new junction) and a signpost where it meets it. Carved last, only inside
+  // VILLAGE_MASK; what it changed is kept (villageBefore: groundBefore reads it after the highways', so chests and siege
+  // sites never move). Their areas go first, so they win over the land-wide areas round them
+  const villageBefore = new Map<number, { g: number; o: number }>();
+  const villagePosts = carveVillages(ground, objects, roads, T, EMPTY, (v) => { const h = HIGHWAYS.find((q) => q.land === v.land)!; return [v.name, h.seat, h.town]; }, villageBefore);
+  areas.unshift(...VILLAGES.map((v) => { const b = villageBox(v); return { name: v.name, x: b.x0, y: b.y0, w: v.w, h: v.h, mobs: [] as MobKind[] }; }));
+  posts.push(...villagePosts);
+  return { ground, objects, areas, posts, roads, broken, makeshift, highways, highwaySkip: skip, highwayBefore, highwayPosts: posts.slice(firstHighwayPost, posts.length - villagePosts.length), villageBefore, villagePosts };
 }
 
 /**
@@ -1204,6 +1218,9 @@ export const HIGHWAY_TILES: ReadonlySet<number> = WORLD.highways;
 export const HIGHWAY_SKIP: readonly TileBox[] = WORLD.highwaySkip;
 /** The highways' signposts (placed after the carve; the band rebuild tests put them back on a fresh band). */
 export const HIGHWAY_POSTS: readonly { x: number; y: number; to: string[] }[] = WORLD.highwayPosts;
+/** The villages' signposts (shared/villages.ts), where each one's path meets the road. */
+export const VILLAGE_POSTS: readonly { x: number; y: number; to: string[] }[] = WORLD.villagePosts;
+export { VILLAGE_MASK } from "./villages";
 
 /**
  * Mawdeep gates (Murat 2026-11-05: "doors to open"; 2026-11-08: "part should be like a prison wall and only part a
@@ -1382,7 +1399,16 @@ function buildSignpost(p: { x: number; y: number; to: string[] }): Signpost {
   });
   return { x: p.x, y: p.y, dirs };
 }
-export const SIGNPOSTS: Signpost[] = WORLD.posts.map(buildSignpost);
+/**
+ * A village's post (shared/villages.ts) stands where its dirt path meets the road. The path is no road, so the boards
+ * along the road name the way home (the seat and the land's town); one more board points up the path to the village.
+ */
+function villageSignpost(p: { x: number; y: number; to: string[] }): Signpost {
+  const v = VILLAGES.find((q) => q.name === p.to[0])!, b = villageBox(v), base = buildSignpost({ ...p, to: p.to.slice(1) });
+  const angle = Math.atan2((b.y0 + b.y1 + 1) / 2 - (p.y + 0.5), (b.x0 + b.x1 + 1) / 2 - (p.x + 0.5)), oct = Math.round(angle / (Math.PI / 4));
+  return { ...base, dirs: [{ name: v.name, arrow: ARROWS[(oct + 8) % 8], angle }, ...base.dirs] };
+}
+export const SIGNPOSTS: Signpost[] = WORLD.posts.map((p) => (WORLD.villagePosts.includes(p) ? villageSignpost(p) : buildSignpost(p)));
 AREAS_AT.clear();
 
 /** The signpost within reach of a player at pixel (px, py), if any. */
@@ -1395,10 +1421,12 @@ export function signpostNear(px: number, py: number, reach = 1.6): Signpost | un
  * The map as it was before the land highways (shared/highways.ts) were cut: spots worked out from the map that are saved
  * or pinned (chests, siege sites: tests/quest-steps.test.ts) are found on it, so a highway never moves them.
  */
-export const groundBefore = (tx: number, ty: number): number | undefined => WORLD.highwayBefore.get(ty * MW + tx)?.g ?? GROUND[ty]?.[tx];
-export const objectBefore = (tx: number, ty: number): number | undefined => WORLD.highwayBefore.get(ty * MW + tx)?.o ?? OBJECTS[ty]?.[tx];
+/** What a tile was before the highways and the villages (shared/villages.ts) were cut: the highways' record first (older). */
+const beforeAt = (k: number) => WORLD.highwayBefore.get(k) ?? WORLD.villageBefore.get(k);
+export const groundBefore = (tx: number, ty: number): number | undefined => beforeAt(ty * MW + tx)?.g ?? GROUND[ty]?.[tx];
+export const objectBefore = (tx: number, ty: number): number | undefined => beforeAt(ty * MW + tx)?.o ?? OBJECTS[ty]?.[tx];
 export function solidBefore(tx: number, ty: number): boolean {
-  const b = WORLD.highwayBefore.get(ty * MW + tx);
+  const b = beforeAt(ty * MW + tx);
   return b ? b.g === T.WATER || (b.o !== EMPTY && !WALKABLE_OBJECTS.has(b.o)) : isSolidTile(tx, ty);
 }
 

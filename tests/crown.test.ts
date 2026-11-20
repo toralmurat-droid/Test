@@ -21,6 +21,7 @@ import { baseLevelAt, SPAWN_ZONES } from "../shared/spawns";
 import { regionOf } from "../shared/war/regions";
 import { TERRITORIES } from "../shared/war/territories";
 import { startRoom, until, wait } from "./helpers/room";
+import { carveVillages, VILLAGE_MASK, VILLAGES } from "../shared/villages";
 
 const tileOf = (p: { x: number; y: number }) => [Math.floor(p.x / TILE), Math.floor(p.y / TILE)] as const;
 const C0 = CROWN_Y0, C1 = CROWN_Y0 + CROWN_H;
@@ -59,7 +60,8 @@ test("crown: a band of its own under the sinkholes, built the same every time", 
     const g = Array.from({ length: MAP_H }, () => Array<number>(MAP_W).fill(T.DIRT)), o = Array.from({ length: MAP_H }, () => Array<number>(MAP_W).fill(T.ROCK));
     const r = buildCrown(T, g, o, EMPTY);
     carveBorders(g, o, new Set(), T, EMPTY); // the border roads (shared/borders.ts), cut last
-    carveHighways(g, o, new Set(r.roads), T, EMPTY, HIGHWAY_SKIP, [6]); for (const p of HIGHWAY_POSTS) o[p.y][p.x] = T.SIGNPOST; // the king's roads' gaps and posts (shared/highways.ts), after them
+    const rd = new Set(r.roads); carveHighways(g, o, rd, T, EMPTY, HIGHWAY_SKIP, [6]); for (const p of HIGHWAY_POSTS) o[p.y][p.x] = T.SIGNPOST; // the king's roads' gaps and posts (shared/highways.ts), after them
+    carveVillages(g, o, rd, T, EMPTY, () => [], undefined, VILLAGES.filter((v) => v.land === 6).map((v) => v.id)); // its villages (shared/villages.ts), last
     return { g: g.slice(C0, C1), o: o.slice(C0, C1), areas: r.areas, roads: [...r.roads], posts: r.posts };
   };
   const a = fresh(), b = fresh();
@@ -162,16 +164,18 @@ test("crown: every homeland's Crownway dais is open ground joined to its land, c
   // the four city gates were added (the same hashes before and after: the gates changed only tiles inside their boxes).
   // The border roads' boxes (shared/borders.ts BORDER_BOXES) too: re-hashed with them masked, the same with and without the roads cut.
   // The land highways (shared/highways.ts HIGHWAY_MASK) too: re-hashed with the mask, the same with and without them cut.
+  // The villages (shared/villages.ts VILLAGE_MASK, settlement network step 4) the same way: the moors' and the badlands'
+  // re-hashed with the mask on the map before them, the same with and without the villages cut (no tile outside it moved).
   const hash = (y0: number, y1: number, B: TileBox) => {
     const boxes = [B, ...CITIES.map((c) => c.outerBox), ...BORDER_BOXES]; // (the border roads, shared/borders.ts, cut only inside theirs)
-    const h = createHash("sha256"), inB = (x: number, y: number) => boxes.some((b) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1) || HIGHWAY_MASK.has(y * MAP_W + x);
+    const h = createHash("sha256"), inB = (x: number, y: number) => boxes.some((b) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1) || HIGHWAY_MASK.has(y * MAP_W + x) || VILLAGE_MASK.has(y * MAP_W + x);
     for (let y = y0; y < y1; y++) h.update(GROUND[y].map((g, x) => (inB(x, y) ? -9 : g)).join(",") + "|" + OBJECTS[y].map((o, x) => (inB(x, y) ? -9 : o)).join(",") + "\n");
     return h.digest("hex");
   };
   const box = (from: string) => CROWNWAYS.find((c) => c.from === from)!.box;
   assert.equal(hash(DESERT_Y0, DESERT_Y0 + DESERT_H, box("sunscar")), "7e3ee02863d2887fca92fd002c76e6e19eac972f6fd51160f8149fc38709dfbb", "the Sunscar");
-  assert.equal(hash(MOORS_Y0, MOORS_Y0 + MOORS_H, box("moors")), "f10c4c2f2e0b5244d9da9a21f526da8e6cf8707cb5812fc86483980b007d7c7e", "the moors");
-  assert.equal(hash(BADLANDS_Y0, BADLANDS_Y0 + BADLANDS_H, box("badlands")), "b83585b7d6bcda629419f8fe2c1f9da18bd4d79b2ddb5674d3cafed9e35a49f9", "the badlands");
+  assert.equal(hash(MOORS_Y0, MOORS_Y0 + MOORS_H, box("moors")), "3975c6c0a2d061a7f984743cd53b3ea1cb9c11fa03f45889ed4a9bd9f508e9f0", "the moors");
+  assert.equal(hash(BADLANDS_Y0, BADLANDS_Y0 + BADLANDS_H, box("badlands")), "cf33174c9a231d88c14ff07e23b05a9d4ea56e553ab25efd892082654835f85f", "the badlands");
   assert.equal(hash(SINKHOLES_Y0, SINKHOLES_Y0 + SINKHOLES_H, box("sinkholes")), "7de73831e64d8baa1de4d5eaab650d440784bfe228e8cbe1140e3e902da6e93f", "the sinkholes");
 });
 

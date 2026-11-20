@@ -73,9 +73,9 @@ test("Oakvale, the moors and the badlands have their kit and landmarks", () => {
   const pen = LAND_KIT_SPOTS.filter((s) => s.area === "The Rustwater Post" && IN_PEN.has(s.kind));
   assert.ok(pen.some((s) => s.kind === "lk_longhorn") && pen.some((s) => s.kind === "lk_trough"), "Rustwater's pen is empty");
   for (const s of pen) { const [tx, ty] = tileOf(s.x, s.y); assert.ok(tx >= 238 && tx <= 244 && ty >= 876 && ty <= 878, `${s.kind} at ${tx},${ty}: out of the pen`); }
-  // the ore carts stand by the headframe
+  // the ore carts stand by the headframe (Redlode's own, a highway village's, by Redlode: tests/villages.test.ts)
   const hf = LANDMARKS.find((l) => l.id === "headframe")!;
-  for (const s of LAND_KIT_SPOTS.filter((q) => q.kind === "lk_ore_cart")) assert.ok(Math.hypot(s.x / TILE - hf.x, s.y / TILE - hf.y) < 9, "an ore cart far from the Cinnabar Pits");
+  for (const s of LAND_KIT_SPOTS.filter((q) => q.kind === "lk_ore_cart" && !q.village)) assert.ok(Math.hypot(s.x / TILE - hf.x, s.y / TILE - hf.y) < 9, "an ore cart far from the Cinnabar Pits");
 });
 
 test("the Sinkholes and the Sunscar have their kit and landmarks: rope and lifts, caravans and salt", () => {
@@ -169,7 +169,7 @@ test("a landmark with no box of its own stands on ground the map already blocks:
 
 test("way-cairns stand beside the Moors Highway, off its paving", () => {
   const h = HIGHWAYS.find((q) => q.land === 3)!, mid = h.legs.flatMap((leg) => legLine(h, leg));
-  const cairns = LAND_KIT_SPOTS.filter((s) => s.kind === "lk_way_cairn");
+  const cairns = LAND_KIT_SPOTS.filter((s) => s.kind === "lk_way_cairn" && !s.village); // (Barrowstead's own: tests/villages.test.ts)
   assert.ok(cairns.length >= 8, `only ${cairns.length} way-cairns`);
   for (const s of cairns) {
     const [tx, ty] = tileOf(s.x, s.y), d = Math.min(...mid.map((k) => Math.hypot((k % MW) - tx, Math.floor(k / MW) - ty)));

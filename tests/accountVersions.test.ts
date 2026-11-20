@@ -6,7 +6,9 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { accountAccess, ACCOUNT_API } from "../shared/accountApi";
+import { accountAccess, ACCOUNT_API, ACCOUNT_MIN_READER } from "../shared/accountApi";
+/** A newer build's account version than this one's. */
+const NEXT = ACCOUNT_API + 1;
 import { memLeases } from "../server/lease";
 import { memDb } from "./helpers/fencedStore";
 
@@ -20,18 +22,22 @@ const acct = (name: string, extra: Record<string, unknown> = {}) => {
 const NEW_AGE = /lives in the new Age: play it there/;
 // The JSON save file the accounts module reads when first imported: an old account (no av) and a newer build's
 const hero = { color: 1, xp: 0, level: 3, kills: 0, gold: 5, potions: 0, ptSta: 0, ptStr: 0, ptMag: 0, weapon: "", armour: "", shoes: "", hat: "", shield: "", ranged: "", bag: [], talents: {}, slots: [], questStage: 0, questCount: 0, zap: 7 };
-const saved = { oldie: acct("Oldie", { guild: "far", heroes: { wizard: hero } }), newer: acct("Newer", { av: 2, minReader: 2, heroes: { wizard: hero } }) };
+const saved = { oldie: acct("Oldie", { guild: "far", heroes: { wizard: hero } }), newer: acct("Newer", { av: NEXT, minReader: NEXT, heroes: { wizard: hero } }) };
 fs.writeFileSync(process.env.SAVE_FILE, JSON.stringify(saved));
 
 test("accountAccess: missing av is 1; a newer account is read-only when minReader allows, else hidden", () => {
-  assert.equal(ACCOUNT_API, 1);
+  // 2 since settlement network step 4 (new portal ids: an older build's cleanPortals would drop the village stones)
+  assert.equal(ACCOUNT_API, 2);
+  assert.equal(ACCOUNT_MIN_READER, 1, "older builds may still show the accounts");
   assert.equal(accountAccess({ name: "a" }), "write", "old saves (no av) are version 1");
   assert.equal(accountAccess({ av: null }), "write");
   assert.equal(accountAccess({ av: 1, minReader: 1 }), "write");
-  assert.equal(accountAccess({ av: 2 }), "hide", "a newer account that names no reader");
-  assert.equal(accountAccess({ av: 2, minReader: 1 }), "read");
-  assert.equal(accountAccess({ av: 2, minReader: 2 }), "hide");
-  assert.equal(accountAccess({ av: 2, minReader: "x" }), "hide", "an unusable minReader is the account's own version");
+  assert.equal(accountAccess({ av: 2, minReader: 1 }), "write", "this build's own");
+  assert.equal(accountAccess({ av: 2, minReader: 1 }, 1), "read", "an older build (1) may show this build's accounts, never write them");
+  assert.equal(accountAccess({ av: NEXT }), "hide", "a newer account that names no reader");
+  assert.equal(accountAccess({ av: NEXT, minReader: 1 }), "read");
+  assert.equal(accountAccess({ av: NEXT, minReader: NEXT }), "hide");
+  assert.equal(accountAccess({ av: NEXT, minReader: "x" }), "hide", "an unusable minReader is the account's own version");
   assert.equal(accountAccess({ av: 2, minReader: 1 }, 2), "write", "the newer build writes its own");
   assert.equal(accountAccess({ av: 3, minReader: 2 }, 2), "read");
   assert.equal(accountAccess({ av: "two" }), "hide", "an av that is no version: not ours");
@@ -49,7 +55,7 @@ test("keepUnknown: a newer build's hero fields are kept, known fields the snapsh
   assert.equal((keepUnknown({ toString: 5 } as any, { gold: 1 } as any) as any).toString, 5, "own keys only");
 });
 
-test("accounts (JSON): an old save without av loads and is written with av 1, unknown fields kept; a newer one is refused and never written", async () => {
+test("accounts (JSON): an old save without av loads and is written with this build's av, unknown fields kept; a newer one is refused and never written", async () => {
   const acc = await import("../server/accounts");
   assert.equal(await acc.login("Oldie", PW, IP), "Oldie");
   const { zap: _z, ...known } = hero; // (the snapshot of a build that does not know `zap`)
@@ -63,12 +69,12 @@ test("accounts (JSON): an old save without av loads and is written with av 1, un
   acc.markChest("Newer", "c1", Date.now() + 60_000);
   await acc.flush();
   const disk = JSON.parse(fs.readFileSync(process.env.SAVE_FILE!, "utf8"));
-  assert.equal(disk.oldie.av, 1);
-  assert.equal(disk.oldie.minReader, 1);
+  assert.equal(disk.oldie.av, ACCOUNT_API);
+  assert.equal(disk.oldie.minReader, ACCOUNT_MIN_READER);
   assert.equal(disk.oldie.guild, "far", "unknown account field kept");
   assert.equal(disk.oldie.heroes.wizard.gold, 77);
   assert.equal(disk.oldie.heroes.wizard.zap, 7, "unknown hero field kept");
-  assert.equal(disk.fresh1.av, 1, "new accounts carry av");
+  assert.equal(disk.fresh1.av, ACCOUNT_API, "new accounts carry av");
   assert.deepEqual(disk.newer, saved.newer, "the newer account is untouched");
 });
 
@@ -77,7 +83,7 @@ test("accounts (shared): login, peek, edits and claims of a newer account are re
   const leases = memLeases(), db = memDb<any>(leases);
   await acc.initAccounts({ store: db.store, leases, holder: "old", retryMs: 1 });
   const code = "123456", reset = { hash: crypto.createHash("sha256").update(code).digest("hex"), until: Date.now() + 600_000, tries: 0 };
-  const row = acct("Future", { av: 2, minReader: 2, email: "f@x.io", reset, extra: { keep: true } });
+  const row = acct("Future", { av: NEXT, minReader: NEXT, email: "f@x.io", reset, extra: { keep: true } });
   db.rows.set("future", structuredClone(row));
   await assert.rejects(acc.login("Future", PW, IP), NEW_AGE);
   await assert.rejects(acc.peek("Future", PW, IP), NEW_AGE);
@@ -95,7 +101,7 @@ test("accounts (shared): login, peek, edits and claims of a newer account are re
   // Logged in while it was version 1; a newer build wrote it before the room claimed it: the claim reloads and refuses
   db.rows.set("later", acct("Later"));
   assert.equal(await acc.login("Later", PW, IP), "Later");
-  const newer = acct("Later", { av: 2, heroes: { wizard: { gold: 3, beyond: 1 } } });
+  const newer = acct("Later", { av: NEXT, heroes: { wizard: { gold: 3, beyond: 1 } } });
   db.rows.set("later", structuredClone(newer));
   await assert.rejects(acc.claimAccount("Later"), NEW_AGE);
   assert.ok(!leases.rows.has("acct:later"), "the lease went back");
@@ -108,7 +114,7 @@ test("accounts (shared): login, peek, edits and claims of a newer account are re
   assert.deepEqual(db.rows.get("future"), row);
 });
 
-test("accounts (room): unknown account and hero fields survive login, play and save; an old row without av is written with av 1", async () => {
+test("accounts (room): unknown account and hero fields survive login, play and save; an old row without av is written with this build's av", async () => {
   const acc = await import("../server/accounts");
   const { startRoom, until, wait } = await import("./helpers/room");
   const leases = memLeases(), db = memDb<any>(leases);
@@ -137,8 +143,8 @@ test("accounts (room): unknown account and hero fields survive login, play and s
     r.heroes.oracle = { level: 9, gold: 1, newOnly: true };
     await play("r2", 250);
     const out = db.rows.get("roundy");
-    assert.equal(out.av, 1, "written with av 1");
-    assert.equal(out.minReader, 1);
+    assert.equal(out.av, ACCOUNT_API, "written with this build's av");
+    assert.equal(out.minReader, ACCOUNT_MIN_READER);
     assert.deepEqual(out.realm, { banner: "blue" });
     assert.deepEqual(out.perks, [1, 2]);
     assert.equal(out.heroes.wizard.gold, 250, "the play was saved");

@@ -1,5 +1,6 @@
 import { icon as pxIcon } from "./pixelicons";
 import { CITIES, cityText } from "../../shared/capitals";
+import { VILLAGES } from "../../shared/villages";
 /**
  * Background music.
  *
@@ -74,9 +75,9 @@ const firstOf = (...ids: (string | null)[]) => ids.find((id): id is string => !!
 /** Act 2 calm areas with their own tune (else the Dune tune). */
 const DESERT_TOWNS = ["Kel Ashar", "Kel Ashar Market"];
 /** Act 3 calm areas that play the village tune (Cairnwatch, the moors' outpost). */
-const MOORS_TOWNS = ["Cairnwatch"];
+const MOORS_TOWNS = ["Cairnwatch", ...VILLAGES.filter((v) => v.land === 3).map((v) => v.name)]; // (and the moors' villages, shared/villages.ts)
 /** Act 4 calm area that plays the village tune (the Rustwater Post) until the badlands have their own music. */
-const BADLANDS_TOWNS = ["The Rustwater Post", "Rustwater Post"];
+const BADLANDS_TOWNS = ["The Rustwater Post", "Rustwater Post", ...VILLAGES.filter((v) => v.land === 4).map((v) => v.name)]; // (and the badlands' villages)
 /** Act 5 calm area that plays the village tune (Ropewell) until the sinkholes have their own music. */
 const SINKHOLES_TOWNS = ["Ropewell"];
 /** Act 1 areas with their own calm song (Saltmere's sea shanty), else the village tune. */

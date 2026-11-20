@@ -10,7 +10,7 @@
  */
 import { warAccess } from "./war/api";
 
-export const ACCOUNT_API = 1;
+export const ACCOUNT_API = 2;
 /** Written as `minReader` with every account this build saves: the oldest ACCOUNT_API that may show (not write) it. */
 export const ACCOUNT_MIN_READER = 1;
 

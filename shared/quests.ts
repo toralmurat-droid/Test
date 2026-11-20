@@ -2938,6 +2938,99 @@ const SALT_WAYS: QuestDef[] = [
 ];
 const WATCH_QUEST = SALT_WAYS.findIndex((d) => d.id === "watchfire");
 
+// ---- The villages along the highways (settlement network step 4, shared/villages.ts): one short quest each, from the
+// village's own giver, in its patron land (two steps: something to find there, then the monsters behind it). Levels
+// from the patron land's; objects in its spawn zone ----
+/** A village quest: `use` the objects (no chest), then `kill`; the arc reward of its level. */
+function villageQuest(q: { id: string; title: string; giver: string; zone: string; level: number; description: string; offer: string[]; acceptText: string;
+  use: { objects: QuestObject[]; text: string; banner: [string, string]; obj: string; nag: string };
+  kill: { zone: string; kinds: MobKind[]; goal: number; text: string; banner: [string, string]; obj: string; nag: string };
+  outro: string[]; after: string }): QuestDef[] {
+  return [{
+    id: q.id, title: q.title, giver: q.giver, zone: q.zone, minLevel: q.level, description: q.description, offer: q.offer, acceptText: q.acceptText,
+    steps: [
+      { type: "use", zone: q.zone, objects: q.use.objects, chest: false, text: q.use.text, banner: q.use.banner, obj: q.use.obj, nag: q.use.nag },
+      { type: "kill", zone: q.kill.zone, kinds: q.kill.kinds, goal: q.kill.goal, text: q.kill.text, banner: q.kill.banner, obj: q.kill.obj, nag: q.kill.nag },
+    ],
+    outro: q.outro, reward: arcReward(q.level + 1), after: q.after,
+  }];
+}
+const TURF_QUESTS = villageQuest({
+  id: "turfspades", title: "Lost Spades", giver: "peatmaster", zone: "Thane's Rest", level: 23,
+  description: "The peat-cutters of Turfhallow ran from the banks by Thane's Rest when the barrow-dead walked out among them, and left their turf spades in the bog. Old Maddock wants them back, and the dead gone.",
+  offer: [
+    "You'll have passed our banks on the road. Black cuts in the heather, east toward the barrows. That's Turfhallow's whole living: we cut the turf, dry it, and Cairnwatch burns it on the beacon.",
+    "Three days back the dead walked out of Thane's Rest and stood among my cutters. Just stood. Nobody waited to see what they'd do next.",
+    "They dropped their spades where they stood. A turf spade is a man's own, shaped to his hand. Find three for me at Thane's Rest, and put down the wights that frightened them off.",
+  ],
+  acceptText: "I'll fetch the spades",
+  use: { objects: [obj("turf_spade1", "clue", "Dropped turf spade", "Take up", "Thane's Rest", 0.1, 0.75), obj("turf_spade2", "clue", "Dropped turf spade", "Take up", "Thane's Rest", 0.35, 0.12), obj("turf_spade3", "clue", "Dropped turf spade", "Take up", "Thane's Rest", 0.68, 0.9)],
+    text: "Find 3 dropped turf spades at Thane's Rest", banner: ["New quest", "Lost Spades"], obj: "Turf spades found: {n} / {goal}", nag: "{n} of {goal}. In the cuts at the edge of the barrows, where the heather's been dug." },
+  kill: { zone: "Thane's Rest", kinds: ["wight"], goal: 6, text: "Put down 6 Barrow-Wights at Thane's Rest", banner: ["The dead are still there", "Put down 6 Barrow-Wights"], obj: "Barrow-Wights put down: {n} / {goal}", nag: "{n} of {goal}. They stand about the mounds like men waiting for a cart." },
+  outro: ["The last wight folds into the heather. The spades are cold and wet, every handle worn to its cutter's grip.", "Turfhallow will be cutting again by the morning."],
+  after: "Cutters back on the banks, and the beacon fed for another winter. That's a debt Turfhallow won't forget. Mind the soft ground going out.",
+});
+const STAITHE_QUESTS = villageQuest({
+  id: "staithelamps", title: "Lanterns on the Fen", giver: "staithewife", zone: "Blackwater Fen", level: 26,
+  description: "Blackwater Staithe's peat boats steer home across the fen by three lanterns on poles. The mist has put them out, and the mistwraiths have come in behind it. Hedda Reed wants them lit and the wraiths gone.",
+  offer: [
+    "This is the staithe: the landing. The peat boats come down the fen loaded to the gunwales and tie up here, and the carts take it on to the road.",
+    "They steer by three lanterns on poles out in the fen. My grandmother set them. In this mist a boatman with no lantern rows in circles until the eels have him.",
+    "The mist put them out, and the mistwraiths came in after. Light the three lanterns, and drive off the wraiths, and the boats can come home.",
+  ],
+  acceptText: "I'll light the lanterns",
+  use: { objects: [obj("staithe_lamp1", "wardlamp", "Fen lantern on its pole", "Light", "Blackwater Fen", 0.3, 0.9), obj("staithe_lamp2", "wardlamp", "Fen lantern on its pole", "Light", "Blackwater Fen", 0.62, 0.9), obj("staithe_lamp3", "wardlamp", "Fen lantern on its pole", "Light", "Blackwater Fen", 0.86, 0.62)],
+    text: "Light the 3 fen lanterns in Blackwater Fen", banner: ["New quest", "Lanterns on the Fen"], obj: "Fen lanterns lit: {n} / {goal}", nag: "{n} of {goal}. Tall poles along the boat-lanes, south side of the fen." },
+  kill: { zone: "Blackwater Fen", kinds: ["mistwraith"], goal: 6, text: "Drive off 6 Mistwraiths in Blackwater Fen", banner: ["The lanterns are lit", "Drive off 6 Mistwraiths"], obj: "Mistwraiths driven off: {n} / {goal}", nag: "{n} of {goal}. They come to the light. Let them." },
+  outro: ["Three small lights stand out over the black water, and the mist thins round them.", "Far off, an oar knocks on a gunwale, and someone laughs."],
+  after: "Hear that? Oars. First boat home in a week. Cobb's already got the kettle on for them.",
+});
+const BARROW_QUESTS = villageQuest({
+  id: "barrowseals", title: "Open Barrows", giver: "barrowwarden", zone: "The Hollow Mounds", level: 27,
+  description: "The barrow-wardens of Barrowstead keep the Hollow Mounds shut. Wights have broken three barrows open from inside. Warden Osgar wants them sealed again, and the wights that came out put back down.",
+  offer: [
+    "Barrowstead keeps two things: the mourners' hostel, and the barrows. The mourners come to sit by their dead. We see that their dead sit still.",
+    "Three barrows in the Hollow Mounds have opened. Not dug: opened, from inside, the door-stones pushed out onto the grass.",
+    "Set the seals back on the doors. Then put down the wights that walked out, before the mourners see them and know them.",
+  ],
+  acceptText: "I'll seal the barrows",
+  use: { objects: [obj("barrow_seal1", "seal", "Broken barrow seal", "Set the seal", "The Hollow Mounds", 0.15, 0.8), obj("barrow_seal2", "seal", "Broken barrow seal", "Set the seal", "The Hollow Mounds", 0.45, 0.9), obj("barrow_seal3", "seal", "Broken barrow seal", "Set the seal", "The Hollow Mounds", 0.78, 0.78)],
+    text: "Re-seal 3 opened barrows in the Hollow Mounds", banner: ["New quest", "Open Barrows"], obj: "Barrows sealed: {n} / {goal}", nag: "{n} of {goal}. The door-stones lie on the grass in front of them. You can't miss them." },
+  kill: { zone: "The Hollow Mounds", kinds: ["wight"], goal: 6, text: "Put down 6 Barrow-Wights in the Hollow Mounds", banner: ["The barrows are shut", "Put down 6 Barrow-Wights"], obj: "Barrow-Wights put down: {n} / {goal}", nag: "{n} of {goal}. They walk between the mounds, looking for their doors." },
+  outro: ["The last seal grinds home. Somewhere under the turf, something knocks twice, and stops.", "Sister Elfreda will want to know the mourners can come out again."],
+  after: "Shut and quiet. The mourners can sit out by the mounds again. Most of them never knew. That's how it should be.",
+});
+const LODE_QUESTS = villageQuest({
+  id: "lodecarts", title: "Snakes in the Adits", giver: "foreman", zone: "The Cinnabar Pits", level: 28,
+  description: "Redlode's miners work the Cinnabar Pits. A rockfall caught three ore carts in the adits, and rattlers have nested in the rubble. Foreman Brask wants the carts searched for his miners' tallies, and the snakes cleared.",
+  offer: [
+    "Redlode's a miners' row. We dig the red ore out of the Cinnabar Pits and the Post buys it by the cart.",
+    "A roof came down in the adits last week. Nobody under it, thank the dust, but three carts were, with every man's tally-board on them. No tally, no pay.",
+    "And the rattlers love a rockfall: cool stone, plenty of holes. Search the three carts for the tallies, and kill enough snakes that my lads can go back down.",
+  ],
+  acceptText: "I'll clear the adits",
+  use: { objects: [obj("lode_cart1", "clue", "Caved-in ore cart", "Search", "The Cinnabar Pits", 0.15, 0.6), obj("lode_cart2", "clue", "Caved-in ore cart", "Search", "The Cinnabar Pits", 0.38, 0.92), obj("lode_cart3", "clue", "Caved-in ore cart", "Search", "The Cinnabar Pits", 0.8, 0.9)],
+    text: "Search 3 caved-in ore carts in the Cinnabar Pits", banner: ["New quest", "Snakes in the Adits"], obj: "Ore carts searched: {n} / {goal}", nag: "{n} of {goal}. Half-buried in red rubble at the adit mouths." },
+  kill: { zone: "The Red Badlands", kinds: ["rattler"], goal: 8, text: "Kill 8 Rattlers", banner: ["Tallies found", "Kill 8 Rattlers"], obj: "Rattlers killed: {n} / {goal}", nag: "{n} of {goal}. Any of them on the badlands will do. They all come back to the pits to sleep." },
+  outro: ["The last tally-board is scratched with forty notches and a drawing of a snake.", "Somebody in Redlode will be paid tonight."],
+  after: "Every man paid and the lads back down the adits. Ilse says she'll make you a snake-proof boot if you ask her nicely. I wouldn't.",
+});
+const HORN_QUESTS = villageQuest({
+  id: "hornstrays", title: "Strays on the Gulch", giver: "rancher", zone: "Rattlesnake Gulch", level: 33,
+  description: "Hornstead runs longhorns on the Rattler's Way. Warhounds ran the herd into Rattlesnake Gulch, and three calves never came back. Tilly Hobb wants their trail found and the hounds put down.",
+  offer: [
+    "This is Hornstead. Longhorns, mostly. We drive them up the Rattler's Way to Fangrock, and the Post buys the hides.",
+    "Two nights back a pack of warhounds came through and ran the whole herd down into Rattlesnake Gulch. We got most of them back. Three calves we didn't.",
+    "Find what's left of their trail in the gulch: a hoof-print, a torn halter, anything. Then kill the hounds, or they'll be back for the rest.",
+  ],
+  acceptText: "I'll find the strays",
+  use: { objects: [obj("horn_trail1", "clue", "Stray calf's trail", "Search", "Rattlesnake Gulch", 0.25, 0.35), obj("horn_trail2", "clue", "Torn calf halter", "Search", "Rattlesnake Gulch", 0.5, 0.55), obj("horn_trail3", "clue", "Stray calf's trail", "Search", "Rattlesnake Gulch", 0.2, 0.75)],
+    text: "Search for 3 stray calves' trails in Rattlesnake Gulch", banner: ["New quest", "Strays on the Gulch"], obj: "Trails found: {n} / {goal}", nag: "{n} of {goal}. They'd have run downhill, into the gulch." },
+  kill: { zone: "The Red Badlands", kinds: ["warhound"], goal: 6, text: "Kill 6 Warhounds", banner: ["The trail goes cold", "Kill 6 Warhounds"], obj: "Warhounds killed: {n} / {goal}", nag: "{n} of {goal}. They range all over the badlands. Follow the vultures." },
+  outro: ["The third trail ends at a thorn thicket, and inside it, three calves, scratched and hungry and very much alive.", "They follow you to the gulch's mouth and then bolt for home without you."],
+  after: "All three calves home, and their mothers bawling the whole ranch awake. Jory says he'll name the brindle one after you. I told him not to.",
+});
+
 /** Side arcs (QuestChain.local, after ZONE_ARCS in CHAINS): `needs` gates the first offer (Saltmere Ways: every offer). */
 export const SIDE_ARCS: { id: string; name: string; quests: QuestDef[]; needs?: (p: Quester | undefined) => boolean }[] = [
   { id: "letters", name: "Two Letters", quests: LETTER_QUESTS, needs: (p) => chainDone(p, RED_CHAIN) },
@@ -2950,6 +3043,12 @@ export const SIDE_ARCS: { id: string; name: string; quests: QuestDef[]; needs?: 
   { id: "saltways", name: "Saltmere Ways", quests: SALT_WAYS, needs: (p) => (chainState(p, chainIx("saltways"))?.questId ?? 0) < WATCH_QUEST || questFinished(p, "cod") },
   // Act 6: the Crown of the Marches, from Tollcross (a side arc, last, so no chain index moves; not "crown": that key is the Hollow Crown's)
   { id: "throne", name: "The Riven Throne", quests: THRONE_QUESTS },
+  // the villages along the highways (settlement network step 4): one arc each, named after the village (append only)
+  { id: "turfhallow", name: "Turfhallow", quests: TURF_QUESTS },
+  { id: "staithe", name: "Blackwater Staithe", quests: STAITHE_QUESTS },
+  { id: "barrowstead", name: "Barrowstead", quests: BARROW_QUESTS },
+  { id: "redlode", name: "Redlode", quests: LODE_QUESTS },
+  { id: "hornstead", name: "Hornstead", quests: HORN_QUESTS },
 ];
 const ARC_OBJECTS: QuestObject[] = [...ZONE_ARCS, ...SIDE_ARCS].flatMap((a) => a.quests.flatMap((d) => d.steps.flatMap(stepObjects)));
 
@@ -3232,6 +3331,11 @@ const IDLE: Record<string, string> = {
   miller: "When the brook runs low, the windmill up on the meadow grinds, and when the wind drops, my wheel does. Between the two of them the valley never goes without bread. Goldenreach sends the sacks down by cart.",
   // the Sunscar moves salt by caravan (Hamid's caravan was hit at Jackal Springs)
   caravaneer: "Salt from the Glasswind Flats, cut in slabs and roped two to a camel. Kel Ashar's east gate is where the strings rest before the long road. The camels came back on their own, the drivers didn't. A camel knows the road.",
+  // the villages along the highways (settlement network step 4): their townsfolk
+  turfcutter: "Cut it, stack it, turn it, stack it again. Peat dries slow on the moors, and Cairnwatch's beacon eats a stack a night. My arms will be this shape when they bury me.",
+  eeltrapper: "Eels in the creels, flasks on the shelf. The boats bring both up the fen. You'd be amazed how many folk want the one after they've eaten the other.",
+  hostelkeeper: "Mourners come from all over the moors to sit by the mounds. We give them a bed and broth and don't ask who they've come to see. The broth's better than it sounds.",
+  drover: "Longhorns are easy. Point them at Fangrock and walk behind. It's the hounds and the snakes and the dust you have to watch, and the bull with the broken horn. Mostly the bull.",
   huntsman: "Hides on the frames, meat in the smoke. Goldenreach feeds the valley on grain, but someone has to keep the wolves off the sheaves.",
 };
 /**
