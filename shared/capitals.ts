@@ -14,7 +14,8 @@ import { TITLES } from "./cosmetics";
  * Settlement network step 5: one by one the cities leave the band and stand in their homelands (`site`, shared/cityLand.ts
  * builds them there): heroes walk in through open gates (south, and west and east where the land allows: `sideGates`) on
  * the land's roads, and a gate ward (server/cityGates.ts) keeps W7's entry rules. Hearthhold stands in Oakvale's
- * north-west, Scarwall in the Red Badlands' north-west; their strip plots stay rock until all five have moved.
+ * north-west, Scarwall in the Red Badlands' north-west, Duskveil in the Sunscar's Saffron Dunes; their strip plots stay
+ * rock until all five have moved.
  *
  * Every city is the same plan (CITY_TEMPLATE, local tiles 0..w-1 x 0..h-1, the gate in the south wall) dressed in its
  * clan's style (walls, roofs, ground): gate square with the waystone and the stash, market with the quartermaster,
@@ -163,10 +164,13 @@ export const CITIES: readonly City[] = [
     style: { wall: "WALL_STONE", roof: "ROOF_SLATE", roof2: "ROOF_RED", street: "COBBLE", ground: ["GRASS", "GRASS_DARK", "FLOWERS"], yard: "DIRT" },
     sprites: { leader: "cap_wardens_leader", quartermaster: "steward_wardens", oathkeeper: "cap_wardens_oathkeeper", trainer: "cap_wardens_trainer" },
   },
-  // The Veiled Circle's Duskveil: its city gate stands on the open sand of the Thornspire Heights west of the Veiled
-  // Sanctum, clear of the Sanctum's walls, its Hold (228, 358) and standard (233, 344). Mud-brick walls, sandstone streets.
+  // The Veiled Circle's Duskveil: in the Saffron Dunes under the Thornspire's south wall, east of Mirage Wells (settlement
+  // network step 5; the Sanctum's plateau has no room: the Sun Furnace, the Thornspire muster). The highway comes in at its
+  // west gate from Mirage Wells' east shore; a dirt road runs from its south gate west under the walls to the dunes trail
+  // (no east gate: the cliffs). Its old city gate stood on the Thornspire west of the Sanctum (shared/cityLand.ts
+  // OLD_CITY_GATES). Mud-brick walls, sandstone streets.
   {
-    clan: "veiled", act: 2, plot: 1, outer: { x: 217, y: 350 }, outerBox: { x0: 212, x1: 222, y0: 346, y1: 355 },
+    clan: "veiled", act: 2, plot: 1, outer: { x: 255, y: 444 }, outerBox: { x0: 230, x1: 281, y0: 404, y1: 443 }, site: { x: 230, y: 404 }, sideGates: ["west"],
     style: { wall: "ADOBE_WALL", roof: "ROOF_SLATE", roof2: "ROOF_THATCH", street: "COBBLE", ground: ["SAND", "DIRT", "RUBBLE"], yard: "DIRT" },
     sprites: { leader: "cap_veiled_leader", quartermaster: "steward_veiled", oathkeeper: "cap_veiled_oathkeeper", trainer: "cap_veiled_trainer" },
   },

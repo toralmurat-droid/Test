@@ -71,6 +71,14 @@ export const CITY_LAND: Partial<Record<ClanKey, CityLandFit>> = {
     trims: [],
     posts: [{ x: 63, y: 806, to: ["Scarwall", "Fangrock"] }],
   },
+  // Duskveil: a dirt road from the south gate west along the apron (a row above the brand-totem of the Circle) to the
+  // dunes trail out of Mirage Wells, its post by the gate; the west gate is on the highway, its post is the highway's
+  // (shared/highways.ts); no east gate (the cliffs)
+  veiled: {
+    roads: [[[255, 444], [255, 445], [229, 445]]],
+    trims: [],
+    posts: [{ x: 253, y: 446, to: ["Duskveil", "Mirage Wells", "Kel Ashar"] }],
+  },
 };
 
 /**
