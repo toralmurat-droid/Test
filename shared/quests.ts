@@ -3459,7 +3459,7 @@ export const rewardText = (r: Reward) => `${r.xp ? `${r.xp} XP, ` : ""}${r.gold}
 /** Idle lines of quest givers with nothing to say on a chain. */
 const IDLE: Record<string, string> = {
   druid: "The old oaks are restless. Keep your blade sharp, friend.",
-  captain: "Quiet on the walls today. I don't trust quiet.",
+  captain: "Quiet on the walls today. I don't trust quiet. Up the King's Highway, the walled city on the hill is Hearthhold, the Wardens' seat. If you've the mettle for it, their gates will open to you.",
   oldfisher: "Tide's turning. Mind the wet sand, it'll have your boots off.",
   sexton: "Thirty years with a spade. The ground tells you things, if you listen.",
   mourner1: "Forty years married. You'd think I'd be cried out by now.",
