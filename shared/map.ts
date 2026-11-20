@@ -1139,11 +1139,11 @@ function buildWorld() {
   // edge, where the mist of the pass takes the hero on into the neighbouring land. Cut last, only inside BORDER_BOXES.
   carveBorders(ground, objects, roads, T, EMPTY);
   // ---------- 22b. The clans' cities in their lands (shared/cityLand.ts; settlement network step 5): Hearthhold north of
-  // Goldenreach Farms, Scarwall on the badlands plain north of Fangrock. The city over its whole box, cleared ground round
-  // its walls, gates onto the roads, the fields in the way cut back, the posts inside its walls gone. Cut before the
-  // highways (they skip the box and run up to its gates) and only inside CITY_MASK; what it changed is kept (cityBefore,
-  // the oldest record: chests and siege sites never move). Its areas go first, like the band's cities'. Its posts may
-  // stand in any land (FULL_H: map.ts's MAP_H is the overworld's)
+  // Goldenreach Farms, Scarwall on the badlands plain north of Fangrock, Duskveil in the Saffron Dunes east of Mirage
+  // Wells. The city over its whole box, cleared ground round its walls, gates onto the roads, the fields in the way cut
+  // back, the posts inside its walls gone. Cut before the highways (they skip the box and run up to its gates) and only
+  // inside CITY_MASK; what it changed is kept (cityBefore, the oldest record: chests and siege sites never move). Its
+  // areas go first, like the band's cities'. Its posts may stand in any land (FULL_H: map.ts's MAP_H is the overworld's)
   const cityBefore = new Map<number, { g: number; o: number }>();
   const inLand = carveCitiesInLand(T, ground, objects, EMPTY, roads, posts, meadow, cityBefore);
   areas.unshift(...inLand.areas);

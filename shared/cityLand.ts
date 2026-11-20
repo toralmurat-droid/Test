@@ -54,6 +54,11 @@ export interface CityLandFit {
   trims: readonly { x: number; y: number; w: number; h: number; top: number; gap: readonly [number, number] }[];
   /** Signposts beside the gate roads (placed after them, on the nearest free tile beside the road). */
   posts: readonly { x: number; y: number; to: string[] }[];
+  /**
+   * Ways round the walls (map tile boxes, inside the apron): cliffs and nature cleared to open ground (the ground under them
+   * stays), where the walls stand across a way the land had, so it still leads somewhere.
+   */
+  ways?: readonly TileBox[];
 }
 export const CITY_LAND: Partial<Record<ClanKey, CityLandFit>> = {
   // Hearthhold: the east gate's road north along the wall to the Watchtower Trail; Goldenreach's north field four rows
@@ -70,6 +75,17 @@ export const CITY_LAND: Partial<Record<ClanKey, CityLandFit>> = {
     roads: [[[61, 808], [64, 808]]],
     trims: [],
     posts: [{ x: 63, y: 806, to: ["Scarwall", "Fangrock"] }],
+  },
+  // Duskveil: a dirt road from the south gate west along the apron (a row above the brand-totem of the Circle) to the
+  // dunes trail out of Mirage Wells, its post by the gate; the west gate is on the highway, its post is the highway's
+  // (shared/highways.ts); no east gate (the cliffs)
+  veiled: {
+    roads: [[[255, 444], [255, 445], [229, 445]]],
+    trims: [],
+    posts: [{ x: 253, y: 446, to: ["Duskveil", "Mirage Wells", "Kel Ashar"] }],
+    // the walls close the foot of the Thornspire's eastern valley (x 254..276), which opened onto the dunes at row 404: a
+    // way two tiles wide along the north wall through the cliff knot and down the west wall to the dunes trail
+    ways: [{ x0: 228, x1: 276, y0: 402, y1: 403 }, { x0: 228, x1: 229, y0: 402, y1: 431 }],
   },
 };
 
@@ -102,8 +118,8 @@ function apronTiles(c: City): number[] {
 const postBoxTiles = (p: { x: number; y: number }) => { const s: number[] = []; for (let j = -3; j <= 3; j++) for (let i = -3; i <= 3; i++) s.push((p.y + j) * MAP_W + p.x + i); return s; };
 
 /**
- * Every tile the cities in their lands may change (map tiles): box, apron, gate roads and posts, trimmed fields, the retired
- * legs (core and verge, per land) and posts. The map hash tests mask these, with OLD_CITY_GATES.
+ * Every tile the cities in their lands may change (map tiles): box, apron, gate roads and posts, trimmed fields, ways round
+ * the walls, the retired legs (core and verge, per land) and posts. The map hash tests mask these, with OLD_CITY_GATES.
  */
 export const CITY_MASK: Set<number> = (() => {
   const s = new Set<number>();
@@ -115,6 +131,7 @@ export const CITY_MASK: Set<number> = (() => {
     for (const r of fit?.roads ?? []) for (const t of gateRoadTiles(r)) s.add(t.y * MAP_W + t.x);
     for (const f of fit?.trims ?? []) for (let y = f.y; y <= f.top; y++) for (let x = f.x; x < f.x + f.w; x++) s.add(y * MAP_W + x);
     for (const p of fit?.posts ?? []) for (const k of postBoxTiles(p)) s.add(k);
+    for (const w of fit?.ways ?? []) for (let y = w.y0; y <= w.y1; y++) for (let x = w.x0; x <= w.x1; x++) s.add(y * MAP_W + x);
   }
   for (const land of new Set(RETIRED_LEGS.map((l) => l.land))) {
     const legs = RETIRED_LEGS.filter((l) => l.land === land).map((l) => ({ from: "", to: "", pts: l.pts }));
@@ -130,7 +147,7 @@ type CityLandT = CityTiles & { TREE: number; PINE: number; BUSH: number; STUMP: 
 
 /**
  * Builds every city with a `site` into its land (shared/map.ts section 22b): cuts back the fields in the way (`natural`:
- * the land's own ground there before any field), clears the apron's nature, builds the city over its whole box, makes its
+ * the land's own ground there before any field), clears the apron's nature and the ways round the walls, builds the city over its whole box, makes its
  * through streets and gates roads (and no other tile inside the box), lays the dirt gate roads, and drops the signposts
  * that stood inside the walls. Writes only inside CITY_MASK and keeps what each changed tile was in `before`. Returns the
  * cities' areas (districts first) and the gate roads' signposts for the map to place. `lands`: only the cities of these
@@ -156,6 +173,8 @@ export function carveCitiesInLand(T: CityLandT, ground: number[][], objects: num
       for (let x = f.x; x < f.x + f.w; x++) if (x < f.gap[0] || x > f.gap[1]) objects[f.top][x] = T.FENCE;
     }
     for (const k of apronTiles(c)) { const x = k % MAP_W, y = Math.floor(k / MAP_W); if (nature.has(objects[y][x])) objects[y][x] = EMPTY; }
+    for (const w of fit?.ways ?? []) for (let y = w.y0; y <= w.y1; y++) for (let x = w.x0; x <= w.x1; x++)
+      if (!inBox(x, y) && (objects[y][x] === T.CLIFF || nature.has(objects[y][x]))) objects[y][x] = EMPTY;
     areas.push(...buildCity(c, T, ground, objects, EMPTY));
     // roads: none inside the walls but the through streets and the gates
     for (const k of [...roads]) if (inBox(k % MAP_W, Math.floor(k / MAP_W))) roads.delete(k);

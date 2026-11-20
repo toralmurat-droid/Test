@@ -29,8 +29,8 @@ import { FANGROCK } from "../shared/badlands";
 
 /**
  * The clans' cities in their homelands (settlement network step 5, shared/capitals.ts City.site, shared/cityLand.ts), one
- * table row per city that has moved: Hearthhold north of Goldenreach Farms (Oakvale's lands), Scarwall on the badlands
- * plain north of Fangrock. The rules every moved city keeps run over the table; what is one city's own is in its own
+ * table row per city that has moved: Hearthhold north of Goldenreach Farms (Oakvale's lands), Duskveil in the Sunscar's
+ * Saffron Dunes east of Mirage Wells, Scarwall on the badlands plain north of Fangrock. The rules every moved city keeps run over the table; what is one city's own is in its own
  * test below. The room side (the gate ward, the hand-off) is in tests/cityLand-room.test.ts.
  */
 type Pt = { x: number; y: number };
@@ -58,6 +58,14 @@ const rows: Row[] = [
     roads: [["south", 79, 46, 20, "Oakvale's north gate"], ["south", 84, 46, -1, "Oakvale's stone"], ["south", 30, 58, -1, "Goldenreach Farms (the seat)"],
       ["west", 38, 20, -1, "Hunter's Camp's stone"], ["east", 98, 15, 20, "the Watchtower Trail"]],
     over: ["Goldenreach Farms", "North Meadow"], territory: [[45, 46, "Goldenreach Farms"], [100, 20, "North Meadow"]],
+  },
+  {
+    clan: "veiled", land: 2, box: { x: 230, y: 404, w: 52, h: 40 }, outer: { x: 255, y: 444 },
+    gates: { south: [254, 255, 256].map((x) => ({ x, y: 443 })), west: [429, 430, 431].map((y) => ({ x: 230, y })) },
+    seed: () => tileOf(waygateArrival(waygateById("desert")!)), highway: ["west"],
+    roads: [["west", 219, 416, 30, "Mirage Wells' east shore"], ["west", 231, 353, -1, "the Veiled Sanctum's west gate (the seat)"], ["west", 155, 410, -1, "Kel Ashar"],
+      ["south", 229, 445, 40, "the dunes trail"], ["south", 219, 416, 60, "Mirage Wells, up the dunes trail"]],
+    over: ["The Saffron Dunes", "The Sunscar"], territory: [[229, 430, "The Saffron Dunes"], [255, 446, "The Saffron Dunes"]],
   },
   {
     clan: "redfang", land: 4, box: { x: 9, y: 782, w: 52, h: 40 }, outer: { x: 34, y: 822 },
@@ -298,7 +306,7 @@ test("cities in their lands: forts, musters, chests, siege sites, landmarks, que
   let n = 0;
   for (const b of BORDERS) for (const e of [b.a, b.b]) { const [x, y] = endPath(e)[0]; if (HOLDS.some((h) => Math.hypot(h.x / TILE - x, h.y / TILE - y) <= 30)) n++; }
   assert.equal(n, 14);
-  // the digests taken on the map before the moves (default branch after #571; the same after Hearthhold and Scarwall)
+  // the digests taken on the map before the moves (default branch after #571; the same after Hearthhold, Scarwall and Duskveil)
   assert.equal(digest(HOLDS, (h) => [h.t, Math.round(h.x), Math.round(h.y)]), "25:9caa51d");
   assert.deepEqual(HOLDS.filter((h) => h.site === "capital").map((h) => [h.x / TILE, h.y / TILE]), [[26.5, 58.5], [241.5, 355.5], [271.5, 671.5], [27.5, 867.5], [248.5, 1105.5]], "the capital forts");
   assert.equal(digest(MUSTERS, (h) => [h.t, Math.round(h.x), Math.round(h.y)]), "72:82341353");
@@ -307,7 +315,8 @@ test("cities in their lands: forts, musters, chests, siege sites, landmarks, que
   assert.equal(digest(SIEGE_SITES, (s) => [s.tx, s.ty]), "14:cac2c0c9");
   assert.equal(digest(LANDMARKS, (l) => [l.id, l.x, l.y, l.solid ?? null]), "6:4b449bf7");
   assert.equal(digest(allObjects(), (o) => [o.id, Math.round(o.x), Math.round(o.y)]), "213:663e782a");
-  assert.equal(digest(PORTAL_SPOTS.filter((p) => !inLandCities().some((c) => p.id === `city_${c.clan}`)), (p) => [p.id, p.x, p.y]), "41:f8dc4b3");
+  // every stone but the moved cities' waystones ("41:f8dc4b3" with Duskveil's, before it moved)
+  assert.equal(digest(PORTAL_SPOTS.filter((p) => !inLandCities().some((c) => p.id === `city_${c.clan}`)), (p) => [p.id, p.x, p.y]), "40:b1394a39");
   assert.equal(digest(POSTS, (p) => [p.kind ?? "", p.role, p.at, p.route ?? null]), "95:7b83c3b", "every camp post where it was");
   for (const c of CHESTS) assert.ok(!cityAt(Math.floor(c.x / TILE), Math.floor(c.y / TILE)), `${c.id}: not inside the walls`);
 });
@@ -373,4 +382,65 @@ test("Scarwall: its back to the edge cliffs (no west gate), its east gate onto t
   const fromS = roadSteps(G[0].out.x, G[0].out.y);
   assert.ok(HIGHWAY_TILES.has(G[0].out.y * MAP_W + G[0].out.x));
   assert.ok(roadTo(fromS, FANGROCK.x + FANGROCK.w + 2, FANGROCK.y + LAND_ROWS[4].y0 + 14) >= 0, "Fangrock's east gate on road");
+});
+
+test("Duskveil: under the Thornspire in the Saffron Dunes, its back to the cliffs (no east gate); the highway from Mirage Wells to its west gate", () => {
+  const D = CITIES.find((c) => c.clan === "veiled")!, B = plotBox(D), G = cityGates(D), inBox = (x: number, y: number) => x >= B.x && y >= B.y && x < B.x + B.w && y < B.y + B.h;
+  assert.deepEqual(D.sideGates, ["west"]);
+  for (let y = B.y; y < B.y + B.h; y++) assert.ok(isSolidTile(B.x + B.w, y), `cliff east of the wall at ${y}`);
+  const Wg = G.find((g) => g.side === "west")!;
+  assert.deepEqual(Wg.out, { x: 229, y: 430 });
+  // the leg from the west gate up the dunes trail into Mirage Wells, where it meets the east shore's leg; the legs from the
+  // old gate dais keep their line (the Thornspire's war roads stay), renamed
+  const h = HIGHWAYS.find((o) => o.land === 2)!, y0 = LAND_ROWS[2].y0, leg = (from: string, to: string) => h.legs.find((l) => l.from === from && l.to === to)!;
+  const mine = leg("Duskveil Gate", "Mirage Wells"), shore = leg("Mirage Wells", "Mirage Wells' east shore");
+  assert.deepEqual(mine.pts[0], [Wg.out.x, Wg.out.y - y0]); assert.deepEqual(mine.pts.at(-1), shore.pts.at(-1));
+  assert.ok(!mine.join, "no join: it never enters the city's box, and rides Mirage Wells' street as it is");
+  assert.deepEqual(leg("The Sanctum's fork", "The Veiled Sanctum").pts, [[223, 54], [231, 53]]);
+  assert.deepEqual(leg("The Veiled Sanctum", "Mirage Wells").pts, [[223, 54], [226, 54], [229, 59], [231, 61], [233, 61], [238, 66], [238, 68], [219, 94], [217, 98], [216, 108]]);
+  assert.ok(!h.legs.some((l) => l.from.startsWith("Duskveil") && l !== mine), "no other leg from the old gate");
+  // Mirage Wells' chest by the north-west corner and the brand-totem under the south road stay outside, free, off the road
+  const chest = CHESTS.find((c) => c.id === "sun_6_2")!, cx = Math.floor(chest.x / TILE), cy = Math.floor(chest.y / TILE);
+  assert.ok(!inBox(cx, cy) && !isSolidTile(cx, cy) && B.x - cx > CITY_APRON, "sun_6_2 west of the apron");
+  const totem = allObjects().find((o) => o.id === "dune_totem3")!, tx = Math.floor(totem.x / TILE), ty = Math.floor(totem.y / TILE);
+  assert.ok(!inBox(tx, ty) && !WORLD.roads.has(ty * MAP_W + tx) && !isSolidTile(tx, ty), "the totem: off the road, free");
+  assert.ok(WORLD.roads.has((ty - 1) * MAP_W + tx), "the south gate's road runs just above the totem");
+  // the south gate's post: the city up through the gate, Mirage Wells and Kel Ashar west along the road
+  const sp = SIGNPOSTS.find((p) => Math.hypot(p.x - G[0].out.x, p.y - G[0].out.y) <= 4)!;
+  assert.ok(sp.dirs.some((d) => d.name.includes("Duskveil") && !d.name.includes("Mirage Wells")), sp.dirs.map((d) => d.name).join(" | "));
+  assert.ok(sp.dirs.some((d) => d.name.includes("Mirage Wells") && d.arrow === "←"), "Mirage Wells to the west");
+  // the Sanctum's plateau (the seat, its fort and the Thornspire muster) a long walk north
+  assert.ok(B.y - 361 > 40, "the Sanctum's walls 40+ rows north");
+});
+
+test("Duskveil: the Thornspire's eastern valley, closed at its foot by the north wall, leads on round the walls", () => {
+  const D = CITIES.find((c) => c.clan === "veiled")!, B = plotBox(D);
+  /** Steps on foot (4-way over free tiles) from a to b. */
+  const walk = (a: Pt, b: Pt) => {
+    const d = new Int32Array(MAP_W * MAP_H).fill(-1), q = [a.y * MAP_W + a.x];
+    d[q[0]] = 0;
+    for (let i = 0; i < q.length; i++) {
+      const x = q[i] % MAP_W, y = (q[i] / MAP_W) | 0;
+      if (x === b.x && y === b.y) return d[q[i]];
+      for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) {
+        const n = ny * MAP_W + nx;
+        if (d[n] >= 0 || isSolidTile(nx, ny)) continue;
+        d[n] = d[q[i]] + 1; q.push(n);
+      }
+    }
+    return -1;
+  };
+  // the way: two tiles wide along the north wall through the cliff knot, and down the west wall to the dunes trail
+  for (const w of CITY_LAND.veiled!.ways!) for (let y = w.y0; y <= w.y1; y++) for (let x = w.x0; x <= w.x1; x++) {
+    assert.ok(!isSolidTile(x, y) && !cityAt(x, y), `the way at ${x},${y}`);
+    assert.ok(CITY_MASK.has(y * MAP_W + x) && (x < B.x || y < B.y), "in the apron, in the mask");
+  }
+  // from the valley's foot (steps on the map before the city: 68 to the west gate's spot, 64 to Mirage Wells' east shore,
+  // 58 to the south gate's): the west gate and Mirage Wells as near as before; the south gate the long way round the walls
+  // (110: the city has no north gate, so no way runs through it)
+  const valley = { x: 265, y: 398 };
+  assert.ok(walk(valley, { x: 229, y: 430 }) <= 1.3 * 68, "the west gate");
+  assert.ok(walk(valley, { x: 219, y: 416 }) <= 1.3 * 64, "Mirage Wells' east shore");
+  const south = walk(valley, { x: 255, y: 446 });
+  assert.ok(south > 0 && south <= 2 * 58, `the south gate: ${south} steps`);
 });

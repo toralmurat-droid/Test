@@ -33,10 +33,11 @@ const LEGS: Record<number, { from: string; to: string; via: P[] }[]> = {
     { from: "Old Ruins", to: "The Eastmarch Pass", via: [[140, 64], [193, 57], [246, 57]] },
   ],
   2: [
-    { from: "Duskveil Gate", to: "The Veiled Sanctum", via: [[223, 354], [231, 353]] },
-    { from: "Duskveil Gate", to: "Mirage Wells", via: [[223, 355], [232, 361], [216, 408]] },
+    { from: "The Sanctum's fork", to: "The Veiled Sanctum", via: [[223, 354], [231, 353]] },
+    { from: "The Veiled Sanctum", to: "Mirage Wells", via: [[223, 355], [232, 361], [216, 408]] },
     { from: "Mirage Wells", to: "Kel Ashar", via: [[216, 408], [165, 410], [157, 411], [155, 410]] },
     { from: "Mirage Wells", to: "Mirage Wells' east shore", via: [[216, 408], [219, 416]] },
+    { from: "Duskveil Gate", to: "Mirage Wells", via: [[229, 430], [225, 429], [219, 416]] },
     { from: "Kel Ashar", to: "Jackal Springs", via: [[148, 395], [100, 365]] },
     { from: "Jackal Springs", to: "The Ashen Pass", via: [[100, 365], [99, 360], [146, 345]] },
     { from: "Jackal Springs", to: "The Sun Road", via: [[100, 365], [89, 364], [65, 366], [46, 368]] },

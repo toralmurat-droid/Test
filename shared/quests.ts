@@ -3478,7 +3478,7 @@ const IDLE: Record<string, string> = {
   // land identity (settlement network step 3): Oakvale grows and mills grain
   miller: "When the brook runs low, the windmill up on the meadow grinds, and when the wind drops, my wheel does. Between the two of them the valley never goes without bread. Goldenreach sends the sacks down by cart.",
   // the Sunscar moves salt by caravan (Hamid's caravan was hit at Jackal Springs)
-  caravaneer: "Salt from the Glasswind Flats, cut in slabs and roped two to a camel. Kel Ashar's east gate is where the strings rest before the long road. The camels came back on their own, the drivers didn't. A camel knows the road.",
+  caravaneer: "Salt from the Glasswind Flats, cut in slabs and roped two to a camel. Kel Ashar's east gate is where the strings rest before the long road. The camels came back on their own, the drivers didn't. A camel knows the road. East of the wells, under the Thornspire, there is a walled city of the Veiled. We water the strings at the wells and go no nearer.",
   // the villages along the highways (settlement network step 4): their townsfolk
   turfcutter: "Cut it, stack it, turn it, stack it again. Peat dries slow on the moors, and Cairnwatch's beacon eats a stack a night. My arms will be this shape when they bury me.",
   eeltrapper: "Eels in the creels, flasks on the shelf. The boats bring both up the fen. You'd be amazed how many folk want the one after they've eaten the other.",
