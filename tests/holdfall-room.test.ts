@@ -137,6 +137,7 @@ test("hold works (room): renown only for legal wrecks, capped per war tick; work
     assert.ok(p.renown > one, "a new war tick pays again");
     // the last works brought down by a sworn hero whose clan's war does not reach this land: the Hold falls, nothing is paid
     const st = warState()!, OFF = CLAN_KEYS.find((k) => k !== OWN && !(atWar(k, OWN) && targetsOf(st, k).includes(LAND.id))) ?? OWN;
+    (HOLD_FALL as any).wreckRenownPerTick = cap; warState()!.tick++; room.holdWorks.tick(Date.now()); // (a fresh cap: only legality may refuse)
     p.clan = OFF; const paid = p.renown;
     assert.ok(works().length >= 1, "works left for the out-of-war hero");
     for (const [mid, m] of works()) kill(mid, m);
