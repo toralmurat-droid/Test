@@ -34,5 +34,14 @@ export const LK_SHEETS = {
   lk_salt_stack: { w: 88, h: 56, frames: 1, ox: 36, oy: 37, fps: 0 },
   lk_salt_pan: { w: 106, h: 62, frames: 1, ox: 52, oy: 32, fps: 0 },
   lk_caravan: { w: 266, h: 146, frames: 6, ox: 108, oy: 88, fps: 3 },
+  // the Crown of the Marches: pilgrims and tourneys
+  lk_pavilion: { w: 186, h: 124, frames: 6, ox: 82, oy: 88, fps: 4 },
+  lk_pavilion_blue: { w: 186, h: 124, frames: 6, ox: 82, oy: 88, fps: 4 },
+  lk_candle_shrine: { w: 92, h: 86, frames: 6, ox: 39, oy: 66, fps: 6 },
+  lk_quintain: { w: 128, h: 105, frames: 6, ox: 49, oy: 76, fps: 3 },
+  lk_pilgrim_staves: { w: 74, h: 56, frames: 1, ox: 27, oy: 43, fps: 0 },
+  lk_ribbon_post: { w: 72, h: 63, frames: 6, ox: 22, oy: 50, fps: 4 },
+  lk_lists: { w: 286, h: 198, frames: 6, ox: 106, oy: 148, fps: 4 },
+  lk_tilt: { w: 398, h: 248, frames: 6, ox: 175, oy: 159, fps: 4 },
 } satisfies Record<string, LkSheet>;
 export type LkKind = keyof typeof LK_SHEETS;

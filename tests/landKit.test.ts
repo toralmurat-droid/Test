@@ -4,13 +4,14 @@ import { readFileSync } from "node:fs";
 import { actOfTile, TILE } from "../shared/constants";
 import { AREAS, EMPTY, GROUND, HIGHWAY_TILES, isSolidAt, NATURE, OBJECTS, PORTAL_SPOTS, SIGNPOSTS, T } from "../shared/map";
 import { isDecorSolidAt, NPCS, NPC_DECOR } from "../shared/npcs";
-import { LANDMARKS, LANDMARK_SOLIDS } from "../shared/landmarks";
+import { landmarkBoxes, LANDMARKS, LANDMARK_SOLIDS } from "../shared/landmarks";
 import { CHESTS } from "../shared/chests";
 import { SIEGE_SITES } from "../shared/siege";
 import { HOLDS, MUSTERS } from "../shared/war/standards";
 import { CAPITAL_FORTS, FORT_SKIP, HIGHWAYS, legLine } from "../shared/highways";
 import { bodySolidAt } from "../shared/movement";
-import { buildLandKit, IN_PEN, inSeat, KIT_BUDGET, kitFree, LAND_KIT_SPOTS, LANDMARK_LIGHT, LANDMARK_SHEET, LK_SHEETS, ON_FIELD, SEAT_MARGIN, type LkKind } from "../client/src/landKit";
+import { buildLandKit, IN_PEN, inSeat, KIT_BUDGET, kitFree, LAND_KIT_SPOTS, LANDMARK_LIGHT, LANDMARK_PARTS, LANDMARK_SHEET, LK_SHEETS, ON_FIELD, SEAT_MARGIN, type LkKind } from "../client/src/landKit";
+import { allObjects } from "../shared/quests";
 
 // Land identity (settlement network step 3): kit props (client, walk-through) and landmarks (shared, solid)
 const MW = GROUND[0].length;
@@ -97,8 +98,62 @@ test("the Sinkholes and the Sunscar have their kit and landmarks: rope and lifts
   assert.ok(LAND_KIT_SPOTS.filter((s) => s.area === "The Sunscar" && s.kind.startsWith("lk_camel")).every((s) => Math.hypot(s.x / TILE - cv.x, s.y / TILE - cv.y) < 7), "a camel far from the caravan halt");
   for (const area of ["Kel Ashar", "Jackal Springs", "Palmshade Oasis", "Mirage Wells", "The Glasswind Flats"]) assert.ok(LAND_KIT_SPOTS.some((s) => s.area === area), `${area}: undressed`);
   assert.ok(at("lk_salt_pan").every(([, , s]) => s.area === "The Glasswind Flats"), "a salt pan off the Flats");
-  // the clan seats in these lands stay clear for step 5: Hidehall, the Veiled Sanctum
-  for (const area of ["Hidehall", "The Veiled Sanctum"]) assert.ok(!LAND_KIT_SPOTS.some((s) => s.area === area), `${area} dressed`);
+  // the clan seats in these lands stay clear for step 5: Hidehall, the Veiled Sanctum. By position, not by the spot's
+  // area name (no Place names them, so that could never fail): no kit prop stands in their area or their seat box
+  const R = FORT_SKIP + SEAT_MARGIN;
+  for (const area of ["Hidehall", "The Veiled Sanctum"]) {
+    const a = AREAS.find((r) => r.name === area)!, forts = CAPITAL_FORTS.filter(([x, y]) => x >= a.x && x < a.x + a.w && y >= a.y && y < a.y + a.h);
+    assert.equal(forts.length, 1, `${area}: its capital fort`);
+    const [fx, fy] = forts[0];
+    for (const s of LAND_KIT_SPOTS) {
+      const [tx, ty] = tileOf(s.x, s.y);
+      assert.ok(!(tx >= a.x && tx < a.x + a.w && ty >= a.y && ty < a.y + a.h), `${s.kind} at ${tx},${ty}: in ${area}`);
+      assert.ok(Math.abs(tx - fx) > R || Math.abs(ty - fy) > R, `${s.kind} at ${tx},${ty}: in ${area}'s seat`);
+    }
+  }
+});
+
+test("the Crown has its kit and the Lists: pavilions and a shrine round Tollcross, ribbon posts on the Pilgrims' Way", () => {
+  assert.ok(LANDMARKS.some((l) => l.id === "lists" && l.land === 6), "no Lists");
+  const crown = LAND_KIT_SPOTS.filter((s) => s.land === 6), at = (s: (typeof crown)[number]) => tileOf(s.x, s.y);
+  for (const k of ["lk_pavilion", "lk_pavilion_blue", "lk_candle_shrine", "lk_quintain", "lk_pilgrim_staves", "lk_ribbon_post"] as const) assert.ok(crown.some((s) => s.kind === k), `crown: no ${k}`);
+  // Tollcross: pavilions on both sides of the square, none behind the herald at its head; the shrine in the north-west
+  const herald = NPCS.find((n) => n.id === "crownherald")!, tc = crown.filter((s) => s.area === "Tollcross");
+  const pav = tc.filter((s) => s.kind.startsWith("lk_pavilion"));
+  assert.ok(pav.some((s) => at(s)[0] < 138) && pav.some((s) => at(s)[0] >= 150), "Tollcross: pavilions on one side only");
+  for (const s of pav) assert.ok(Math.abs(s.x - herald.x) / TILE > 8, `pavilion at ${at(s)}: behind the herald`);
+  for (const s of tc.filter((q) => q.kind === "lk_candle_shrine")) assert.ok(at(s)[0] < 134 && at(s)[1] < 1193, `shrine at ${at(s)}: not in the north-west`);
+  assert.ok(tc.some((s) => s.kind === "lk_quintain") && crown.some((s) => s.area === "The Tourney Grounds" && s.kind === "lk_quintain"), "a quintain in Tollcross and at the Lists");
+  // ribbon posts beside the Greenward road through the Pilgrims' Way, off its paving
+  const h = HIGHWAYS.find((q) => q.land === 6)!, mid = h.legs.flatMap((leg) => legLine(h, leg));
+  const posts = crown.filter((s) => s.kind === "lk_ribbon_post");
+  assert.ok(posts.length >= 2 && posts.every((s) => s.area === "The Pilgrims' Way"), "ribbon posts on the Way");
+  for (const s of posts) {
+    const [tx, ty] = at(s), d = Math.min(...mid.map((k) => Math.hypot((k % MW) - tx, Math.floor(k / MW) - ty)));
+    assert.ok(d >= 2.5 && d <= 6, `ribbon post at ${tx},${ty}: ${d.toFixed(1)} tiles from the road`);
+  }
+  // nothing in the Crown Keep; the quest's shrines and pennants keep their ground
+  assert.ok(!crown.some((s) => s.area === "The Crown Keep" || s.area === "The Throne Hall"), "the Keep dressed");
+  const objs = allObjects().filter((o) => o.y / TILE > 1148);
+  for (const s of crown) for (const o of objs) assert.ok(Math.hypot(s.x - o.x, s.y - o.y) / TILE >= 2, `${s.kind} at ${at(s)}: on ${o.id}`);
+});
+
+test("the Lists: a stand and a tilt barrier with the riders' lane open between them, clear of the King's Hunt pennant", () => {
+  const l = LANDMARKS.find((q) => q.id === "lists")!, [stand, tilt] = landmarkBoxes(l);
+  assert.ok(stand && tilt && landmarkBoxes(l).length === 2, "the Lists: stand and barrier");
+  // the lane: the barrier south of the stand, more than a tile of open ground between them, walkable all along
+  const lane0 = stand[1] + stand[3], lane1 = tilt[1];
+  assert.ok(lane1 - lane0 >= 1, `the riders' lane is ${(lane1 - lane0).toFixed(2)} tiles`);
+  for (let x = Math.max(stand[0], tilt[0]) + 0.2; x < Math.min(stand[0] + stand[2], tilt[0] + tilt[2]); x += 0.25)
+    assert.ok(!bodySolidAt(x * TILE, ((lane0 + lane1) / 2) * TILE), `lane blocked at ${x.toFixed(2)}`);
+  // its pennant ("they hang from the old lists") stays in reach
+  const pennant = allObjects().find((o) => o.id === "throne_pennant2")!, px = pennant.x / TILE, py = pennant.y / TILE;
+  for (const [x, y, w, h] of landmarkBoxes(l)) assert.ok(Math.max(x - px, px - x - w, 0) + Math.max(y - py, py - y - h, 0) >= 2.5, "the Lists crowd the pennant");
+  // the barrier is drawn on its own (it stands in front of the lane, the stand behind it), its foot on the box's south edge
+  const part = LANDMARK_PARTS.lists[0];
+  assert.equal(part.kind, "lk_tilt");
+  assert.ok(Math.abs(part.y - (tilt[1] + tilt[3])) < 0.01 && Math.abs(part.x - (tilt[0] + tilt[2] / 2)) < 0.01, "the tilt's sprite is not at its box");
+  assert.ok(l.y <= lane0 + 0.01, "the stand's sprite sorts in front of the lane");
 });
 
 test("a landmark with no box of its own stands on ground the map already blocks: the Ropewell Lift over its pit", () => {
@@ -144,7 +199,7 @@ test("per-land budget: at most 40 kit props and one landmark", () => {
 const pngSize = (path: string) => { const b = readFileSync(path); return [b.readUInt32BE(16), b.readUInt32BE(20)]; };
 
 test("every kit kind and landmark has a sheet size and a baked sheet of that size", () => {
-  const used = new Set<LkKind>([...LAND_KIT_SPOTS.map((s) => s.kind), ...LANDMARKS.map((l) => LANDMARK_SHEET[l.id])]);
+  const used = new Set<LkKind>([...LAND_KIT_SPOTS.map((s) => s.kind), ...LANDMARKS.map((l) => LANDMARK_SHEET[l.id]), ...Object.values(LANDMARK_PARTS).flat().map((p) => p.kind)]);
   for (const k of used) {
     const s = LK_SHEETS[k];
     assert.ok(s, `${k}: no size`);
@@ -158,25 +213,25 @@ test("no land-kit sheet is in NPC_DECOR (siege works, tunnels and rituals read i
 });
 
 test("landmarks: solid boxes on open ground in their area and land, blocking movement, not NPC_DECOR", () => {
-  assert.equal(LANDMARK_SOLIDS.length, LANDMARKS.filter((l) => l.solid).length);
+  assert.equal(LANDMARK_SOLIDS.length, LANDMARKS.flatMap(landmarkBoxes).length);
   for (const l of LANDMARKS) {
     const a = AREAS.find((r) => r.name === l.area)!;
     assert.ok(a && l.x >= a.x && l.x < a.x + a.w && l.y >= a.y && l.y < a.y + a.h, `${l.id}: outside ${l.area}`);
     assert.equal(actOfTile(Math.floor(l.x), Math.floor(l.y)), l.land, `${l.id}: wrong land`);
     assert.ok(LANDMARK_SHEET[l.id], `${l.id}: no art`);
     assert.ok(!NPC_DECOR.some((d) => d.prop === l.id || d.prop === LANDMARK_SHEET[l.id] || (l.solid && d.solid && d.solid.every((v, i) => v === l.solid![i]))), `${l.id}: in NPC_DECOR`);
-    if (!l.solid) continue;
-    const [x, y, w, h] = l.solid;
-    // the box and a ring of one tile round it: open ground, no road, water, highway or built object
-    for (let ty = Math.floor(y) - 1; ty <= Math.floor(y + h); ty++) for (let tx = Math.floor(x) - 1; tx <= Math.floor(x + w); tx++) {
-      const g = GROUND[ty][tx], o = OBJECTS[ty][tx];
-      assert.ok(g !== T.WATER && g !== T.COBBLE && g !== T.BRIDGE && !HIGHWAY_TILES.has(ty * MW + tx), `${l.id}: road or water at ${tx},${ty}`);
-      assert.ok(o === EMPTY || NATURE.has(o), `${l.id}: built object at ${tx},${ty}`);
+    for (const [x, y, w, h] of landmarkBoxes(l)) {
+      // the box and a ring of one tile round it: open ground, no road, water, highway or built object
+      for (let ty = Math.floor(y) - 1; ty <= Math.floor(y + h); ty++) for (let tx = Math.floor(x) - 1; tx <= Math.floor(x + w); tx++) {
+        const g = GROUND[ty][tx], o = OBJECTS[ty][tx];
+        assert.ok(g !== T.WATER && g !== T.COBBLE && g !== T.BRIDGE && !HIGHWAY_TILES.has(ty * MW + tx), `${l.id}: road or water at ${tx},${ty}`);
+        assert.ok(o === EMPTY || NATURE.has(o), `${l.id}: built object at ${tx},${ty}`);
+      }
+      for (const p of [...PORTAL_SPOTS.map((q) => [q.x + 0.5, q.y + 0.5]), ...SIGNPOSTS.map((q) => [q.x + 0.5, q.y + 0.5]), ...[...NPCS, ...CHESTS, ...HOLDS, ...MUSTERS].map((q) => [q.x / TILE, q.y / TILE])])
+        assert.ok(Math.hypot(p[0] - (x + w / 2), p[1] - (y + h / 2)) > 3, `${l.id}: too close to a stone, post, NPC, chest or fort at ${p}`);
+      assert.ok(isDecorSolidAt((x + w / 2) * TILE, (y + h / 2) * TILE), `${l.id}: does not block`);
+      assert.ok(!isDecorSolidAt((x - 0.3) * TILE, (y + h / 2) * TILE) && !isDecorSolidAt((x + w + 0.3) * TILE, (y + h / 2) * TILE), `${l.id}: blocks outside its box`);
     }
-    for (const p of [...PORTAL_SPOTS.map((q) => [q.x + 0.5, q.y + 0.5]), ...SIGNPOSTS.map((q) => [q.x + 0.5, q.y + 0.5]), ...[...NPCS, ...CHESTS, ...HOLDS, ...MUSTERS].map((q) => [q.x / TILE, q.y / TILE])])
-      assert.ok(Math.hypot(p[0] - (x + w / 2), p[1] - (y + h / 2)) > 3, `${l.id}: too close to a stone, post, NPC, chest or fort at ${p}`);
-    assert.ok(isDecorSolidAt((x + w / 2) * TILE, (y + h / 2) * TILE), `${l.id}: does not block`);
-    assert.ok(!isDecorSolidAt((x - 0.3) * TILE, (y + h / 2) * TILE) && !isDecorSolidAt((x + w + 0.3) * TILE, (y + h / 2) * TILE), `${l.id}: blocks outside its box`);
   }
 });
 
@@ -215,8 +270,9 @@ test("chests, siege sites, forts and musters did not move (digests from the comm
 
 test("no monster spawns inside a landmark's solid box (it could never step out)", async () => {
   const { SPAWN_ZONES, randomPointInZone, underLandmark } = await import("../shared/spawns");
-  // the lift has no box (its pit blocks, see above); every other landmark is solid and checked here
-  assert.equal(LANDMARK_SOLIDS.length, LANDMARKS.length - 1);
+  // the lift has no box (its pit blocks, see above); every other landmark is solid (the Lists twice) and checked here
+  assert.deepEqual(LANDMARKS.filter((l) => !landmarkBoxes(l).length).map((l) => l.id), ["lift"]);
+  assert.equal(LANDMARK_SOLIDS.length, LANDMARKS.flatMap(landmarkBoxes).length);
   for (const [x, y, w, h] of LANDMARK_SOLIDS) {
     for (let ty = Math.floor(y); ty < y + h; ty++) for (let tx = Math.floor(x); tx < x + w; tx++) assert.ok(underLandmark(tx, ty), `tile ${tx},${ty} under a landmark`);
     const zones = SPAWN_ZONES.filter((z) => x + w > z.x && x < z.x + z.w && y + h > z.y && y < z.y + z.h);

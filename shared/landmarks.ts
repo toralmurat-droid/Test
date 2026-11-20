@@ -19,6 +19,8 @@ export interface Landmark {
   y: number;
   /** Blocks movement here; none when it stands on ground the map already blocks (the lift over its pit). */
   solid?: readonly [number, number, number, number];
+  /** More blocking boxes when the landmark has parts with open ground between them (the Lists: stand and tilt barrier). */
+  parts?: readonly (readonly [number, number, number, number])[];
 }
 
 export const LANDMARKS: readonly Landmark[] = [
@@ -34,7 +36,14 @@ export const LANDMARKS: readonly Landmark[] = [
   // the caravan halt outside Kel Ashar's east gate: a loaded litter under a striped canopy (solid), the couched camels
   // round it walk-through like the kit
   { id: "caravan", land: 2, area: "The Sunscar", x: 168.6, y: 404.6, solid: [167.9, 404.05, 1.4, 1.1] },
+  // the Lists on the Tourney Grounds, south of the old lists' ruined court: a viewing stand under heralds' cloth (solid)
+  // and the tilt barrier in front of it (solid), the riders' lane between them open. Its east end stays 3 tiles off the
+  // torn pennant the King's Hunt searches (98.5,1205.7); the muster at 108.5,1206.5 stays 13 tiles off
+  { id: "lists", land: 6, area: "The Tourney Grounds", x: 90.5, y: 1206, solid: [88.6, 1205.1, 3.8, 0.9], parts: [[88.6, 1207.1, 7.3, 0.4]] },
 ];
 
+/** Every blocking box of a landmark: its `solid` and its `parts`. */
+export const landmarkBoxes = (l: Landmark): readonly (readonly [number, number, number, number])[] => [...(l.solid ? [l.solid] : []), ...(l.parts ?? [])];
+
 /** The blocking boxes, for the decor collision grid. */
-export const LANDMARK_SOLIDS: readonly (readonly [number, number, number, number])[] = LANDMARKS.flatMap((l) => (l.solid ? [l.solid] : []));
+export const LANDMARK_SOLIDS: readonly (readonly [number, number, number, number])[] = LANDMARKS.flatMap(landmarkBoxes);

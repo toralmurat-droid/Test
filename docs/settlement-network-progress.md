@@ -161,6 +161,37 @@ Roadmap: client/src/roadmap.ts, "Settlement network".
   - Not done: Ropewell's working townsfolk (plan Q5), rope ladders into pits, hitching rails and water jars at the oases
     (the halt has a rail), a light for the Lift's lantern (LANDMARK_LIGHT stays the beacon only).
 
+- Step 3, PR 4: the Crown of the Marches (pilgrims and tourneys). **Step 3 is done**: all six lands have their kit and landmark.
+  - Landmark (`shared/landmarks.ts`): the Lists on the Tourney Grounds, south of the old lists' ruined court. Two solid
+    boxes: the viewing stand (`solid` 88.6,1205.1 3.8x0.9) and the tilt barrier (new optional `parts`: 88.6,1207.1
+    7.3x0.4), with the riders' lane between them open (1.1 tiles). `landmarkBoxes(l)` gives every box of a landmark;
+    `LANDMARK_SOLIDS`, landKit.ts's keep-clear rule and the tests read it. The barrier is 0.4 thick so a body centred on it
+    has its feet box inside (at 0.3 it did not). It stands 2.6 tiles off the King's Hunt pennant at 98.5,1205.7 ("they
+    hang from the old lists") and 13 off the muster at 108.5,1206.5. It is in the Tourney Grounds' monster zone:
+    `underLandmark` covers its spawns.
+  - Art (`tools/art/paint/landKit/crown.ts`): heralds' pavilions in two liveries (red and cream, blue and gold) with
+    gored roofs, valances, door flaps tied back and a house shield; a candle shrine (a marble niche with a saint, votive
+    candles flickering on the steps, painted flames via `overlay`); a quintain with its shield and sandbag swinging; a
+    bundle of pilgrims' staves with shells and a gourd; ribbon posts with a cairn of pilgrims' stones; the Lists in two
+    sheets, `lk_lists` (the stand, at the landmark's foot) and `lk_tilt` (the barrier), so heroes in the lane sort between
+    them: `LANDMARK_PARTS` in landKit.ts, drawn by landKitView.ts at each part's own foot.
+  - Placement (landKit.ts `CROWN`): Tollcross a red and a blue pavilion on each side of the square (none behind the
+    herald), the candle shrine and staves in the north-west corner, a quintain on the south-east ground; at the Lists a
+    quintain at the tilt's east end and two knights' pavilions south of it; staves at the Greenward Gate's arrival and
+    ribbon posts along the Greenward road through the Pilgrims' Way (`cairns()` on the King's Roads). 13 props (budget
+    40). The quest's wayside shrines and pennants keep 2 tiles; the Crown Keep and the Throne Hall stay as they are. The
+    other lands' spots came out byte-identical.
+  - Text: the herald's IDLE line (pilgrims' ribbons, the pavilions, the mended Lists). No item ids, no stock change.
+  - Tests: tests/landKit.test.ts (the Crown's kinds and the Lists, both sides of the square, ribbon posts 2.5-6 tiles off
+    the road, quest objects clear, the lane open, the pennant in reach, the tilt's sprite at its box; every landmark box
+    on open ground, blocking and in a monster zone; part sheets on disk). The reviewer's Hidehall / Veiled Sanctum check
+    now tests positions against each area and its seat box (it compared the spot's area name, which could never fail).
+    tests/landmarkBodies.test.ts: a dash and a gore north at the tilt stop south of it and walk on. No map tile changed.
+  - Not done: Tollcross's working townsfolk (plan Q5), herald shield boards, the pilgrim relic-seller (Q6: no).
+
 ## Next
-- Step 3, PR 4: Crown. It adds `tools/art/paint/landKit/crown.ts` and its `Place` list in landKit.ts.
+- Step 3 optional follow-ups (none blocks step 4): working townsfolk for Millbrook, Cairnwatch, the Rustwater Post,
+  Ropewell and Tollcross (plan Q5); the small props left out (spare millstone, turf drying rack, creels, tailings heap,
+  skulls on gateposts, rope ladders, hitching rails and water jars at the oases, herald shield boards); a light for the
+  Lift's lantern and the candle shrine; real stalls in Tollcross with step 4 (Murat: cosmetic pavilions for now).
 - Later: 3-wide bridges (client isobridge.ts), per-land cobble palettes, highways on the war table (all owner calls: no for now).
