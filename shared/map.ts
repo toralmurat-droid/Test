@@ -1137,11 +1137,12 @@ function buildWorld() {
     if (a) skip.push({ x0: a.x, x1: a.x + a.w - 1, y0: a.y, y1: a.y + a.h - 1 });
   }
   const highwayBefore = new Map<number, { g: number; o: number }>(), highways = carveHighways(ground, objects, roads, T, EMPTY, skip, undefined, highwayBefore);
+  const firstHighwayPost = posts.length;
   for (const h of HIGHWAYS) {
     const { y0, h: rows } = LAND_ROWS[h.land];
     for (const p of h.posts ?? []) placePost({ x: p.x, y: p.y + y0, to: p.to }, (y) => y >= y0 && y < y0 + rows, highwayBefore);
   }
-  return { ground, objects, areas, posts, roads, broken, makeshift, highways, highwaySkip: skip, highwayBefore };
+  return { ground, objects, areas, posts, roads, broken, makeshift, highways, highwaySkip: skip, highwayBefore, highwayPosts: posts.slice(firstHighwayPost) };
 }
 
 /**
@@ -1200,6 +1201,8 @@ export const AREAS = WORLD.areas;
 export const HIGHWAY_TILES: ReadonlySet<number> = WORLD.highways;
 /** Where the highways stay unwidened (towns, villages, city gate boxes, capital forts), for the tests and tools/highway-route.ts. */
 export const HIGHWAY_SKIP: readonly TileBox[] = WORLD.highwaySkip;
+/** The highways' signposts (placed after the carve; the band rebuild tests put them back on a fresh band). */
+export const HIGHWAY_POSTS: readonly { x: number; y: number; to: string[] }[] = WORLD.highwayPosts;
 
 /**
  * Mawdeep gates (Murat 2026-11-05: "doors to open"; 2026-11-08: "part should be like a prison wall and only part a
