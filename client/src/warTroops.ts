@@ -11,7 +11,7 @@ import Phaser from "phaser";
 import { CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
 import { viewTier, holdGuards } from "../../shared/war/intel";
 import { garrisonSpots, mix, patrolCount, patrolOf, patrolPos, SIEGE_FIGHT, siegeCounts, siegeLife, TROOP, TROOP_LOOK, type Patrol } from "../../shared/war/patrols";
-import { HOLDS, STANDARDS } from "../../shared/war/standards";
+import { MUSTERS, musterOf, STANDARDS } from "../../shared/war/standards";
 import type { WarView } from "../../shared/war/view";
 import { underground } from "../../shared/dungeon";
 import { isSolidAt } from "../../shared/map";
@@ -35,11 +35,11 @@ const FLAG_H = 44;
 /** The look without painted art (`?pixel=1`): each art key's older stand-in (watchman and monster sheets). */
 const LEGACY = WAR_LEGACY;
 
-/** Where each land's stops are (Hold and standards): used to find nearby lands without building any patrol. */
+/** Where each land's stops are (muster and standards): used to find nearby lands without building any patrol. */
 const STOPS = new Map<number, { x: number; y: number }[]>();
 function stopsOf(t: number) {
   if (!STOPS.size) {
-    for (const h of HOLDS) (STOPS.get(h.t) ?? STOPS.set(h.t, []).get(h.t)!).push(h);
+    for (const h of MUSTERS) (STOPS.get(h.t) ?? STOPS.set(h.t, []).get(h.t)!).push(h);
     for (const s of STANDARDS) (STOPS.get(s.t) ?? STOPS.set(s.t, []).get(s.t)!).push(s);
   }
   return STOPS.get(t);
@@ -269,7 +269,7 @@ export class WarTroops {
 
   /** A battle at each standard: attackers (side +1 of the axis) against defenders, as two loose lines. */
   private buildSiege(sq: Squad, t: number, clan: ClanKey, atk: ClanKey, atkIdx: number, control: number) {
-    const F = SIEGE_FIGHT, std = STANDARDS.filter((s) => s.t === t), hold = HOLDS.find((h) => h.t === t);
+    const F = SIEGE_FIGHT, std = STANDARDS.filter((s) => s.t === t), hold = musterOf(t); // (defenders come from the muster: a fort, or an open camp)
     const ax = this.attackAxis(t, atkIdx), px = -ax.y, py = ax.x, cnt = siegeCounts(std.length, control);
     std.forEach((s, si) => {
       const seed = t * 31 + si;

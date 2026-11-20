@@ -59,10 +59,11 @@ test("fort ground: who counts as wild", () => {
 test("fort ground: lairs, the Tide and quest spawns stay clear; camp posts and guarded chests inside a fort belong to exempt monsters", () => {
   for (const l of LAIRS) for (let x = l.x; x < l.x + l.w; x++) for (let y = l.y; y < l.y + l.h; y++) assert.ok(!fortGroundTile(x, y), `${l.name} (${x},${y})`);
   assert.ok(!fortGroundAt(TIDE_GOAL.x, TIDE_GOAL.y) && TIDE_SPAWNS.every((p) => !fortGroundAt(p.x, p.y)), "the Gloam Tide's march");
-  // Redfang Hollow, Fangrock and Hidehall have their Hold in the camp: those bandits are camp mobs (Mob.camp, exempt),
+  // Fangrock and Hidehall (capitals, their Holds where they always stood) have their Hold in the camp; Redfang Hollow and Talon
+  // Fort have no fort since the Holds moved to the roads (standards.ts HOLD_SITES). Camp bandits are camp mobs (Mob.camp, exempt),
   // spawned on their posts (TownRoom freeSpawnPoint), never through the wild re-roll. Pinned so a new one is looked at.
   const campPosts = POSTS.filter((p) => [p.at, ...(p.route ?? [])].some(([x, y]) => fortGroundTile(x, y)));
-  assert.deepEqual([...new Set(campPosts.map((p) => p.camp))].sort(), [0, 1, 2, 3]);
+  assert.deepEqual([...new Set(campPosts.map((p) => p.camp))].sort(), [1, 3]);
   // a few lair chests lie in a Hold's courtyard: their guardians carry Mob.guard (exempt)
   const chests = CHESTS.filter((c) => c.guards && fortGroundAt(c.x, c.y)).map((c) => c.id);
   assert.ok(chests.length <= 8, `guarded chests in forts: ${chests.join(", ")}`);

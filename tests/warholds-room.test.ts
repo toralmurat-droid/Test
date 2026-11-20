@@ -10,6 +10,7 @@ import { bannerSpot, HOLD_SACK, inSackReach, sackGold } from "../shared/war/hold
 import { garrisonCount, garrisonSpots, patrolOf, TROOP } from "../shared/war/patrols";
 import { newWar, targetsOf, WAR } from "../shared/war/rules";
 import { TERRITORIES } from "../shared/war/territories";
+import { musterOf } from "../shared/war/standards";
 import { troopLevel, WAR_TROOPS } from "../shared/war/troops";
 import { SAFE_ZONE, isSafeZone } from "../shared/map";
 import { _resetWar, _valorOf, warLog, warNow, warState } from "../server/war";
@@ -18,7 +19,7 @@ import { holdTier } from "../shared/war/holdTiers";
 import { _resetHolds } from "../server/warHolds";
 
 /**
- * A land with guards, away from Oakvale, not a capital; FOE: a clan at war with its holder that may attack it; CALM: a
+ * A land with guards (a fortified land: standards.ts HOLD_SITES), away from Oakvale, not a capital; FOE: a clan at war with its holder that may attack it; CALM: a
  * clan neither at war with the holder nor able to reach the land (its heroes need a grudge to be enemies).
  */
 const PICK = (() => {
@@ -26,7 +27,7 @@ const PICK = (() => {
   _resetWar({ v: 1, state: s, minds: newMinds(), next: Date.now() + 1e9, log: [] }); // (sets the clans at war for the opening map)
   for (const t of TERRITORIES) {
     const b = bannerSpot(t.id);
-    if (!b || t.capitalOf || t.act !== 1 || !patrolOf(t.id) || garrisonSpots(t.id, TROOP.garrisonMax).length < 4 || isSafeZone(b.x, b.y)) continue;
+    if (!b || t.capitalOf || !patrolOf(t.id) || garrisonSpots(t.id, TROOP.garrisonMax).length < 4 || isSafeZone(b.x, b.y)) continue;
     if (Math.hypot(t.cx - (SAFE_ZONE.x + SAFE_ZONE.w / 2), t.cy - (SAFE_ZONE.y + SAFE_ZONE.h / 2)) < 60) continue;
     const own = s.owner[t.id], foe = CLAN_KEYS.find((k) => k !== own && atWar(k, own) && targetsOf(s, k).includes(t.id));
     const calm = CLAN_KEYS.find((k) => k !== own && !atWar(k, own) && !targetsOf(s, k).includes(t.id));
@@ -280,16 +281,18 @@ test("holds (room): a sworn hero whose clan is not at war with the holder (a gru
   } finally { setWarPairs(wars); await srv.stop(); }
 });
 
-test("holds (room): the Crown Keep's banner cannot be raised by anyone: it changes hands only at a Reckoning", async () => {
+test("holds (room): the Crown Keep has no banner to raise: it changes hands only at a Reckoning", async () => {
   const srv = await startRoom();
   freshWar();
   try {
-    const keep = TERRITORIES.find((t) => t.reckoningOnly)!, at = bannerSpot(keep.id)!, holder = warState()!.owner[keep.id];
+    const keep = TERRITORIES.find((t) => t.reckoningOnly)!, holder = warState()!.owner[keep.id];
+    assert.equal(bannerSpot(keep.id), undefined, "war-proof land: no fort (standards.ts HOLD_SITES)");
+    const at = musterOf(keep.id)!;
     const c = await srv.join({ cls: "wizard" });
     await wait(150);
     const room = srv.room, p = room.state.players.get(c.sessionId);
     p.level = 50; p.clan = CLAN_KEYS.find((k) => k !== holder); p.lastAct = Date.now(); p.x = at.x; p.y = at.y;
-    assert.match(room.holds.sack(c.sessionId, { t: keep.id }), /Reckoning/);
+    assert.match(room.holds.sack(c.sessionId, { t: keep.id }), /no banner/);
     assert.equal(room.holds.count, 0);
     assert.equal(warState()!.control[keep.id], 100);
   } finally { await srv.stop(); }

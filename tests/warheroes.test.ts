@@ -64,10 +64,11 @@ test("presence (W2c): ten minutes in an enemy ring add no valor; the minutes are
   assert.equal(heroValor(1, std.t), 0); assert.equal(heroValor(50, std.t), 0);
 });
 
-test("holds: one per territory, on free ground inside it", async () => {
-  const { HOLDS } = await import("../shared/war/standards");
-  assert.equal(HOLDS.length, TERRITORIES.length);
-  for (const h of HOLDS) {
+test("holds: a muster in every territory, a fort in some (at most one each), on free ground inside it", async () => {
+  const { HOLDS, MUSTERS } = await import("../shared/war/standards");
+  assert.equal(MUSTERS.length, TERRITORIES.length);
+  assert.equal(new Set(HOLDS.map((h) => h.t)).size, HOLDS.length, "at most one fort per territory");
+  for (const h of [...MUSTERS, ...HOLDS]) {
     const t = TERRITORIES[h.t];
     assert.ok(h.x / 32 >= t.x && h.x / 32 < t.x + t.w && h.y / 32 >= t.y && h.y / 32 < t.y + t.h, t.name);
     assert.ok(!isSolidAt(h.x, h.y), `${t.name} hold walkable`);
