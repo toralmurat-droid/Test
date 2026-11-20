@@ -13,5 +13,15 @@ export const LK_SHEETS = {
   lk_beehives: { w: 76, h: 58, frames: 6, ox: 38, oy: 46, fps: 6 },
   lk_hide_frame: { w: 64, h: 74, frames: 6, ox: 32, oy: 64, fps: 3 },
   lk_windmill: { w: 284, h: 236, frames: 6, ox: 138, oy: 202, fps: 5 },
+  // the Grey Barrow Moors: peat and barrows
+  lk_peat_stack: { w: 64, h: 60, frames: 1, ox: 32, oy: 46, fps: 0 },
+  lk_peat_bank: { w: 100, h: 70, frames: 1, ox: 50, oy: 48, fps: 0 },
+  lk_way_cairn: { w: 48, h: 62, frames: 1, ox: 24, oy: 50, fps: 0 },
+  lk_beacon: { w: 150, h: 196, frames: 6, ox: 75, oy: 150, fps: 8 },
+  // the Red Badlands: mines and cattle
+  lk_longhorn: { w: 124, h: 92, frames: 6, ox: 62, oy: 66, fps: 3 },
+  lk_trough: { w: 96, h: 54, frames: 1, ox: 48, oy: 36, fps: 0 },
+  lk_ore_cart: { w: 96, h: 72, frames: 1, ox: 48, oy: 50, fps: 0 },
+  lk_headframe: { w: 330, h: 330, frames: 6, ox: 180, oy: 268, fps: 4 },
 } satisfies Record<string, LkSheet>;
 export type LkKind = keyof typeof LK_SHEETS;

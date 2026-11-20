@@ -547,7 +547,8 @@ export class TownScene extends Phaser.Scene {
     this.shadows = new CastShadows(this, () => !!this.details?.underground);
     this.details = new Details(this); // roof shading, ground detail, ducks, lanterns, day/night
     this.details.onDarkness((d) => this.ambient?.setDarkness(d));
-    addWorldProps(this, (x, y, lift, dx) => this.details?.addLight(x, y, 0xffb347, 2.2, 0.75, 0.08, lift, dx)); // spear racks, pennants, dummies, lantern poles...
+    addWorldProps(this, (x, y, lift, dx) => this.details?.addLight(x, y, 0xffb347, 2.2, 0.75, 0.08, lift, dx), // spear racks, pennants, dummies, lantern poles...
+      (x, y, color, scale, lift) => this.details?.addLight(x, y, color, scale, 0.85, 0.16, lift)); // and the landmarks' fires (the Beacon Cairn)
     addSiegeWorks(this); // the necromancer's half-built siege engines in the skeleton lands
     this.siege = new SiegeWork(this);
     // The Mawdeep Warrens below the woods: cave walls, braziers, ropes and stairs, and the dark down there

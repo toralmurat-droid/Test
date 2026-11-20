@@ -419,7 +419,7 @@ export function findHideSpot(kind: MobKind, px: number, py: number, radius: numb
       if (isSafeZone(x, y)) continue;
       for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
         const ox = x + dx * TILE, oy = y + dy * TILE;
-        if (isSafeZone(ox, oy) || isSolidAt(ox - 5, oy - 5) || isSolidAt(ox + 5, oy + 5) || isSolidAt(ox - 5, oy + 5) || isSolidAt(ox + 5, oy - 5)) continue;
+        if (isSafeZone(ox, oy) || underLandmark(Math.floor(ox / TILE), Math.floor(oy / TILE)) || isSolidAt(ox - 5, oy - 5) || isSolidAt(ox + 5, oy + 5) || isSolidAt(ox - 5, oy + 5) || isSolidAt(ox + 5, oy - 5)) continue;
         const d = Math.hypot(ox - px, oy - py);
         if (d < bestD) { bestD = d; best = { key: `${tx},${ty}`, x, y, outX: ox, outY: oy }; }
       }

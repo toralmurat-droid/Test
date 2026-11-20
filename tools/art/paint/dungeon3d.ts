@@ -21,7 +21,7 @@ const ropeM = M(ROPER, { tex: (x, y, z) => ((x + y + z) * 1.3 % 1 < 0.3 ? -0.15 
 const FLAME = [0xfff2b0, 0xffd36a, 0xffa040, 0xe0641e, 0xa83a14, 0x5e1e0c];
 const h2 = (x: number, y: number, s: number) => hash3(x, y, s);
 /** Painted flame tongues (the old dungeon flame, over the 3D bowl): half width hw, height H texels, base at screen (cx, fy). */
-function flame2d(px: (x: number, y: number, c: number) => void, cx: number, fy: number, hw: number, H: number, f: number) {
+export function flame2d(px: (x: number, y: number, c: number) => void, cx: number, fy: number, hw: number, H: number, f: number) {
   for (let x = -hw; x <= hw; x++) {
     const base = 1 - Math.abs(x) / (hw + 1);
     const fh = Math.round(H * 0.25 + base * H * (0.7 + 0.3 * Math.sin(f * 1.7 + x * 1.3)) + h2(x, f, 7) * 2.5);
