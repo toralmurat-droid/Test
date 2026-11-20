@@ -183,8 +183,9 @@ test("villages: stone, people, gate and banners on free ground; each portal ston
 });
 
 test("villages: portal stones appended (ids = the villages'), grouped with their land; the older stones did not move", () => {
-  // the 29 older stones, as before step 4 ("29:6a70cae7"), but Hearthhold's waystone, which moved with the city (step 5)
-  assert.equal(digest(OLD_PORTALS.filter((p) => p.id !== "city_wardens"), (p) => [p.id, p.x, p.y]), "28:8245c3f0");
+  // the 29 older stones, as before step 4 ("29:6a70cae7"), but Hearthhold's and Scarwall's waystones, which moved with
+  // their cities (step 5; "28:8245c3f0" without Hearthhold's only)
+  assert.equal(digest(OLD_PORTALS.filter((p) => p.id !== "city_wardens" && p.id !== "city_redfang"), (p) => [p.id, p.x, p.y]), "27:76a98b7");
   assert.deepEqual(PORTAL_SPOTS.slice(-VILLAGES.length).map((p) => p.id), VILLAGES.map((v) => v.id));
   for (const v of VILLAGES) {
     const p = PORTALS.find((q) => q.id === v.id)!, land = portalLand(p);
@@ -227,11 +228,12 @@ test("villages: forts, musters, chests, siege sites, landmarks and signposts sta
   assert.equal(digest(LANDMARKS, (l) => [l.id, l.x, l.y, landmarkBoxes(l)]), "6:78da6c25"); // with the Crown's Lists (PR #568), every box
   assert.ok(!HOLDS.some((h) => VIDS.has(h.anchor)), "no fort anchored at a village gate (fort: false)");
   // every older signpost stays; the villages add one each. Hearthhold's move (step 5) took the north fork's and the
-  // highway's posts inside its walls (84,25 and 51,18: "88:1d1dbb68" with them) and put up three by its gates
-  const moved = [[84, 25], [51, 18], [94, 25], [66, 44], [38, 28]];
+  // highway's posts inside its walls (84,25 and 51,18: "88:1d1dbb68" with them) and put up three by its gates; Scarwall's
+  // (step 5 PR 2) took none and put up two by its gates
+  const moved = [[84, 25], [51, 18], [94, 25], [66, 44], [38, 28], [63, 807], [36, 824]];
   const old = SIGNPOSTS.filter((p) => !VILLAGE_POSTS.some((q) => q.x === p.x && q.y === p.y) && !moved.some(([x, y]) => p.x === x && p.y === y));
   assert.equal(digest(old, (p) => [p.x, p.y]), "86:3be19dec");
-  assert.equal(SIGNPOSTS.length - VILLAGE_POSTS.length, 89);
+  assert.equal(SIGNPOSTS.length - VILLAGE_POSTS.length, 91, "86 older posts, Hearthhold's three and Scarwall's two");
   assert.equal(VILLAGE_POSTS.length, VILLAGES.length);
 });
 

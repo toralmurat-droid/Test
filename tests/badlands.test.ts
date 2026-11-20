@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import {
   ACT_LEVEL, actMobLevel, actOfTile, actSpecialLevel, BADLANDS_H, BADLANDS_LEVEL, BADLANDS_Y0, DEEP_END, MAP_H, MAP_W, MOORS_H, MOORS_Y0, SINKHOLES_Y0, TILE, WORLD_H, inCitiesBand,
 } from "../shared/constants";
-import { EMPTY, GROUND, HIGHWAY_POSTS, HIGHWAY_SKIP, isSafeZone, isSolidAt, isSolidTile, MIRROR_POND, OBJECTS, randomSpawn, T, TILE_COUNT, NATURE, PORTAL_SPOTS } from "../shared/map";
+import { CITY_POSTS, EMPTY, GROUND, HIGHWAY_POSTS, HIGHWAY_SKIP, isSafeZone, isSolidAt, isSolidTile, MIRROR_POND, OBJECTS, randomSpawn, T, TILE_COUNT, NATURE, PORTAL_SPOTS } from "../shared/map";
 import {
   ARCHES, BR, buildBadlands, FANGROCK, inBadlandsRow, REDPASS, REDPASS_BADLANDS, REDPASS_OAKVALE, RUSTWATER_POST, RUSTWATER_SQUARE, TALON_FORT,
 } from "../shared/badlands";
@@ -24,7 +24,7 @@ import { TERRITORIES } from "../shared/war/territories";
 import { REGIONS, regionOf } from "../shared/war/regions";
 import { startRoom, until, wait } from "./helpers/room";
 import { carveVillages, VILLAGE_MASK, VILLAGES } from "../shared/villages";
-import { CITY_MASK, OLD_CITY_GATES } from "../shared/cityLand";
+import { carveCitiesInLand, CITY_MASK, OLD_CITY_GATES } from "../shared/cityLand";
 
 /** 4-way flood over free tiles from (sx, sy). */
 function flood(sx: number, sy: number) {
@@ -55,7 +55,9 @@ test("badlands: a band of its own under the moors, built the same every time", (
     const r = buildBadlands(T, g, o, EMPTY);
     for (const c of CITIES) if (c.act === 4) cityGateDais(c, T, g, o, EMPTY, (t) => NATURE.has(t)); // the capital's city gate (W7), cut in after the land
     carveBorders(g, o, new Set(), T, EMPTY); // the border roads (shared/borders.ts), cut last
-    const rd = new Set(r.roads); carveHighways(g, o, rd, T, EMPTY, HIGHWAY_SKIP, [4]); for (const p of HIGHWAY_POSTS) o[p.y][p.x] = T.SIGNPOST; // the land highway and its posts (shared/highways.ts), after them
+    const rd = new Set(r.roads);
+    carveCitiesInLand(T, g, o, EMPTY, rd, [...r.posts], () => T.SAND, undefined, [4]); for (const p of CITY_POSTS) o[p.y][p.x] = T.SIGNPOST; // Scarwall (shared/cityLand.ts, settlement network step 5) and its posts, after them
+    carveHighways(g, o, rd, T, EMPTY, HIGHWAY_SKIP, [4]); for (const p of HIGHWAY_POSTS) o[p.y][p.x] = T.SIGNPOST; // the land highway and its posts (shared/highways.ts), after it
     carveVillages(g, o, rd, T, EMPTY, () => [], undefined, VILLAGES.filter((v) => v.land === 4).map((v) => v.id)); // its villages (shared/villages.ts), last
     return { g: g.slice(B0, B1), o: o.slice(B0, B1), areas: r.areas, roads: [...r.roads], posts: r.posts };
   };
