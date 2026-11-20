@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { MAP_KEY } from "./mapLayers";
 import { icon as pxIcon } from "./pixelicons";
 import { ART_K as K } from "../../shared/constants";
 import { PORTAL_COMBAT_MS, PORTAL_RANGE, PORTALS, portalById, type Portal } from "../../shared/portals";
@@ -121,7 +122,7 @@ export class PortalLayer {
   wokenIds(): ReadonlySet<string> { return this.found; }
 
   markers(): MapMarker[] {
-    return PORTALS.filter((p) => this.found.has(p.id)).map((p) => ({ x: p.x, y: p.y, glyph: "◆", color: "#ff9a3c", label: p.name, layer: "ways" as const }));
+    return PORTALS.filter((p) => this.found.has(p.id)).map((p) => ({ x: p.x, y: p.y, glyph: "◆", color: MAP_KEY.stone, label: p.name, layer: "ways" as const }));
   }
 
   /** The art this stone should show: dark until found, burning once woken, with one ring block lit per woken portal. */
