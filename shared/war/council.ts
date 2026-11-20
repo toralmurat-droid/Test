@@ -12,7 +12,7 @@ import { CLANS, CLAN_KEYS, type ClanKey, type Doctrine } from "./clans";
 import { DOCTRINE, doctrineRank, followedSack, scriptedOrders, type Mind } from "./doctrine";
 import { clansOf } from "./feuds";
 import { crownLands, keepOf } from "./crown";
-import { huntedClan, landOf, leaderOf, phaseOf, rallyClan, targetsOf, WAR, type Orders, type WarState } from "./rules";
+import { foughtCount, huntedClan, landOf, leaderOf, phaseOf, rallyClan, targetsOf, WAR, type Orders, type WarState } from "./rules";
 import { TERRITORIES } from "./territories";
 import { FORGE, forgeCodex, validateRecipe, type ForgeRecipe } from "../forge";
 import { COUNCIL, COUNCIL_STANCES, type CouncilStance } from "./councilScript";
@@ -90,6 +90,7 @@ export function validateCouncil(raw: unknown, s: Pick<WarState, "owner">, k: Cla
       if (typeof t !== "number" || !Number.isInteger(t)) errors.push(`${at}: not a territory id (a whole number)`);
       else if (!ter || t >= s.owner.length) errors.push(`${at}: no territory ${t} (ids 0-${Math.min(TERRITORIES.length, s.owner.length) - 1})`);
       else if (ter.reckoningOnly) errors.push(`${at}: ${ter.name} is the Crown Keep; only a Reckoning moves it`);
+      else if (ter.haven) errors.push(`${at}: ${ter.name} is a heartland haven; no army strikes it`);
       else if (ter.capitalOf) errors.push(`${at}: ${ter.name} is a capital; capitals never fall`);
       else if (s.owner[t] === k) errors.push(`${at}: ${ter.name} is already yours`);
       else if (!legal.has(t)) errors.push(`${at}: ${ter.name} is not a legal target (not on your border)`);
@@ -253,7 +254,7 @@ export function buildBriefing(s: WarState, k: ClanKey, ctx: BriefingCtx = {}, da
       text: "Name up to maxTargets territory ids from `targets` (most wanted first) and a stance. Capitals and the Crown Keep can never be targeted. Your armies push your first target still legal each 10-minute tick for the whole war day; plain-text proclamation and rationale only.",
     },
     lands: {
-      held: own.length, total: n, share: r2(own.length / n), army: Math.round(s.army[k]),
+      held: own.length, total: n, share: r2(landOf(s, k) / foughtCount(s.owner)), army: Math.round(s.army[k]),
       capitals: own.filter((t) => t.capitalOf === k).map((t) => t.name),
       list: own.map((t) => {
         const l: CouncilBriefing["lands"]["list"][number] = { id: t.id, name: t.name, region: t.region, control: Math.round(s.control[t.id]), fort: r2(s.fort[t.id]) };

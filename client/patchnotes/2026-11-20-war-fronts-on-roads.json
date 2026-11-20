@@ -1,0 +1,11 @@
+{
+  "date": "2026-11-20",
+  "patch": 345,
+  "pr": 558,
+  "title": "War fronts follow the roads",
+  "changes": [
+    "Lands now meet in the clan war only where a border road joins them, the same roads heroes walk. Gates and portal stones are quick ways for heroes, not for armies.",
+    "Each clan now has one capital, in its own homeland. The old footholds in other clans' lands are ordinary lands now and can change hands.",
+    "Oakvale's quiet inner meadows round the village always stay with the Wardens, so new heroes level in peace while the war is fought on the rim. Millbrook Mill is part of that heartland and can no longer be claimed."
+  ]
+}

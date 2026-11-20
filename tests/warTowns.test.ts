@@ -128,10 +128,10 @@ function golden(towns?: TickExtra["towns"]): string {
 }
 
 test("towns: warTick without towns (or with none held, or junk) plays exactly as before W6; held towns add WAR.townIncome", () => {
-  assert.equal(golden(), "524f2911");
-  assert.equal(golden({}), "524f2911");
-  assert.equal(golden({ wardens: 0, redfang: -3, host: NaN, nobody: 4 } as unknown as TickExtra["towns"]), "524f2911");
-  assert.notEqual(golden({ redfang: 2 }), "524f2911");
+  assert.equal(golden(), "84b1edf0");
+  assert.equal(golden({}), "84b1edf0");
+  assert.equal(golden({ wardens: 0, redfang: -3, host: NaN, nobody: 4 } as unknown as TickExtra["towns"]), "84b1edf0");
+  assert.notEqual(golden({ redfang: 2 }), "84b1edf0");
   const a = newWar(), b = newWar();
   warTick(a, {}, { phase: 0 }); warTick(b, {}, { phase: 0, towns: { redfang: 2, host: 99 } });
   assert.ok(Math.abs(b.army.redfang - a.army.redfang - 2 * WAR.townIncome) < 1e-9, "two towns: +1 troop");

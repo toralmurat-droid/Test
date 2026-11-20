@@ -96,7 +96,9 @@ test("hold tiers: a front land (bordering a clan its holder is at war with) is a
   const s = newWar(), peace = () => false, war = () => true;
   const front = TERRITORIES.find((t) => !t.capitalOf && t.near.some((n) => s.owner[n] !== s.owner[t.id]))!.id;
   const inner = TERRITORIES.find((t) => !t.capitalOf && t.near.every((n) => s.owner[n] === s.owner[t.id]))!.id;
-  const cap = TERRITORIES.find((t) => t.capitalOf && t.near.some((n) => s.owner[n] !== s.owner[t.id]))!.id;
+  // (capitals sit deep in their homelands since the fronts follow the roads: put one on the front)
+  const cap = TERRITORIES.find((t) => t.capitalOf)!.id, nb = TERRITORIES[cap].near.find((n) => n !== front && n !== inner && !TERRITORIES[inner].near.includes(n) && !TERRITORIES[front].near.includes(n))!;
+  s.owner[nb] = CLAN_KEYS.find((k) => k !== s.owner[cap])!;
   for (const t of [front, inner]) { s.fort[t] = 0.9; s.control[t] = 100; }
   assert.ok(frontLand(s, front, war) && !frontLand(s, front, peace) && !frontLand(s, inner, war));
   assert.equal(holdTier(s, front, war), 1, "a fortress-built front land shows a camp");

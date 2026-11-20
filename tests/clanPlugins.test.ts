@@ -2,6 +2,7 @@
 // failure falling back to the doctrine, the auto switch-off, the kill switch (env and admin), the provider id in the
 // council log, the default plug-ins equal to the scripted council, and the gate. The bundles are built from the clan
 // folders (fs.readdirSync below lists them), so this file always runs in CI.
+import type { ClanPlugin } from "../shared/clans/api";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
@@ -109,16 +110,17 @@ test("pinned default plug-in: provider plugin:<clan>@<v>#<sha8>, orders equal th
   assert.equal((await sit(sv, 1)).status, "led");
 });
 
-test("default plug-ins: every clan's bundle answers exactly the scripted council on war-sim briefings", async () => {
+test("default plug-ins: every clan's bundle answers exactly as its source on war-sim briefings (a version 1 plug-in: the scripted council)", async () => {
   const dirs = fs.readdirSync(path.join(__dirname, "../shared/clans"), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort();
   assert.deepEqual(dirs, [...CLAN_KEYS].sort(), "one folder per clan");
   _resetClanPlugins();
   for (const k of CLAN_KEYS) {
-    const code = (await clanBundle(k))!.code, fx = gateFixtures(k, 40);
+    const code = (await clanBundle(k))!.code, fx = gateFixtures(k, 40), src = (await import(`../shared/clans/${k}/index`)).plugin as ClanPlugin;
     const res = sandboxRun(code, fx.map((f) => JSON.stringify(f.b)), { callMs: CLAN_PLUGIN.callMs, loadMs: CLAN_PLUGIN.callMs, maxOut: CLAN_PLUGIN.maxOut });
     res.forEach((r, i) => {
       assert.ok(r.ok, `${k} #${i}: ${!r.ok && r.error}`);
-      assert.equal(r.out, JSON.stringify(scriptedCouncil(fx[i].b)), `${k} #${i}`);
+      // (a clan that rewrote its council, like the Hide-Kin's v2 of 2026-11-19, answers as its own source; the others as the script)
+      assert.equal(r.out, JSON.stringify(src.version === "1" ? scriptedCouncil(fx[i].b) : src.council(fx[i].b)), `${k} #${i}`);
     });
   }
 });

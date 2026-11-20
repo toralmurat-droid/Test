@@ -62,7 +62,7 @@ async function warSetup() {
   }
   assert.ok(pick, "a land some clan may sack");
   const { t, foe } = pick!;
-  const others = HOLDS.map((h) => h.t).filter((x) => x !== t && x !== P && st.owner[x] && !TERRITORIES[x].reckoningOnly && !st.siege[x]);
+  const others = HOLDS.map((h) => h.t).filter((x) => x !== t && x !== P && st.owner[x] && !TERRITORIES[x].reckoningOnly && !TERRITORIES[x].haven && !st.siege[x]);
   const own = st.owner[P] === foe ? CLAN_KEYS.find((k) => k !== foe)! : st.owner[P];
   const row = { v: 1, state: st, minds: newMinds(), next: t0 + WAR.tickMs, log: [], towns: { saltmere: { k: own, c: { by: foe, until: st.tick + 3, ext: 0 } } } };
   m.set("war", JSON.stringify(row));

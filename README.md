@@ -91,13 +91,13 @@ Only the classes in `ACTIVE_CLASSES` can be played. Archived classes keep their 
   and dry riverbeds (levels 25-40), reached through the Red Pass at Oakvale's west edge once a hero reaches level 25.
   The Rustwater Post holds out with a portal stone, a bounty board and shops; Marshal Hesk Varro's chain climbs
   through Talon Fort and Gallows Canyon to Old Rourke in Fangrock Keep. The badlands are a land of the clan war, joined to
-  Oakvale by the Red Pass, with Fangrock as the Redfang seat.
+  Oakvale by the Red Road (the clan war fronts follow the border roads), with Fangrock as the Redfang seat.
 - **Act 5 — the Mawdeep Sinkholes** (`shared/sinkholes.ts`): the Hide-Kin's homeland of damp moss country,
   sinkholes, collapsed slopes and burrow-warrens (levels 30-45), reached down the Sinkway, a cave on the beach south of
   Sunken Lake, once a hero reaches level 30. Ropewell, the trappers' lodge round a tame sinkhole, holds a portal stone,
   a bounty board and shops; Hidehall is the Hide-Kin's seat. Lodge-Warden Brannoc Tull's chain climbs the zones
   through a Hide-Chieftain at Tunneltop and Hidehall to the Maw-Father in the Great Maw. The sinkholes are a land of the
-  clan war, joined to Oakvale by the Sinkway, with Hidehall as the Hide-Kin seat.
+  clan war, joined to the badlands and the Sunscar by the Deep Road, the Rattler's Way and the Dune Road, with Hidehall as the Hide-Kin seat.
 - **Act 6 — the Crown of the Marches** (`shared/crown.ts`, being built): the ruined realm of the last High King in the
   middle of the continent (levels 40-50), reached by five Crownways, one from each homeland, once a hero reaches level
   40 (the Sun Gate also wants Act 2 unlocked). Tollcross, the Truce Market, is the safe outpost; the Crown Keep and its

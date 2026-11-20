@@ -6,7 +6,7 @@
  * siege they called by sacking a Hold comes first (followedSack).
  */
 import { CLANS, CLAN_KEYS, type ClanKey } from "./clans";
-import { landOf, leaderOf, phaseOf, targetsOf, type Orders, type WarState } from "./rules";
+import { foughtCount, landOf, leaderOf, phaseOf, targetsOf, type Orders, type WarState } from "./rules";
 import { TERRITORIES } from "./territories";
 
 export interface Mind { target?: number; since: number; feint?: number }
@@ -25,7 +25,7 @@ function score(s: WarState, k: ClanKey, t: number, lead: ClanKey | undefined, rn
   let v = 1;
   if (CLANS[k].counters === vs) v *= 1.3;
   if (lead && vs === lead && lead !== k) v *= DOCTRINE.leaderWeight;
-  v *= 0.5 + (landOf(s, vs) / s.owner.length) * CLAN_KEYS.length * 0.5; // the bigger the owner, the more tempting
+  v *= 0.5 + (landOf(s, vs) / foughtCount(s.owner)) * CLAN_KEYS.length * 0.5; // the bigger the owner, the more tempting
   if (TERRITORIES[t].capitalOf === vs) v *= 0.2; // capitals never fall: pointless to besiege
   v *= 1 + (100 - s.control[t]) / 100; // finish what is already shaking
   v /= 1 + s.fort[t];
