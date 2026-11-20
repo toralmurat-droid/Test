@@ -25,7 +25,7 @@ export const WAR = {
   upkeep: 0.02, // share of the army lost to upkeep each tick, so armies settle near income / upkeep
   supplyDecay: 0.25, // supply = 1 / (1 + decay x borders from the nearest own capital)
   cutOff: 0.35, // supply of land with no road back to a capital
-  defender: 1.3,
+  defender: 1.1, // (1.3 until the fronts moved to the roads, 2026-11-20: fewer fronts concentrate the defence, so the edge is smaller)
   counter: 1.2, // attacking the clan you counter
   doctrine: 1.25, // night for the Host, noon for the Veiled
   controlDiv: 25, // (attack - defence) / controlDiv = Control points per tick...
