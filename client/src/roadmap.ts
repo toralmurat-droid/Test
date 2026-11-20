@@ -71,6 +71,7 @@ export const MILESTONES: Milestone[] = [
       { name: "Forts kept clear of wild monsters", owner: "Gameplay Engineers", status: "done", note: "Wild monsters walk round clan forts; the clan's troops guard them", pr: 531 },
       { name: "Archers, pikes and riders for every clan", owner: "Gameplay + Art", status: "done", note: "Wall archers, bracing pikes and charging riders in Holds, patrols, columns, caravans, sieges and battles (#532, #534)", pr: 535 },
       { name: "Troop roles in tunnels, rituals and town gates", owner: "Gameplay Engineers", status: "doing", pr: 537 },
+      { name: "Holds fall: barracks, works to wreck, claim the ruin", owner: "Gameplay + Art", status: "doing", note: "Soldiers come out of a barracks; wreck every work and the Hold falls until a clan claims it" },
     ],
   },
   {

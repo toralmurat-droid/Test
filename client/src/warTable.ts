@@ -158,12 +158,12 @@ let art: HTMLCanvasElement | undefined, artKey = "";
 function paintArt(v: WarView, ground?: HTMLCanvasElement): HTMLCanvasElement {
   buildStatics();
   const tc = terrainOf(ground);
-  const key = v.owner.join(",") + (tc ? "|t" : "");
+  const key = v.owner.join(",") + (tc ? "|t" : "") + (v.fallen?.length ? `|f${v.fallen.join(",")}` : "");
   if (art && key === artKey) return art;
   artKey = key;
   art ??= Object.assign(document.createElement("canvas"), { width: RW, height: RH });
   const g = art.getContext("2d")!, img = g.createImageData(RW, RH);
-  const own = (t: number) => (t < 0 ? -1 : v.owner[t]);
+  const own = (t: number) => (t < 0 || v.fallen?.includes(t) ? -1 : v.owner[t]); // (a fallen Hold's land stands unclaimed: shared/war/holdFall.ts)
   const sh = tc ? shading() : undefined;
   for (let y = 0; y < RH; y++) for (let x = 0; x < RW; x++) {
     const i = y * RW + x;
@@ -317,7 +317,7 @@ export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, font: stri
   reach = Math.max(16, sz);
   spots = [];
   for (const t of TERRITORIES) {
-    const [x0, y0] = P(t.id), x = Math.round(x0), y = Math.round(y0), k = CLAN_KEYS[v.owner[t.id]], col = k ? MAP[k] : 0x888888;
+    const [x0, y0] = P(t.id), x = Math.round(x0), y = Math.round(y0), k = v.fallen?.includes(t.id) ? undefined : CLAN_KEYS[v.owner[t.id]], col = k ? MAP[k] : 0x888888;
     const cap = !!t.capitalOf || !!t.reckoningOnly, s = cap ? Math.round(sz * 1.5) : Math.round(sz * [0.75, 1, 1.25][viewTier(v, t.id)]), h = s >> 1; // (a bigger marker for a bigger Hold)
     spots.push({ id: t.id, x, y });
     if (v.sieges.some((sg) => sg[0] === t.id)) { g.lineWidth = 2; g.strokeStyle = `rgba(255,80,40,${0.45 + 0.55 * pulse})`; g.strokeRect(x - h - 5, y - h - 5, s + 10, s + 10); }
@@ -501,6 +501,7 @@ export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, font: stri
       if (t.reckoningOnly) lines.push("Falls only at a Reckoning");
       else if (t.region === CROWN_LAND && t.wards) lines.push(`Crownway land, first held by ${short(t.wards)} (${gateReq(CROWN_LAND)})`);
       if (sg) lines.push(`Siege by ${short(CLAN_KEYS[sg[1]])}`);
+      if (v.fallen?.includes(hovered)) lines.push(`Hold fallen (was ${short(k!)}): any clan may claim it`);
     }
     if (hn === hovered) lines.push("You are here");
     else if (hn !== undefined) {

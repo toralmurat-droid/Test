@@ -13,7 +13,7 @@
 import { TILE } from "../shared/constants";
 import { CLANS, CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import { newMinds, type Mind } from "../shared/war/doctrine";
-import { deployments, newWar, nightRaid, rallyClan, sackHold, supplyMap, WAR, warTick, type Orders, type TickExtra, type WarState } from "../shared/war/rules";
+import { claimFallen, deployments, fellHold, isFallen, newWar, nightRaid, rallyClan, sackHold, supplyMap, WAR, warTick, type Orders, type TickExtra, type WarState } from "../shared/war/rules";
 import { initialOwners, TERRITORIES, type Territory } from "../shared/war/territories";
 import { regionByKey } from "../shared/war/regions";
 import { tunnelStrikes, type TunnelStrike } from "../shared/war/tunnels";
@@ -51,7 +51,8 @@ export interface WarNews { raid?: { clan: ClanKey; ts: number[] }; rally?: { cla
  * `grow` (W3): the holder (`by` = `from`) built its Hold of t up to `tier` (1 camp, 2 fortress; shared/war/holdTiers.ts).
  */
 /** `town` (W6): town `town` (shared/war/towns.ts) was contested, claimed, submitted or the contest called off (`change`); t is its patron land. */
-export interface WarEvent { at: number; tick: number; kind: "siege" | "flip" | "held" | "sack" | "grow" | "town"; t: number; by: ClanKey; from: ClanKey; text: string; tier?: number; town?: string; change?: TownChange | "claimed" }
+/** `fall`: land t's Hold fell (every work wrecked, shared/war/holdFall.ts); `by` the clan whose hero wrecked the last work (the holder for an unsworn hero), `from` the holder. `claim`: clan `by` claimed fallen land t, `from` its last holder. */
+export interface WarEvent { at: number; tick: number; kind: "siege" | "flip" | "held" | "sack" | "grow" | "town" | "fall" | "claim"; t: number; by: ClanKey; from: ClanKey; text: string; tier?: number; town?: string; change?: TownChange | "claimed" }
 /** Most Holds the Herald announces growing in one war tick (a new war raises every camp at once; the log keeps the rest quiet). */
 const GROW_NEWS = 3;
 /** `names`: the territory names in id order (optional: saves before 2026-11-15 have none, and their ids are today's). */
@@ -138,7 +139,8 @@ function wellFormed(s: Saved | undefined): s is Saved {
   return !!s && readable(s) && !!st && Number.isFinite(s.next) && Array.isArray(s.log) && Array.isArray(st.owner) && n! > 0
     && [st.control, st.fort, st.siege, st.pressure].every((a) => Array.isArray(a) && a.length === n)
     && (s.names === undefined || (Array.isArray(s.names) && s.names.length === n && s.names.every((x) => typeof x === "string") && new Set(s.names).size === n))
-    && st.owner.every((k) => !!CLANS[k]) && CLAN_KEYS.every((k) => Number.isFinite(st.army?.[k]) && !!s.minds?.[k]);
+    && st.owner.every((k) => !!CLANS[k]) && CLAN_KEYS.every((k) => Number.isFinite(st.army?.[k]) && !!s.minds?.[k])
+    && (st.fallen === undefined || (Array.isArray(st.fallen) && st.fallen.length === n && st.fallen.every((f) => f === 0 || f === 1)));
 }
 
 /**
@@ -173,9 +175,11 @@ export function migrateWar(saved: Saved, oldNames: readonly string[], names: rea
     control: pick(st.control, () => 100), fort: pick(st.fort, () => 0),
     siege: pick(st.siege, () => null).map((x) => x && { ...x }), pressure: pick(st.pressure, () => 0), army: { ...st.army },
   };
+  if (st.fallen) { const f = pick(st.fallen, () => 0); if (f.some((x) => x === 1)) state.fallen = f; else delete state.fallen; } // (fallen Holds follow their land)
   for (let i = 0; i < names.length; i++) {
     const cap = ts.find((x) => x.name === names[i])?.capitalOf;
     if (cap && state.owner[i] !== cap) { state.owner[i] = cap; state.control[i] = 100; state.siege[i] = null; }
+    if (cap && state.fallen) state.fallen[i] = 0; // (a capital never stands fallen)
   }
   const to = new Map<number, number>();
   from.forEach((o, i) => { if (o !== undefined) to.set(o, i); });
@@ -456,6 +460,57 @@ function strikeCore(t: number, k: ClanKey | undefined, half: boolean, hero: stri
   listeners.forEach((f) => { try { f(view, events, {}); } catch (e) { console.error("War listener:", e); } });
   return { control: r.control, siege: !!r.siege };
 }
+
+/**
+ * Territory t's Hold fell: its last work was wrecked (server/warHoldWorks.ts) by a hero of clan `k` (undefined: unsworn).
+ * rules.ts fellHold: the land stands neutral until a clan claims it. The news goes out at once like a sack's (a "fall"
+ * event, every room's snapshot), the war is saved. On a follower (Ages) it is queued for the owner. False when nothing changed.
+ */
+export function holdFall(t: number, k: ClanKey | undefined, hero = "A hero", now = Date.now()): boolean {
+  if (!saved || !(t >= 0 && t < saved.state.owner.length)) return false;
+  if (role === "follower") return queueAct(["fall", t, k ?? "", hero.slice(0, 64), { id: `${ACT_RUN}:${++actN}` }]);
+  if (role !== "owner" || !fallCore(t, k, hero, now)) return false;
+  if (canWrite()) kv?.set(KEY, stamped(saved)).catch((e) => console.error("War: could not save:", e));
+  return true;
+}
+function fallCore(t: number, k: ClanKey | undefined, hero: string, now: number): boolean {
+  if (!saved) return false;
+  const s = saved.state, from = s.owner[t];
+  if (!from || !fellHold(s, t)) return false;
+  const land = TERRITORIES[t].name, by = k ?? from;
+  return tellCore([{ at: now, tick: s.tick, kind: "fall", t, by, from, text: `${hero}${k ? ` of ${CLANS[k].name}` : ""} brought down the Hold of ${land}, held by ${CLANS[from].name}: it stands empty, for any clan to claim` }], now);
+}
+
+/**
+ * A hero sworn to `k` raised its banner at the ruin of fallen land t (server/warHolds.ts): rules.ts claimFallen, the
+ * land is `k`'s with a fresh outpost; its clan earns HOLD_FALL valor there (paid by the caller). News, snapshot and save as
+ * holdFall. On a follower it is queued. False when t has not fallen (or the war is not here).
+ */
+export function holdClaim(t: number, k: ClanKey, hero = "A hero", now = Date.now()): boolean {
+  if (!saved || !(t >= 0 && t < saved.state.owner.length) || !CLANS[k]) return false;
+  if (role === "follower") return isFallen(saved.state, t) && queueAct(["hclaim", t, k, hero.slice(0, 64), { id: `${ACT_RUN}:${++actN}` }]);
+  if (role !== "owner" || !claimCore(t, k, hero, now)) return false;
+  if (canWrite()) kv?.set(KEY, stamped(saved)).catch((e) => console.error("War: could not save:", e));
+  return true;
+}
+function claimCore(t: number, k: ClanKey, hero: string, now: number): boolean {
+  if (!saved) return false;
+  const s = saved.state, from = s.owner[t];
+  if (!claimFallen(s, t, k)) return false;
+  const land = TERRITORIES[t].name;
+  return tellCore([{ at: now, tick: s.tick, kind: "claim", t, by: k, from, text: `${hero} of ${CLANS[k].name} raised their banner over the ruin of ${land}: ${CLANS[k].name} hold it now and build anew` }], now);
+}
+/** Log, console and every listener (rooms) for events made between ticks; always true. */
+function tellCore(events: WarEvent[], _now: number): boolean {
+  saved!.log.push(...events);
+  if (saved!.log.length > LOG_MAX) saved!.log.splice(0, saved!.log.length - LOG_MAX);
+  if (!process.env.NODE_TEST_CONTEXT) for (const e of events) console.log(`War: ${e.text}`);
+  const view = viewOf(saved!);
+  listeners.forEach((f) => { try { f(view, events, {}); } catch (e) { console.error("War listener:", e); } });
+  return true;
+}
+/** Has land t's Hold fallen (no clan claimed it since), as this server knows the war? */
+export const warFallen = (t: number): boolean => !!saved && isFallen(saved.state, t);
 
 /** The snapshot players get, with the clans at war (shared/war/feuds.ts: the client takes them as they are). */
 const viewOf = (s: Saved): WarView => ({ ...warView(s.state, s.next, lastRaided), wars: warPairs(), reck: crownView() });
@@ -930,6 +985,10 @@ export function attachWar(room: { broadcast(type: string, msg: unknown): void })
         if (at) room.broadcast("sfx", { ev: "hold_grow", t: e.t, x: Math.round(at.x), y: Math.round(at.y), by: e.by, tier: e.tier ?? 1 });
         continue;
       }
+      if (e.kind === "fall" || e.kind === "claim") { // the fort comes down (or a new banner rises over the ruin): a sound there (client/src/sfx.ts)
+        const at = bannerSpot(e.t);
+        if (at) room.broadcast("sfx", { ev: e.kind === "fall" ? "hold_fell" : "hold_claimed", t: e.t, x: Math.round(at.x), y: Math.round(at.y), by: e.by, from: e.from });
+      }
       const v = eventVoice(e.kind, e.by, e.from), line = leaderLine(v.k, v.moment, TERRITORIES[e.t].name, v.foe, e.tick);
       if (e.by !== e.from) room.broadcast("chat", { id: "", name: line.name, text: line.text }); // (an unsworn hero's sack: no clan to answer)
       room.broadcast("warev", { kind: e.kind, t: e.t, by: e.by, from: e.from }); // horn and notice (client/src/warNotice.ts)
@@ -1232,7 +1291,8 @@ type ValorAdd = [number, ClanKey, number, string?];
  * the clan when the owner applies it (`valor` in the land, Reckoning `credits` for these hero keys).
  */
 interface ActMeta { id: string; valor?: number; credits?: string[] }
-type WarAct = ["sack", number, ClanKey | "", 0 | 1, string, number, ActMeta?] | ["claim", string, ClanKey, string, ActMeta?];
+type WarAct = ["sack", number, ClanKey | "", 0 | 1, string, number, ActMeta?] | ["claim", string, ClanKey, string, ActMeta?]
+  | ["fall", number, ClanKey | "", string, ActMeta?] | ["hclaim", number, ClanKey, string, ActMeta?]; // (a fallen Hold: server/warHoldWorks.ts, warHolds.ts)
 /** A server's valor queue (kv `war-valor:<holder>`, counted at the owner's tick) and its act queue (`war-acts:<holder>`, every beat). */
 const VALOR_Q = new AgeQueue<{ adds: ValorAdd[] }>("war-valor:", (b) => Array.isArray(b.adds) ? {
   adds: b.adds.flatMap((a): ValorAdd[] => (Array.isArray(a) && typeof a[0] === "number" && typeof a[1] === "string" && typeof a[2] === "number"
@@ -1245,6 +1305,10 @@ function cleanAct(a: unknown): WarAct[] {
   if (a[0] === "sack" && Number.isInteger(a[1]) && a[1] >= 0 && a[1] < TERRITORIES.length && (a[2] === "" || !!CLANS[a[2] as ClanKey]) && Number.isInteger(a[5])) {
     const m = cleanMeta(a[6]);
     return [["sack", a[1], a[2] as ClanKey | "", a[3] ? 1 : 0, hero, a[5], ...(m ? [m] : [])] as WarAct];
+  }
+  if ((a[0] === "fall" || a[0] === "hclaim") && Number.isInteger(a[1]) && a[1] >= 0 && a[1] < TERRITORIES.length && (a[0] === "fall" ? a[2] === "" || !!CLANS[a[2] as ClanKey] : !!CLANS[a[2] as ClanKey])) {
+    const m = cleanMeta(a[4]);
+    return [[a[0], a[1], a[2], hero, ...(m ? [m] : [])] as WarAct];
   }
   if (a[0] === "claim" && typeof a[1] === "string" && a[1].length <= 64 && !!CLANS[a[2] as ClanKey]) {
     const m = cleanMeta(a[4]);
@@ -1296,6 +1360,12 @@ export function claimAct(id: string, k: ClanKey, hero = "A hero"): string | unde
   pendingActs.push(["claim", id, k, hero.slice(0, 64), meta]);
   claimedHere.add(id); heldGate.delete(id);
   return meta.id;
+}
+/** A follower queues act `a` for the war's owner (false: the queue is full or nothing to queue it on). */
+function queueAct(a: WarAct): boolean {
+  if (!saved || role !== "follower" || pendingActs.length >= ACTS_PENDING_MAX) return false;
+  pendingActs.push(a);
+  return true;
 }
 /** What the war's owner made of act `id` (as this server last read the war): "ok" applied, "no" dropped, undefined not yet known. */
 export function warActFate(id: string): "ok" | "no" | undefined {
@@ -1359,6 +1429,10 @@ function applyAct(a: WarAct, now: number, from = "this server") {
     // the clan's part, only now that the sack counts (on the owner it is given with the sack: server/warHolds.ts)
     if (k && meta?.valor && addValor(t, k, meta.valor)) for (const by of meta.credits ?? []) crownCredit(t, by, k, meta.valor, now);
     noteFate(meta?.id, true);
+  } else if (a[0] === "fall" || a[0] === "hclaim") {
+    const ok = a[0] === "fall" ? fallCore(a[1], a[2] || undefined, a[3], now) : claimCore(a[1], a[2], a[3], now);
+    if (!ok) console.log(`War: a Hold ${a[0] === "fall" ? "fall" : "claim"} at ${TERRITORIES[a[1]].name} from ${from} is no longer valid: dropped`);
+    noteFate(a[4]?.id, ok);
   } else {
     const ok = townCore(a[1], a[2], a[3], now);
     if (!ok) console.log(`War: a claim of ${a[1]} from ${from} is no longer valid: dropped`);
