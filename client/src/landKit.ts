@@ -6,7 +6,7 @@ import { SIEGE_SITES } from "../../shared/siege";
 import { HOLDS, MUSTERS } from "../../shared/war/standards";
 import { TOWNS } from "../../shared/war/townSites";
 import { CAPITAL_FORTS, FORT_SKIP, HIGHWAYS, legLine } from "../../shared/highways";
-import { LANDMARKS } from "../../shared/landmarks";
+import { landmarkBoxes, LANDMARKS } from "../../shared/landmarks";
 import { BOARDS } from "../../shared/bounty";
 import { allObjects } from "../../shared/quests";
 import { WORLD_PROP_SPOTS } from "./worldPropSpots";
@@ -15,7 +15,8 @@ import { LK_SHEETS, type LkKind } from "./landKitSheets";
 /**
  * Land kits (settlement network step 3, "land identity"): the small props that say what a land's people do, placed
  * round its settlements (Oakvale: stooks, scarecrows, grain carts, beehives, hide frames; the moors: peat and way-cairns;
- * the badlands: longhorns, troughs and ore carts; the Sinkholes: rope and gantries; the Sunscar: camels and salt). Phaser-free and
+ * the badlands: longhorns, troughs and ore carts; the Sinkholes: rope and gantries; the Sunscar: camels and salt; the Crown:
+ * pavilions, shrines, quintains and pilgrims' ribbon posts). Phaser-free and
  * deterministic, the same on every client; landKitView.ts draws them. Cosmetic and walk-through: the server never
  * reads this file. The solid landmarks are shared/landmarks.ts.
  */
@@ -66,8 +67,8 @@ function palisadeGate(tx: number, ty: number) {
 const nearGate = (tx: number, ty: number) => { for (let j = -3; j <= 3; j++) for (let i = -3; i <= 3; i++) if (palisadeGate(tx + i, ty + j)) return true; return false; };
 /** A capital fort's skip box widened by SEAT_MARGIN: the five clan seats. */
 export const inSeat = (tx: number, ty: number) => CAPITAL_FORTS.some(([x, y]) => Math.abs(tx - x) <= FORT_SKIP + SEAT_MARGIN && Math.abs(ty - y) <= FORT_SKIP + SEAT_MARGIN);
-/** Inside a landmark's solid box, or within `m` tiles of it. */
-const nearLandmarkBox = (tx: number, ty: number, m: number) => LANDMARKS.some((l) => l.solid && tx + 0.5 > l.solid[0] - m && tx + 0.5 < l.solid[0] + l.solid[2] + m && ty + 0.5 > l.solid[1] - m && ty + 0.5 < l.solid[1] + l.solid[3] + m);
+/** Inside one of a landmark's solid boxes, or within `m` tiles of it. */
+const nearLandmarkBox = (tx: number, ty: number, m: number) => LANDMARKS.some((l) => landmarkBoxes(l).some(([x, y, w, h]) => tx + 0.5 > x - m && tx + 0.5 < x + w + m && ty + 0.5 > y - m && ty + 0.5 < y + h + m));
 
 /**
  * The keep-clear rule for a kit prop on tile (tx, ty): its 3x3 holds only empty ground or nature (no fence, wall,
@@ -193,6 +194,27 @@ const SUNSCAR: Place[] = [
   { area: "The Glasswind Flats", kind: "lk_salt_stack", n: 1, box: [138, 426, 22, 14] },
 ];
 
+/**
+ * The Crown keeps the Truce fair and the tourney: heralds' pavilions round Tollcross Square (never behind the herald, who
+ * stands at its head), a candle shrine with pilgrims' staves by it in the north-west corner and a quintain on the
+ * south-east ground; at the Lists, knights' pavilions and a quintain at the tilt's east end. On the Pilgrims' Way, staves
+ * where pilgrims arrive from the Greenward Gate and ribbon posts along the Greenward road (`cairns`); the quest's
+ * wayside shrines there are their own objects.
+ */
+const CROWN: Place[] = [
+  { area: "Tollcross", kind: "lk_candle_shrine", n: 1, near: inBox(125, 1185, 132, 1191) },
+  { area: "Tollcross", kind: "lk_pilgrim_staves", n: 1, near: inBox(127, 1186, 133, 1193) },
+  { area: "Tollcross", kind: "lk_pavilion", n: 1, gap: 5, box: [126, 1185, 9, 10] },
+  { area: "Tollcross", kind: "lk_pavilion_blue", n: 1, gap: 5, box: [126, 1185, 9, 10] },
+  { area: "Tollcross", kind: "lk_pavilion", n: 1, gap: 5, box: [153, 1185, 9, 10] },
+  { area: "Tollcross", kind: "lk_pavilion_blue", n: 1, gap: 5, box: [153, 1185, 9, 10] },
+  { area: "Tollcross", kind: "lk_quintain", n: 1, near: inBox(151, 1198, 161, 1202) },
+  { area: "The Tourney Grounds", kind: "lk_quintain", n: 1, box: [96, 1207, 5, 4] },
+  { area: "The Tourney Grounds", kind: "lk_pavilion", n: 1, gap: 5, near: byLandmark("lists", 10) },
+  { area: "The Tourney Grounds", kind: "lk_pavilion_blue", n: 1, gap: 5, near: byLandmark("lists", 10) },
+  { area: "The Pilgrims' Way", kind: "lk_pilgrim_staves", n: 1, near: inBox(30, 1170, 44, 1182) },
+];
+
 /** Way-cairns beside a land's highway: every CAIRN_EVERY tiles of each leg, on the first free tile 3-5 off either side. */
 function cairns(out: KitSpot[], land: Act, area: string, kind: LkKind) {
   const h = HIGHWAYS.find((q) => q.land === land), a = AREAS.find((r) => r.name === area);
@@ -235,6 +257,8 @@ function build(): KitSpot[] {
   for (const p of [...OAKVALE, ...MOORS]) scatter(out, p);
   cairns(out, 3, "The Grey Barrow Moors", "lk_way_cairn");
   for (const p of [...BADLANDS, ...SINKHOLES, ...SUNSCAR]) scatter(out, p);
+  for (const p of CROWN) scatter(out, p);
+  cairns(out, 6, "The Pilgrims' Way", "lk_ribbon_post");
   return out;
 }
 
@@ -244,7 +268,12 @@ export const LAND_KIT_SPOTS: readonly KitSpot[] = build();
 export const buildLandKit = build;
 
 /** The sheet each landmark is drawn with (shared/landmarks.ts id -> kit sheet). */
-export const LANDMARK_SHEET: Record<string, LkKind> = { windmill: "lk_windmill", beacon: "lk_beacon", headframe: "lk_headframe", lift: "lk_lift", caravan: "lk_caravan" };
+export const LANDMARK_SHEET: Record<string, LkKind> = { windmill: "lk_windmill", beacon: "lk_beacon", headframe: "lk_headframe", lift: "lk_lift", caravan: "lk_caravan", lists: "lk_lists" };
+/**
+ * More sprites of a landmark, each at its own foot (tiles), so heroes between its parts sort between them: the Lists'
+ * tilt barrier stands in front of the riders' lane, its stand behind it (shared/landmarks.ts `parts`).
+ */
+export const LANDMARK_PARTS: Record<string, readonly { kind: LkKind; x: number; y: number }[]> = { lists: [{ kind: "lk_tilt", x: 92.25, y: 1207.5 }] };
 /**
  * Landmarks that shine after dusk, from a fire you can see on the sheet (the game's rule: no light without a source).
  * `lift` raises the glow to the flame (world px above the foot), `scale` its size.
