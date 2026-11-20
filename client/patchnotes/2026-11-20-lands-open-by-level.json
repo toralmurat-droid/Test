@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-20",
+  "pr": 555,
+  "title": "Every land opens by level",
+  "changes": [
+    "The Sunscar now opens at level 30, like the other lands open at their level. Its story, the Second Sun, still begins once the Hollow King and the Hide-Mother are beaten.",
+    "Gates and border roads now show the level range of the land they lead to.",
+    "Places are named by their land instead of by act number."
+  ]
+}
