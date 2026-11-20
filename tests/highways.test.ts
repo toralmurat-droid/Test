@@ -48,6 +48,7 @@ const SPOTS: Record<number, (string | [string, number, number])[]> = {
   2: [["The Veiled Sanctum (seat)", 242, 353], "kelashar", "jackal", "palmshade", "mirage", ["Dustrider Camp", 51, 363]],
   3: [["The Host's Muster (seat)", 262, 678], "cairnwatch", "blackwater", "thanesrest"],
   4: [["Fangrock (seat)", 29, 859], "rustwater", "vulture", "cinnabar"],
+  5: [["Hidehall (seat)", 248, 1105], "ropewell", "tunneltop", "mosslight"],
 };
 
 test("highways: each land's highway joins its capital's gate to every settlement and border-road pass end on road", () => {

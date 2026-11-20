@@ -171,7 +171,7 @@ test("crown: every homeland's Crownway dais is open ground joined to its land, c
   assert.equal(hash(DESERT_Y0, DESERT_Y0 + DESERT_H, box("sunscar")), "7e3ee02863d2887fca92fd002c76e6e19eac972f6fd51160f8149fc38709dfbb", "the Sunscar");
   assert.equal(hash(MOORS_Y0, MOORS_Y0 + MOORS_H, box("moors")), "f10c4c2f2e0b5244d9da9a21f526da8e6cf8707cb5812fc86483980b007d7c7e", "the moors");
   assert.equal(hash(BADLANDS_Y0, BADLANDS_Y0 + BADLANDS_H, box("badlands")), "b83585b7d6bcda629419f8fe2c1f9da18bd4d79b2ddb5674d3cafed9e35a49f9", "the badlands");
-  assert.equal(hash(SINKHOLES_Y0, SINKHOLES_Y0 + SINKHOLES_H, box("sinkholes")), "37a76beb2b8f29433a8f30110060d0d309af1419484c6ab5193f8c651259f9ae", "the sinkholes");
+  assert.equal(hash(SINKHOLES_Y0, SINKHOLES_Y0 + SINKHOLES_H, box("sinkholes")), "7de73831e64d8baa1de4d5eaab650d440784bfe228e8cbe1140e3e902da6e93f", "the sinkholes");
 });
 
 test("crown: Lv 40-50 climbing inward from the rim, the Crownways open at Lv 40, ten war territories (Crown PR3)", () => {

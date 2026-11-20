@@ -56,6 +56,15 @@ const LEGS: Record<number, { from: string; to: string; via: P[] }[]> = {
     { from: "The Rustwater Post", to: "The Redgate Road", via: [[240, 880], [231, 890]] },
     { from: "The Rustwater Post", to: "The Red Road", via: [[246, 872], [271, 876]] },
   ],
+  5: [
+    { from: "Deepden Gate", to: "Hidehall", via: [[206, 1075], [207, 1064], [214, 1064], [236, 1068], [248, 1089]] },
+    { from: "Hidehall", to: "The Dune Road", via: [[236, 1068], [238, 1067]] },
+    { from: "Hidehall", to: "Ropewell", via: [[207, 1064], [166, 1056], [137, 1050], [116, 1000]] },
+    { from: "The Great Maw", to: "Tunneltop", via: [[158, 1046], [192, 1034]] },
+    { from: "Ropewell", to: "The Deep Road", via: [[127, 991], [160, 998]] },
+    { from: "Ropewell", to: "The Rattler's Way", via: [[104, 992], [60, 998], [46, 1030], [45, 1042], [30, 1037]] },
+    { from: "The Rattler's Way", to: "Mosslight Fen", via: [[45, 1041], [44, 1068], [44, 1076]] },
+  ],
 };
 
 const W = MAP_W, roads = WORLD.roads, NAT = new Set<number>([...NATURE, T.CACTUS, T.BONES, T.STUMP]);
