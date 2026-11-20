@@ -22,7 +22,7 @@ import { rallyRenown, targetsOf } from "../shared/war/rules";
 import { HOLDS, STANDARD } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
 import { troopLevel, troopStats, WAR_TROOPS } from "../shared/war/troops";
-import { addValor, holdFall, warFallen, warNow, warState } from "./war";
+import { addValor, holdFall, warFallen, warNow, warRole, warState } from "./war";
 import { boonRenown } from "./warCrown";
 import type { TroopHero, TroopMob } from "./warTroops";
 
@@ -73,6 +73,8 @@ export class WarHoldWorks {
   private awake = new Map<number, number>();
   private seq = 0;
   private sent = -1;
+  /** Works each hero was paid wreck renown for in a war tick. */
+  private earned = new Map<string, { tick: number; n: number }>();
 
   constructor(private h: HoldWorksHost) {}
 
@@ -96,7 +98,7 @@ export class WarHoldWorks {
   barracks(t: number): { x: number; y: number } | null | undefined {
     const st = warState();
     if (!HOLD_FALL.live || !st || !canFall(t)) return undefined;
-    if (warFallen(t)) return null;
+    if (warFallen(t) || falling.has(t)) return null; // (fallen, or its fall waiting for the war's owner: Ages)
     const clan = st.owner[t], l = clan ? lands.get(t) : undefined, tier = l && l.clan === clan ? l.tier : viewTier(warNow()!, t);
     const works = clan ? holdWorks(t, clan, tier) : [], b = barracksOf(works);
     if (!b) return undefined;
@@ -121,10 +123,11 @@ export class WarHoldWorks {
       if (!v || !l || l.clan !== p.clan || l.tier !== p.tier || l.wrecked.has(p.i) || warFallen(p.t) || CLAN_KEYS[v.owner[p.t]] !== p.clan) this.drop(id);
     }
     if (!v) { this.tell(); return; }
+    for (const [hid, e] of this.earned) if (e.tick !== v.tick) this.earned.delete(hid);
     for (const [t, l] of lands) {
       const down = warFallen(t);
       if (down && l.fell) continue; // (its ruin stays until a clan claims it)
-      if ((l.fell && !down) || CLAN_KEYS[v.owner[t]] !== l.clan) { lands.delete(t); version++; continue; } // (a claimed or taken Hold: its works start afresh with its holder)
+      if ((l.fell && !down && !falling.has(t)) || CLAN_KEYS[v.owner[t]] !== l.clan) { lands.delete(t); version++; continue; } // (a claimed or taken Hold: its works start afresh with its holder)
       if (down) { for (const w of holdWorks(t, l.clan, l.tier)) l.wrecked.set(w.i, now); l.fell = true; version++; continue; } // (fallen on another server: all in ruins)
       for (const [i, at] of l.wrecked) if (now - at >= HOLD_FALL.rebuildMs) { l.wrecked.delete(i); version++; }
     }
@@ -188,7 +191,7 @@ export class WarHoldWorks {
     if (hero && heroId) {
       let valor = 0;
       if (legal && addValor(p.t, hero.clan!, HOLD_FALL.wreckValor)) valor = HOLD_FALL.wreckValor;
-      if (hero.clan && hero.level >= STANDARD.minLevel) this.renown([[heroId, hero]], p.t, hero.clan, HOLD_FALL.wreckRenown);
+      if (legal && this.mayEarn(heroId)) this.renown([[heroId, hero]], p.t, hero.clan!, HOLD_FALL.wreckRenown); // (only for effort the war counts, capped per war tick)
       const what = workName(p.clan, w.kind);
       this.h.send(heroId, "chat", { id: "", name: "Herald", text: `You wrecked the ${what} of ${land}${valor ? `: +${valor} valor for ${the(CLANS[hero.clan!].name)}` : ""}.${left ? ` ${left} work${left === 1 ? "" : "s"} still stand${left === 1 ? "s" : ""}.` : ""}` });
     }
@@ -206,11 +209,21 @@ export class WarHoldWorks {
     falling.set(t, now); version++;
     for (const [id] of this.placed) if (this.placed.get(id)!.t === t) this.drop(id);
     if (!clan || !heroId) return;
-    if (legal) addValor(t, clan, HOLD_FALL.fallValor);
+    if (!legal || warRole() === "follower") return; // (renown only for a fall the war counts; on a follower the owner decides: Ages)
+    addValor(t, clan, HOLD_FALL.fallValor);
     const sharers: [string, TroopHero][] = [];
     for (const [hid, o] of this.h.heroes()) if (!o.dead && o.clan === clan && o.level >= STANDARD.minLevel && (hid === heroId || inSackReach(t, o.x, o.y))) sharers.push([hid, o]);
     this.renown(sharers, t, clan, HOLD_FALL.fallRenown);
     for (const [hid] of sharers) this.h.send(hid, "chat", { id: "", name: "Herald", text: `The Hold of ${TERRITORIES[t].name} has fallen! ${CLANS[holder].name} lost it: raise ${the(CLANS[clan].name)}'s banner at its middle to claim it.` });
+  }
+
+  /** Wreck renown a hero may still earn this war tick (HOLD_FALL.wreckRenownPerTick works). */
+  private mayEarn(heroId: string): boolean {
+    const tick = warNow()?.tick ?? -1, e = this.earned.get(heroId);
+    const n = e && e.tick === tick ? e.n : 0;
+    if (n >= HOLD_FALL.wreckRenownPerTick) return false;
+    this.earned.set(heroId, { tick, n: n + 1 });
+    return true;
   }
 
   private renown(heroes: [string, TroopHero][], t: number, clan: ClanKey, amount: number) {

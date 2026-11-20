@@ -25,7 +25,7 @@ import { atWar } from "../shared/war/feuds";
 import { STANDARD } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
 import { parseTroop, troopLevel, troopStance } from "../shared/war/troops";
-import { ACT_FATE_MS, addValor, holdClaim, sackAct, strikeHold, warActFate, warFallen, warNow, warRole, warSacked, warState } from "./war";
+import { ACT_FATE_MS, addValor, holdClaim, warClaimQueued, sackAct, strikeHold, warActFate, warFallen, warNow, warRole, warSacked, warState } from "./war";
 import { HOLD_FALL } from "../shared/war/holdFall";
 import { boonRenown, crownCredit, keyOf } from "./warCrown";
 import type { SiegeHero } from "./warSieges";
@@ -111,6 +111,7 @@ export class WarHolds {
   /** Why hero `id` may not claim fallen land t's ruin now ("" when they may): a sworn hero, nobody else raising, no hero of another clan watching. */
   private whyClaim(id: string, p: HoldHero, t: number, now: number): string {
     if (!p.clan) return "This Hold has fallen. Only a hero sworn to a clan can claim it: swear an oath first.";
+    if (warClaimQueued(t)) return "A banner already flies over this ruin: the heralds carry the news to the war.";
     for (const [oid, r] of this.raises) if (r.t === t && oid !== id) return "Another hero is raising a banner here.";
     if (this.rivals(t, p.clan, now) > 0) return "Heroes of another clan contest this ruin: drive them off first.";
     return "";
@@ -200,7 +201,7 @@ export class WarHolds {
     const at = bannerSpot(r.t), clan = r.claim!;
     if (!at || underground(p.y) || Math.hypot(p.x - at.x, p.y - at.y) > HOLD_SACK.useTiles * TILE * 1.5) { this.stop(id, "You left the banner."); return; }
     if (p.clan !== clan) { this.stop(id, "You are no longer sworn to the clan you raised this banner for."); return; }
-    if (!warFallen(r.t)) { this.stop(id, "The ruin was claimed already."); return; }
+    if (!warFallen(r.t) || warClaimQueued(r.t)) { this.stop(id, "The ruin was claimed already."); return; }
     const hurt = p.lastHurt > r.hurtAt;
     r.hurtAt = p.lastHurt;
     const dt = now - r.lastStep, was = r.paused;

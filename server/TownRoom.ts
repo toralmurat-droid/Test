@@ -758,7 +758,7 @@ export class TownRoom extends Room<TownState> {
     strikeMob: (mid, tid, dmg, shot) => { const m = this.state.mobs.get(mid), o = this.state.mobs.get(tid); if (m && o && !o.dead) { if (!shot) this.broadcast("swing", { id: mid }); this.mobHitsMob(m, mid, o, tid, dmg * this.battles.dmgMult(mid, tid)); } }, // (battle lines on each other: BATTLE.troopDmg; an archer's shot landing: no swing)
     sfx: (msg) => this.broadcast("sfx", msg),
     ranked: (pid, rank) => { const c = this.clients.getById(pid), p = this.state.players.get(pid); if (c && p) { c.send("clan", clanView(p)); c.send("chat", { id: "", name: "Herald", text: `Your renown grows: you are now ${rank}.` }); } },
-    reserved: (): number => this.caravans.count + this.sieges.count + this.tunnels.count + this.rituals.count + this.feuds.count + this.marches.count + this.towns.count + this.holdWorks.count, // caravans, sieges, tunnels, rituals, manhunters, columns, town gates, Hold works, then patrols
+    reserved: (): number => this.caravans.count + this.sieges.count + this.tunnels.count + this.rituals.count + this.feuds.count + this.marches.count + this.towns.count, // caravans, sieges, tunnels, rituals, manhunters, columns, town gates, then patrols (a Hold's works stand outside the budget: they never move or think)
     barracks: (t) => this.holdWorks.barracks(t), // soldiers come out of the Hold's barracks; none while it lies wrecked (server/warHoldWorks.ts)
   });
   /** Caravans (server/warCaravans.ts): supply carts on the clans' roads, spawned with their escorts near heroes. */

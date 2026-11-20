@@ -1,5 +1,6 @@
 {
   "date": "2026-11-19",
+  "pr": 549,
   "title": "Holds can fall",
   "changes": [
     "Every clan Hold now has a barracks where its soldiers come out, plus supply stores, weapon racks, towers and gates. The bigger the Hold, the more of them it has.",

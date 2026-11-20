@@ -37,8 +37,10 @@ export const HOLD_FALL = {
   hp: { barracks: 14, stores: 5, rack: 4, tower: 10, gate: 8 } as Record<WorkKind, number>,
   /** A wrecked work stands again after this long, unless the Hold fell (ms). */
   rebuildMs: 15 * 60_000,
-  /** Valor for the wrecker's clan per work (only where the war lets it fight there, like a sack) and renown for the wrecker. */
+  /** Valor for the wrecker's clan per work (only where the war lets it fight there, like a sack) and renown for the wrecker (the same, capped per war tick). */
   wreckValor: 3, wreckRenown: 6,
+  /** Works a hero is paid wreck renown for in one war tick (a Hold's works rebuild: no endless renown). */
+  wreckRenownPerTick: 8,
   /** The fall: valor for the clan that wrecked the last work, renown for each of its sworn heroes in the Hold's reach. */
   fallValor: 10, fallRenown: 25,
   /** Valor for the claiming clan in the land, renown for each of its sworn heroes in the reach. */

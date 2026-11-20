@@ -312,7 +312,7 @@ async function takeOver(now: number) {
 }
 /** Taking over: the sacks and claims made here while following and not written to the queue yet, applied at once. */
 function applyPendingActs(now: number) {
-  const acts = pendingActs; pendingActs = []; claimedHere.clear();
+  const acts = pendingActs; pendingActs = []; claimedHere.clear(); claimingHere.clear();
   for (const a of acts) applyAct(a, now);
   if (acts.length) void save(now);
 }
@@ -488,7 +488,11 @@ function fallCore(t: number, k: ClanKey | undefined, hero: string, now: number):
  */
 export function holdClaim(t: number, k: ClanKey, hero = "A hero", now = Date.now()): boolean {
   if (!saved || !(t >= 0 && t < saved.state.owner.length) || !CLANS[k]) return false;
-  if (role === "follower") return isFallen(saved.state, t) && queueAct(["hclaim", t, k, hero.slice(0, 64), { id: `${ACT_RUN}:${++actN}` }]);
+  if (role === "follower") { // (queued for the owner; no second claim from here meanwhile)
+    if (!isFallen(saved.state, t) || claimingHere.has(t) || !queueAct(["hclaim", t, k, hero.slice(0, 64), { id: `${ACT_RUN}:${++actN}` }])) return false;
+    claimingHere.set(t, Date.now());
+    return true;
+  }
   if (role !== "owner" || !claimCore(t, k, hero, now)) return false;
   if (canWrite()) kv?.set(KEY, stamped(saved)).catch((e) => console.error("War: could not save:", e));
   return true;
@@ -509,8 +513,16 @@ function tellCore(events: WarEvent[], _now: number): boolean {
   listeners.forEach((f) => { try { f(view, events, {}); } catch (e) { console.error("War listener:", e); } });
   return true;
 }
+/** Fallen lands this server (a follower) queued a claim for: no other claim from here until the war shows it claimed. */
+const claimingHere = new Map<number, number>();
 /** Has land t's Hold fallen (no clan claimed it since), as this server knows the war? */
 export const warFallen = (t: number): boolean => !!saved && isFallen(saved.state, t);
+/** Is a claim of fallen land t already on its way to the war's owner from this server (Ages)? */
+export function warClaimQueued(t: number): boolean {
+  const at = claimingHere.get(t);
+  if (at !== undefined && (!saved || !isFallen(saved.state, t) || Date.now() - at > ACT_FATE_MS)) claimingHere.delete(t); // (claimed, or the owner dropped it)
+  return claimingHere.has(t);
+}
 
 /** The snapshot players get, with the clans at war (shared/war/feuds.ts: the client takes them as they are). */
 const viewOf = (s: Saved): WarView => ({ ...warView(s.state, s.next, lastRaided), wars: warPairs(), reck: crownView() });
