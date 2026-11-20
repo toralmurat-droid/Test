@@ -299,7 +299,7 @@ export function warTick(s: WarState, orders: Partial<Record<ClanKey, Orders>>, e
     let inc = 0;
     for (const t of TERRITORIES) if (s.owner[t.id] === k) inc += (t.capitalOf === k ? WAR.capitalIncome : WAR.income) * supply[t.id];
     // Rally: the less land a clan holds below a fair share, the more its people take up arms
-    inc *= 1 + WAR.rally * Math.max(0, 1 - land[k] / (s.owner.length / CLAN_KEYS.length));
+    inc *= 1 + WAR.rally * Math.max(0, 1 - land[k] / (foughtCount(s.owner) / CLAN_KEYS.length));
     if (extra.towns) inc += WAR.townIncome * townCount(extra.towns, k); // held towns (W6); nothing at all without them
     s.army[k] = s.army[k] * (1 - WAR.upkeep) + inc;
   }

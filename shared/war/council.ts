@@ -12,7 +12,7 @@ import { CLANS, CLAN_KEYS, type ClanKey, type Doctrine } from "./clans";
 import { DOCTRINE, doctrineRank, followedSack, scriptedOrders, type Mind } from "./doctrine";
 import { clansOf } from "./feuds";
 import { crownLands, keepOf } from "./crown";
-import { huntedClan, landOf, leaderOf, phaseOf, rallyClan, targetsOf, WAR, type Orders, type WarState } from "./rules";
+import { foughtCount, huntedClan, landOf, leaderOf, phaseOf, rallyClan, targetsOf, WAR, type Orders, type WarState } from "./rules";
 import { TERRITORIES } from "./territories";
 import { FORGE, forgeCodex, validateRecipe, type ForgeRecipe } from "../forge";
 import { COUNCIL, COUNCIL_STANCES, type CouncilStance } from "./councilScript";
@@ -254,7 +254,7 @@ export function buildBriefing(s: WarState, k: ClanKey, ctx: BriefingCtx = {}, da
       text: "Name up to maxTargets territory ids from `targets` (most wanted first) and a stance. Capitals and the Crown Keep can never be targeted. Your armies push your first target still legal each 10-minute tick for the whole war day; plain-text proclamation and rationale only.",
     },
     lands: {
-      held: own.length, total: n, share: r2(own.length / n), army: Math.round(s.army[k]),
+      held: own.length, total: n, share: r2(landOf(s, k) / foughtCount(s.owner)), army: Math.round(s.army[k]),
       capitals: own.filter((t) => t.capitalOf === k).map((t) => t.name),
       list: own.map((t) => {
         const l: CouncilBriefing["lands"]["list"][number] = { id: t.id, name: t.name, region: t.region, control: Math.round(s.control[t.id]), fort: r2(s.fort[t.id]) };

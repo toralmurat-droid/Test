@@ -202,3 +202,14 @@ test("kill valor: a hero sworn to the rallied clan earns rallyRenown x renown fo
   assert.ok(mine > 0);
   if (other) assert.ok(Math.abs(mine - earn(other) * WAR.rallyRenown) < 1e-9, "the Rally multiplies the same kill's renown");
 });
+
+test("income Rally: a fair share counts fought land only, so the havens give no extra Rally (review 2026-11-20)", () => {
+  const fair = Math.ceil(N / CLAN_KEYS.length), s = newWar();
+  for (const t of TERRITORIES) if (landOf(s, "wardens") > fair && s.owner[t.id] === "wardens" && !t.capitalOf && !t.haven) s.owner[t.id] = "redfang";
+  for (const t of TERRITORIES) if (landOf(s, "wardens") < fair && s.owner[t.id] !== "wardens" && !t.capitalOf && !t.haven) s.owner[t.id] = "wardens";
+  assert.equal(landOf(s, "wardens"), fair);
+  const run = () => warTick(JSON.parse(JSON.stringify(s)) as WarState, {}, { phase: 0 }).army.wardens;
+  const withRally = run(), w = WAR as { rally: number }, keep = w.rally;
+  w.rally = 0;
+  try { assert.equal(withRally, run(), "at a fair share of fought land the Rally adds nothing"); } finally { w.rally = keep; }
+});

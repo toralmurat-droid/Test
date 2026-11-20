@@ -115,7 +115,7 @@ export function buildTerritories(allZones: readonly SpawnZone[], regions: readon
 }
 
 export const TERRITORIES: Territory[] = buildTerritories(SPAWN_ZONES);
-/** The live links between lands on today's map (the war table draws them). */
+/** The live links between lands on today's map (where fronts can meet; the war table draws the gates and roads from client/src/warRoute.ts). */
 export const LAND_LINKS = linkPairs(TERRITORIES);
 export const territoryByName = (name: string) => TERRITORIES.find((t) => t.name === name);
 /** Ground no army may strike, besiege, sack or raid: the Crown Keep (a Reckoning moves it) and the heartland havens. */
