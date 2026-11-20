@@ -45,6 +45,16 @@ const FALL_FRAMES = 2;
  * right) after all other frames; mobs.json `run` = the first. The client steps through them at the monster's speed.
  */
 const RUN_FRAMES = 6;
+/**
+ * Melee swings built in 3D (body3d.ts swingJoints, Murat 2026-11-19 "a proper swing, a few alternatives"): after the
+ * run frames, SWING_VARIANTS swings x 3 facings (down, up, right) x SWING_STEPS poses (wind-up, mid-arc, hit,
+ * follow-through); mobs.json `swing` = the first frame. The client picks a variant per blow.
+ */
+const SWING_STEPS = [0, 1.1, 2.0, 2.6], SWING_VARIANTS = 3;
+/** Which of a weapon family's moves become the three swings (characters.ts human() moves: a1 basic, a2, a3, a4). */
+const SWING_MOVES: Record<string, (undefined | "a2" | "a3" | "a4")[]> = {
+  axe: [undefined, "a2", "a3"], hammer: [undefined, "a2", "a3"], dagger: [undefined, "a2", "a4"], spear: [undefined, "a2", "a4"], // a1 is already the lunge
+};
 /** Facing and pose of sheet frame f. */
 /** A beast built in 3D (beasts3d.ts): `oy` is the client origin row, where its feet stand. */
 function beast3D(key: string, w: number, h: number, oy: number, model: (pose: Pose, f: number) => Model): Sheet {
@@ -57,7 +67,7 @@ function frameOf(f: number): { dir: Dir; pose: "stand" | "step" | "wind" | "stri
   return { dir: (["down", "up", "right"] as Dir[])[k >> 1], pose: k % 2 ? "strike" : "wind" };
 }
 
-interface Sheet { key: string; w: number; h: number; draw: (c: C2, f: number) => void; frames?: number; hands?: number[][]; pix?: (f: number) => MobFrame; run?: number }
+interface Sheet { key: string; w: number; h: number; draw: (c: C2, f: number) => void; frames?: number; hands?: number[][]; pix?: (f: number) => MobFrame; run?: number; swing?: number }
 
 /**
  * Bone Demon's Bone Harvest (client TownScene demonRip): 9 more frames after the 12, 3 per facing (down, up, right):
@@ -80,12 +90,13 @@ function humanoid(key: string, kind: string, w: number, h: number, oy: number, s
   const base = kind.replace(/_(axe|spear|bow|champ|folk)$/, "").replace(/_champ$/, "");
   // 3D-built walkers get a real run cycle at the end of the sheet (flyers hover, clan soldiers march in formation)
   const runAt = MOB3D.has(base) && !lift && !kind.startsWith("war_") ? FRAMES + (rip ? RIP_FRAMES : 0) + (fall ? FALL_FRAMES : 0) : -1;
-  const nf = FRAMES + (rip ? RIP_FRAMES : 0) + (fall ? FALL_FRAMES : 0) + (runAt >= 0 ? RUN_FRAMES * 3 : 0);
+  const swingAt = runAt >= 0 && SWING_MOVES[MOB_POSES[kind]?.weaponKind ?? ""] ? runAt + RUN_FRAMES * 3 : -1;
+  const nf = FRAMES + (rip ? RIP_FRAMES : 0) + (fall ? FALL_FRAMES : 0) + (runAt >= 0 ? RUN_FRAMES * 3 : 0) + (swingAt >= 0 ? SWING_VARIANTS * 3 * SWING_STEPS.length : 0);
   // Frames are painted on first use, so rebuilding a few sheets (buildMobs ONLY) doesn't paint every humanoid
   let frames: ReturnType<typeof humanoidFrame>[] | undefined;
   const hands: number[][] = [];
   const paint = () => frames ??= [...Array(nf).keys()].map((f) => {
-    const fr = humanoidFrame(kind, f, fall, runAt);
+    const fr = humanoidFrame(kind, f, fall, runAt, swingAt);
     // the hands in sheet px (world px from the frame's top-left): where the client puts the skeleton it holds
     const toSheet = (q: P) => [+(w / 2 + (q[0] - 16) * scale).toFixed(2), +(oy * h + (q[1] - 29) * scale).toFixed(2)];
     if (rip && lastRig) hands.push([...toSheet(lastRig.nearH), ...toSheet(lastRig.farH)]);
@@ -95,7 +106,7 @@ function humanoid(key: string, kind: string, w: number, h: number, oy: number, s
   const pix = MOB3D.has(base) ? (f: number): MobFrame => {
     const up = lift ? lift + Math.sin(f * 1.7) * 1.2 : 0;
     setMob3D({ tw: Math.round(w * TX), th: Math.round(h * TX), k: scale * TX, x0: 16 - w / 2 / scale, y0: 29 - (oy * h - up) / scale, lift: up / scale, noShadow: fall && f >= FRAMES });
-    humanoidFrame(kind, f, fall, runAt);
+    humanoidFrame(kind, f, fall, runAt, swingAt);
     let body = lastMob3D!;
     setMob3D(null);
     if (fall && f >= FRAMES) { // fall frames: the side view toppled backwards about the feet, as the painted sheet does
@@ -120,7 +131,7 @@ function humanoid(key: string, kind: string, w: number, h: number, oy: number, s
     return { body, under: new Uint8ClampedArray(body.length), done: true };
   } : undefined;
   return {
-    key, w, h, frames: nf, pix, ...(runAt >= 0 ? { run: runAt } : {}), get hands() { if (!rip) return undefined; paint(); return hands; },
+    key, w, h, frames: nf, pix, ...(runAt >= 0 ? { run: runAt } : {}), ...(swingAt >= 0 ? { swing: swingAt } : {}), get hands() { if (!rip) return undefined; paint(); return hands; },
     draw: (c, f) => {
       const fr = paint()[f], n = createCanvas(fr.w, fr.h), x = n.getContext("2d"), img = x.createImageData(fr.w, fr.h);
       img.data.set(fr.data); x.putImageData(img, 0, 0);
@@ -140,7 +151,13 @@ function humanoid(key: string, kind: string, w: number, h: number, oy: number, s
   };
 }
 
-function humanoidFrame(kind: string, f: number, fall = false, runAt = -1) {
+function humanoidFrame(kind: string, f: number, fall = false, runAt = -1, swingAt = -1) {
+  if (swingAt >= 0 && f >= swingAt) { // 3D swings: per facing, SWING_VARIANTS blows of SWING_STEPS poses
+    const n = SWING_STEPS.length, k = f - swingAt, dir = (["down", "up", "right"] as const)[Math.floor(k / (n * SWING_VARIANTS))];
+    const v = Math.floor((k % (n * SWING_VARIANTS)) / n), at = SWING_STEPS[k % n], hero = MOB_POSES[kind];
+    const dip = Math.max(0, 1 - Math.abs(at - 2) * 1.4);
+    return posed(hero, { dir, t: f, attack: Math.max(0, Math.min(3, Math.round(at))), attackT: at, move: SWING_MOVES[hero.weaponKind][v], bob: dip, crouch: dip * 0.6, expr: at > 1.5 && at < 2.6 ? "squint" : "n" }, false);
+  }
   if (runAt >= 0 && f >= runAt) { // the run cycle (body3d.ts runJoints): RUN_FRAMES per facing, down, up, right
     const k = f - runAt, dir = (["down", "up", "right"] as const)[Math.floor(k / RUN_FRAMES)], ph = (k % RUN_FRAMES) * 2 * Math.PI / RUN_FRAMES;
     return posed(MOB_POSES[kind], { dir, t: f, stride: Math.cos(ph), phase: ph, run: true, bob: 0.1 + 0.7 * Math.cos(2 * ph - 0.9) }, false);
@@ -374,7 +391,7 @@ export function buildMobs(out: string, ONLY?: string[]) {
     sheets.push(humanoid(`mob_${k}_champ`, `${k}_champ`, ...a));
   }
   const todo = sheets.filter((s) => !ONLY || ONLY.includes(s.key));
-  const meta: Record<string, { w: number; h: number; scale: number; frames: number; hands?: number[][]; run?: number }> = {};
+  const meta: Record<string, { w: number; h: number; scale: number; frames: number; hands?: number[][]; run?: number; swing?: number }> = {};
   for (const s of todo) {
     const tw = s.w * TX, th = s.h * TX;
     const NF = s.frames ?? FRAMES;
@@ -406,7 +423,7 @@ export function buildMobs(out: string, ONLY?: string[]) {
     }
     oc.putImageData(sheet, 0, 0);
     writeFileSync(`${out}/${s.key}.webp`, cv.encodeSync("webp", 100));
-    meta[s.key] = { w: s.w, h: s.h, scale: TX, frames: NF, ...(s.hands ? { hands: s.hands } : {}), ...(s.run !== undefined ? { run: s.run } : {}) };
+    meta[s.key] = { w: s.w, h: s.h, scale: TX, frames: NF, ...(s.hands ? { hands: s.hands } : {}), ...(s.run !== undefined ? { run: s.run } : {}), ...(s.swing !== undefined ? { swing: s.swing } : {}) };
   }
   // Only some sheets rebuilt (ONLY): keep the others' entries
   let all = meta;

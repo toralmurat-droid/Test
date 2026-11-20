@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-20",
+  "title": "Real weapon swings",
+  "changes": [
+    "Melee attacks are now full-body swings: the weapon winds up, the shoulders turn into the blow, the front foot steps in and the swing follows through, leaving a trail along the arc it cut.",
+    "Each hero has four different blows: a forehand diagonal, a backhand, an overhead chop and a flat sweep or lunge, depending on the weapon.",
+    "Monsters with weapons swing for real too, picking one of three different blows each time, instead of a single lunge."
+  ]
+}
