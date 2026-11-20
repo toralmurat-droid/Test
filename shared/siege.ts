@@ -58,7 +58,7 @@ function fits(cx: number, cy: number, flip: boolean, taken: SiegeSite[]): boolea
   if (NPCS.some((n) => D(n.x, n.y) < 7 * TILE)) return false;
   if (NPC_DECOR.some((n) => D(n.x * TILE, n.y * TILE) < 6 * TILE)) return false;
   if (CHESTS.some((c) => D(c.x, c.y) < 6 * TILE)) return false;
-  if (SIGNPOSTS.some((s) => D((s.x + 0.5) * TILE, (s.y + 0.5) * TILE) < 6 * TILE)) return false;
+  if (SIGNPOSTS.some((s) => objectBefore(s.x, s.y) === T.SIGNPOST && D((s.x + 0.5) * TILE, (s.y + 0.5) * TILE) < 6 * TILE)) return false; // (not the highways' posts)
   return true;
 }
 

@@ -1,12 +1,12 @@
 import { test } from "node:test";
 import { BORDER_BOXES, carveBorders } from "../shared/borders";
-import { HIGHWAY_MASK } from "../shared/highways";
+import { carveHighways, HIGHWAY_MASK } from "../shared/highways";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
   ACT_LEVEL, actMobLevel, actOfTile, actSpecialLevel, BADLANDS_H, BADLANDS_LEVEL, BADLANDS_Y0, DEEP_END, MAP_H, MAP_W, MOORS_H, MOORS_Y0, SINKHOLES_Y0, TILE, WORLD_H, inCitiesBand,
 } from "../shared/constants";
-import { EMPTY, GROUND, isSafeZone, isSolidAt, isSolidTile, MIRROR_POND, OBJECTS, randomSpawn, T, TILE_COUNT, NATURE, PORTAL_SPOTS } from "../shared/map";
+import { EMPTY, GROUND, HIGHWAY_POSTS, HIGHWAY_SKIP, isSafeZone, isSolidAt, isSolidTile, MIRROR_POND, OBJECTS, randomSpawn, T, TILE_COUNT, NATURE, PORTAL_SPOTS } from "../shared/map";
 import {
   ARCHES, BR, buildBadlands, FANGROCK, inBadlandsRow, REDPASS, REDPASS_BADLANDS, REDPASS_OAKVALE, RUSTWATER_POST, RUSTWATER_SQUARE, TALON_FORT,
 } from "../shared/badlands";
@@ -53,6 +53,7 @@ test("badlands: a band of its own under the moors, built the same every time", (
     const r = buildBadlands(T, g, o, EMPTY);
     for (const c of CITIES) if (c.act === 4) cityGateDais(c, T, g, o, EMPTY, (t) => NATURE.has(t)); // the capital's city gate (W7), cut in after the land
     carveBorders(g, o, new Set(), T, EMPTY); // the border roads (shared/borders.ts), cut last
+    carveHighways(g, o, new Set(r.roads), T, EMPTY, HIGHWAY_SKIP, [4]); for (const p of HIGHWAY_POSTS) o[p.y][p.x] = T.SIGNPOST; // the land highway and its posts (shared/highways.ts), after them
     return { g: g.slice(B0, B1), o: o.slice(B0, B1), areas: r.areas, roads: [...r.roads], posts: r.posts };
   };
   const a = fresh(), b = fresh();

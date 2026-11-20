@@ -17,6 +17,8 @@ test("files map to their areas", () => {
   assert.deepEqual(areasOf([f("shared/sinkholes.ts")]), ["map"], "the Mawdeep Sinkholes band is deterministic map code too");
   assert.deepEqual(areasOf([f("shared/saltmere.ts")]), ["map"], "Saltmere's layout is drawn by the map builder");
   assert.deepEqual(areasOf([f("shared/crown.ts")]), ["map"], "the Crown of the Marches band is deterministic map code too");
+  assert.deepEqual(areasOf([f("shared/highways.ts")]), ["map"], "the land highways are cut into the map");
+  assert.deepEqual(areasOf([f("shared/borders.ts")]), ["map"], "the border roads are cut into the map");
   assert.deepEqual(areasOf([f("shared/skills.ts"), f("client/src/TownScene.ts"), f("docs/x.md")]), []);
 });
 

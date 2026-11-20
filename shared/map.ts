@@ -4,7 +4,7 @@ import { carveBorders, LAND_ROWS } from "./borders";
 import { carveHighways, fortSkipBoxes, HIGHWAYS, highwayTiles } from "./highways";
 import { buildDesert, D, inDesertRow, KEL_MARKET, WAYGATE_OAKVALE } from "./desert";
 import { buildMoors, CAIRN_PORTAL, CAIRN_SQUARE, MOORSGATE_OAKVALE, MR } from "./moors";
-import { BR, buildBadlands, REDPASS_OAKVALE, RUSTWATER_PORTAL, RUSTWATER_SQUARE } from "./badlands";
+import { BR, buildBadlands, LEDGES, REDPASS_OAKVALE, RUSTWATER_PORTAL, RUSTWATER_SQUARE } from "./badlands";
 import { buildSinkholes, ROPEWELL_PORTAL, ROPEWELL_SQUARE, SINKWAY_OAKVALE, SR } from "./sinkholes";
 import { buildCrown, CR, crownwayDais, crownwayFrom, TOLLCROSS_SQUARE, type TileBox } from "./crown";
 import { buildCities, cityGateDais as carveCityGate, CITIES, CITY_TEMPLATE, cityAt, cityText, cityTile } from "./capitals";
@@ -1063,8 +1063,12 @@ function buildWorld() {
   // ---------- 16. Act 2: the desert, in its own band under the rock (shared/desert.ts) ----------
   const desert = buildDesert(T, ground, objects, EMPTY);
   for (const k of desert.roads) roads.add(k);
-  /** Puts a post beside the road on the nearest free tile within 3 of (p.x, p.y) whose row `rowOk` allows (the desert's trails, the highways). */
-  const placePost = (p: { x: number; y: number; to: string[] }, rowOk: (y: number) => boolean) => {
+  /**
+   * Puts a post beside the road on the nearest free tile within 3 of (p.x, p.y) whose row `rowOk` allows (the desert's
+   * trails, the highways). `before`: keeps what the tile was (the highways' posts: chests and siege sites read the map
+   * as it was before them, so a post never moves one).
+   */
+  const placePost = (p: { x: number; y: number; to: string[] }, rowOk: (y: number) => boolean, before?: Map<number, { g: number; o: number }>) => {
     let best: [number, number] | undefined, bd = Infinity;
     for (let j = -3; j <= 3; j++) for (let i = -3; i <= 3; i++) {
       const x = p.x + i, y = p.y + j;
@@ -1073,7 +1077,10 @@ function buildWorld() {
       for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (roads.has((y + dy) * MAP_W + x + dx)) byRoad = true;
       if (byRoad && Math.hypot(i, j) < bd) { bd = Math.hypot(i, j); best = [x, y]; }
     }
-    if (best) { objects[best[1]][best[0]] = T.SIGNPOST; posts.push({ x: best[0], y: best[1], to: p.to }); }
+    if (!best) return;
+    const [x, y] = best, k = y * MAP_W + x;
+    if (before && !before.has(k)) before.set(k, { g: ground[y][x], o: objects[y][x] });
+    objects[y][x] = T.SIGNPOST; posts.push({ x, y, to: p.to });
   };
   for (const p of desert.posts) placePost(p, inDesertRow); // a post beside the trail, on the nearest free tile
   // the Undercity's well-shaft in Kharsun: a ring of old paving round the black hole (shared/dungeon.ts UNDER_SHAFT)
@@ -1124,17 +1131,19 @@ function buildWorld() {
   // to its towns, villages and pass ends. Cut after everything else, so nothing overwrites it; never inside a town or
   // village, a city gate's box or round a capital's fort (there it rides the old streets), then its signposts beside it
   const skip: TileBox[] = [{ x0: V.x0 - 4, x1: V.x1 + 4, y0: V.y0 - 4, y1: V.y1 + 4 }, { x0: SALT_TOWN.x, x1: SALT_TOWN.x + SALT_TOWN.w - 1, y0: SALT_TOWN.y, y1: SALT_TOWN.y + SALT_TOWN.h - 1 },
-    ...CITIES.map((c) => c.outerBox), ...fortSkipBoxes()];
+    ...CITIES.map((c) => c.outerBox), ...fortSkipBoxes(),
+    ...LEDGES.map(([x, y]) => ({ x0: x, x1: x, y0: BR(y), y1: BR(y) }))]; // (the badlands' ambush ledges keep their boulders: shared/bandits.ts)
   for (const h of HIGHWAYS) for (const name of h.towns) {
     const a = areas.find((o) => o.name === name);
     if (a) skip.push({ x0: a.x, x1: a.x + a.w - 1, y0: a.y, y1: a.y + a.h - 1 });
   }
   const highwayBefore = new Map<number, { g: number; o: number }>(), highways = carveHighways(ground, objects, roads, T, EMPTY, skip, undefined, highwayBefore);
+  const firstHighwayPost = posts.length;
   for (const h of HIGHWAYS) {
     const { y0, h: rows } = LAND_ROWS[h.land];
-    for (const p of h.posts ?? []) placePost({ x: p.x, y: p.y + y0, to: p.to }, (y) => y >= y0 && y < y0 + rows);
+    for (const p of h.posts ?? []) placePost({ x: p.x, y: p.y + y0, to: p.to }, (y) => y >= y0 && y < y0 + rows, highwayBefore);
   }
-  return { ground, objects, areas, posts, roads, broken, makeshift, highways, highwaySkip: skip, highwayBefore };
+  return { ground, objects, areas, posts, roads, broken, makeshift, highways, highwaySkip: skip, highwayBefore, highwayPosts: posts.slice(firstHighwayPost) };
 }
 
 /**
@@ -1193,6 +1202,8 @@ export const AREAS = WORLD.areas;
 export const HIGHWAY_TILES: ReadonlySet<number> = WORLD.highways;
 /** Where the highways stay unwidened (towns, villages, city gate boxes, capital forts), for the tests and tools/highway-route.ts. */
 export const HIGHWAY_SKIP: readonly TileBox[] = WORLD.highwaySkip;
+/** The highways' signposts (placed after the carve; the band rebuild tests put them back on a fresh band). */
+export const HIGHWAY_POSTS: readonly { x: number; y: number; to: string[] }[] = WORLD.highwayPosts;
 
 /**
  * Mawdeep gates (Murat 2026-11-05: "doors to open"; 2026-11-08: "part should be like a prison wall and only part a
