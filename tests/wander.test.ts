@@ -22,7 +22,7 @@ test("idle Gildhounds and scorpions stroll freely, without jittering in place", 
         p.x = hx; p.y = hy; p.hp = p.maxHp = 1e7;
         await wait(100);
         for (const m of near) {
-          if (m.target || m.foe) continue;
+          if (m.target || m.foe || m.spot || m.hidden) continue; // hunting, or off to a hiding spot of its own (HIDE: may lie beyond the stroll ring)
           const [x, y] = last.get(m)!, d = Math.hypot(m.x - x, m.y - y);
           if (m.moving) { moving++; if (d < 0.5) stuck++; }
           if (Math.hypot(m.x - m.homeX, m.y - m.homeY) > WANDER.homeAt + 8) far++;
