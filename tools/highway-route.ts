@@ -65,6 +65,12 @@ const LEGS: Record<number, { from: string; to: string; via: P[] }[]> = {
     { from: "Ropewell", to: "The Rattler's Way", via: [[104, 992], [60, 998], [46, 1030], [45, 1042], [30, 1037]] },
     { from: "The Rattler's Way", to: "Mosslight Fen", via: [[45, 1041], [44, 1068], [44, 1076]] },
   ],
+  6: [
+    { from: "The Redgate Road", to: "The Red road", via: [[27, 1244], [27, 1239]] },
+    { from: "The Deep Road", to: "The Deep road", via: [[150, 1300], [145, 1297]] },
+    { from: "The Sun Road", to: "The Sun road", via: [[261, 1289], [256, 1292]] },
+    { from: "Tollcross", to: "The Crown Keep", via: [[144, 1198], [144, 1219]] },
+  ],
 };
 
 const W = MAP_W, roads = WORLD.roads, NAT = new Set<number>([...NATURE, T.CACTUS, T.BONES, T.STUMP]);

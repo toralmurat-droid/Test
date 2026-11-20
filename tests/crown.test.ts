@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import { BORDER_BOXES, carveBorders } from "../shared/borders";
 import { CITIES } from "../shared/capitals";
-import { HIGHWAY_MASK } from "../shared/highways";
+import { carveHighways, HIGHWAY_MASK } from "../shared/highways";
 import { BEAST_CHAIN, CHAINS, CROWN_CHAIN, packQuest } from "../shared/quests";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -9,7 +9,7 @@ import {
   ACT_LEVEL, actMobLevel, actOfTile, actSpecialLevel, BADLANDS_H, BADLANDS_Y0, CITIES_Y0, CROWN_H, CROWN_LEVEL, CROWN_Y0, DESERT_H, DESERT_Y0, MAP_H, MAP_W,
   MOORS_H, MOORS_Y0, SINKHOLES_H, SINKHOLES_LEVEL, SINKHOLES_Y0, TILE, inCitiesBand,
 } from "../shared/constants";
-import { AREAS, EMPTY, GROUND, isSafeZone, isSolidAt, isSolidTile, OBJECTS, randomSpawn, T, TILE_COUNT } from "../shared/map";
+import { AREAS, EMPTY, GROUND, HIGHWAY_POSTS, HIGHWAY_SKIP, isSafeZone, isSolidAt, isSolidTile, OBJECTS, randomSpawn, T, TILE_COUNT } from "../shared/map";
 import {
   buildCrown, COURTS, CR, CROWN_KEEP, CROWN_KEEP_GATES, CROWN_LANDS, crownGateTile, CROWNWAYS, GARDENS, inCrownRow, SPIRES, THRONE_DOOR, THRONE_HALL,
   TOLLCROSS, TOLLCROSS_SQUARE, type TileBox,
@@ -59,6 +59,7 @@ test("crown: a band of its own under the sinkholes, built the same every time", 
     const g = Array.from({ length: MAP_H }, () => Array<number>(MAP_W).fill(T.DIRT)), o = Array.from({ length: MAP_H }, () => Array<number>(MAP_W).fill(T.ROCK));
     const r = buildCrown(T, g, o, EMPTY);
     carveBorders(g, o, new Set(), T, EMPTY); // the border roads (shared/borders.ts), cut last
+    carveHighways(g, o, new Set(r.roads), T, EMPTY, HIGHWAY_SKIP, [6]); for (const p of HIGHWAY_POSTS) o[p.y][p.x] = T.SIGNPOST; // the king's roads' gaps and posts (shared/highways.ts), after them
     return { g: g.slice(C0, C1), o: o.slice(C0, C1), areas: r.areas, roads: [...r.roads], posts: r.posts };
   };
   const a = fresh(), b = fresh();

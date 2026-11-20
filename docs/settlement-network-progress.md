@@ -31,9 +31,31 @@ Roadmap: client/src/roadmap.ts, "Settlement network".
   - Fort diff after Oakvale: Saltwind Coast's fort moved from 97.5,189.5 to 105.5,190.5 (its junction anchor moved from
     110,174 to 129,174: the widened road joins runs); Gravemoor's anchor junction moved from 205,167 to 222,162 (fort
     unchanged). Still 25 forts, 14 of 20 pass ends guarded, capital forts unchanged. Hold atlases rebaked.
+- Step 2b, PR 2: the other five lands, one commit per land (each with its fort diff, so a shift can be bisected).
+  - Sunscar Highway: Duskveil's gate round the Veiled Sanctum south to Mirage Wells, west to Kel Ashar, on to Jackal
+    Springs, the Ashen Pass, Dustrider Camp and the Sun Road; Kel Ashar west to Palmshade Oasis and the Dune Road. Legs
+    `join` the oases' broken trails through the camps (round the shore, never through water). The Sanctum's own road to
+    the Ashen Pass stays a track (paved, it pushed the Humpback Mesas' fort off the pass). Forts unchanged.
+  - Moors Highway: Marrowkeep's gate to the Host's Muster, south to the Mourning Road; west past Blackwater Fen to
+    Cairnwatch, out to the Eastmarch and south-east to Thane's Rest and the Ashen Pass. Thane's Rest's fort moved from
+    138.5,748.5 to 125.5,748.5; the Drowned Hollow's fort stays but is now a pass fort (mourning) instead of a junction
+    fort; the Hollow Mounds' anchor junction moved a tile (fort unchanged).
+  - Badlands Highway: Scarwall's gate round Fangrock's east wall, east past Vulture's Roost and the Cinnabar Pits to the
+    Rustwater Post, the Redgate and Red Road passes; Fangrock down the Rattler's Way. The bandits' ambush ledges
+    (shared/bandits.ts LEDGES) are one-tile skip boxes, so they keep their boulders. Talon Fort stays a sight up its own
+    track (open owner question). Forts unchanged.
+  - Sinkholes Highway: Deepden's gate north to the old road east of the Great Maw, to the Dune Road pass and Hidehall's
+    north gate; round the Maw's north rim (fork to Tunneltop) to Ropewell; east to the Deep Road; west through Hollowbrook
+    Dells, round the Old Warren's west side to the Rattler's Way and down to Mosslight Fen. Rushmere Hollows' fort moved
+    from 231.5,1062.5 to 243.5,1062.5 (still on the Dune Road pass); Rootfall Slopes, Hollowbrook Dells and Mosslight
+    Fen shifted one tile. The Rushmere signpost sits off the Hollows' war patch (SINK_LANDS hold, tests/sinkholes.test.ts).
+  - The Crown's King's Roads: no widening. The legs follow the king's roads' own middle tiles (crown.ts `trail` splines,
+    simplified so the line never leaves them), so the 3-wide core is the old road; the carve only filled the gaps with
+    crown paving: Tollcross Square down to the ring road (one tile, inside Tollcross: it is a skip box), and the Red, Deep
+    and Sun roads' ends to their passes. 60 ground tiles changed. Forts unchanged. The ring road stays one tile wide.
+  - After all six: still 25 forts, 14 of 20 pass ends guarded, capital forts unchanged. The whole map, masked with
+    HIGHWAY_MASK, hashes the same as the map before PR 1. Hold atlases rebaked.
+  - `tools/highway-route.ts`: `NOFORT=1` routes along the old road past forts (without it, the fort penalty makes detours).
 
 ## Next
-- PR 2: the Sunscar, the moors, the badlands, the sinkholes and the Crown (one commit per land; plan in the step 2b brief).
-  Each land: add its legs and posts, its town areas to `towns`, set `seat` / `town`, rerun the fort diff, extend
-  tests/highways.test.ts (a) to its gate, and call `carveHighways(..., [land])` in that land's test `fresh()`.
 - Later: 3-wide bridges (client isobridge.ts), per-land cobble palettes, highways on the war table (all owner calls: no for now).

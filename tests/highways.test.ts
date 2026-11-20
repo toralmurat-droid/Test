@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { MAP_W, TILE, WORLD_H } from "../shared/constants";
+import { MAP_H, MAP_W, TILE, WORLD_H } from "../shared/constants";
 import { BORDERS, endPath, LAND_ROWS } from "../shared/borders";
 import { CITIES } from "../shared/capitals";
 import {
@@ -49,6 +49,7 @@ const SPOTS: Record<number, (string | [string, number, number])[]> = {
   3: [["The Host's Muster (seat)", 262, 678], "cairnwatch", "blackwater", "thanesrest"],
   4: [["Fangrock (seat)", 29, 859], "rustwater", "vulture", "cinnabar"],
   5: [["Hidehall (seat)", 248, 1105], "ropewell", "tunneltop", "mosslight"],
+  6: ["tollcross", "pilgrims", ["The Crown Keep's north gate", 144, 1219]],
 };
 
 test("highways: each land's highway joins its capital's gate to every settlement and border-road pass end on road", () => {
@@ -120,7 +121,7 @@ test("highways: only nature cleared and open ground paved, all inside HIGHWAY_MA
   // the carve on made-up land: what it paves, what it clears, what it leaves alone
   const land = LAND_ROWS[oak.land], { core, verge } = highwayTiles(oak);
   for (const k of [...core, ...verge]) assert.ok(HIGHWAY_MASK.has(k));
-  const grid = (g: number, o: number) => ({ g: Array.from({ length: WORLD_H }, () => Array<number>(MAP_W).fill(g)), o: Array.from({ length: WORLD_H }, () => Array<number>(MAP_W).fill(o)) });
+  const grid = (g: number, o: number, rows = WORLD_H) => ({ g: Array.from({ length: rows }, () => Array<number>(MAP_W).fill(g)), o: Array.from({ length: rows }, () => Array<number>(MAP_W).fill(o)) });
   const woods = grid(T.GRASS, T.TREE), r = new Set<number>();
   const paved = carveHighways(woods.g, woods.o, r, T, EMPTY, [], [oak.land]);
   assert.deepEqual([...paved].sort(), [...core].sort(), "the whole core paved in open woods");
@@ -138,7 +139,8 @@ test("highways: only nature cleared and open ground paved, all inside HIGHWAY_MA
   }
   const boxed = grid(T.GRASS, T.TREE);
   assert.equal(carveHighways(boxed.g, boxed.o, new Set(), T, EMPTY, [{ x0: 0, x1: MAP_W - 1, y0: land.y0, y1: land.y0 + land.h - 1 }], [oak.land]).size, 0, "nothing inside a skip box");
-  assert.equal(carveHighways(boxed.g, boxed.o, new Set(), T, EMPTY, [], [6]).size, 0, "only the lands asked for");
+  const all = grid(T.GRASS, T.TREE, MAP_H); carveHighways(all.g, all.o, new Set(), T, EMPTY, [], [6]);
+  assert.ok(all.g.slice(0, WORLD_H).every((row) => row.every((t) => t === T.GRASS)) && all.o.slice(0, WORLD_H).every((row) => row.every((t) => t === T.TREE)), "only the lands asked for");
 });
 
 test("highways: towns, villages, Oakvale's gates, city gates and capital forts keep their own streets", () => {

@@ -149,6 +149,24 @@ export const HIGHWAYS: readonly Highway[] = [
     { x: 62, y: 36, to: ["Hidehall", "Ropewell", "Hollowbrook Dells", "Mosslight Fen"] }, // in the Dells, where the way turns south
     { x: 43, y: 81, to: ["Hidehall", "Ropewell", "Mosslight Fen"] }, // the Fen's cave road: the Rattler's Way and the Fen
   ] },
+  // The Crown of the Marches: no capital, no widening. Its king's roads are its highway, already three flagstones wide
+  // (crown.ts `trail`; the legs follow their middle tiles, so the core is the old road): the Greenward and Mourning roads
+  // into Tollcross, the Red, Deep and Sun roads to the ring road round the Keep's hill. The carve only fills the gaps with
+  // the Crown's own paving: from each south and west road's end to its pass, and from Tollcross Square down to the ring
+  // road and the Keep's north gate (one tile wide inside Tollcross, as through any town)
+  { land: 6, name: "The King's Roads", seat: "Tollcross", town: "Tollcross", towns: ["Tollcross"], paving: "crown", legs: [
+    { from: "Tollcross", to: "The Crown Keep", pts: [[144, 49], [144, 71]], join: true },
+    { from: "The Greenward Road", to: "Tollcross", pts: [[36, 21], [58, 28], [64, 29], [65, 30], [75, 32], [76, 33], [82, 34], [83, 35], [117, 46], [124, 48]] },
+    { from: "The Mourning Road", to: "Tollcross", pts: [[252, 21], [230, 28], [224, 29], [223, 30], [213, 32], [212, 33], [206, 34], [205, 35], [171, 46], [164, 48]] },
+    { from: "The Red Gate", to: "The ring road", pts: [[20, 91], [39, 90], [44, 89], [59, 88], [78, 89], [79, 90], [102, 90]] },
+    { from: "The Redgate Road", to: "The Red road", pts: [[27, 96], [25, 96], [25, 91]] },
+    { from: "The Deep Road", to: "The ring road", pts: [[150, 152], [148, 150], [145, 150], [144, 150], [144, 125]] },
+    { from: "The Sun Road", to: "The ring road", pts: [[261, 141], [260, 144], [257, 145], [256, 144], [244, 142], [232, 138], [230, 136], [224, 134], [222, 132], [216, 130], [201, 116], [194, 115], [174, 115]] },
+  ], posts: [
+    { x: 28, y: 94, to: ["Tollcross", "The Crown Keep"] }, // the Redgate Road meets the Red road
+    { x: 147, y: 148, to: ["Tollcross", "The Crown Keep"] }, // the Deep Road meets the Deep road
+    { x: 258, y: 141, to: ["Tollcross", "The Crown Keep"] }, // the Sun Road meets the Sun road
+  ] },
 ];
 
 /** A leg's middle line in map tiles (row * MAP_W + x), in walking order, without repeats. */
