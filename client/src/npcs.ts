@@ -832,16 +832,16 @@ export class NpcLayer {
       const g = npcQuestMark(n.id, q);
       // a zone quest giver's "!" gets a rim arrow on the minimap only while their arc fits the hero's level
       if (g) return { x: n.x, y: n.y, glyph: g, color: "#ffd166", label: n.name, track: this.log.anyTracked && (g === "?" || !ZONE_GIVERS.has(n.id) || arcFits(n.id, q?.level ?? 1)) };
-      if (n.shop) return { x: n.x, y: n.y, glyph: "$", color: "#f2c14e", label: n.title };
-      return { x: n.x, y: n.y, glyph: "•", color: "#b9f27c", label: n.name };
+      if (n.shop) return { x: n.x, y: n.y, glyph: "$", color: "#f2c14e", label: n.title, layer: "people" };
+      return { x: n.x, y: n.y, glyph: "•", color: "#b9f27c", label: n.name, layer: "people" };
     });
     for (const g of targets) {
-      if (g.kind === "area") this.markers.push({ x: g.x, y: g.y, r: g.r, glyph: "", color: "#ffd166", label: g.label, track: true });
-      else if (g.kind === "object") this.markers.push({ x: g.x, y: g.y, glyph: "◆", color: "#7ff3ff", label: g.label, track: true });
+      if (g.kind === "area") this.markers.push({ x: g.x, y: g.y, r: g.r, glyph: "", color: "#ffd166", label: g.label, track: true, known: true });
+      else if (g.kind === "object") this.markers.push({ x: g.x, y: g.y, glyph: "◆", color: "#7ff3ff", label: g.label, track: true, known: true });
     }
     for (const t of this.rumours.targets()) {
-      if (t.kind === "area") this.markers.push({ x: t.x, y: t.y, r: t.r, glyph: "", color: "#e8a45a", label: t.label, track: true });
-      else this.markers.push({ x: t.x, y: t.y, glyph: "◆", color: "#e8a45a", label: t.label, track: true });
+      if (t.kind === "area") this.markers.push({ x: t.x, y: t.y, r: t.r, glyph: "", color: "#e8a45a", label: t.label, track: true, known: true });
+      else this.markers.push({ x: t.x, y: t.y, glyph: "◆", color: "#e8a45a", label: t.label, track: true, known: true });
     }
     this.log.render(q);
 
