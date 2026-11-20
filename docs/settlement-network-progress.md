@@ -161,6 +161,35 @@ Roadmap: client/src/roadmap.ts, "Settlement network".
   - Not done: Ropewell's working townsfolk (plan Q5), rope ladders into pits, hitching rails and water jars at the oases
     (the halt has a rail), a light for the Lift's lantern (LANDMARK_LIGHT stays the beacon only).
 
+- Step 4, PR 1: new villages, framework + the Grey Barrow Moors and the Red Badlands (one commit for both lands: they
+  were wired together, and the fort and muster digests did not move, so there is nothing to bisect).
+  - Data and carve (`shared/villages.ts`): one template plan (three houses, a square with a well or a stone, a portal
+    stone, a reeve, banners, a crate, a barrel and hay), mirrored per village, plus a hand-routed dirt spur from the
+    square's exit to the highway and a signpost by the road. `carveVillages` runs as map.ts section 24, after the highway
+    signposts, into its own `villageBefore` map (chests and siege sites read the map from before both carves). The spur is
+    not in `roads`, never crosses water, bridges, flags or roads. `VILLAGE_MASK` (boxes, spur, post, `clear` tiles) lets
+    the land hash tests mask the villages as they mask the highways.
+  - Villages: Turfhallow (Thane's Rest), Blackwater Staithe (Blackwater Fen), Barrowstead (the Hollow Mounds) on the
+    moors; Redlode (the Cinnabar Pits) and Hornstead (Rattlesnake Gulch) in the badlands. Their stones are appended to
+    `PORTAL_SPOTS` (older ids and spots unchanged; the 13c nature disk skips them via `EARLY_STONES`); names are in
+    `NO_MOB_AREAS`; signposts name the village on a first board pointing up the path.
+  - People (`shared/npcs.ts` `VILLAGE_FOLK`, appended): a giver and a townsperson or trader each, and a reeve
+    (`steward_<id>`). Cobb sells flasks at the Staithe, Ilse Copperhand sells the Rustwater armourer's stock at Redlode
+    (`shared/shops.ts`; no new item ids).
+  - Quests (`shared/quests.ts` `villageQuest`): one arc per village, appended last in `SIDE_ARCS` (no chain index moves):
+    find three objects in the patron zone, then kill there; arc reward. Save keys are new top-level `<id>Id/Stage/Count/Ver`
+    fields (old saves load as not begun); `ACCOUNT_API` is 2 for the new `*Ver` fields.
+  - War: each village is a `TOWNS` entry with `fort: false` (standards.ts skips it, so forts and musters stay where they
+    were) and `income: 0.5` (`townIncome`, `townCounts` weighted, `townCount` steps of a half). No WAR_API bump.
+  - Client: LAND_LOOK dresses the houses with the land's existing look (cairn, drover); music lists include the names;
+    landKit's `VILLAGE_KIT` is scattered last (older spots never move; spots carry `village`).
+  - Tests: `tests/villages.test.ts` (sites, carve in the mask and deterministic, reachability to the land's town stone,
+    pins of older portals, landmarks, signposts, forts 25, musters, chests, siege sites, 14 of 20 pass ends guarded),
+    `tests/villages-room.test.ts` (Turfhallow's stone wakes and takes travellers, Old Maddock's quest runs to its reward;
+    a save from before loads). map-metrics: 100% reachable.
+  - Not done: villages in the other lands (PR 2), new art or sprites (owner: none), forts at village gates (owner: no).
+
 ## Next
+- Step 4, PR 2: villages in the other lands, on the same framework.
 - Step 3, PR 4: Crown. It adds `tools/art/paint/landKit/crown.ts` and its `Place` list in landKit.ts.
 - Later: 3-wide bridges (client isobridge.ts), per-land cobble palettes, highways on the war table (all owner calls: no for now).
