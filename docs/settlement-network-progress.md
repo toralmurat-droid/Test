@@ -290,6 +290,13 @@ Roadmap: client/src/roadmap.ts, "Settlement network".
     3+ days in 0.5% of runs. Bench within noise, 51 fewer monsters.
   - Open (owner): the Crown villages' war income (keep 0.5, lower it, or leave them out of the war).
 
+## Step 5: clan cities move into their homelands (one PR per city)
+- PR 1 Hearthhold (in progress, branch `claude/hearthhold-in-land`): the Wardens' city leaves the city strip and stands in
+  Oakvale's north-west (x 41..92, y 1..40), with south, west and east gates on the highways and roads, a gate ward for
+  W7's entry rules, and about 37 client-side townsfolk per city. Plot 0 of the strip stays rock until all five cities have
+  moved. Defaults taken: keep entry rules, remove the old Goldenreach gate dais, highway seat stays Goldenreach Farms,
+  login stays at Oakvale, strip cities get the townsfolk too.
+
 ## Next
 - Step 3 optional follow-ups: working townsfolk for Millbrook, Cairnwatch, the Rustwater Post,
   Ropewell and Tollcross (plan Q5); the small props left out (spare millstone, turf drying rack, creels, tailings heap,
