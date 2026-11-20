@@ -116,8 +116,8 @@ export class TideHud {
   markers(): MapMarker[] {
     if (!this.st?.wave) return [];
     return [
-      { x: TIDE_GATE.x, y: TIDE_GATE.y, r: TIDE.creditTiles * TILE, glyph: "", color: "#ff8a5a", label: "Tide: stand here" },
-      { x: TIDE_GOAL.x, y: TIDE_GOAL.y, glyph: "!", color: "#ff8a5a", track: true, label: "The Tide" },
+      { x: TIDE_GATE.x, y: TIDE_GATE.y, r: TIDE.creditTiles * TILE, glyph: "", color: "#ff8a5a", label: "Tide: stand here", known: true },
+      { x: TIDE_GOAL.x, y: TIDE_GOAL.y, glyph: "!", color: "#ff8a5a", track: true, label: "The Tide", known: true },
     ];
   }
 }

@@ -17,8 +17,8 @@ export interface Slot {
   core: Pt;
   /** Top-left of the land's name plate. */
   plate: Pt;
-  /** The home clan's banner standing in the land (centre of the cloth). */
-  banner?: { clan: ClanKey; x: number; y: number };
+  /** The home clan, whose banner stands over its capital in this land (Murat 2026-11-19: banners on the capitals). */
+  banner?: { clan: ClanKey };
   /** A box (x0, y0, x1, y1) its territories keep out of: a name plate drawn inside the land (the Crown's, in the middle). */
   keepOut?: [number, number, number, number];
 }
@@ -29,15 +29,15 @@ const OAK_MOOR: Pt[] = [[600, 110], [615, 210], [590, 280], [610, 345]];
 
 /** Lands by compass (regions.ts): Oakvale NW, Moors NE, Badlands W, Sunscar SE, Sinkholes S, the Crown in the centre. */
 export const SLOTS: Slot[] = [
-  { key: "oakvale", core: [300, 170], plate: [18, 18], banner: { clan: "wardens", x: 415, y: 95 },
+  { key: "oakvale", core: [300, 170], plate: [18, 18], banner: { clan: "wardens" },
     poly: [[0, 0], [560, 0], ...OAK_MOOR, M1, [500, 400], [425, 425], [340, 405], [290, 300], [200, 265], [0, 270]] },
-  { key: "moors", core: [850, 200], plate: [660, 18], banner: { clan: "host", x: 810, y: 150 },
+  { key: "moors", core: [850, 200], plate: [660, 18], banner: { clan: "host" },
     poly: [[560, 0], [1200, 0], D, [900, 290], [900, 430], M2, M1, ...OAK_MOOR.slice().reverse()] },
-  { key: "badlands", core: [150, 500], plate: [18, 600], banner: { clan: "redfang", x: 235, y: 400 },
+  { key: "badlands", core: [150, 500], plate: [18, 600], banner: { clan: "redfang" },
     poly: [[0, 270], [200, 265], [290, 300], [340, 405], [425, 425], [425, 500], [300, 580], [270, 740], [250, 840], [0, 840]] },
-  { key: "sunscar", core: [1020, 580], plate: [830, 726], banner: { clan: "veiled", x: 1010, y: 410 },
+  { key: "sunscar", core: [1020, 580], plate: [830, 726], banner: { clan: "veiled" },
     poly: [[900, 290], D, [1200, 840], [920, 840], [900, 700], [780, 650], [710, 585], [750, 515], M2, [900, 430]] },
-  { key: "sinkholes", core: [560, 730], plate: [330, 756], banner: { clan: "hidekin", x: 480, y: 625 },
+  { key: "sinkholes", core: [560, 730], plate: [330, 756], banner: { clan: "hidekin" },
     poly: [[300, 580], [425, 500], [560, 570], [600, 600], [710, 585], [780, 650], [900, 700], [920, 840], [250, 840], [270, 740]] },
   // the Crown's plate stands in the middle of its land (a 1366 x 768 plate is about 190 x 40 sheet units): territories keep out
   { key: "crown", core: [600, 530], plate: [490, 455], keepOut: [490, 455, 680, 495],
@@ -58,10 +58,12 @@ const roomy = (p: Pt, poly: readonly Pt[], m: number) =>
   inPoly(p, poly) && inPoly([p[0] + m, p[1]], poly) && inPoly([p[0] - m, p[1]], poly) && inPoly([p[0], p[1] + m], poly) && inPoly([p[0], p[1] - m], poly);
 
 export const SEP = 40, EDGE = 16;
-/** The box a standing banner and its name plate take on the sheet (relative to its centre): territories keep out of it. */
-export const BANNER_BOX = { x: 78, y0: -85, y1: 112 };
+/** The box a capital's standing banner and its name plate (both above it) take on the sheet, relative to the capital: other territories keep out of it. */
+export const BANNER_BOX = { x: 36, y0: -138, y1: 14 };
 /** How far (sheet units) a territory keeps from a slot's keepOut box: room for its marker. */
 export const KEEP_M = 14;
+/** A land's name plate on the sheet (w, h, from its top-left): a home capital's banner keeps off it. */
+export const PLATE: Pt = [220, 64];
 export interface Placed { id: number; x: number; y: number }
 
 /**
@@ -99,20 +101,25 @@ export function layoutTerritories(ts: readonly Territory[], slots: readonly Slot
           if (d < SEP) { const k = (SEP - d) / 2 / d; pts[i].x -= dx * k; pts[i].y -= dy * k; pts[j].x += dx * k; pts[j].y += dy * k; }
         }
       }
-      const bn = s.banner, ko = s.keepOut;
+      const ko = s.keepOut, capT = s.banner && mine.find((t) => t.capitalOf === s.banner!.clan), bn = capT && pts.find((p) => p.id === capT.id);
       for (const p of pts) {
         if (ko && p.x > ko[0] - KEEP_M && p.x < ko[2] + KEEP_M && p.y > ko[1] - KEEP_M && p.y < ko[3] + KEEP_M) { // out of the box by its nearest side
           const m = [p.x - ko[0] + KEEP_M, ko[2] + KEEP_M - p.x, p.y - ko[1] + KEEP_M, ko[3] + KEEP_M - p.y], i = m.indexOf(Math.min(...m));
           if (i === 0) p.x = ko[0] - KEEP_M; else if (i === 1) p.x = ko[2] + KEEP_M; else if (i === 2) p.y = ko[1] - KEEP_M; else p.y = ko[3] + KEEP_M;
         }
-        if (bn) { // out of the banner's box by its nearest side
-          const dx = p.x - bn.x, dy = p.y - bn.y, ex = BANNER_BOX.x + 8, y0 = bn.y + BANNER_BOX.y0 - 8, y1 = bn.y + BANNER_BOX.y1 + 8;
+        if (bn && p !== bn) { // out of the banner's box by its nearest side
+          const dx = p.x - bn.x, ex = BANNER_BOX.x + 8, y0 = bn.y + BANNER_BOX.y0 - 8, y1 = bn.y + BANNER_BOX.y1 + 8;
           if (Math.abs(dx) < ex && p.y > y0 && p.y < y1) {
             const m = [ex - Math.abs(dx), p.y - y0, y1 - p.y], i = m.indexOf(Math.min(...m));
             if (i === 0) p.x = bn.x + Math.sign(dx || 1) * ex; else p.y = i === 1 ? y0 : y1;
           }
         }
-        for (let n = 0; n < 40 && !roomy([p.x, p.y], s.poly, EDGE); n++) { p.x += (s.core[0] - p.x) * 0.06; p.y += (s.core[1] - p.y) * 0.06; }
+        if (p === bn) { // the banner keeps off the land's name plate (about PLATE sheet units from its top-left): the capital steps down
+          const [px, py] = s.plate;
+          if (p.x + BANNER_BOX.x > px && p.x - BANNER_BOX.x < px + PLATE[0] && p.y + BANNER_BOX.y0 < py + PLATE[1] && p.y > py) p.y = py + PLATE[1] - BANNER_BOX.y0;
+        }
+        const fits = () => roomy([p.x, p.y], s.poly, EDGE) && (p !== bn || [-BANNER_BOX.x, 0, BANNER_BOX.x].every((dx) => inPoly([p.x + dx, p.y + BANNER_BOX.y0], s.poly))); // the capital keeps room for its banner
+        for (let n = 0; n < 40 && !fits(); n++) { p.x += (s.core[0] - p.x) * 0.06; p.y += (s.core[1] - p.y) * 0.06; }
       }
     }
     out.push(...pts.map((p) => ({ id: p.id, x: Math.round(p.x), y: Math.round(p.y) })));

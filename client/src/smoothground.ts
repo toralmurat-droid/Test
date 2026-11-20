@@ -3,6 +3,10 @@ import { BADLANDS_H, BADLANDS_Y0, DEEP_END, DEEP_Y0, DESERT_H, DESERT_Y0, MAP_H,
 import { SEA_END } from "../../shared/dungeon";
 import { ELEMENT_LANDS, EMPTY, OBJECTS, T, TILE_COUNT } from "../../shared/map";
 import { CITIES, cityAt } from "../../shared/capitals";
+import { isDesertDune } from "../../shared/desert";
+import { isCrownRim } from "../../shared/crown";
+import { isBadlandsRim } from "../../shared/badlands";
+import { RELIEF_DUNE, RELIEF_GRANITE, RELIEF_RED } from "./groundPaint";
 import { CITY_LOOK } from "./cityArt";
 import type { GroundData } from "./groundPaint";
 
@@ -33,17 +37,20 @@ export class SmoothGround {
   private pinSets = new Map<string, { x: number; y: number }[]>(); // per caller (the waygates, the border roads)
 
   constructor(private scene: Phaser.Scene, ground: number[][], private onImage: (img: Phaser.GameObjects.Image) => void) {
-    const g = new Int16Array(MAP_W * MAP_H), solid = new Uint8Array(MAP_W * MAP_H), cliff = new Uint8Array(MAP_W * MAP_H);
+    const g = new Int16Array(MAP_W * MAP_H), solid = new Uint8Array(MAP_W * MAP_H), cliff = new Uint8Array(MAP_W * MAP_H), relief = new Uint8Array(MAP_W * MAP_H);
     for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
       g[y * MAP_W + x] = ground[y][x];
       const o = OBJECTS[y][x];
-      if (o === T.CLIFF) cliff[y * MAP_W + x] = 1;
+      // the lands' rims in 3D, painted by the ground: the desert's dunes, the Crown's granite peaks, the badlands' red rock
+      const rim = o !== T.CLIFF ? 0 : isDesertDune(x, y) ? RELIEF_DUNE : isCrownRim(x, y) ? RELIEF_GRANITE : isBadlandsRim(x, y) ? RELIEF_RED : 0;
+      if (rim) relief[y * MAP_W + x] = rim;
+      else if (o === T.CLIFF) cliff[y * MAP_W + x] = 1;
       else if (o !== EMPTY && SOLID.has(o)) solid[y * MAP_W + x] = 1;
     }
     const cityRock = new Uint8Array(MAP_W * MAP_H);
     for (let y = CITIES_Y0 - 4; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) if (!cityAt(x, y)) cityRock[y * MAP_W + x] = 1; // the solid rock round the plots
     const tints = [0, 1, 2, 3, 4].map((i) => { const c = CITIES.find((q) => q.plot === i); if (!c) return [1, 1, 1]; const s = CITY_LOOK[c.clan].stone; return [(s >> 16) / 255 * 1.02, ((s >> 8) & 255) / 255 * 1.02, (s & 255) / 255 * 1.02]; });
-    const data: GroundData = { w: MAP_W, h: MAP_H, tile: TILE, tileCount: TILE_COUNT, ground: g, solid, lands: ELEMENT_LANDS.map((l) => ({ x: l.x, y: l.y, w: l.w, h: l.h, el: l.el })), cave: { y0: WORLD_H, rock: SEA_END, end: UNDER_END, deep: [DEEP_Y0, DEEP_END] }, desert: { y0: DESERT_Y0, y1: DESERT_Y0 + DESERT_H }, moors: { y0: MOORS_Y0, y1: MOORS_Y0 + MOORS_H }, badlands: { y0: BADLANDS_Y0, y1: BADLANDS_Y0 + BADLANDS_H }, sinkholes: { y0: SINKHOLES_Y0, y1: SINKHOLES_Y0 + SINKHOLES_H }, crown: { y0: CROWN_Y0, y1: CROWN_Y0 + CROWN_H }, cities: { y0: CITIES_Y0, x0: CITY_PLOT.x0, stride: CITY_PLOT.stride, tints, acts: [...CITY_ACTS], rock: cityRock }, cliff };
+    const data: GroundData = { w: MAP_W, h: MAP_H, tile: TILE, tileCount: TILE_COUNT, ground: g, solid, lands: ELEMENT_LANDS.map((l) => ({ x: l.x, y: l.y, w: l.w, h: l.h, el: l.el })), cave: { y0: WORLD_H, rock: SEA_END, end: UNDER_END, deep: [DEEP_Y0, DEEP_END] }, desert: { y0: DESERT_Y0, y1: DESERT_Y0 + DESERT_H }, moors: { y0: MOORS_Y0, y1: MOORS_Y0 + MOORS_H }, badlands: { y0: BADLANDS_Y0, y1: BADLANDS_Y0 + BADLANDS_H }, sinkholes: { y0: SINKHOLES_Y0, y1: SINKHOLES_Y0 + SINKHOLES_H }, crown: { y0: CROWN_Y0, y1: CROWN_Y0 + CROWN_H }, cities: { y0: CITIES_Y0, x0: CITY_PLOT.x0, stride: CITY_PLOT.stride, tints, acts: [...CITY_ACTS], rock: cityRock }, cliff, relief, reliefBands: [[DESERT_Y0, DESERT_Y0 + DESERT_H], [CROWN_Y0, CROWN_Y0 + CROWN_H], [BADLANDS_Y0, BADLANDS_Y0 + BADLANDS_H]] };
     const n = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 2) - 1));
     for (let i = 0; i < n; i++) {
       const w = new Worker(new URL("./groundWorker.ts", import.meta.url), { type: "module" });

@@ -69,7 +69,7 @@ export class WaygateLayer {
   /** Map markers for the gates (Murat 2026-11-08: "where is the portal to Act 2?"): gold once awake, grey while asleep. */
   markers(): MapMarker[] {
     return WAYGATES.map((g) => ({ x: g.x, y: g.y, glyph: "", gate: this.awake.get(g.id) ? "awake" as const : "asleep" as const, color: this.awake.get(g.id) ? (isCrownGate(g) ? "#f0d080" : isMoorsGate(g) ? "#b8c4d8" : isBadlandsGate(g) ? "#ff9a60" : isSinkholesGate(g) ? "#a8d070" : "#ffb347") : "#9a8a74",
-      label: nameFor(g) }));
+      label: nameFor(g), layer: "ways" as const }));
   }
 
   /** Step through the gate we stand at (E, the prompt, or a click on the gate). */
