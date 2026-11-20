@@ -884,6 +884,7 @@ export class TownScene extends Phaser.Scene {
       if (!e) return;
       e.sprite.setPosition(x, y); e.tx = x; e.ty = y; e.lastX = x; e.lastY = y; // a jump, not a walk
       if (id === this.me && why === "ferry") { this.ferry?.close(); this.jumped(); this.arrive(8, 28, 44, 650); } // the boat: a short sea-blue fade
+      else if (id === this.me && why === "gate") { this.jumped(); this.snapCamera(); } // turned back at a city gate (server/cityGates.ts): put back outside, no fade
       else if (id === this.me && why) { this.jumped(); this.arrive(18, 4, 8, 650); } // seen, dragged back: a short dark-red fade
       else if (id === this.me) { this.portals?.close(); this.jumped(); this.arrive(40, 14, 4, 700); } // warm glow, then the new place
     });

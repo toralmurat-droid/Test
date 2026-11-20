@@ -387,14 +387,18 @@ export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, font: stri
   }
   // the capital cities' gates (shared/capitals.ts): a small gilt arch in the clan's colour beside the territory the gate stands in
   for (const c of CITIES) {
-    const t = TERRITORIES.find((q) => q.x <= c.outer.x && c.outer.x < q.x + q.w && q.y <= c.outer.y && c.outer.y < q.y + q.h);
+    let t = TERRITORIES.find((q) => q.x <= c.outer.x && c.outer.x < q.x + q.w && q.y <= c.outer.y && c.outer.y < q.y + q.h);
+    if (!t && c.site) { // a city in its land: its gate lies in no territory, so mark the nearest one
+      let bd = Infinity;
+      for (const q of TERRITORIES) { const d = Math.hypot(Math.max(q.x - c.outer.x, 0, c.outer.x - (q.x + q.w - 1)), Math.max(q.y - c.outer.y, 0, c.outer.y - (q.y + q.h - 1))); if (d < bd) { bd = d; t = q; } }
+    }
     if (!t) continue;
     const [x0, y0] = P(t.id), k = Math.max(2, Math.round(sz / 5)), gx = Math.round(x0 + sz * 0.9), gy = Math.round(y0 + sz * 0.5);
     g.fillStyle = "#0d0a07"; g.fillRect(gx - 3 * k - 1, gy - 3 * k - 1, 6 * k + 2, 6 * k + 2);
     g.fillStyle = hex(MAP[c.clan]); g.fillRect(gx - 3 * k, gy - 3 * k, 6 * k, 6 * k);
     g.fillStyle = "#0d0a07"; g.fillRect(gx - k, gy, 2 * k, 3 * k);
     g.fillStyle = "#ffd860"; g.fillRect(gx - 3 * k, gy - 3 * k, 6 * k, Math.max(1, k >> 1));
-    g.textAlign = "left"; text(`${cityText(c).name} gate`, gx + 3 * k + 5, gy, GOLD, 11);
+    g.textAlign = "left"; text(c.site ? cityText(c).name : `${cityText(c).name} gate`, gx + 3 * k + 5, gy, GOLD, 11);
   }
 
   // land plates: the land's name and each clan's share of it

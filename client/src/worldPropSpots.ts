@@ -4,6 +4,7 @@ import { CAMP_TOWERS } from "../../shared/bandits";
 import { NPCS, NPC_DECOR } from "../../shared/npcs";
 import { CHESTS } from "../../shared/chests";
 import { SIEGE_SITES } from "../../shared/siege";
+import { inCityBox } from "./cityFolk";
 import { COW_FOOT_U, COW_FOOT_V } from "./farmArt";
 import { MILL_FOOT_U, MILL_FOOT_V } from "./millArt";
 
@@ -20,6 +21,7 @@ const BAD_GROUND = new Set<number>([T.WATER, T.COBBLE, T.BRIDGE, T.CROPS, T.FIEL
 
 /** Free tile for a standing prop: nothing on it or right around it, not on a road or in water, away from NPCs and chests. */
 function free(tx: number, ty: number, taken: Spot[], gap: number): boolean {
+  if (inCityBox(tx, ty, 2)) return false; // none within a city standing in its land and two tiles round it
   for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
     const o = OBJECTS[ty + j]?.[tx + i], g = GROUND[ty + j]?.[tx + i];
     if (o === undefined || o !== EMPTY || (i === 0 && j === 0 && BAD_GROUND.has(g)) || g === T.WATER) return false;

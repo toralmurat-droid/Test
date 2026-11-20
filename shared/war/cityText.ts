@@ -21,6 +21,8 @@ export interface CityText {
   trainerGreeting: string;
   /** The clan title the leader grants at Banneret (appended to shared/cosmetics.ts TITLES). */
   title: string;
+  /** What the town crier calls across the gate square (client/src/cityFolk.ts); none: he stays silent. */
+  crier?: string[];
 }
 
 export const CITY_TEXT: Partial<Record<ClanKey, CityText>> = {

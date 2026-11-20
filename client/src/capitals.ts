@@ -5,16 +5,17 @@
  * home, rank and what the leader owes) and the panels of the leader, the oath-keeper and the trainer (npcs.ts shows them).
  */
 import Phaser from "phaser";
-import { CITIES, CITY, CITY_TEMPLATE, cityAtPx, cityPrice, cityPx, cityText, rankRewardGold, type City, type CityRole } from "../../shared/capitals";
+import { CITIES, CITY, CITY_TEMPLATE, cityAtPx, cityGates, cityPrice, cityPx, plotBox, cityText, rankRewardGold, type City, type CityRole } from "../../shared/capitals";
 import { CLANS, type ClanKey } from "../../shared/war/clans";
 import { RENOWN_RANKS } from "../../shared/war/renown";
 import { TROOP_LOOK } from "../../shared/war/patrols";
 import { respecCost } from "../../shared/upkeep";
 import { TILE } from "../../shared/constants";
-import { CITY_PROPS, cityPropKey, cityPropTextures } from "./cityProps";
-import { MOB_LOOK, warSoldierTexture } from "./textures";
-import { SMOOTH } from "./isoflag";
-import { CHAR_ORIGIN, CHAR_SCALE, ensureCharSheet, playCharAnim, type CharacterName } from "./artAssets";
+import { CITY_PROPS, cityPropKey, cityPropTextures, paintGatehouse } from "./cityProps";
+import { CITY_TEXT } from "../../shared/war/cityText";
+import { cityCentre, cityFolkPlan, CITY_FOLK_TILES } from "./cityFolk";
+import { Villagers } from "./villagers";
+import { dayPhase, dayTime } from "./details";
 import { hudSlot } from "./hudSlots";
 import { icon as pxIcon } from "./pixelicons";
 
@@ -30,13 +31,6 @@ export interface CityHost {
 
 /** How close (px) a hero must stand to study a war table (it is a wide prop). */
 const WARTABLE_REACH = 3 * TILE;
-const FRAME: Record<string, number> = { down: 0, up: 2, right: 4, left: 4 };
-const FOLK: CharacterName[] = ["villager", "goodwife", "labourer", "peasant", "merchant", "farmwife"] as CharacterName[];
-/** Local tiles (feet) and facing of the guards and townsfolk standing about a city (cosmetic: nobody blocks, nobody walks). */
-const GUARDS: [number, number, string][] = [[23.3, 37.3, "down"], [28.7, 37.3, "down"], [23.3, 16, "right"], [28.7, 16, "left"], [24, 7.4, "down"], [29, 7.4, "down"], [5.5, 15.2, "up"], [11.5, 15.2, "up"], [41.5, 10.4, "down"], [47, 10.4, "down"]];
-const FOLKS: [number, number, string][] = [[4.5, 34, "down"], [11.5, 34.6, "left"], [13.6, 32.6, "down"], [29.5, 31.5, "left"], [21.2, 35.6, "right"], [41.4, 36.6, "right"], [46, 35.8, "down"], [14.5, 25.9, "right"]];
-
-interface Man { spr: Phaser.GameObjects.Sprite; x: number; y: number; dir: string; art?: string; sheet?: CharacterName; on: boolean }
 
 export class CityLayer {
   state?: CityState;
@@ -46,7 +40,10 @@ export class CityLayer {
   note?: { text: string; err: boolean; at: number };
   /** The war table the hero stands at. */
   nearTable = false;
-  private men: Man[] = [];
+  /** The people of each built city (cityFolk.ts): wardens, patrols, stall keepers, shoppers, a crier. */
+  private folk: Villagers[] = [];
+  /** The gatehouse sprites of the cities in their lands (cityProps.ts paintGatehouse). */
+  private gatehouses: Phaser.GameObjects.Image[] = [];
   /** The cities whose props and people are placed (by clan). */
   private built = new Set<ClanKey>();
   private prompt = document.createElement("div");
@@ -70,6 +67,9 @@ export class CityLayer {
     this.rev++;
   }
 
+  /** Scene teardown: the gatehouses go with the scene's display list; drop our references. */
+  destroy() { for (const g of this.gatehouses) g.destroy(); this.gatehouses.length = 0; this.folk.length = 0; this.prompt.remove(); }
+
   /** The war table prompt's E: opens the big map on the war layer. True when it took the key. */
   interact(): boolean {
     if (!this.nearTable) return false;
@@ -83,6 +83,7 @@ export class CityLayer {
   /** A city's props in its clan's colours, baked and placed the first time the hero comes near it (update). */
   private props(c: City) {
     cityPropTextures(this.scene, c.clan);
+    for (const g of cityGates(c)) this.gatehouses.push(paintGatehouse(this.scene, g, c.clan)); // a city in its land: a gatehouse over each gap (the walls are solid already)
     for (const p of CITY_TEMPLATE.props) {
       if (p.kind === "stash") continue; // the account stash chest is drawn by trade.ts
       const s = p.solid, fx = s ? s[0] + s[2] / 2 : p.x + 0.5, fy = s ? s[1] + s[3] : p.y + 0.9, at = cityPx(c, fx, fy), a = CITY_PROPS[p.kind];
@@ -96,26 +97,13 @@ export class CityLayer {
     }
   }
 
-  private man(c: City, [x, y, dir]: [number, number, string], i: number, guard: boolean): Man {
-    const at = cityPx(c, x, y);
-    const spr = this.scene.add.sprite(at.x, at.y, "__DEFAULT").setVisible(false).setDepth(at.y);
-    return { spr, x: at.x, y: at.y, dir, on: false, art: guard ? TROOP_LOOK[c.clan].kinds[0] : undefined, sheet: guard ? undefined : FOLK[i % FOLK.length] };
-  }
-
-  private ready(m: Man) {
-    if (m.on) return;
-    if (m.art) { // a clan soldier's painted sheet, fetched on first sight
-      if (!SMOOTH) return;
-      const tex = warSoldierTexture(this.scene, m.art);
-      if (!tex) return;
-      m.spr.setTexture(tex, FRAME[m.dir] ?? 0).setOrigin(0.5, MOB_LOOK[m.art]?.oy ?? 0.9375).setFlipX(m.dir === "left").setVisible(true);
-    } else if (m.sheet) {
-      const sh = m.sheet;
-      if (!ensureCharSheet(this.scene, sh, () => { m.on = false; }, 400)) return;
-      m.spr.setOrigin(CHAR_ORIGIN.x, CHAR_ORIGIN.y).setScale(CHAR_SCALE).setTexture(sh, 0).setVisible(true);
-      playCharAnim(m.spr, sh, "idle", m.dir);
-    }
-    m.on = true;
+  /** A city's people: ~37 with a post or a route each, active while the hero is within CITY_FOLK_TILES of its centre. */
+  private people(c: City) {
+    const b = plotBox(c), at = cityCentre(c);
+    this.folk.push(new Villagers(this.scene, {
+      area: { x0: b.x, y0: b.y, x1: b.x + b.w, y1: b.y + b.h }, folk: [], wrath: false, people: cityFolkPlan(c).people, soldierArt: TROOP_LOOK[c.clan].kinds[0],
+      crier: CITY_TEXT[c.clan]?.crier ?? [], dark: () => dayPhase(dayTime(Date.now())).dark, active: { x: at.x, y: at.y, r: CITY_FOLK_TILES * TILE },
+    }));
   }
 
   /** Every frame: the guards and townsfolk of a city the hero is near, the war table prompt. */
@@ -128,9 +116,9 @@ export class CityLayer {
       if (Math.hypot(p.x - me.x, p.y - me.y) >= 45 * TILE) continue;
       this.built.add(c.clan);
       this.props(c);
-      GUARDS.forEach((g, i) => this.men.push(this.man(c, g, i, true))); FOLKS.forEach((f, i) => this.men.push(this.man(c, f, i, false)));
+      this.people(c);
     }
-    if (me && this.built.size) for (const m of this.men) this.ready(m);
+    if (this.folk.length) { const dt = this.scene.game.loop.delta; for (const v of this.folk) v.update(dt, [], me); }
     const inCity = !!me && !!cityAtPx(me.x, me.y);
     this.nearTable = inCity && !blocked && this.tables.some((t) => Math.hypot(t.x - me!.x, t.y - me!.y) <= WARTABLE_REACH);
     this.prompt.classList.toggle("open", this.nearTable);

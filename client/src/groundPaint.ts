@@ -52,6 +52,8 @@ export interface GroundData {
    */
   /** The capitals' band: per plot its tint and its homeland's act (the city's ground is painted like that land's). */
   cities?: { y0: number; x0: number; stride: number; tints: number[][]; acts: number[]; rock: Uint8Array };
+  /** Cities standing in their lands (City.site): the box (tiles, x1 / y1 exclusive) takes the clan's stone tint like a band city does. */
+  cityBoxes?: { x0: number; y0: number; x1: number; y1: number; tint: number[] }[];
 }
 
 // Tile ids (shared/map.ts T)
@@ -1016,6 +1018,7 @@ export function paintChunk(g: GroundData, f: Fields, sx0: number, sy0: number, c
         const ao = field(f.ao, wx / tile - 0.5, wy / tile - 0.5);
         if (ao > 0) { const k = 1 - 0.45 * ao; r *= k; gg *= k; b *= k; }
       }
+      if (g.cityBoxes) { const bx = wx / tile, by = wy / tile; for (const cb of g.cityBoxes) if (bx >= cb.x0 && by >= cb.y0 && bx < cb.x1 && by < cb.y1) { r *= cb.tint[0]; gg *= cb.tint[1]; b *= cb.tint[2]; } }
       if (CITY) { // a capital: its homeland's grounds in the clan's stone tint; the rock round the plots is bare black
         const c = g.cities!, pl = Math.max(0, Math.min(c.tints.length - 1, Math.floor((wx / tile - c.x0 + 2) / c.stride))), tn = c.tints[pl];
         if (tn) { r *= tn[0]; gg *= tn[1]; b *= tn[2]; }

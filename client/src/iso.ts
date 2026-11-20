@@ -770,7 +770,7 @@ export function isoStanding(scene: Phaser.Scene, objects: number[][]): number[][
       const key = stakesTexture(scene, t !== T.PALISADE, mask, broken, outDir, variant % 6);
       const H = t === T.PALISADE ? 30 : 12;
       const stakes = scene.add.image(cx, cy, key).setOrigin(0.5, (H + IH / 2) / (IH + H)).setDepth(cy);
-      const pcity = ty >= Y0 ? cityAt(tx, ty) : undefined;
+      const pcity = cityAt(tx, ty); // band cities and cities in their lands
       if (pcity) stakes.setTint(CITY_LOOK[pcity.clan].wall); // a capital's palisade in its clan's colour (cityArt.ts)
       staticObj(scene, stakes);
       out[ty][tx] = -1;

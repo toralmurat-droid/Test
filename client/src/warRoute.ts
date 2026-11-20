@@ -53,10 +53,10 @@ export interface Here {
 /** The territory and land of a map tile (underground: the land only, no node). */
 export function hereAt(tx: number, ty: number): Here {
   const city = cityAt(tx, ty);
-  if (city) return hereAt(city.outer.x, city.outer.y); // inside a capital: where its city gate stands in its land
+  if (city && !city.site) return hereAt(city.outer.x, city.outer.y); // inside a band capital: where its city gate stands in its land (a city in its land: where you stand, the nearest territory)
   const land = regionOf(tx, ty)?.key;
   if ((ty >= WORLD_H && ty < UNDER_END) || inDeepRow(ty)) return { land, near: false }; // dungeon floors and caves lie under the lands: no territory to mark
-  const hit = TERRITORIES.find((t) => inRect(t, tx, ty));
+  const hit = city ? undefined : TERRITORIES.find((t) => inRect(t, tx, ty)); // no territory inside a city (shared/war/view.ts territoryAt)
   if (hit) return { land: hit.region, terr: hit.id, node: hit.id, near: false };
   const n = land ? nearestIn(land, tx, ty) : undefined;
   return { land, node: n?.id, near: !!n };

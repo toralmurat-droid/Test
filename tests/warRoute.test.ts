@@ -110,7 +110,8 @@ test("findRoute: into the Crown by the nearest Crownway, then over its borders t
 test("warRoute: inside a capital you stand where its city gate stands in its land (W7)", () => {
   for (const c of CITIES) {
     const t = cityTile(c, CITY_TEMPLATE.gate), h = hereAt(t.x, t.y - 3);
-    assert.deepEqual(h, hereAt(c.outer.x, c.outer.y), c.clan);
+    if (c.site) assert.equal(h.terr, undefined, `${c.clan}: no territory inside a city in its land`); // you stand where you are; the nearest territory is marked
+    else assert.deepEqual(h, hereAt(c.outer.x, c.outer.y), c.clan);
     assert.ok(h.node !== undefined && h.land === REGIONS.find((r) => r.home === c.clan)?.key, `${c.clan}: its own homeland`);
   }
 });
