@@ -37,6 +37,8 @@ export const OLD_CITY_GATES: Readonly<Record<ClanKey, TileBox>> = {
 export const RETIRED_LEGS: readonly { land: Act; pts: readonly [number, number][] }[] = [
   { land: 1, pts: [[18, 53], [19, 56], [27, 56], [30, 58]] },
   { land: 1, pts: [[52, 57], [52, 21], [44, 16], [36, 16], [35, 17]] },
+  // the Red Badlands: the first stretch from Scarwall's old gate dais down to Fangrock (the leg starts at its south gate now)
+  { land: 4, pts: [[26, 44], [47, 63]] },
 ];
 /** Signposts the moves took away (local tiles of their land): the King's Highway's post where it met the North Meadow road (now inside Hearthhold's walls). */
 export const RETIRED_POSTS: readonly { land: Act; x: number; y: number }[] = [{ land: 1, x: 50, y: 20 }];
@@ -61,12 +63,13 @@ export const CITY_LAND: Partial<Record<ClanKey, CityLandFit>> = {
     trims: [{ x: 28, y: 38, w: 18, h: 17, top: 42, gap: [35, 37] }],
     posts: [{ x: 94, y: 25, to: ["Hearthhold", "North Meadow", "Old Watchtower"] }],
   },
-  // Scarwall: a few tiles of track out of the east gate onto the head of Gallows Canyon, its post above them (the south
-  // gate is on the highway, its post is the highway's: shared/highways.ts); no west gate (the band's edge cliffs)
+  // Scarwall: a few tiles of track out of the east gate onto the head of Gallows Canyon, its post above them (it stands in
+  // the canyon, so it names the city and the way to Fangrock through it); the south gate is on the highway, its post is
+  // the highway's (shared/highways.ts); no west gate (the band's edge cliffs)
   redfang: {
     roads: [[[61, 808], [64, 808]]],
     trims: [],
-    posts: [{ x: 63, y: 806, to: ["Scarwall", "Gallows Canyon"] }],
+    posts: [{ x: 63, y: 806, to: ["Scarwall", "Fangrock"] }],
   },
 };
 
