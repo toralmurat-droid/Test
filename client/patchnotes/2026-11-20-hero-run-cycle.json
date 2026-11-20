@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-20",
+  "title": "Heroes really run",
+  "changes": [
+    "Heroes now run when they move instead of shuffling: long strides with both feet off the ground, the heel kicking up behind, arms pumping and the body leaning into the run.",
+    "The run keeps pace with your hero's real speed, so the feet stay planted on the ground instead of sliding, and it slows down when you are slowed."
+  ]
+}

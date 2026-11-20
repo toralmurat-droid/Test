@@ -118,6 +118,58 @@ function lift(p: P, depth: number, zMin = -99): V3 { return [p[0], depth, Math.m
 
 interface Built { prims: Prim[]; eyes: V3[]; eyeCol: number; handNear: V3; handFar: V3 }
 
+/**
+ * Run cycle joints (3D, rig units). Each leg: a short stance (the foot planted and sliding back under the body at
+ * ground speed), then a swing where the heel kicks up behind and the knee drives forward; both feet are off the ground
+ * between strides. Arms pump bent at the elbow, opposite to the legs; the upper body leans into the run.
+ * Leg 0 touches down at phase 0, leg 1 half a cycle later. With RUN_STEP below, one cycle covers 2 x RUN_STEP / RUN_STANCE
+ * of ground at the speed where the feet do not slide (the client scales the animation to the hero's real speed).
+ */
+export const RUN_STANCE = 0.32, RUN_A = 5.6;
+function runJoints(ph: number, f: P, s: P, hips: V3[], nearS0: V3, farS0: V3, head0: V3, lean: number) {
+  const fw = (p: V3, k: number, up = 0): V3 => [p[0] + f[0] * k, p[1] + f[1] * k, p[2] + up];
+  const nearS = fw(nearS0, lean, -0.3), farS = fw(farS0, lean, -0.3), head = fw(head0, lean * 1.25, -0.35);
+  const t0 = (((ph / (2 * Math.PI)) % 1) + 1) % 1;
+  const L1 = 5.3, L2 = 5.3, A = RUN_A, H = 4.2;
+  const feet: V3[] = [], knees: V3[] = [];
+  for (const i of [0, 1]) {
+    const t = (t0 + i * 0.5) % 1, hp = hips[i];
+    let u: number, h: number;
+    if (t < RUN_STANCE) { const q = t / RUN_STANCE; u = A * (1 - 2 * q); h = 0; }
+    else {
+      const q = (t - RUN_STANCE) / (1 - RUN_STANCE);
+      u = -A + 2 * A * (1 - Math.cos(Math.PI * Math.pow(q, 1.35))) / 2; // lingers behind (heel kick), then reaches forward
+      h = H * Math.pow(Math.sin(Math.PI * Math.pow(q, 0.8)), 1.2);
+    }
+    // feet land a little closer to the line under the body than the hips
+    const side = (hp[0] - (hips[0][0] + hips[1][0]) / 2) * s[0] + (hp[1] - (hips[0][1] + hips[1][1]) / 2) * s[1];
+    let ft: V3 = [hp[0] + f[0] * u - s[0] * side * 0.25, hp[1] + f[1] * u - s[1] * side * 0.25, 0.9 + h];
+    // a leg can't stretch past its length: the foot rolls up onto the toe at the ends of the stance
+    let dx = ft[0] - hp[0], dy = ft[1] - hp[1], dz = ft[2] - hp[2], D = Math.hypot(dx, dy, dz);
+    const M = (L1 + L2) * 0.995;
+    if (D > M) { ft = [hp[0] + dx / D * M, hp[1] + dy / D * M, hp[2] + dz / D * M]; dx *= M / D; dy *= M / D; dz *= M / D; D = M; }
+    // knee: two-bone IK, bending forward
+    const ux = dx / D, uy = dy / D, uz = dz / D;
+    const fd = f[0] * ux + f[1] * uy; // forward part along the leg
+    let px = f[0] - ux * fd, py = f[1] - uy * fd, pz = -uz * fd;
+    const pl = Math.hypot(px, py, pz) || 1; px /= pl; py /= pl; pz /= pl;
+    const a = (L1 * L1 - L2 * L2 + D * D) / (2 * D), k = Math.sqrt(Math.max(0, L1 * L1 - a * a));
+    knees.push([hp[0] + ux * a + px * k, hp[1] + uy * a + py * k, hp[2] + uz * a + pz * k]);
+    feet.push(ft);
+  }
+  // arms: the near (weapon) arm swings with leg 1, the far one with leg 0; bent ~80 degrees at the elbow
+  const arm = (S: V3, w: number, amp: number, sg: number): [V3, V3] => {
+    const al = amp * w, be = 1.35 + 0.25 * Math.max(0, w);
+    const Lu = 3.9, Lf = 3.7;
+    const E: V3 = [S[0] + (f[0] * Math.sin(al) + s[0] * sg * 0.18) * Lu, S[1] + (f[1] * Math.sin(al) + s[1] * sg * 0.18) * Lu, S[2] - Math.cos(al) * Lu];
+    const Hd: V3 = [E[0] + (f[0] * Math.sin(al + be) - s[0] * sg * 0.3) * Lf, E[1] + (f[1] * Math.sin(al + be) - s[1] * sg * 0.3) * Lf, E[2] - Math.cos(al + be) * Lf];
+    return [E, Hd];
+  };
+  const c = Math.cos(2 * Math.PI * t0);
+  const [nearE, nearH] = arm(nearS, -c, 0.6, 1), [farE, farH] = arm(farS, c, 0.85, -1);
+  return { feet, knees, nearS, farS, head, nearE, nearH, farE, farH };
+}
+
 export function build3D(L: Look, w: Dress3D, r: Rig3): Built {
   const f = facingOf(r), s: P = [f[1], -f[0]]; // s = the body's right side (the weapon side)
   const dep = (a: number, si: number) => a * f[1] + si * s[1]; // depth of a point `a` forward, `si` to the right
@@ -126,18 +178,23 @@ export function build3D(L: Look, w: Dress3D, r: Rig3): Built {
   const atk = r.attack >= 0 ? 1 : 0;
   // joints in 3D: x/height straight from the rig, depth from where that joint sits on the body
   const SW = 3.2 * b;
-  const nearS = lift(r.nearS, dep(0, SW)), farS = lift(r.farS, dep(0, -SW));
+  let nearS = lift(r.nearS, dep(0, SW)), farS = lift(r.farS, dep(0, -SW));
   const handA = 1.2 + atk * 2.2;
-  const nearH = lift(r.nearH, dep(handA, SW * 0.85)), farH = lift(r.farH, dep(r.dir === "right" ? 0.6 : 0.8, -SW * 0.85));
-  const nearE = lift(r.nearE, (nearS[1] + nearH[1]) / 2 + dep(-0.6, 0.6)), farE = lift(r.farE, (farS[1] + farH[1]) / 2 + dep(-0.6, -0.6));
+  let nearH = lift(r.nearH, dep(handA, SW * 0.85)), farH = lift(r.farH, dep(r.dir === "right" ? 0.6 : 0.8, -SW * 0.85));
+  let nearE = lift(r.nearE, (nearS[1] + nearH[1]) / 2 + dep(-0.6, 0.6)), farE = lift(r.farE, (farS[1] + farH[1]) / 2 + dep(-0.6, -0.6));
   const strideA = r.stride * (r.run ? 4.3 : 3.5);
   const hipD = [dep(0, 1.55 * b), dep(0, -1.55 * b)];
   const footD = [dep(-strideA, 1.75 * b), dep(strideA, -1.75 * b)];
   // the rig's "near" leg 0 is the back one when facing right; for down/up the rig spreads them sideways
   const hips = [lift(r.hips[0], hipD[0]), lift(r.hips[1], hipD[1])];
-  const feet = [0, 1].map((i) => { const ft = r.feet[i]; const d = footD[i]; return [ft[0], d, Math.max(0.9, (29 - ft[1]) / COS - (r.dir === "right" ? 0 : d * 0.25))] as V3; });
-  const knees = [0, 1].map((i) => { const k = lift(r.knees[i], (hipD[i] + footD[i]) / 2 + dep(0.9, 0)); return k; });
-  const head = lift([r.head[0], r.head[1] + 0.7], dep(0.2, 0));
+  let feet = [0, 1].map((i) => { const ft = r.feet[i]; const d = footD[i]; return [ft[0], d, Math.max(0.9, (29 - ft[1]) / COS - (r.dir === "right" ? 0 : d * 0.25))] as V3; });
+  let knees = [0, 1].map((i) => { const k = lift(r.knees[i], (hipD[i] + footD[i]) / 2 + dep(0.9, 0)); return k; });
+  let head = lift([r.head[0], r.head[1] + 0.7], dep(0.2, 0));
+  if (r.run && r.phase !== undefined && !atk) {
+    // a real run in 3D, the same for every facing (Murat 2026-11-19: "running, not shuffling")
+    const J = runJoints(r.phase, f, s, hips, nearS, farS, head, r.dir === "right" ? 0.5 : 1.3);
+    ({ feet, knees, nearS, farS, head, nearE, nearH, farE, farH } = J);
+  }
   const chest: V3 = [(nearS[0] + farS[0]) / 2, (nearS[1] + farS[1]) / 2, (nearS[2] + farS[2]) / 2 - 2.2];
   const pelvis: V3 = [(hips[0][0] + hips[1][0]) / 2, (hips[0][1] + hips[1][1]) / 2, (hips[0][2] + hips[1][2]) / 2 + 0.6];
   const waist: V3 = [(chest[0] + pelvis[0]) / 2, (chest[1] + pelvis[1]) / 2, (chest[2] + pelvis[2]) / 2];
