@@ -7,6 +7,19 @@ import { ROAD_STYLE } from "./columnArt";
 
 export type MapLayer = "quests" | "people" | "ways" | "boards" | "lands" | "war" | "names" | "heroes" | "exits";
 
+/**
+ * One key for every map (coherence review, Murat 2026-11-20): the zone map, the minimap and the war table draw fronts,
+ * ways between lands and portal stones in these same colours, so a mark means the same thing wherever it shows.
+ */
+export const MAP_KEY = {
+  /** where two clans' lands meet (the war table dithers it with `frontDark`) */
+  front: "#e0503a", frontDark: "#b83a28",
+  /** a gate or a border road between lands */
+  way: "#96d7ff",
+  /** a portal stone */
+  stone: "#ff9a3c",
+};
+
 /** The colours the map draws each line in, shared with the drawing code so the legend always matches. */
 export const MAP_LINE = {
   /** the territory you stand in: a calm solid line */
@@ -14,7 +27,7 @@ export const MAP_LINE = {
   /** the territory you picked */
   picked: "#8fe0ff",
   /** where two clans' lands meet */
-  front: "#e0503a",
+  front: MAP_KEY.front,
   /** quest areas: dashed circles */
   quest: "#ffd166",
 };
@@ -33,7 +46,7 @@ const line = (g: CanvasRenderingContext2D, color: string, dash: number[] = [], w
 const ROWS: Row[] = [
   { key: "quests", label: "Quests: givers and areas", sample: (g) => { glyph(g, 8, "!", "#ffd166"); g.strokeStyle = MAP_LINE.quest; g.lineWidth = 2; g.setLineDash([3, 2]); g.beginPath(); g.arc(26, 9, 7, 0, Math.PI * 2); g.stroke(); g.setLineDash([]); } },
   { key: "people", label: "People and shops", sample: (g) => { glyph(g, 10, "•", "#b9f27c"); glyph(g, 26, "$", "#f2c14e"); } },
-  { key: "ways", label: "Ways: gates, stones, roads", sample: (g) => { glyph(g, 10, "◆", "#e8dcc0"); glyph(g, 26, "◆", "#ff9a3c"); } },
+  { key: "ways", label: "Gates and roads / portal stones", sample: (g) => { glyph(g, 10, "◆", MAP_KEY.way); glyph(g, 26, "◆", MAP_KEY.stone); } },
   { key: "boards", label: "Bounty boards", sample: (g) => glyph(g, 18, "!", "#e3bf6a") },
   { key: "lands", label: "Your territory / picked", sample: (g) => { g.save(); g.beginPath(); g.rect(0, 0, 18, 18); g.clip(); line(g, MAP_LINE.here); g.restore(); g.save(); g.beginPath(); g.rect(18, 0, 18, 18); g.clip(); line(g, MAP_LINE.picked, [5, 3]); g.restore(); } },
   { key: "war", label: "Clan war: front, roads, Holds", sample: (g) => { g.save(); g.beginPath(); g.rect(0, 0, 18, 18); g.clip(); line(g, MAP_LINE.front, [], 2.5); g.restore(); g.save(); g.beginPath(); g.rect(18, 0, 18, 18); g.clip(); line(g, ROAD_STYLE.color, ROAD_STYLE.dash); g.restore(); } },
