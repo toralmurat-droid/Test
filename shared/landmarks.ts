@@ -1,0 +1,29 @@
+import type { Act } from "./constants";
+
+/**
+ * Land landmarks (settlement network step 3, "land identity"): one big built thing per land that tells you where you
+ * are, like Oakvale's windmill on North Meadow. Pure data, in tiles. `x`, `y` is the foot the art stands on
+ * (client/src/landKitView.ts); `solid` (x, y, w, h) blocks movement through shared/npcs.ts isDecorSolidAt, next to the
+ * capitals' props (Murat 2026-11-20: landmarks block, land-kit props are walk-through).
+ *
+ * Not NPC_DECOR: siege works, tunnels and rituals read that list, and none of them may move. No map tiles change, so
+ * map hashes, chests, siege sites, forts and musters stay where they are (tests/landKit.test.ts checks the boxes sit on
+ * open ground and leave every reachable tile reachable).
+ */
+export interface Landmark {
+  id: string;
+  land: Act;
+  /** The shared/map.ts AREAS name it stands in. */
+  area: string;
+  x: number;
+  y: number;
+  solid?: readonly [number, number, number, number];
+}
+
+export const LANDMARKS: readonly Landmark[] = [
+  // a post mill on the North Meadow rise above Millbrook: the water mill below and the windmill share the grain
+  { id: "windmill", land: 1, area: "North Meadow", x: 94.5, y: 31.5, solid: [93.6, 30.6, 1.8, 1.8] },
+];
+
+/** The blocking boxes, for the decor collision grid. */
+export const LANDMARK_SOLIDS: readonly (readonly [number, number, number, number])[] = LANDMARKS.flatMap((l) => (l.solid ? [l.solid] : []));

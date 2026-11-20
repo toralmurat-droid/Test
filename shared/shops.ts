@@ -133,7 +133,7 @@ const masterwork = (level: number): ShopEntry[] => Object.keys(MASTER_BASES).map
 
 export const SHOPS: Record<string, Shop> = {
   weaponsmith: {
-    greeting: "Steel for every hand, friend. Have a look, or show me what you found out there.",
+    greeting: "Steel for every hand, friend. Sickles and scythe blades go out to Goldenreach at harvest, swords to everyone else. Have a look, or show me what you found out there.",
     stock: [
       ...weapons(["w_bronze", "w_ash", "w_frost", "w_long", "w_dragon", "w_sky", "ws_arming", "wx_hand", "wb_hunt", "wf_oak", "r_sling", "r_knives", "r_crossbow"]),
       // armour, shields, hats and boots at their tier's level
@@ -152,7 +152,7 @@ export const SHOPS: Record<string, Shop> = {
   },
   // the armourers: one in each village, armour slots only
   armourer: {
-    greeting: "Mail, plate, good boots. Steel keeps the blood on the inside, love. Try something on.",
+    greeting: "Mail, plate, good boots. Steel keeps the blood on the inside, love. The millers pay me in flour, so you'll pay in gold. Try something on.",
     stock: armourStock("armourer"),
     buys: ARMOUR_SLOTS,
     levelHeads: true,

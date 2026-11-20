@@ -3228,6 +3228,9 @@ const IDLE: Record<string, string> = {
   pell: "She's taken on more water than a gull's belly, but she'll float. Gullrock or the Heronwreck, twelve gold a leg, and I row the whole way. Mind your feet getting in. The planks have their own mind.",
   marta: "The stores are near empty. I water the broth and tell the boys it's the cold. Garrick says there is hope. I hope he's right.",
   alewife: "Ale's cold, the gossip's warm. Pull up a barrel, love. Whatever happens in this valley, it comes past my cart sooner or later.",
+  // land identity (settlement network step 3): Oakvale grows and mills grain
+  miller: "When the brook runs low, the windmill up on the meadow grinds, and when the wind drops, my wheel does. Between the two of them the valley never goes without bread. Goldenreach sends the sacks down by cart.",
+  huntsman: "Hides on the frames, meat in the smoke. Goldenreach feeds the valley on grain, but someone has to keep the wolves off the sheaves.",
 };
 /**
  * Idle lines by the hero's choice, also said instead of a finished chain's plain `after` (with every story done, that

@@ -6,6 +6,7 @@ import { MAW_LEDGE_RECT, SINKWAY_SINKHOLES, SR } from "./sinkholes";
 import { CR, crownGateTile, CROWNWAYS, THRONE_HALL } from "./crown";
 import { CITIES, CITY } from "./capitals";
 import { AREAS, isSafeZone, isSolidAt, OBJECTS, T, VILLAGE } from "./map";
+import { LANDMARK_SOLIDS } from "./landmarks";
 import { CAMP_POSTS, campMobs } from "./bandits";
 import { AMBUSH_ROOMS, chamberAtPx, FLOORS, LAIRS, LANDING, pointInChamber } from "./dungeon";
 
@@ -282,6 +283,9 @@ function claimedByArea(name: string, tx: number, ty: number): boolean {
 /** True within CITY.gateClear tiles of a city's outer gate: spawn zones place nothing there, so a hero leaving a capital is not
  * met by a pack (wandering monsters may still come by). */
 export const nearCityGate = (tx: number, ty: number) => CITIES.some((c) => Math.hypot(tx - c.outer.x, ty - c.outer.y) < CITY.gateClear);
+/** True when tile (tx, ty), padded by half a tile for the body, touches a solid landmark box (shared/landmarks.ts). */
+export const underLandmark = (tx: number, ty: number) =>
+  LANDMARK_SOLIDS.some(([x, y, w, h]) => tx + 1.5 > x && tx - 0.5 < x + w && ty + 1.5 > y && ty - 0.5 < y + h);
 /** Per zone, the areas that keep it out (filtered once: this runs for every tile of every wild zone at start-up). */
 const claimCache = new Map<string, { x: number; y: number; w: number; h: number }[]>();
 /** Tiles where this zone may spawn a monster. */
@@ -294,6 +298,7 @@ function spawnable(z: { name: string; wild?: boolean }, tx: number, ty: number):
   if (BOSS_HALLS.some((l) => l.name !== z.name && inRect(l, tx, ty))) return false; // (the Riven King's hall is his)
   const x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE;
   if (noMobsAt(x, y) || isSafeZone(x, y)) return false;
+  if (underLandmark(tx, ty)) return false; // a body put down inside a landmark's solid box could never step out
   const solid = isSolidAt; // one getter call under tsx (the tests), not four
   return !solid(x - 6, y - 6) && !solid(x + 6, y + 6) && !solid(x - 6, y + 6) && !solid(x + 6, y - 6);
 }
