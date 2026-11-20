@@ -9,7 +9,7 @@ import {
   RESPAWN_MS, TICK_RATE, TILE,
   HOLLOW_KING, ELEM_BLOB, ELEM_MOVE, inputDir, ELITE, BOSS, URSK, SUNWRIGHT, act2MobLevel, act2SpecialLevel, BEAST, BEAST_BROOD, BEAST_FOLK, BEAST_KINDS, BEAST_MOVES, BEAST_RIDER, type BeastMove,
   MAP_W, MAP_H, WORLD_H, inDeepRow, actOfTile, actMobLevel, actSpecialLevel, MOORS_AI, BADLANDS_AI, REDFANG_KINDS,
-  SINKHOLES_AI, HIDEKIN_KINDS, PACK_KINDS, CROWN_AI, CROWN_KINDS, RIVEN_KING,
+  SINKHOLES_AI, HIDEKIN_KINDS, PACK_KINDS, CROWN_AI, CROWN_KINDS, RIVEN_KING, WANDER,
 } from "../shared/constants";
 import { HideKin, type HideKinState } from "./hidekin";
 import { CrownCourt, type CrownState } from "./crownMobs";
@@ -3885,17 +3885,18 @@ export class TownRoom extends Room<TownState> {
       input = STILL; // nothing left to fight: back up into a tree (walks there next tick)
     } else if (m.camp && POSTS[m.post]?.route) {
       input = this.patrolStep(m, now); // walk the trail, back and forth
-    } else if (Math.hypot(m.x - m.homeX, m.y - m.homeY) > 40) {
+    } else if (Math.hypot(m.x - m.homeX, m.y - m.homeY) > WANDER.homeAt) {
       input = this.go(m, m.homeX, m.homeY, now); // walk back home
     } else {
+      input = this.stroll(m, dt, now);
       if (now > m.nextWander) {
         // Idle or stroll in a random 8-way direction
         const dx = Math.floor(Math.random() * 3) - 1, dy = Math.floor(Math.random() * 3) - 1;
-        m.wander = Math.random() < 0.4 ? STILL : { right: dx > 0, left: dx < 0, down: dy > 0, up: dy < 0 };
-        m.nextWander = now + 800 + Math.random() * 2000;
+        m.wander = Math.random() < WANDER.idleChance ? STILL : { right: dx > 0, left: dx < 0, down: dy > 0, up: dy < 0 };
+        m.nextWander = now + WANDER.minMs + Math.random() * WANDER.randMs;
         if (HIDE.spots[m.kind] && Math.random() < HIDE.idleChance) this.claimSpot(m, m.homeX, m.homeY, HIDE.idleRadius, now, false);
+        input = this.stroll(m, dt, now);
       }
-      input = m.wander;
     }
 
     const charge = now < m.chargeUntil ? m.chargeMult : 1;
@@ -3912,8 +3913,12 @@ export class TownRoom extends Room<TownState> {
     }
     const x0 = m.x, y0 = m.y;
     if (this.canStep(m, r.x, r.y)) { m.x = r.x; m.y = r.y; }
+    // a stroll pressed on a rock, a wall or the edge of a town: it turns another way soon (stroll), not after seconds
+    if (input === m.wander && r.moving && !t && !foe) {
+      if (Math.hypot(m.x - x0, m.y - y0) < speed * dt * 0.25) m.stuckSince ||= now; else m.stuckSince = 0;
+    }
     // walking home and stuck on a rock or a fort's corner: it finds its way round for a while (go) instead of pressing on
-    if (!t && !foe && !m.camp && r.moving && Math.hypot(m.x - m.homeX, m.y - m.homeY) > 40) {
+    if (!t && !foe && !m.camp && r.moving && Math.hypot(m.x - m.homeX, m.y - m.homeY) > WANDER.homeAt) {
       // (headway = getting nearer home, not just moving: pressed on a rock it jitters sideways)
       const d = Math.hypot(m.x - m.homeX, m.y - m.homeY);
       if (!m.homeStuck || d < m.homeBest - TILE / 2) { m.homeBest = d; m.homeStuck = now; }
@@ -4138,6 +4143,28 @@ export class TownRoom extends Room<TownState> {
       if (Math.hypot(o.x - t.x, o.y - t.y) <= C.r) hitMob(oid, o, C.mult);
     });
     if (killed && Math.random() < 0.6) { const R = raiderByKey(m.weapon); if (R) this.bossSay(id, R.kill); }
+  }
+
+  /**
+   * Its idle stroll this tick (m.wander, re-rolled every few seconds in updateMob). A step that would leave WANDER.radius
+   * turns back inward, and one stuck on a rock for WANDER.stuckMs picks another way, so it never jitters on one spot.
+   */
+  private stroll(m: Mob, dt: number, now: number): InputState {
+    const w = m.wander;
+    if (!(w.up || w.down || w.left || w.right)) return w;
+    const hx = m.homeX - m.x, hy = m.homeY - m.y, d = Math.hypot(hx, hy);
+    const v = { x: (w.right ? 1 : 0) - (w.left ? 1 : 0), y: (w.down ? 1 : 0) - (w.up ? 1 : 0) };
+    const outward = d > WANDER.radius - 2 && v.x * hx + v.y * hy < 0;
+    const stuck = m.stuckSince && now - m.stuckSince > WANDER.stuckMs;
+    if (!outward && !stuck) return w;
+    m.stuckSince = 0;
+    // turn back toward home (with some spread); stuck well inside, any other way will do
+    const a = d > 4 && (outward || d > WANDER.radius / 2) ? Math.atan2(hy, hx) + (Math.random() * 2 - 1) * WANDER.inwardSpread
+      : Math.atan2(v.y, v.x) + Math.PI / 2 + Math.floor(Math.random() * 3) * Math.PI / 2;
+    m.wander = { right: Math.cos(a) > 0.38, left: Math.cos(a) < -0.38, down: Math.sin(a) > 0.38, up: Math.sin(a) < -0.38 };
+    if (!(m.wander.up || m.wander.down || m.wander.left || m.wander.right)) m.wander = { right: hx > 0, left: hx < 0, down: hy > 0, up: hy < 0 };
+    m.nextWander = Math.max(m.nextWander, now + WANDER.minMs / 2);
+    return m.wander;
   }
 
   /** May a walking monster step to (x,y)? Never into the safe zone or a peaceful place; a Mother Blob never closer to Oakvale than MOTHER_KEEP_OUT (she may still step back out). */
