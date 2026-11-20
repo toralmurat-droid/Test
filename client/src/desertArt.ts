@@ -734,3 +734,49 @@ export function sunStoneTexture(scene: Phaser.Scene, v: number): string {
   });
   return key;
 }
+
+/** Height of a wind-catcher above the roof it stands on. */
+export const CATCHER_H = 34;
+/**
+ * A wind-catcher (settlement network step 3, "land identity": the Sunscar's house look) on a Kel Ashar house's upper
+ * storey: a square plastered tower at the back of the tile, louvred vents up top on the faces the wind comes from, a
+ * striped cloth flap over the front vent and a lip of beams at the cap. `base`: the roof height it stands on.
+ * The image's ground point is the tile centre, like the house tiles: origin (0.5, (IH / 2 + base + CATCHER_H + 6) / height).
+ */
+export function windCatcherTexture(scene: Phaser.Scene, hv: number, base: number): string {
+  const key = `dsb_catcher_${hv}_${base}`, head = base + CATCHER_H + 8, tint = PLASTER[hv];
+  hiResTexture(scene, key, IW, IH + head, 1, 3, (c) => {
+    const I = new Iso(c, IW / 2, head + IH / 2), R = rng(hv * 7 + base);
+    const u0 = -12, u1 = 2, v0 = -12, v1 = 2, z0 = base - 2, z1 = base + CATCHER_H;
+    I.box(u0, u1, v0, v1, z0, z1, tint);
+    // hand-smoothed plaster blotches on both faces
+    for (let n = 0; n < 14; n++) {
+      const L = R() < 0.5, a = u0 + R() * (u1 - u0), z = z0 + R() * (z1 - z0);
+      const [x, y] = L ? I.p(a, v1, z) : I.p(u1, v0 + R() * (v1 - v0), z);
+      c.fillStyle = col(tint, (L ? 0.78 : 0.62) * (R() < 0.5 ? 1.1 : 0.9), 0.5); c.beginPath(); c.ellipse(x, y, 1.6, 1, 0, 0, Math.PI * 2); c.fill();
+    }
+    // the vents: three tall slots on each face, dark inside, with the mullions between lit on their edge
+    const vz0 = z1 - 15, vz1 = z1 - 4;
+    for (let k = 0; k < 3; k++) {
+      const a = u0 + 2.2 + k * 4, b = a + 2.4;
+      I.poly([I.p(a, v1, vz0), I.p(b, v1, vz0), I.p(b, v1, vz1), I.p(a, v1, vz1)], col(0x140c08));
+      const e = v0 + 2.2 + k * 4, f = e + 2.4;
+      I.poly([I.p(u1, e, vz0), I.p(u1, f, vz0), I.p(u1, f, vz1), I.p(u1, e, vz1)], col(0x100806));
+    }
+    // a lip of beam ends under the cap, and the cap itself
+    for (let a = u0 + 1.5; a < u1; a += 3.5) { const [x, y] = I.p(a, v1 + 0.6, z1 - 1.5); c.fillStyle = col(0x3e2a1a); c.fillRect(x - 0.7, y - 0.6, 1.4, 1.2); }
+    I.box(u0 - 1, u1 + 1, v0 - 1, v1 + 1, z1, z1 + 2.2, tint);
+    // a striped cloth flap tied over the front vents, lifting at its hem
+    const stripes = [0xc8a050, hv % 2 ? 0x2a3a72 : 0x8a3424];
+    for (let i = 0; i < 5; i++) {
+      const a = u0 + 0.5 + i * ((u1 - u0 - 1) / 5), b = a + (u1 - u0 - 1) / 5;
+      I.poly([I.p(a, v1 + 0.4, z1 - 0.5), I.p(b, v1 + 0.4, z1 - 0.5), I.p(b, v1 + 3.6, vz1 - 4), I.p(a, v1 + 3.6, vz1 - 4)], col(stripes[i % 2], 0.95));
+    }
+    c.strokeStyle = col(0x4a3020); c.lineWidth = 0.4;
+    c.beginPath(); c.moveTo(...I.p(u0 + 0.5, v1 + 3.6, vz1 - 4)); c.lineTo(...I.p(u1 - 0.5, v1 + 3.6, vz1 - 4)); c.stroke();
+    // a crack and the stain of a drain under the cap
+    c.strokeStyle = col(0x3a2416, 1, 0.5); c.lineWidth = 0.35;
+    c.beginPath(); c.moveTo(...I.p(u1, v0 + 4, z1 - 1)); c.lineTo(...I.p(u1, v0 + 5, z1 - 9)); c.lineTo(...I.p(u1, v0 + 4, z1 - 14)); c.stroke();
+  });
+  return key;
+}

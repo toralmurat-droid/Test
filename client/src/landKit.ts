@@ -15,7 +15,7 @@ import { LK_SHEETS, type LkKind } from "./landKitSheets";
 /**
  * Land kits (settlement network step 3, "land identity"): the small props that say what a land's people do, placed
  * round its settlements (Oakvale: stooks, scarecrows, grain carts, beehives, hide frames; the moors: peat and way-cairns;
- * the badlands: longhorns, troughs and ore carts). Phaser-free and
+ * the badlands: longhorns, troughs and ore carts; the Sinkholes: rope and gantries; the Sunscar: camels and salt). Phaser-free and
  * deterministic, the same on every client; landKitView.ts draws them. Cosmetic and walk-through: the server never
  * reads this file. The solid landmarks are shared/landmarks.ts.
  */
@@ -157,6 +157,42 @@ const BADLANDS: Place[] = [
   { area: "The Cinnabar Pits", kind: "lk_ore_cart", n: 2, gap: 4, near: byLandmark("headframe", 7) },
 ];
 
+/** Within `r` tiles of an object of this kind (a gantry by a pit's rim). */
+const byObject = (o: number, r: number) => (tx: number, ty: number) => {
+  for (let j = -r; j <= r; j++) for (let i = -r; i <= r; i++) if (OBJECTS[ty + j]?.[tx + i] === o) return true;
+  return false;
+};
+/**
+ * The Sinkholes live by rope and lift: a rope walk in Ropewell's east yard (between the palisade and the crates), coils of
+ * rope in its west yard, tripod gantries with their cage baskets on pit rims in Hollowbrook Dells and round the Great
+ * Maw. The Ropewell Lift itself is the landmark over the square's sinkhole.
+ */
+const SINKHOLES: Place[] = [
+  { area: "Ropewell", kind: "lk_rope_walk", n: 1, near: inBox(122, 990, 123, 991) },
+  { area: "Ropewell", kind: "lk_rope_coil", n: 2, gap: 3, near: inBox(105, 990, 109, 993) },
+  { area: "Hollowbrook Dells", kind: "lk_gantry", n: 1, box: [50, 994, 20, 16], near: byObject(T.PIT, 2) },
+  { area: "Hollowbrook Dells", kind: "lk_rope_coil", n: 1, box: [50, 994, 20, 16], near: byObject(T.PIT, 3) },
+  { area: "The Great Maw", kind: "lk_gantry", n: 2, gap: 8, near: byObject(T.PIT, 2) },
+];
+/**
+ * The Sunscar moves salt by caravan: the camel string and salt slabs round the caravan halt outside Kel Ashar's east
+ * gate, salt stacks in the town, camels and salt at the oases (Jackal Springs keeps to stacks: Hamid's camels ran), and
+ * salt pans with a stack on the Glasswind Flats.
+ */
+const SUNSCAR: Place[] = [
+  { area: "The Sunscar", kind: "lk_camel_load", n: 1, box: [164, 398, 16, 10], near: byLandmark("caravan", 5) },
+  { area: "The Sunscar", kind: "lk_camel", n: 1, box: [164, 398, 16, 10], near: byLandmark("caravan", 6) },
+  { area: "The Sunscar", kind: "lk_salt_stack", n: 1, box: [164, 398, 16, 10], near: byLandmark("caravan", 5) },
+  { area: "Kel Ashar", kind: "lk_salt_stack", n: 2, gap: 6 },
+  { area: "Jackal Springs", kind: "lk_salt_stack", n: 2, gap: 4 },
+  { area: "Palmshade Oasis", kind: "lk_camel", n: 2, gap: 5 },
+  { area: "Palmshade Oasis", kind: "lk_salt_stack", n: 1 },
+  { area: "Mirage Wells", kind: "lk_camel_load", n: 1 },
+  { area: "Mirage Wells", kind: "lk_salt_stack", n: 1 },
+  { area: "The Glasswind Flats", kind: "lk_salt_pan", n: 3, gap: 4, box: [138, 426, 22, 14] },
+  { area: "The Glasswind Flats", kind: "lk_salt_stack", n: 1, box: [138, 426, 22, 14] },
+];
+
 /** Way-cairns beside a land's highway: every CAIRN_EVERY tiles of each leg, on the first free tile 3-5 off either side. */
 function cairns(out: KitSpot[], land: Act, area: string, kind: LkKind) {
   const h = HIGHWAYS.find((q) => q.land === land), a = AREAS.find((r) => r.name === area);
@@ -198,7 +234,7 @@ function build(): KitSpot[] {
   const out: KitSpot[] = [];
   for (const p of [...OAKVALE, ...MOORS]) scatter(out, p);
   cairns(out, 3, "The Grey Barrow Moors", "lk_way_cairn");
-  for (const p of BADLANDS) scatter(out, p);
+  for (const p of [...BADLANDS, ...SINKHOLES, ...SUNSCAR]) scatter(out, p);
   return out;
 }
 
@@ -208,7 +244,7 @@ export const LAND_KIT_SPOTS: readonly KitSpot[] = build();
 export const buildLandKit = build;
 
 /** The sheet each landmark is drawn with (shared/landmarks.ts id -> kit sheet). */
-export const LANDMARK_SHEET: Record<string, LkKind> = { windmill: "lk_windmill", beacon: "lk_beacon", headframe: "lk_headframe" };
+export const LANDMARK_SHEET: Record<string, LkKind> = { windmill: "lk_windmill", beacon: "lk_beacon", headframe: "lk_headframe", lift: "lk_lift", caravan: "lk_caravan" };
 /**
  * Landmarks that shine after dusk, from a fire you can see on the sheet (the game's rule: no light without a source).
  * `lift` raises the glow to the flame (world px above the foot), `scale` its size.

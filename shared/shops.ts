@@ -194,7 +194,7 @@ export const SHOPS: Record<string, Shop> = {
     buys: ["rune"],
   },
   ropearmourer: {
-    greeting: "Stitched hide over riveted plate. A Delver comes up under your feet and a Stagkin comes straight at your chest: dress for both.",
+    greeting: "Hesta Coil. Stitched hide over riveted plate, and every strap is Ropewell rope. A Delver comes up under your feet and a Stagkin comes straight at your chest: dress for both.",
     stock: armourStock("ropearmourer"),
     buys: ARMOUR_SLOTS,
     levelHeads: true,
@@ -206,7 +206,7 @@ export const SHOPS: Record<string, Shop> = {
     buys: ["rune"],
   },
   spicetrader: {
-    greeting: "Cardamom, saffron, and flasks to keep you breathing in the sun. Water is extra. Joking. Mostly. Carved stones? I buy those too, or fuse four into one.",
+    greeting: "Cardamom, saffron, and flasks to keep you breathing in the sun. Every grain came in on a salt caravan. Water is extra. Joking. Mostly. Carved stones? I buy those too, or fuse four into one.",
     stock: [
       ...[1, 2].flatMap((size) => (["potion", "mpotion"] as const).flatMap((item) => [
         { item, size, qty: 1, price: POTION_SIZES[size].price },

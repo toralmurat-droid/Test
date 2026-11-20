@@ -3221,7 +3221,7 @@ const IDLE: Record<string, string> = {
   ilka: "Don't look at me like that. Keep walking.",
   rustmarshal: "Water's free, the roof's free, and nobody here pays the Redfang a copper. That's the Post's whole law. Fangrock doesn't like it, and now that you've been out there, neither do you. The drovers water their longhorns at my spring, and the cinnabar carts from the Pits stop here on the way west. Keep both moving and the Post keeps eating.",
   crownherald: "The truce is simple: no blade drawn on the square, no clan's banner over the market, and every herald's word written down. The College has kept it three hundred years. We did not expect to keep it while the old king woke up.",
-  ropewarden: "Hold the rope and watch your footing. The ground round here gives way when it likes, and the Hide-Kin are no steadier. Every trapper at Ropewell has lost somebody to the Mawdeep, and none of us has stopped looking.",
+  ropewarden: "Hold the rope and watch your footing. The ground round here gives way when it likes, and the Hide-Kin are no steadier. Every trapper at Ropewell has lost somebody to the Mawdeep, and none of us has stopped looking. The rope walk in the east yard never stops twisting, and the Lift over the square takes the trappers down and brings the hides up. Here a good rope is worth more than a good sword.",
   cairncaptain: "Keep to the corpse roads, and if a barrow calls your name, don't answer. Four hundred years the Wardens have held these cairns shut. I mean to be the captain who doesn't lose them. Every night we cut peat for the Beacon Cairn north of the gate. While it burns, the barrows know someone is still watching.",
   smoker: "Cod on the left, herring on the right, and don't lean on the racks. Alder smoke gets into everything, your coat included. You'll smell like Saltmere for a week. Folk say it suits you.",
   agna: "Mind the nets. I mend them, but I can't mend the sea. My Ilka used to hold the other end for me.",
@@ -3230,6 +3230,8 @@ const IDLE: Record<string, string> = {
   alewife: "Ale's cold, the gossip's warm. Pull up a barrel, love. Whatever happens in this valley, it comes past my cart sooner or later.",
   // land identity (settlement network step 3): Oakvale grows and mills grain
   miller: "When the brook runs low, the windmill up on the meadow grinds, and when the wind drops, my wheel does. Between the two of them the valley never goes without bread. Goldenreach sends the sacks down by cart.",
+  // the Sunscar moves salt by caravan (Hamid's caravan was hit at Jackal Springs)
+  caravaneer: "Salt from the Glasswind Flats, cut in slabs and roped two to a camel. Kel Ashar's east gate is where the strings rest before the long road. The camels came back on their own, the drivers didn't. A camel knows the road.",
   huntsman: "Hides on the frames, meat in the smoke. Goldenreach feeds the valley on grain, but someone has to keep the wolves off the sheaves.",
 };
 /**

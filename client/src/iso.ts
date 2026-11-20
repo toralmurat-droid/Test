@@ -1,7 +1,7 @@
 import { hasTree3d, tree3dOrigin, WIND_FRAMES, WIND_LIVE } from "./trees3d";
 import Phaser from "phaser";
 import { MAP_H, MAP_W, TILE, WORLD_H } from "../../shared/constants";
-import { T, TILE_COUNT } from "../../shared/map";
+import { AREAS, T, TILE_COUNT } from "../../shared/map";
 import { ROWS, ANIMATED_TILES, animatedRows } from "./tileset";
 import { refreshRegions } from "./texupload";
 import { StaticChunks, staticObj } from "./staticChunks";
@@ -29,7 +29,7 @@ import { ISO, SMOOTH } from "./isoflag";
 import { SmoothGround } from "./smoothground";
 import { hiResTexture } from "./smooth";
 import { uprightTexture, UPRIGHT_OY } from "./smoothProps";
-import { ADOBE_PAD, ADOBE_WALL_H, adobeHead, adobeTexture, adobeWallTexture, bonesTexture, CLIFF_DEPTH, cliffDistance, cliffHeight, cliffTexture, cliffVariant, deadTreeTexture, desertRockTexture, sunStoneTexture, tentTexture } from "./desertArt";
+import { ADOBE_H, ADOBE_PAD, ADOBE_UP, ADOBE_WALL_H, CATCHER_H, adobeHead, adobeTexture, adobeWallTexture, bonesTexture, CLIFF_DEPTH, cliffDistance, cliffHeight, cliffTexture, cliffVariant, deadTreeTexture, desertRockTexture, sunStoneTexture, tentTexture, windCatcherTexture } from "./desertArt";
 import { D, FURNACE, isDesertDune, SUNSTONE } from "../../shared/desert";
 import { BADLANDS_H, BADLANDS_Y0, DESERT_H, DESERT_Y0, MOORS_H, MOORS_Y0, SINKHOLES_H, SINKHOLES_Y0, CROWN_H, CROWN_Y0, CITIES_Y0 } from "../../shared/constants";
 import { cityAt } from "../../shared/capitals";
@@ -818,6 +818,39 @@ const DESERT_UPRIGHT_OY = 44 / 58;
  * blocks; deeper in, the ground painter paints the rock top), mud-brick houses and walls, tents, bones, boulders,
  * dead trees. Returns false for anything drawn the usual way.
  */
+/**
+ * Kel Ashar's wind-catchers (settlement network step 3, "land identity"): one on each of the town's three biggest houses
+ * that carry an upper storey, on the back (north-east) corner of it so it never hides a door. Tile key -> house variant.
+ */
+let catchers: Map<number, number> | undefined;
+function windCatchers(at: (x: number, y: number) => number): Map<number, number> {
+  if (catchers) return catchers;
+  catchers = new Map();
+  const isHouse = (x: number, y: number) => { const n = id(at(x, y)); return n === T.ADOBE || (n === T.DOOR && y >= DESERT_Y0); };
+  const inner = (x: number, y: number) => { for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) if (!isHouse(x + i, y + j)) return false; return true; };
+  const seen = new Set<number>(), houses: { size: number; tile: [number, number]; hv: number }[] = [];
+  for (let y = KEL_ASHAR.y; y < KEL_ASHAR.y + KEL_ASHAR.h; y++) for (let x = KEL_ASHAR.x; x < KEL_ASHAR.x + KEL_ASHAR.w; x++) {
+    if (!isHouse(x, y) || seen.has(y * MAP_W + x)) continue;
+    const q = [[x, y]], tiles: [number, number][] = []; seen.add(y * MAP_W + x);
+    while (q.length) {
+      const [cx, cy] = q.pop()!; tiles.push([cx, cy]);
+      for (const [nx, ny] of [[cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]]) if (isHouse(nx, ny) && !seen.has(ny * MAP_W + nx)) { seen.add(ny * MAP_W + nx); q.push([nx, ny]); }
+    }
+    const inn = tiles.filter(([a, b]) => inner(a, b));
+    if (!inn.length) continue;
+    // the variant as isoDesert names it: from the house's north-west corner
+    let x0 = x, y0 = y; while (isHouse(x0 - 1, y)) x0--; while (isHouse(x0, y0 - 1)) y0--;
+    const hv = Math.floor(hashXY(x0 * 7 + 3, y0 * 5 + 1) * 4);
+    if (ADOBE_UP[hv] === 0) continue; // a palm-frond shade on the roof, no upper storey to build on
+    inn.sort((a, b) => a[1] - b[1] || b[0] - a[0]);
+    houses.push({ size: tiles.length, tile: inn[0], hv });
+  }
+  houses.sort((a, b) => b.size - a.size || a.tile[1] - b.tile[1] || a.tile[0] - b.tile[0]);
+  for (const h of houses.slice(0, 3)) catchers.set(h.tile[1] * MAP_W + h.tile[0], h.hv);
+  return catchers;
+}
+const KEL_ASHAR = AREAS.find((a) => a.name === "Kel Ashar")!;
+
 function isoDesert(scene: Phaser.Scene, t: number, tx: number, ty: number, at: (x: number, y: number) => number, cd: (x: number, y: number) => number): boolean {
   const cx = (tx + 0.5) * TILE, cy = (ty + 0.5) * TILE;
   const v = Math.floor(hashXY(tx, ty) * 4);
@@ -850,6 +883,11 @@ function isoDesert(scene: Phaser.Scene, t: number, tx: number, ty: number, at: (
     const look = { hv, inner: inn, uf, ue }, head = adobeHead(look);
     const key = adobeTexture(scene, faces, edges, t === T.DOOR && !isHouse(tx, ty + 1), v, look);
     staticObj(scene, scene.add.image(cx, cy, key).setOrigin(0.5, (IH / 2 + head) / (IH + head + ADOBE_PAD)).setDepth(cy));
+    const wc = windCatchers(at).get(ty * MAP_W + tx);
+    if (wc !== undefined) {
+      const base = ADOBE_H + ADOBE_UP[wc], ch = base + CATCHER_H + 8;
+      staticObj(scene, scene.add.image(cx, cy, windCatcherTexture(scene, wc, base)).setOrigin(0.5, (IH / 2 + ch) / (IH + ch)).setDepth(cy + 0.5));
+    }
     return true;
   }
   if (t === T.ADOBE_WALL) {

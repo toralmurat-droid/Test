@@ -5,14 +5,15 @@ import { dressSalt, type WinRect } from "./houseSalt";
 /**
  * Life in and around the taller houses (Murat 2026-11-13: "as if the characters had to go inside"): an open door
  * with someone standing in it, and the trade of the house hung on its walls: nets, oars and creels for Saltmere's
- * fishers, sacks and a hoist for the miller, banners and spears for the Redfang barracks.
+ * fishers, sacks and a hoist for the miller, banners and spears for the Redfang barracks, rope coils and a cage on a
+ * hoist for Ropewell's ropewrights.
  *
  * Painted straight onto a house canvas (isobuild.ts house()) in world px: an IsoPaint whose origin is the canvas
  * offset, so (u, v, z) here are the world (x, y, z) of the house.
  */
-export type HouseStyle = "fisher" | "mill" | "barracks" | "tavern" | "smokehouse" | "chandlery";
+export type HouseStyle = "fisher" | "mill" | "barracks" | "tavern" | "smokehouse" | "chandlery" | "ropewright";
 /** The base look a style builds on (Saltmere's tavern, smokehouse and chandlery are fisher houses with their own trade). */
-const baseOf = (style: HouseStyle): "fisher" | "mill" | "barracks" => (style === "mill" || style === "barracks" ? style : "fisher");
+const baseOf = (style: HouseStyle): "fisher" | "mill" | "barracks" | "ropewright" => (style === "mill" || style === "barracks" || style === "ropewright" ? style : "fisher");
 
 const SKIN = [0x3a2418, 0x5a3a28, 0x7e5640, 0xa07458, 0xbe9070];
 const BLUE = [0x0e141e, 0x1a2434, 0x28384e, 0x3a5068, 0x506a84];
@@ -20,6 +21,8 @@ const FLOUR = [0x4a463e, 0x6e685c, 0x948c7c, 0xbab2a0, 0xdcd6c6];
 const OILSKIN = [0x2a2008, 0x4a3a10, 0x6e5818, 0x947826, 0xb89a3a];
 const NET = [0x1e1a12, 0x3a3322, 0x5a5036, 0x7a6e4c];
 const CORK = [0x3a2210, 0x6a4020, 0x9a6634, 0xc8944c];
+const LEATHER = [0x1e140c, 0x342214, 0x4e341e, 0x6a482a, 0x86603a];
+const WICKER = [0x2a1a0c, 0x463018, 0x664826, 0x866236, 0xa47c48];
 
 function painter(ctx: CanvasRenderingContext2D, left: number, topY: number) {
   return new IsoPaint(canvasPen(ctx, 1), ctx.canvas.width, ctx.canvas.height, -left, -topY);
@@ -28,7 +31,7 @@ function painter(ctx: CanvasRenderingContext2D, left: number, topY: number) {
 /** Someone standing in a doorway, facing out (+v). `dark` dims them: they stand in the shade of the house. */
 function person(q: IsoPaint, u: number, v: number, full: HouseStyle, seed: number, dark = -0.12) {
   const style = baseOf(full);
-  const top = style === "fisher" ? BLUE : style === "mill" ? FLOUR : REDR;
+  const top = style === "fisher" ? BLUE : style === "mill" ? FLOUR : style === "ropewright" ? LEATHER : REDR;
   const legs = style === "barracks" ? BLACKR : WOODR;
   const m = (pal: number[], b = 0): Mat => mat(pal, b + dark);
   for (const s of [-1, 1]) q.rod([u + s * 1.4, v, 0], [u + s * 1.3, v, 8.5], 1.15, m(legs, 0.1));
@@ -71,6 +74,7 @@ export function openDoor(ctx: CanvasRenderingContext2D, left: number, topY: numb
   if (style === "tavern") for (const du of [2.5, 6.5, 10.5]) q.blob([a + du, Y1 - 12, 3.6], 1.5, 1.5, 1.6, mat(BRASSR, -0.3)); // tankards on a shelf, glinting
   if (base === "fisher" && style !== "tavern") q.quad([a + 1, Y1 - 14, 6], [12, 0, 0], [0, 0, 14], (l, s, t, x, y) => ((x + y) & 3) && ((x - y) & 3) ? undefined : ramp(NET, l - 0.25, x, y));
   if (base === "mill") for (const [du, dz] of [[3, 0], [8, 0], [5.5, 4]]) q.blob([a + du, Y1 - 12, 2.3 + dz], 2.6, 2, 2.4, mat(STRAWR, -0.35));
+  if (base === "ropewright") for (const [du, dz] of [[3.5, 0], [9.5, 0], [6.5, 3.2]]) q.blob([a + du, Y1 - 12, 1.6 + dz], 3, 2.4, 1.6, mat(ROPER, -0.3));
   if (base === "barracks") for (let k = 0; k < 4; k++) q.rod([a + 2 + k * 3, Y1 - 14, 0], [a + 2.5 + k * 3, Y1 - 14.5, 20], 0.5, mat(k % 2 ? IRONR : WOODR, -0.3));
   person(q, (a + b) / 2 + (hsh(seed, 3) - 0.5) * 3, Y1 - 3.5, style, seed);
   ctx.restore();
@@ -144,6 +148,25 @@ export function dressHouse(ctx: CanvasRenderingContext2D, left: number, topY: nu
       const sx = (b.door === undefined ? X0 + 8 : doorX + 34) + du;
       if (sx < X1 - 4) q.blob([sx, Y1 + 5, 2.6 + dz], 3, 2.4, 2.8, mat(FLOUR, -0.05));
     }
+  } else if (style === "ropewright") {
+    // a hoist beam out of the upper storey with a pulley, a cage basket hung on its rope
+    const hx = [0.72, 0.22, 0.88, 0.1].map((f) => X0 + (X1 - X0) * f).find((x) => clear(x - 6, x + 6));
+    if (hx !== undefined) {
+      q.box(hx - 1.5, hx + 1.5, Y1, Y1 + 14, wallH - 8, wallH - 5, wood(WOODR, 0.05, 14));
+      q.blob([hx, Y1 + 13, wallH - 9], 1.2, 2.2, 2.2, mat(IRONR, 0.05));
+      q.rod([hx, Y1 + 13, wallH - 11], [hx, Y1 + 13, 20], 0.35, mat(ROPER));
+      q.blob([hx, Y1 + 13, 15.5], 4.6, 4.6, 4.6, mat(WICKER, 0.02), 0.5, 1);
+      for (const s of [-1, 1]) q.rod([hx + s * 4, Y1 + 13, 19], [hx, Y1 + 13, 22], 0.3, mat(ROPER));
+    }
+    // coils of rope hung on pegs along the side wall, more coiled by the door
+    for (let k = 0; k < 3; k++) {
+      const yy = Y0 + 14 + k * Math.min(22, (Y1 - Y0 - 28) / 2);
+      if (yy > Y1 - 8) break;
+      q.rod([X1, yy, wallH * 0.42 + 2], [X1 + 3, yy, wallH * 0.42 + 2], 0.6, wood(WOODR, 0, 3));
+      q.surf((s2, t) => { const r = 5 - t * 1.2, a2 = s2 * Math.PI * 2; return [[X1 + 2.2, yy + Math.cos(a2) * r, wallH * 0.42 - 3 + Math.sin(a2) * r], [1, 0, 0]]; }, 40, 4, (l, _s, _t, x, y) => ramp(ROPER, l + ((x + y) % 3 ? 0.05 : -0.15), x, y));
+    }
+    const cx = b.door === undefined ? X0 + 10 : doorX + 38;
+    if (cx < X1 - 8) for (const [du, dz] of [[0, 0], [9, 0], [4.5, 2.4]]) q.blob([cx + du, Y1 + 6, 1.4 + dz], 4, 3.2, 1.4, (l, _s, _t, x, y) => ramp(ROPER, l + ((x - y) % 3 ? 0.05 : -0.18), x, y));
   } else {
     // a war banner on the front's upper storey, spears and round shields along the side wall
     const bx = X0 + (X1 - X0) * (0.25 + R(3) * 0.15);

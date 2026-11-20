@@ -23,5 +23,16 @@ export const LK_SHEETS = {
   lk_trough: { w: 96, h: 54, frames: 1, ox: 48, oy: 36, fps: 0 },
   lk_ore_cart: { w: 96, h: 72, frames: 1, ox: 48, oy: 50, fps: 0 },
   lk_headframe: { w: 330, h: 330, frames: 6, ox: 180, oy: 268, fps: 4 },
+  // the Mawdeep Sinkholes: rope and lifts
+  lk_rope_coil: { w: 60, h: 62, frames: 1, ox: 30, oy: 45, fps: 0 },
+  lk_rope_walk: { w: 166, h: 116, frames: 6, ox: 83, oy: 72, fps: 4 },
+  lk_gantry: { w: 104, h: 102, frames: 6, ox: 44, oy: 80, fps: 3 },
+  lk_lift: { w: 228, h: 238, frames: 12, ox: 104, oy: 186, fps: 3 },
+  // the Sunscar: caravans and salt
+  lk_camel: { w: 112, h: 66, frames: 6, ox: 41, oy: 47, fps: 3 },
+  lk_camel_load: { w: 112, h: 66, frames: 6, ox: 41, oy: 47, fps: 3 },
+  lk_salt_stack: { w: 88, h: 56, frames: 1, ox: 36, oy: 37, fps: 0 },
+  lk_salt_pan: { w: 106, h: 62, frames: 1, ox: 52, oy: 32, fps: 0 },
+  lk_caravan: { w: 266, h: 146, frames: 6, ox: 108, oy: 88, fps: 3 },
 } satisfies Record<string, LkSheet>;
 export type LkKind = keyof typeof LK_SHEETS;

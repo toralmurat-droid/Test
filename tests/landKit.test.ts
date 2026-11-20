@@ -62,7 +62,7 @@ test("no kit prop in a clan seat: a capital fort's box + SEAT_MARGIN", () => {
   }
 });
 
-test("each land done so far has its kit and its landmark: Oakvale, the moors, the badlands", () => {
+test("Oakvale, the moors and the badlands have their kit and landmarks", () => {
   const ids = LANDMARKS.map((l) => l.id);
   for (const id of ["windmill", "beacon", "headframe"]) assert.ok(ids.includes(id), `no ${id}`);
   const kinds = (land: number) => new Set(LAND_KIT_SPOTS.filter((s) => s.land === land).map((s) => s.kind));
@@ -75,6 +75,41 @@ test("each land done so far has its kit and its landmark: Oakvale, the moors, th
   // the ore carts stand by the headframe
   const hf = LANDMARKS.find((l) => l.id === "headframe")!;
   for (const s of LAND_KIT_SPOTS.filter((q) => q.kind === "lk_ore_cart")) assert.ok(Math.hypot(s.x / TILE - hf.x, s.y / TILE - hf.y) < 9, "an ore cart far from the Cinnabar Pits");
+});
+
+test("the Sinkholes and the Sunscar have their kit and landmarks: rope and lifts, caravans and salt", () => {
+  const ids = LANDMARKS.map((l) => l.id);
+  for (const id of ["lift", "caravan"]) assert.ok(ids.includes(id), `no ${id}`);
+  const kinds = (land: number) => new Set(LAND_KIT_SPOTS.filter((s) => s.land === land).map((s) => s.kind));
+  for (const k of ["lk_rope_walk", "lk_rope_coil", "lk_gantry"] as const) assert.ok(kinds(5).has(k), `sinkholes: no ${k}`);
+  for (const k of ["lk_camel", "lk_camel_load", "lk_salt_stack", "lk_salt_pan"] as const) assert.ok(kinds(2).has(k), `sunscar: no ${k}`);
+  const at = (k: LkKind) => LAND_KIT_SPOTS.filter((s) => s.kind === k).map((s) => [...tileOf(s.x, s.y), s] as const);
+  // the rope walk runs north-south in Ropewell's east yard, between the palisade and the crates
+  for (const [tx, ty] of at("lk_rope_walk")) assert.ok(tx >= 122 && tx <= 123 && ty >= 989 && ty <= 992, `rope walk at ${tx},${ty}: out of the east yard`);
+  // every gantry stands on a pit's rim (a pit within 2 tiles), off the pit itself
+  for (const [tx, ty] of at("lk_gantry")) {
+    let pit = false;
+    for (let j = -2; j <= 2; j++) for (let i = -2; i <= 2; i++) if (OBJECTS[ty + j][tx + i] === T.PIT) pit = true;
+    assert.ok(pit, `gantry at ${tx},${ty}: no pit beside it`);
+  }
+  // the camel string rests by the caravan halt; every oasis and the Flats get something
+  const cv = LANDMARKS.find((l) => l.id === "caravan")!;
+  assert.ok(LAND_KIT_SPOTS.filter((s) => s.area === "The Sunscar" && s.kind.startsWith("lk_camel")).every((s) => Math.hypot(s.x / TILE - cv.x, s.y / TILE - cv.y) < 7), "a camel far from the caravan halt");
+  for (const area of ["Kel Ashar", "Jackal Springs", "Palmshade Oasis", "Mirage Wells", "The Glasswind Flats"]) assert.ok(LAND_KIT_SPOTS.some((s) => s.area === area), `${area}: undressed`);
+  assert.ok(at("lk_salt_pan").every(([, , s]) => s.area === "The Glasswind Flats"), "a salt pan off the Flats");
+  // the clan seats in these lands stay clear for step 5: Hidehall, the Veiled Sanctum
+  for (const area of ["Hidehall", "The Veiled Sanctum"]) assert.ok(!LAND_KIT_SPOTS.some((s) => s.area === area), `${area} dressed`);
+});
+
+test("a landmark with no box of its own stands on ground the map already blocks: the Ropewell Lift over its pit", () => {
+  const open = LANDMARKS.filter((l) => !l.solid);
+  assert.deepEqual(open.map((l) => l.id), ["lift"]);
+  const lift = open[0];
+  for (const [tx, ty] of [[115, 989], [116, 989], [115, 990], [116, 990]]) {
+    assert.equal(OBJECTS[ty][tx], T.PIT, `${tx},${ty}: not the sinkhole`);
+    for (const [fx, fy] of [[0.05, 0.05], [0.5, 0.5], [0.95, 0.95]]) assert.ok(isSolidAt((tx + fx) * TILE, (ty + fy) * TILE) && bodySolidAt((tx + fx) * TILE, (ty + fy) * TILE), `${tx},${ty}: walkable`);
+  }
+  assert.ok(lift.x === 116 && lift.y === 990, "the lift's foot is the middle of the pit");
 });
 
 test("way-cairns stand beside the Moors Highway, off its paving", () => {
@@ -180,7 +215,8 @@ test("chests, siege sites, forts and musters did not move (digests from the comm
 
 test("no monster spawns inside a landmark's solid box (it could never step out)", async () => {
   const { SPAWN_ZONES, randomPointInZone, underLandmark } = await import("../shared/spawns");
-  assert.equal(LANDMARK_SOLIDS.length, LANDMARKS.length, "every landmark is solid, so every one is checked here");
+  // the lift has no box (its pit blocks, see above); every other landmark is solid and checked here
+  assert.equal(LANDMARK_SOLIDS.length, LANDMARKS.length - 1);
   for (const [x, y, w, h] of LANDMARK_SOLIDS) {
     for (let ty = Math.floor(y); ty < y + h; ty++) for (let tx = Math.floor(x); tx < x + w; tx++) assert.ok(underLandmark(tx, ty), `tile ${tx},${ty} under a landmark`);
     const zones = SPAWN_ZONES.filter((z) => x + w > z.x && x < z.x + z.w && y + h > z.y && y < z.y + z.h);
