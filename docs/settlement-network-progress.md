@@ -303,6 +303,12 @@ Roadmap: client/src/roadmap.ts, "Settlement network".
   - Deviations: windmill stays 0.6 tiles off the east wall (walkable gap tested); champions family-share floor 0.90 -> 0.88
     (Oakvale lost ~160 blobs); city through streets join the road set.
 
+- PR 2 Scarwall (branch `claude/scarwall-in-land`, in progress): framework for the other four (`City.sideGates`,
+  `OLD_CITY_GATES`, per-land retired legs, land filter on `carveCitiesInLand`, bandit clearance, table-driven
+  cityLand tests) plus Scarwall in the Badlands' north-west (x 9..60, y 782..821), south and east gates, highway to
+  Fangrock. Then Duskveil (Sunscar, below the Thornspire east of Mirage Wells), Marrowkeep (Moors, north of
+  Kingsbarrow), Deepden (Sinkholes, on the back way west of Hidehall), merged one at a time; the strip stays rock.
+
 ## Next
 - Step 3 optional follow-ups: working townsfolk for Millbrook, Cairnwatch, the Rustwater Post,
   Ropewell and Tollcross (plan Q5); the small props left out (spare millstone, turf drying rack, creels, tailings heap,
