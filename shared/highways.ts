@@ -79,23 +79,27 @@ export const HIGHWAYS: readonly Highway[] = [
     { x: 146, y: 64, to: ["Goldenreach Farms", "Oakvale", "Greywatch Keep", "Old Ruins"] }, // the Old Ruins
     { x: 224, y: 74, to: ["Goldenreach Farms", "Oakvale", "Redfang Hollow", "Cinder Scar"] }, // past Greywatch Keep, the Redfang road and the Eastmarch
   ] },
-  // The Sunscar: from Duskveil's gate by the Veiled Sanctum round the Sanctum's walls and south to Mirage Wells, west to
-  // Kel Ashar; from Kel Ashar's north gate to Jackal Springs, on to the Ashen Pass and west through Dustrider Camp to the Sun
+  // The Sunscar: from the fork west of the Veiled Sanctum (where Duskveil's gate dais stood; the city stands in the Saffron
+  // Dunes now, settlement network step 5: the legs keep their line, so the war roads stay) round the Sanctum's walls and
+  // south to Mirage Wells, west to Kel Ashar, and from its east shore down the dunes trail to Duskveil's west gate; from
+  // Kel Ashar's north gate to Jackal Springs, on to the Ashen Pass and west through Dustrider Camp to the Sun
   // Road; from its west gate to Palmshade Oasis and the Dune Road. Round each oasis by its shore, never through the water:
   // the old trails broke off at the palms, so the legs `join` them through the camps. The Sanctum's own road east to the
   // Ashen Pass stays a track (paved, it would push the Humpback Mesas' fort off the pass)
   { land: 2, name: "The Sunscar Highway", seat: "The Veiled Sanctum", town: "Kel Ashar", towns: ["Kel Ashar", "Jackal Springs", "Palmshade Oasis", "Mirage Wells", "Dustrider Camp"], legs: [
-    { from: "Duskveil Gate", to: "The Veiled Sanctum", pts: [[223, 54], [231, 53]] },
-    { from: "Duskveil Gate", to: "Mirage Wells", pts: [[223, 54], [226, 54], [229, 59], [231, 61], [233, 61], [238, 66], [238, 68], [219, 94], [217, 98], [216, 108]] },
+    { from: "The Sanctum's fork", to: "The Veiled Sanctum", pts: [[223, 54], [231, 53]] },
+    { from: "The Veiled Sanctum", to: "Mirage Wells", pts: [[223, 54], [226, 54], [229, 59], [231, 61], [233, 61], [238, 66], [238, 68], [219, 94], [217, 98], [216, 108]] },
     { from: "Mirage Wells", to: "Kel Ashar", pts: [[216, 108], [205, 107], [203, 109], [204, 114], [200, 116], [192, 116], [175, 111], [171, 111], [170, 109], [162, 110], [162, 111], [158, 111], [155, 110]], join: true },
     { from: "Mirage Wells", to: "Mirage Wells' east shore", pts: [[216, 108], [219, 109], [222, 113], [222, 115], [220, 117], [219, 116]], join: true },
+    { from: "Duskveil Gate", to: "Mirage Wells", pts: [[229, 130], [225, 129], [225, 127], [219, 116]] }, // into the town on its dirt street
     { from: "Kel Ashar", to: "Jackal Springs", pts: [[148, 95], [149, 92], [148, 89], [124, 83], [109, 74], [100, 65]] },
     { from: "Jackal Springs", to: "The Ashen Pass", pts: [[100, 65], [102, 61], [99, 60], [111, 61], [118, 54], [120, 50], [126, 44], [130, 42], [135, 42], [135, 44], [137, 46], [146, 45]], join: true },
     { from: "Jackal Springs", to: "The Sun Road", pts: [[100, 65], [97, 65], [95, 67], [91, 67], [91, 65], [89, 65], [89, 64], [79, 64], [63, 67], [47, 67], [46, 68]], join: true },
     { from: "Kel Ashar", to: "The Dune Road", pts: [[131, 110], [126, 112], [121, 119], [113, 127], [107, 131], [102, 132], [94, 136], [74, 139], [70, 141], [66, 141], [64, 139], [62, 139], [57, 145], [52, 145], [51, 146], [47, 145], [46, 148], [43, 151], [42, 150]], join: true },
   ], posts: [
-    { x: 227, y: 57, to: ["The Veiled Sanctum", "Kel Ashar", "Mirage Wells"] }, // under Duskveil's gate, the way round the Sanctum
-    { x: 199, y: 114, to: ["The Veiled Sanctum", "Kel Ashar", "Mirage Wells"] }, // Mirage Wells' west way out
+    { x: 227, y: 57, to: ["The Veiled Sanctum", "Kel Ashar", "Duskveil"] }, // the fork west of the Sanctum, the way round it (a board names two places: Duskveil, not Mirage Wells on its way)
+    { x: 199, y: 114, to: ["The Veiled Sanctum", "Kel Ashar", "Mirage Wells", "Duskveil"] }, // Mirage Wells' west way out
+    { x: 227, y: 128, to: ["Duskveil", "The Veiled Sanctum", "Kel Ashar", "Mirage Wells"] }, // outside Duskveil's west gate, on the dunes trail
     { x: 104, y: 62, to: ["The Veiled Sanctum", "Kel Ashar", "Jackal Springs", "Dustrider Camp"] }, // Jackal Springs: north-east to the pass, west to the camp
     { x: 137, y: 48, to: ["The Veiled Sanctum", "Kel Ashar", "Jackal Springs", "The Humpback Mesas"] }, // below the Ashen Pass, where the Sanctum's road comes in
     { x: 69, y: 66, to: ["The Veiled Sanctum", "Kel Ashar", "Dustrider Camp", "Jackal Springs"] }, // Dustrider Camp's east way in
