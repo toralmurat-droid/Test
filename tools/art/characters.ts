@@ -1,5 +1,5 @@
 import { Canvas, HiCanvas, shade } from "./canvas";
-import { DiagAlt, FrameInfo, hasLook, paintFrame, setPaintPixel } from "./paint/body";
+import { DiagAlt, FrameInfo, hasLook, paintFrame, RAY3D, setPaintPixel } from "./paint/body";
 import { MOVE_HEROES, MOVE_SHEET } from "../../client/src/skillMoveData";
 
 export type Dir = "down" | "up" | "right";
@@ -1574,8 +1574,9 @@ export function animFrames(hero: Hero, anim: string, dir: Dir): Canvas[] {
       if (fluid()) return cycle().map((ph, t) => {
         // 8-frame run: legs on a continuous phase, body dips at each footfall and floats between
         // lowest just after each footfall (phase 0 and pi, see body3d.ts runJoints), floating between strides
-        const c = Math.cos(ph), sink = Math.cos(2 * ph - 0.9);
-        const f = renderFrame(hero, { ...B(t), stride: c, phase: ph, run: true, bob: 0.1 + 0.7 * sink }, true);
+        // (3D-built heroes only: the archived painted heroes keep the run their sheets were drawn with)
+        const c = Math.cos(ph), sink = Math.cos(2 * ph - 0.9), r3 = RAY3D.has(hero.name);
+        const f = renderFrame(hero, { ...B(t), stride: c, phase: ph, run: true, bob: r3 ? 0.1 + 0.7 * sink : 0.9 * Math.abs(c) - 1.4 * Math.abs(Math.sin(ph)) }, true);
         if (Math.abs(c) > 0.99) { const [fx] = FACE[dir]; const bx = dir === "right" ? 12 : c > 0 ? 11 : 20; for (const [x, y] of [[0, 0], [-1, -1], [-2, 0], [1, -1]]) f.px(bx + x - fx, 28 + y, 0xd9cdb4, 170); }
         return f;
       });

@@ -338,12 +338,14 @@ const HERO_SCALE = CHAR_SCALE;
  * Hero run cycle (Murat 2026-11-19: "running, not shuffling"): the 3D run in the sheets plants each foot for one
  * stride at RUN_DESIGN_SPEED world px/s; the animation is sped up or slowed to the hero's real ground speed.
  */
-const RUN_DESIGN_SPEED = 90, RUN_MIN = 30;
+const RUN_DESIGN_SPEED = 90, RUN_ON = 34, RUN_OFF = 26;
 /** Smoothed ground speed (world px/s) of a drawn hero, from how far its sprite moved since the last frame. */
-function runSpeed(e: any, dtMs: number) {
-  const x = e.sprite.x, y = e.sprite.y, px = e.runX ?? x, py = e.runY ?? y;
-  e.runX = x; e.runY = y;
-  const d = Math.hypot(x - px, y - py), v = dtMs > 0 && d < 40 ? (d * 1000) / dtMs : e.runV ?? RUN_DESIGN_SPEED;
+function runSpeed(e: any, dtMs: number, now: number) {
+  const x = e.sprite.x, y = e.sprite.y, fresh = e.runT !== undefined && now - e.runT < 100;
+  const px = fresh ? e.runX : x, py = fresh ? e.runY : y;
+  e.runX = x; e.runY = y; e.runT = now;
+  // a stale sample (after a swing, a skill, standing) only re-seeds the position: no burst of fast steps
+  const d = Math.hypot(x - px, y - py), v = fresh && dtMs > 0 && d < 40 ? (d * 1000) / dtMs : e.runV ?? RUN_DESIGN_SPEED;
   e.runV = (e.runV ?? v) + (v - (e.runV ?? v)) * Math.min(1, dtMs / 120);
   return e.runV as number;
 }
@@ -3639,8 +3641,9 @@ export class TownScene extends Phaser.Scene {
             playCharAnim(e.sprite, e.hero, Math.random() < 0.5 ? "idle2" : "idle3", dir);
           } else if (moving) {
             // a real run, its cadence scaled to how fast the hero actually goes, so the feet don't slide
-            const spd = runSpeed(e, dtMs);
-            if (spd < RUN_MIN) playCharAnim(e.sprite, e.hero, "walk", dir), e.sprite.anims.timeScale = 1;
+            const spd = runSpeed(e, dtMs, now);
+            e.running = spd > (e.running ? RUN_OFF : RUN_ON);
+            if (!e.running) { playCharAnim(e.sprite, e.hero, "walk", dir); e.sprite.anims.timeScale = 1; }
             else { playCharAnim(e.sprite, e.hero, "run", dir); e.sprite.anims.timeScale = Math.min(1.6, Math.max(0.6, spd / RUN_DESIGN_SPEED)); }
           } else {
             playCharAnim(e.sprite, e.hero, "idle", dir);
