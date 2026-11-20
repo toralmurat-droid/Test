@@ -3031,6 +3031,68 @@ const HORN_QUESTS = villageQuest({
   after: "All three calves home, and their mothers bawling the whole ranch awake. Jory says he'll name the brindle one after you. I told him not to.",
 });
 
+// PR 2: the Mawdeep Sinkholes and the Sunscar
+const WINDLASS_QUESTS = villageQuest({
+  id: "windlassropes", title: "Frayed Anchors", giver: "liftmaster", zone: "The Pitfields", level: 36,
+  description: "Windlass lets the cage-lifts down into the Pitfields on ropes made fast to anchor-posts at the pits' rims. Delvers have been gnawing the ropes through from below. Liftmaster Corran wants three anchors mended and the delvers sent back down.",
+  offer: [
+    "You'll have seen the Maw from the road. Windlass is the lift-men: we let the cages down into the Pitfields for the ore-diggers and the worm-hunters, and pull them up again, mostly with the same number in.",
+    "Every lift hangs from an anchor-post at a pit's rim. Three of them have frayed, and it's no wear. Delvers. They come up the shafts at night and chew the ropes where they go over the edge.",
+    "Splice the three frayed anchors in the Pitfields, and then kill enough delvers that the rest think twice about the taste of hemp.",
+  ],
+  acceptText: "I'll mend the anchors",
+  use: { objects: [obj("windlass_anchor1", "seal", "Frayed rope anchor", "Splice", "The Pitfields", 0.2, 0.15), obj("windlass_anchor2", "seal", "Frayed rope anchor", "Splice", "The Pitfields", 0.5, 0.3), obj("windlass_anchor3", "seal", "Frayed rope anchor", "Splice", "The Pitfields", 0.8, 0.2)],
+    text: "Mend 3 frayed rope anchors in the Pitfields", banner: ["New quest", "Frayed Anchors"], obj: "Anchors mended: {n} / {goal}", nag: "{n} of {goal}. Posts at the pits' rims, rope gone to whiskers where it runs over the edge." },
+  kill: { zone: "The Pitfields", kinds: ["delver"], goal: 6, text: "Kill 6 Delvers in the Pitfields", banner: ["The ropes hold", "Kill 6 Delvers"], obj: "Delvers killed: {n} / {goal}", nag: "{n} of {goal}. They come up out of the ground. Stand still and they'll find you." },
+  outro: ["The last anchor sings when you haul the splice tight. Down in the pit, a cage-bell rings twice: all's well.", "The delvers have gone quiet. For tonight."],
+  after: "Three cages up and down since you mended them, and not a strand gone. Nell says the delvers have started on her boot-laces instead. That's Nell's problem.",
+});
+const HEMP_QUESTS = villageQuest({
+  id: "hempsheaves", title: "Rooted Hemp", giver: "hempwife", zone: "The Old Warren", level: 32,
+  description: "Hempfield grows the hemp that Ropewell spins into rope. Quillbacks out of the Old Warren have been rooting through the drying sheaves stacked at the warren's edge. Mother Brakken wants three sheaves saved and the quillbacks driven off.",
+  offer: [
+    "Hemp. That's all Hempfield is. We grow it, cut it, rot it in the pond till the fibre comes loose, and Ropewell spins it into every rope that holds the Lift.",
+    "This year's cut was stacked to dry at the edge of the Old Warren, where the wind gets at it. And the quillbacks found it. They root through a sheaf for the grubs in it and leave nothing worth spinning.",
+    "Save me three sheaves out of the Old Warren that haven't been chewed to string, and kill the quillbacks, or there'll be no rope at Ropewell come spring.",
+  ],
+  acceptText: "I'll save the hemp",
+  use: { objects: [obj("hemp_sheaf1", "clue", "Hemp sheaf, half-rooted", "Gather", "The Old Warren", 0.15, 0.2), obj("hemp_sheaf2", "clue", "Hemp sheaf, half-rooted", "Gather", "The Old Warren", 0.3, 0.85), obj("hemp_sheaf3", "clue", "Hemp sheaf, half-rooted", "Gather", "The Old Warren", 0.85, 0.85)],
+    text: "Gather 3 sound hemp sheaves in the Old Warren", banner: ["New quest", "Rooted Hemp"], obj: "Sheaves gathered: {n} / {goal}", nag: "{n} of {goal}. Look for the ones still standing in their stooks. The rest are bedding." },
+  kill: { zone: "The Old Warren", kinds: ["quillback"], goal: 6, text: "Drive off 6 Quillbacks in the Old Warren", banner: ["The hemp is saved", "Drive off 6 Quillbacks"], obj: "Quillbacks driven off: {n} / {goal}", nag: "{n} of {goal}. Listen for the rustle in the stooks. Mind the quills." },
+  outro: ["The last quillback rattles off into the warren, shedding quills.", "The three sheaves are sound: long grey fibre, enough for a good few fathoms of Ropewell rope."],
+  after: "Sheaves in the pond and the quillbacks back in their holes. Ropewell will have its rope. Tam swears he'll build a fence. Tam has sworn that every year.",
+});
+const SALTGLASS_QUESTS = villageQuest({
+  id: "saltsledges", title: "Sledges on the Flats", giver: "saltmaster", zone: "The Glasswind Flats", level: 30,
+  description: "Saltglass cuts salt slabs out of the pans of the Glasswind Flats and hauls them to the road on sledges. Scorpions swarmed the pans and three sledges were left where they stood. Salt-mistress Nadira wants their tally-slates back, and the scorpions killed.",
+  offer: [
+    "Every slab of salt that goes up the road on a camel was cut here, out of the pans on the Glasswind Flats. Saltglass cuts it, and the caravans carry it.",
+    "We drag the slabs to the road on sledges. Three days back the scorpions came up out of the crust all at once, and my cutters ran and left three sledges in the pans, tally-slates and all.",
+    "No slate, no count, and no count, no pay from Kel Ashar. Search the three sledges for their slates, then kill scorpions until the pans are safe to walk.",
+  ],
+  acceptText: "I'll find the sledges",
+  use: { objects: [obj("salt_sledge1", "clue", "Abandoned salt sledge", "Search", "The Glasswind Flats", 0.1, 0.25), obj("salt_sledge2", "clue", "Abandoned salt sledge", "Search", "The Glasswind Flats", 0.3, 0.5), obj("salt_sledge3", "clue", "Abandoned salt sledge", "Search", "The Glasswind Flats", 0.2, 0.8)],
+    text: "Search 3 abandoned salt sledges on the Glasswind Flats", banner: ["New quest", "Sledges on the Flats"], obj: "Sledges searched: {n} / {goal}", nag: "{n} of {goal}. Out in the white, slabs still roped on. The glare hides them till you're close." },
+  kill: { zone: "The Glasswind Flats", kinds: ["scorpion"], goal: 8, text: "Kill 8 Scorpions on the Glasswind Flats", banner: ["The slates are found", "Kill 8 Scorpions"], obj: "Scorpions killed: {n} / {goal}", nag: "{n} of {goal}. They bury themselves in the crust. Watch for a crack that moves." },
+  outro: ["The last scorpion curls up in the salt. The three slates are scratched with neat rows of tallies, and one cutter's drawing of a camel.", "Saltglass will be paid this month."],
+  after: "Slates counted, pans cut, and the camels loaded for the road. Rana says the scorpions are back already. Rana always says that.",
+});
+const LASTWELL_QUESTS = villageQuest({
+  id: "lastwelltroughs", title: "Fouled Troughs", giver: "wellwarden", zone: "The Humpback Mesas", level: 38,
+  description: "Last Well waters the caravans at troughs out among the Humpback Mesas. The camelfolk have fouled three of them and drive the caravans off. Old Hadiya wants the troughs cleared and the camelfolk driven back into the mesas.",
+  offer: [
+    "This is the Last Well. After this, the road climbs the Ashen Pass and there's nothing to drink until the moors. Every caravan stops here, or it doesn't arrive.",
+    "We fill stone troughs out in the mesas, where the strings wait for their turn at the well. The camelfolk have taken against them. They've filled three with sand and dung.",
+    "Clear the three troughs, then drive off the camelfolk, or the caravans will start turning back at Kel Ashar.",
+  ],
+  acceptText: "I'll clear the troughs",
+  use: { objects: [obj("well_trough1", "cistern", "Fouled stone trough", "Clear", "The Humpback Mesas", 0.15, 0.35), obj("well_trough2", "cistern", "Fouled stone trough", "Clear", "The Humpback Mesas", 0.35, 0.55), obj("well_trough3", "cistern", "Fouled stone trough", "Clear", "The Humpback Mesas", 0.7, 0.45)],
+    text: "Clear 3 fouled troughs in the Humpback Mesas", banner: ["New quest", "Fouled Troughs"], obj: "Troughs cleared: {n} / {goal}", nag: "{n} of {goal}. Long stone troughs below the mesas. You'll smell them first." },
+  kill: { zone: "The Humpback Mesas", kinds: ["camelfolk"], goal: 6, text: "Drive off 6 Camelfolk in the Humpback Mesas", banner: ["The troughs run clear", "Drive off 6 Camelfolk"], obj: "Camelfolk driven off: {n} / {goal}", nag: "{n} of {goal}. They keep to the shade under the mesas. They spit." },
+  outro: ["Clean water slops over the last trough's lip and darkens the sand.", "Far down the road, a string of camels catches the smell of it and starts to hurry."],
+  after: "Three strings watered this morning and every trough sweet. Samira's selling flasks faster than she can count them. Drink before you climb.",
+});
+
 /** Side arcs (QuestChain.local, after ZONE_ARCS in CHAINS): `needs` gates the first offer (Saltmere Ways: every offer). */
 export const SIDE_ARCS: { id: string; name: string; quests: QuestDef[]; needs?: (p: Quester | undefined) => boolean }[] = [
   { id: "letters", name: "Two Letters", quests: LETTER_QUESTS, needs: (p) => chainDone(p, RED_CHAIN) },
@@ -3049,6 +3111,10 @@ export const SIDE_ARCS: { id: string; name: string; quests: QuestDef[]; needs?: 
   { id: "barrowstead", name: "Barrowstead", quests: BARROW_QUESTS },
   { id: "redlode", name: "Redlode", quests: LODE_QUESTS },
   { id: "hornstead", name: "Hornstead", quests: HORN_QUESTS },
+  { id: "windlass", name: "Windlass", quests: WINDLASS_QUESTS },
+  { id: "hempfield", name: "Hempfield", quests: HEMP_QUESTS },
+  { id: "saltglass", name: "Saltglass", quests: SALTGLASS_QUESTS },
+  { id: "lastwell", name: "Last Well", quests: LASTWELL_QUESTS },
 ];
 const ARC_OBJECTS: QuestObject[] = [...ZONE_ARCS, ...SIDE_ARCS].flatMap((a) => a.quests.flatMap((d) => d.steps.flatMap(stepObjects)));
 
@@ -3335,6 +3401,8 @@ const IDLE: Record<string, string> = {
   turfcutter: "Cut it, stack it, turn it, stack it again. Peat dries slow on the moors, and Cairnwatch's beacon eats a stack a night. My arms will be this shape when they bury me.",
   eeltrapper: "Eels in the creels, flasks on the shelf. The boats bring both up the fen. You'd be amazed how many folk want the one after they've eaten the other.",
   hostelkeeper: "Mourners come from all over the moors to sit by the mounds. We give them a bed and broth and don't ask who they've come to see. The broth's better than it sounds.",
+  hempcutter: "Cut it green, sheave it, rot it in the pond, beat it, comb it. By the end the fibre's like a horse's tail and my hands are like a horse's hoof. Ropewell takes every scrap.",
+  saltcutter: "You cut along the grain of the crust, lift the slab whole, and never look at the white too long or you'll see nothing for a day. Two slabs to a camel. A good cutter fills a string by noon.",
   drover: "Longhorns are easy. Point them at Fangrock and walk behind. It's the hounds and the snakes and the dust you have to watch, and the bull with the broken horn. Mostly the bull.",
   huntsman: "Hides on the frames, meat in the smoke. Goldenreach feeds the valley on grain, but someone has to keep the wolves off the sheaves.",
 };

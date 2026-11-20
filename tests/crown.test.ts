@@ -165,7 +165,8 @@ test("crown: every homeland's Crownway dais is open ground joined to its land, c
   // The border roads' boxes (shared/borders.ts BORDER_BOXES) too: re-hashed with them masked, the same with and without the roads cut.
   // The land highways (shared/highways.ts HIGHWAY_MASK) too: re-hashed with the mask, the same with and without them cut.
   // The villages (shared/villages.ts VILLAGE_MASK, settlement network step 4) the same way: the moors' and the badlands'
-  // re-hashed with the mask on the map before them, the same with and without the villages cut (no tile outside it moved).
+  // re-hashed with the mask on the map before them, the same with and without the villages cut (no tile outside it moved);
+  // step 4 PR 2 the Sunscar's and the sinkholes' the same way (the moors' and the badlands' hashes did not change).
   const hash = (y0: number, y1: number, B: TileBox) => {
     const boxes = [B, ...CITIES.map((c) => c.outerBox), ...BORDER_BOXES]; // (the border roads, shared/borders.ts, cut only inside theirs)
     const h = createHash("sha256"), inB = (x: number, y: number) => boxes.some((b) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1) || HIGHWAY_MASK.has(y * MAP_W + x) || VILLAGE_MASK.has(y * MAP_W + x);
@@ -173,10 +174,10 @@ test("crown: every homeland's Crownway dais is open ground joined to its land, c
     return h.digest("hex");
   };
   const box = (from: string) => CROWNWAYS.find((c) => c.from === from)!.box;
-  assert.equal(hash(DESERT_Y0, DESERT_Y0 + DESERT_H, box("sunscar")), "7e3ee02863d2887fca92fd002c76e6e19eac972f6fd51160f8149fc38709dfbb", "the Sunscar");
+  assert.equal(hash(DESERT_Y0, DESERT_Y0 + DESERT_H, box("sunscar")), "55c973c27a14baa6f9472c8cf3394fdb1505b90c61e046aa1b08bc754538c574", "the Sunscar");
   assert.equal(hash(MOORS_Y0, MOORS_Y0 + MOORS_H, box("moors")), "3975c6c0a2d061a7f984743cd53b3ea1cb9c11fa03f45889ed4a9bd9f508e9f0", "the moors");
   assert.equal(hash(BADLANDS_Y0, BADLANDS_Y0 + BADLANDS_H, box("badlands")), "cf33174c9a231d88c14ff07e23b05a9d4ea56e553ab25efd892082654835f85f", "the badlands");
-  assert.equal(hash(SINKHOLES_Y0, SINKHOLES_Y0 + SINKHOLES_H, box("sinkholes")), "7de73831e64d8baa1de4d5eaab650d440784bfe228e8cbe1140e3e902da6e93f", "the sinkholes");
+  assert.equal(hash(SINKHOLES_Y0, SINKHOLES_Y0 + SINKHOLES_H, box("sinkholes")), "0fc7776c1db9d2af5660678a1fb586964ba5e864ce8a37687770a58a5eba24d0", "the sinkholes");
 });
 
 test("crown: Lv 40-50 climbing inward from the rim, the Crownways open at Lv 40, ten war territories (Crown PR3)", () => {

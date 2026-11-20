@@ -73,13 +73,13 @@ const hasTrack = (id: string) => { const t = TRACKS.find((x) => x.id === id); re
 /** The first of these tracks that is in the game. */
 const firstOf = (...ids: (string | null)[]) => ids.find((id): id is string => !!id && hasTrack(id)) ?? null;
 /** Act 2 calm areas with their own tune (else the Dune tune). */
-const DESERT_TOWNS = ["Kel Ashar", "Kel Ashar Market"];
+const DESERT_TOWNS = ["Kel Ashar", "Kel Ashar Market", ...VILLAGES.filter((v) => v.land === 2).map((v) => v.name)]; // (and the Sunscar's villages, shared/villages.ts)
 /** Act 3 calm areas that play the village tune (Cairnwatch, the moors' outpost). */
 const MOORS_TOWNS = ["Cairnwatch", ...VILLAGES.filter((v) => v.land === 3).map((v) => v.name)]; // (and the moors' villages, shared/villages.ts)
 /** Act 4 calm area that plays the village tune (the Rustwater Post) until the badlands have their own music. */
 const BADLANDS_TOWNS = ["The Rustwater Post", "Rustwater Post", ...VILLAGES.filter((v) => v.land === 4).map((v) => v.name)]; // (and the badlands' villages)
 /** Act 5 calm area that plays the village tune (Ropewell) until the sinkholes have their own music. */
-const SINKHOLES_TOWNS = ["Ropewell"];
+const SINKHOLES_TOWNS = ["Ropewell", ...VILLAGES.filter((v) => v.land === 5).map((v) => v.name)]; // (and the sinkholes' villages)
 /** Act 1 areas with their own calm song (Saltmere's sea shanty), else the village tune. */
 const SALTMERE = ["Saltmere"];
 /** Act 6 calm area that plays the Tollcross tune (the Truce Market outside the Keep), else the village tune. */

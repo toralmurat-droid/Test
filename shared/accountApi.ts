@@ -10,7 +10,11 @@
  */
 import { warAccess } from "./war/api";
 
-export const ACCOUNT_API = 2;
+/**
+ * 2: settlement network step 4, PR 1 (the moors' and the badlands' village stones in `portals`); 3: step 4, PR 2 (the
+ * sinkholes' and the Sunscar's: PR 1's build, already released, would drop them with cleanPortals).
+ */
+export const ACCOUNT_API = 3;
 /** Written as `minReader` with every account this build saves: the oldest ACCOUNT_API that may show (not write) it. */
 export const ACCOUNT_MIN_READER = 1;
 

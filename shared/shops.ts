@@ -195,7 +195,7 @@ export const SHOPS: Record<string, Shop> = {
   },
   // The villages (settlement network step 4, shared/villages.ts): traders on existing stock, nothing new. Cobb at
   // Blackwater Staithe sells the moors' flasks (Ysolde's Medium and Greater, buys nothing); Ilse at Redlode the Rustwater
-  // Post's armour steps. In a capturable village, its holder's sworn pay TOWN.discount less (shared/war/towns.ts)
+  // Post's armour steps (PR 2 below). In a capturable village, its holder's sworn pay TOWN.discount less (shared/war/towns.ts)
   staithe: {
     greeting: "Cobb. Eels on the left, flasks on the right, and don't mix them up. The boats bring the flasks up from Cairnwatch with the peat. Red for the blood, blue for the head. Mind the mist on your way out: it follows the lanterns.",
     stock: [...potionStock("potion", [1, 2]), ...potionStock("mpotion", [1, 2])],
@@ -205,6 +205,17 @@ export const SHOPS: Record<string, Shop> = {
     stock: armourStock("rustarmourer"),
     buys: ARMOUR_SLOTS,
     levelHeads: true,
+  },
+  // PR 2: Nell at Windlass sells Ropewell's armour steps (Hesta Coil's), Samira at Last Well the Sunscar's flasks (buys nothing)
+  windlass: {
+    greeting: "Nell Hawser. Stitched hide and riveted plate, Hesta Coil's own cut from Ropewell, sent down the road on the lift-men's carts. A Delver comes up under you at the rim. Dress for the drop.",
+    stock: armourStock("ropearmourer"),
+    buys: ARMOUR_SLOTS,
+    levelHeads: true,
+  },
+  lastwell: {
+    greeting: "Samira. The last sweet water before the Ashen Pass, and the last flasks too. Red for the blood, blue for the head. Fill your skins at the well: that part's free. The flasks are not.",
+    stock: [...potionStock("potion", [1, 2]), ...potionStock("mpotion", [1, 2])],
   },
   ropearmourer: {
     greeting: "Hesta Coil. Stitched hide over riveted plate, and every strap is Ropewell rope. A Delver comes up under your feet and a Stagkin comes straight at your chest: dress for both.",

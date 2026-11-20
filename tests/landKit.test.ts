@@ -93,11 +93,12 @@ test("the Sinkholes and the Sunscar have their kit and landmarks: rope and lifts
     for (let j = -2; j <= 2; j++) for (let i = -2; i <= 2; i++) if (OBJECTS[ty + j][tx + i] === T.PIT) pit = true;
     assert.ok(pit, `gantry at ${tx},${ty}: no pit beside it`);
   }
-  // the camel string rests by the caravan halt; every oasis and the Flats get something
+  // the camel string rests by the caravan halt; every oasis and the Flats get something (Last Well's camels and
+  // Saltglass's pans are a highway village's own, by the village: tests/villages.test.ts)
   const cv = LANDMARKS.find((l) => l.id === "caravan")!;
-  assert.ok(LAND_KIT_SPOTS.filter((s) => s.area === "The Sunscar" && s.kind.startsWith("lk_camel")).every((s) => Math.hypot(s.x / TILE - cv.x, s.y / TILE - cv.y) < 7), "a camel far from the caravan halt");
+  assert.ok(LAND_KIT_SPOTS.filter((s) => s.area === "The Sunscar" && s.kind.startsWith("lk_camel") && !s.village).every((s) => Math.hypot(s.x / TILE - cv.x, s.y / TILE - cv.y) < 7), "a camel far from the caravan halt");
   for (const area of ["Kel Ashar", "Jackal Springs", "Palmshade Oasis", "Mirage Wells", "The Glasswind Flats"]) assert.ok(LAND_KIT_SPOTS.some((s) => s.area === area), `${area}: undressed`);
-  assert.ok(at("lk_salt_pan").every(([, , s]) => s.area === "The Glasswind Flats"), "a salt pan off the Flats");
+  assert.ok(at("lk_salt_pan").every(([, , s]) => s.area === "The Glasswind Flats" || s.village === "saltglass"), "a salt pan off the Flats");
   // the clan seats in these lands stay clear for step 5: Hidehall, the Veiled Sanctum. By position, not by the spot's
   // area name (no Place names them, so that could never fail): no kit prop stands in their area or their seat box
   const R = FORT_SKIP + SEAT_MARGIN;
