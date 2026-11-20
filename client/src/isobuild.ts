@@ -7,6 +7,7 @@ import Phaser from "phaser";
 import { TILE } from "../../shared/constants";
 import { AREAS, BARNS, OBJECTS, T, TILE_COUNT } from "../../shared/map";
 import { dressHouse, type HouseStyle, openDoor, storeyBeam } from "./houseLife";
+import { landRoof, landWalls, PEAT_SMOKE, type LandDress } from "./houseLand";
 import type { WinRect } from "./houseSalt";
 import { SALT_BUILDINGS } from "../../shared/saltmere";
 import { SALT_PERCHES, SALT_SMOKE } from "./saltmereReg";
@@ -121,13 +122,19 @@ export const BUILDINGS: Building[] = [];
 
 const WALL_H = 34;
 /**
- * Houses of these places are two storeys high with an open door and their trade on the walls (Murat 2026-11-13:
- * "thinner and higher, as if the characters had to go inside"). The rest keep the low cottage look.
+ * Each settlement's house look (settlement network step 3, "land identity"). `style`: two storeys high with an open door
+ * and their trade on the walls (Murat 2026-11-13: "thinner and higher, as if the characters had to go inside").
+ * `dress`: the low cottage, its walls and roof painted in the land's way (houseLand.ts). Places not listed keep the low
+ * cottage; their land only changes the roof tile.
  */
-const STYLE_AREAS: Record<string, HouseStyle> = { Saltmere: "fisher", "Millbrook Mill": "mill", "Redfang Hollow": "barracks" };
-const houseStyle = (x: number, y: number): HouseStyle | undefined => {
-  const a = AREAS.find((r) => STYLE_AREAS[r.name] && x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h);
-  return a && STYLE_AREAS[a.name];
+interface LandLook { style?: HouseStyle; dress?: LandDress }
+const LAND_LOOK: Record<string, LandLook> = {
+  Saltmere: { style: "fisher" }, "Millbrook Mill": { style: "mill" }, "Redfang Hollow": { style: "barracks" },
+  Cairnwatch: { dress: "cairn" }, "The Rustwater Post": { dress: "drover" },
+};
+const lookAt = (x: number, y: number): LandLook | undefined => {
+  const a = AREAS.find((r) => LAND_LOOK[r.name] && x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h);
+  return a && LAND_LOOK[a.name];
 };
 /**
  * Saltmere's new buildings (shared/saltmere.ts SALT_BUILDINGS) are matched to their houses by footprint, so the tavern,
@@ -400,7 +407,8 @@ function house(scene: Phaser.Scene, x0: number, y0: number, x1: number, yb: numb
   const alongX = wTiles >= dTiles; // ridge direction: along the longer side
   const half = (alongX ? Y1 - Y0 : X1 - X0) / 2;
   const salt = saltBuilding(x0, y0, wTiles, dTiles);
-  const style = (salt && SALT_STYLE[salt.id]) || houseStyle(x0, y0), wallH = style ? STOREY * 2 + (style === "barracks" ? 4 : 0) : WALL_H;
+  const look = lookAt(x0, y0), dress = look?.dress;
+  const style = (salt && SALT_STYLE[salt.id]) || look?.style, wallH = style ? STOREY * 2 + (style === "barracks" ? 4 : 0) : WALL_H;
   // ridge height above the walls: tall houses get a steeper roof, the barracks a plainer, lower one (Saltmere's deeper
   // public buildings a gentler one, so their ridge stands about as high as the cottages')
   const RH = Math.round(half * (!style ? 0.8 : style === "barracks" ? 0.7 : style === "tavern" ? 0.62 : style === "smokehouse" || style === "chandlery" ? 0.8 : 1.05)) + 4;
@@ -411,6 +419,9 @@ function house(scene: Phaser.Scene, x0: number, y0: number, x1: number, yb: numb
   const topY = P(X0, Y0, top + 26).y - 4, bottom = P(X1 + o, Y1 + o).y + 4;
   const cw = Math.ceil(right - left), ch = Math.ceil(bottom - topY);
   const key = `house_${x0}_${y0}`;
+  /** The chimney's foot on the roof (world px): behind the ridge, near the east gable or the north end. */
+  const chimAt = alongX ? { x: X1 - TILE * 1.2, y: (Y0 + Y1) / 2 - 10 } : { x: (X0 + X1) / 2 - 10, y: Y0 + TILE * 1.2 };
+  if (dress === "cairn" && wTiles >= 3) PEAT_SMOKE.push({ ...chimAt, z: top + 16 }); // peat smoke (ambient.ts), known before the lazy bake
   // Saltmere's buildings register gull perches and smoke while painted (ambient.ts reads them at start): paint those now
   if (salt || !lazyBake(scene, left, topY, cw, ch, () => paintHouse())) paintHouse();
   function paintHouse() {
@@ -455,10 +466,7 @@ function house(scene: Phaser.Scene, x0: number, y0: number, x1: number, yb: numb
     ctx.fillStyle = "#4a4440"; ctx.fillRect(Math.round(t.x) - 5, Math.round(t.y) - 2, 10, 3);
     ctx.fillStyle = "#2a2624"; ctx.fillRect(Math.round(t.x) - 3, Math.round(t.y) - 2, 6, 1);
   };
-  if (wTiles >= 3) {
-    if (alongX) chim(X1 - TILE * 1.2, (Y0 + Y1) / 2 - 10);
-    else chim((X0 + X1) / 2 - 10, Y0 + TILE * 1.2);
-  }
+  if (wTiles >= 3) chim(chimAt.x, chimAt.y);
 
   // 4. walls: south facade (left face) and east side (right face); a tall house stacks two storeys, the upper one
   // from the facade's upper row (its windows), the lower one from the bottom row (door, windows)
@@ -494,6 +502,7 @@ function house(scene: Phaser.Scene, x0: number, y0: number, x1: number, yb: numb
   line(ctx, S(X1, Y1, 0), S(X1, Y0, 0), "rgba(30,20,12,0.5)");
   if (SMOOTH) houseWalls(ctx, S, { X0, X1, Y0, Y1, facadeH, stone: wallId === T.WALL_STONE }, x0 * 31 + y0 * 7);
   const doorAt = [...Array(wTiles).keys()].find((i) => facadeRow(i) === T.DOOR);
+  if (dress) landWalls(ctx, S, dress, { X0, X1, Y0, Y1, facadeH, plain: [...Array(wTiles).keys()].filter((i) => facadeRow(i) === wallId) }, x0 * 41 + y0 * 5);
   if (style) {
     storeyBeam(ctx, S, X0, X1, Y0, Y1, STOREY);
     if (doorAt !== undefined) openDoor(ctx, left, topY, S, X0 + doorAt * TILE, Y1, style, x0 * 13 + y0);
@@ -535,6 +544,7 @@ function house(scene: Phaser.Scene, x0: number, y0: number, x1: number, yb: numb
   if (SMOOTH) houseRoof(ctx, S, { X0, X1, Y0, Y1, o, top, eave, alongX }, x0 * 53 + y0 * 11);
   if (SMOOTH && doorAt !== undefined && !style) porch(ctx, S, X0 + doorAt * TILE, X0 + (doorAt + 1) * TILE, Y1, x0 * 7 + y0);
   if (SMOOTH) weatherHouse(ctx, S, { X0, X1, Y0, Y1, o, top, eave, facadeH, alongX }, x0 * 131 + y0 * 17);
+  if (dress) landRoof(ctx, S, dress, { X0, X1, Y0, Y1, o, top, eave, alongX }, x0 * 59 + y0 * 13);
   if (style === "smokehouse") smokeLouvre(ctx, S, { X0, X1, Y0, Y1, top, alongX });
   tex.refresh();
 

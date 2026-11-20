@@ -170,26 +170,26 @@ export const SHOPS: Record<string, Shop> = {
     levelHeads: true,
   },
   moorarmourer: {
-    greeting: "Gorm. Iron rings over boiled leather, and a hood against the mist. The dead out there bite cold, and the Wardens' wives knit the liners. Wear something thick.",
+    greeting: "Gorm. Iron rings over boiled leather, and a hood against the mist. The dead out there bite cold, and the Wardens' wives knit the liners. Peat-cutters and barrow-wardens buy the same hood. Wear something thick.",
     stock: armourStock("moorarmourer"),
     buys: ARMOUR_SLOTS,
     levelHeads: true,
   },
   // Cairnwatch's herbwife (Act 3): Medium and Greater flasks; she buys and fuses loose runes like Morwen and Zahra
   moorherbalist: {
-    greeting: "Mother Ysolde, dear. Bog-myrtle, sundew, a drop of something stronger. Red keeps you breathing, blue keeps you thinking. Carved stones? I'll take them, or fuse four. Never take a candle from a hag.",
+    greeting: "Mother Ysolde, dear. Bog-myrtle, sundew, a drop of something stronger, all dried over a peat fire. Red keeps you breathing, blue keeps you thinking. Carved stones? I'll take them, or fuse four. Never take a candle from a hag.",
     stock: [...potionStock("potion", [1, 2]), ...potionStock("mpotion", [1, 2])],
     buys: ["rune"],
   },
   rustarmourer: {
-    greeting: "Boiled hide and riveted plate, cut for the heat. A Redfang bolt goes through cloth like it isn't there. Buy something that stops it.",
+    greeting: "Boiled hide and riveted plate, cut for the heat. The hide comes off the drovers' longhorns, the rivets from the Cinnabar Pits. A Redfang bolt goes through cloth like it isn't there. Buy something that stops it.",
     stock: armourStock("rustarmourer"),
     buys: ARMOUR_SLOTS,
     levelHeads: true,
   },
   // the Rustwater Post's healer (Act 4): Medium and Greater flasks; she buys and fuses loose runes like Morwen, Zahra and Ysolde
   rusthealer: {
-    greeting: "Snakebite, burns, a bolt in the shoulder: I've stitched them all. Red for the blood, blue for the head. Carved stones? I'll buy them, or fuse four.",
+    greeting: "Snakebite, burns, a bolt in the shoulder, a miner's lungs full of red dust, a drover under a longhorn: I've stitched them all. Red for the blood, blue for the head. Carved stones? I'll buy them, or fuse four.",
     stock: [...potionStock("potion", [1, 2]), ...potionStock("mpotion", [1, 2])],
     buys: ["rune"],
   },

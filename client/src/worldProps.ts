@@ -352,8 +352,12 @@ export function worldPropTextures(scene: Phaser.Scene) { makeTextures(scene); }
 
 const LANTERN_LIFT = 71 / TX, LANTERN_DX = 6 / TX;
 
-/** Adds the props to the scene. `light` gets called for every lantern (the day/night layer lights it after dusk). */
-export function addWorldProps(scene: Phaser.Scene, light?: (x: number, y: number, lift: number, dx: number) => void) {
+/**
+ * Adds the props to the scene. `light` gets called for every lantern, `fire` for every burning landmark (the day/night
+ * layer lights them after dusk).
+ */
+export function addWorldProps(scene: Phaser.Scene, light?: (x: number, y: number, lift: number, dx: number) => void,
+  fire?: (x: number, y: number, color: number, scale: number, lift: number) => void) {
   makeTextures(scene);
   watchtower(scene);
   sheet(scene, "wp_millwheel", MILL_W, MILL_H, N, millWheel, 0);
@@ -375,5 +379,5 @@ export function addWorldProps(scene: Phaser.Scene, light?: (x: number, y: number
     if (s.kind === "wp_lantern_pole") light?.(s.x, s.y, LANTERN_LIFT, LANTERN_DX);
   }
   addSaltmereProps(scene, light); // Saltmere's harbour: smacks, rowboats, buoy, posts, breakwater (saltmereArt.ts)
-  addLandKit(scene); // stooks, scarecrows, carts, hives, hide frames and the landmarks (landKitView.ts)
+  addLandKit(scene, fire); // the land kits and landmarks (landKitView.ts)
 }

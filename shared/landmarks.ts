@@ -23,6 +23,10 @@ export interface Landmark {
 export const LANDMARKS: readonly Landmark[] = [
   // a post mill on the North Meadow rise above Millbrook: the water mill below and the windmill share the grain
   { id: "windmill", land: 1, area: "North Meadow", x: 94.5, y: 31.5, solid: [93.6, 30.6, 1.8, 1.8] },
+  // the moors' Beacon Cairn on the rise north of Cairnwatch's gate: a peat fire on top, seen across the barrows at night
+  { id: "beacon", land: 3, area: "The Grey Barrow Moors", x: 77, y: 692, solid: [76.1, 691.1, 1.8, 1.8] },
+  // a mine headframe and winch over the shaft at the Cinnabar Pits, by the Badlands Highway (the muster stays 15 tiles off)
+  { id: "headframe", land: 4, area: "The Cinnabar Pits", x: 174.5, y: 883.5, solid: [173.1, 882.1, 2.8, 2.8] },
 ];
 
 /** The blocking boxes, for the decor collision grid. */

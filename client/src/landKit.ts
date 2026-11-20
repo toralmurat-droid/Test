@@ -5,7 +5,7 @@ import { CHESTS } from "../../shared/chests";
 import { SIEGE_SITES } from "../../shared/siege";
 import { HOLDS, MUSTERS } from "../../shared/war/standards";
 import { TOWNS } from "../../shared/war/townSites";
-import { CAPITAL_FORTS, FORT_SKIP } from "../../shared/highways";
+import { CAPITAL_FORTS, FORT_SKIP, HIGHWAYS, legLine } from "../../shared/highways";
 import { LANDMARKS } from "../../shared/landmarks";
 import { BOARDS } from "../../shared/bounty";
 import { allObjects } from "../../shared/quests";
@@ -14,7 +14,8 @@ import { LK_SHEETS, type LkKind } from "./landKitSheets";
 
 /**
  * Land kits (settlement network step 3, "land identity"): the small props that say what a land's people do, placed
- * round its settlements (Oakvale: stooks, scarecrows, grain carts, beehives, hide frames). Phaser-free and
+ * round its settlements (Oakvale: stooks, scarecrows, grain carts, beehives, hide frames; the moors: peat and way-cairns;
+ * the badlands: longhorns, troughs and ore carts). Phaser-free and
  * deterministic, the same on every client; landKitView.ts draws them. Cosmetic and walk-through: the server never
  * reads this file. The solid landmarks are shared/landmarks.ts.
  */
@@ -47,12 +48,22 @@ const keep = () => keepPts ??= [
   ...WORLD_PROP_SPOTS.map((s): Pt => [s.x / TILE, s.y / TILE, s.kind === "wp_millwheel" || s.kind === "wp_shipwreck" ? 5 : 2]),
 ];
 const FIELDS = new Set<number>([T.CROPS, T.FIELD]);
+/** What may stand beside a pen kind (`pen` in kitFree): the pen's own fence and hay, the palisade it is built against. */
+const PEN_SIDES = new Set<number>([T.FENCE, T.FENCE_V, T.PALISADE, T.HAY]);
 const FENCES = new Set<number>([T.FENCE, T.FENCE_V, T.PALISADE]);
 /** In a gap of a fence or palisade (a gateway): fence within 3 tiles on both sides, in its row or its column. */
 function inGateway(tx: number, ty: number) {
   const fenceAt = (dx: number, dy: number) => { for (let k = 1; k <= 3; k++) if (FENCES.has(OBJECTS[ty + dy * k]?.[tx + dx * k] ?? -1)) return true; return false; };
   return (fenceAt(-1, 0) && fenceAt(1, 0)) || (fenceAt(0, -1) && fenceAt(0, 1));
 }
+/** A town gate: an open tile in a palisade, with palisade within 2 tiles on both sides of it, in its row or column. */
+function palisadeGate(tx: number, ty: number) {
+  if (OBJECTS[ty]?.[tx] === T.PALISADE) return false;
+  const pal = (dx: number, dy: number) => OBJECTS[ty + dy]?.[tx + dx] === T.PALISADE || OBJECTS[ty + 2 * dy]?.[tx + 2 * dx] === T.PALISADE;
+  return (pal(-1, 0) && pal(1, 0)) || (pal(0, -1) && pal(0, 1));
+}
+/** Within 3 tiles of a town gate: the way in stays clear. */
+const nearGate = (tx: number, ty: number) => { for (let j = -3; j <= 3; j++) for (let i = -3; i <= 3; i++) if (palisadeGate(tx + i, ty + j)) return true; return false; };
 /** A capital fort's skip box widened by SEAT_MARGIN: the five clan seats. */
 export const inSeat = (tx: number, ty: number) => CAPITAL_FORTS.some(([x, y]) => Math.abs(tx - x) <= FORT_SKIP + SEAT_MARGIN && Math.abs(ty - y) <= FORT_SKIP + SEAT_MARGIN);
 /** Inside a landmark's solid box, or within `m` tiles of it. */
@@ -61,18 +72,19 @@ const nearLandmarkBox = (tx: number, ty: number, m: number) => LANDMARKS.some((l
 /**
  * The keep-clear rule for a kit prop on tile (tx, ty): its 3x3 holds only empty ground or nature (no fence, wall,
  * door, stall, crate or well beside it), no road, highway, water or bridge; the tile itself is no field or crop
- * either (`onField`: a field or crop tile is fine, for scarecrows), and no gateway in a fence; clear of NPCs and their props, signposts, chests, boards, quest objects, portal stones, war-town gates,
+ * either (`onField`: a field or crop tile is fine, for scarecrows), no gateway in a fence, 3 tiles from a palisade gate; clear of NPCs and their props, signposts, chests, boards, quest objects, portal stones, war-town gates,
  * banners and stewards, forts and musters, siege works, the world props (worldPropSpots.ts), barns, landmarks, the
- * clan seats and the other kit props in `taken` (`gap` tiles).
+ * clan seats and the other kit props in `taken` (`gap` tiles). `pen`: stock inside a pen may stand against its fence,
+ * hay and palisade (and the pen's gap is no gateway to keep clear: the beasts are walk-through).
  */
-export function kitFree(tx: number, ty: number, taken: readonly KitSpot[] = [], gap = 2, onField = false): boolean {
+export function kitFree(tx: number, ty: number, taken: readonly KitSpot[] = [], gap = 2, onField = false, pen = false): boolean {
   for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
     const o = OBJECTS[ty + j]?.[tx + i], g = GROUND[ty + j]?.[tx + i];
     if (o === undefined || g === undefined) return false;
-    if (i === 0 && j === 0 ? o !== EMPTY || (BAD_GROUND.has(g) && !(onField && FIELDS.has(g))) : o !== EMPTY && !NATURE.has(o)) return false;
+    if (i === 0 && j === 0 ? o !== EMPTY || (BAD_GROUND.has(g) && !(onField && FIELDS.has(g))) : o !== EMPTY && !NATURE.has(o) && !(pen && PEN_SIDES.has(o))) return false;
     if (NO_NEIGHBOUR.has(g) || HIGHWAY_TILES.has((ty + j) * MW + tx + i)) return false;
   }
-  if (inGateway(tx, ty) || inSeat(tx, ty) || nearLandmarkBox(tx, ty, 1.5)) return false;
+  if ((!pen && (inGateway(tx, ty) || nearGate(tx, ty))) || inSeat(tx, ty) || nearLandmarkBox(tx, ty, 1.5)) return false;
   if (BARNS.some((b) => tx >= b.x - 1 && tx <= b.x + b.w && ty >= b.y - 1 && ty <= b.y + b.h)) return false;
   if (SIEGE_SITES.some((s) => Math.abs(s.tx - tx) <= 9 && Math.abs(s.ty - ty) <= 4)) return false; // the siege works (worldProps rule)
   const cx = tx + 0.5, cy = ty + 0.5;
@@ -90,9 +102,19 @@ const byGround = (gs: number[], r: number) => (tx: number, ty: number) => {
 const byLandmark = (id: string, r: number, front = false) => (tx: number, ty: number) =>
   LANDMARKS.some((l) => l.id === id && Math.hypot(l.x - tx - 0.5, l.y - ty - 0.5) <= r && (!front || tx + ty + 1 > l.x + l.y + 1.5));
 
-interface Place { area: string; kind: LkKind; n: number; gap?: number; near?: (tx: number, ty: number) => boolean }
+interface Place {
+  area: string; kind: LkKind; n: number; gap?: number; near?: (tx: number, ty: number) => boolean;
+  /** Sample only this box of tiles (x, y, w, h) of the area: a few spots near a town in a land-wide area. */
+  box?: readonly [number, number, number, number];
+}
 /** Kinds that stand in a field or crop rather than beside it. */
 export const ON_FIELD: ReadonlySet<LkKind> = new Set<LkKind>(["lk_scarecrow"]);
+/** Kinds that stand inside a pen, against its fence (kitFree's `pen`). */
+export const IN_PEN: ReadonlySet<LkKind> = new Set<LkKind>(["lk_longhorn", "lk_trough"]);
+/** Inside a box of tiles (x0..x1, y0..y1, inclusive). */
+const inBox = (x0: number, y0: number, x1: number, y1: number) => (tx: number, ty: number) => tx >= x0 && tx <= x1 && ty >= y0 && ty <= y1;
+/** Within `r` tiles of an area's rectangle (just outside a palisade). */
+const byArea = (name: string, r: number) => { const a = AREAS.find((q) => q.name === name)!; return (tx: number, ty: number) => tx >= a.x - r && tx < a.x + a.w + r && ty >= a.y - r && ty < a.y + a.h + r; };
 
 /**
  * Oakvale grows and mills grain: stooks and a cart round the windmill, stooks and a scarecrow by Goldenreach's north
@@ -112,14 +134,59 @@ const OAKVALE: Place[] = [
   { area: "Oakvale", kind: "lk_grain_cart", n: 1, near: byGround([T.COBBLE], 2) },
 ];
 
+/**
+ * The moors cut peat and bury their dead under barrows: peat stacks by Cairnwatch's halls, cut banks on the bog outside
+ * its palisade, a fuel stack at the Beacon Cairn's foot; way-cairns line the Moors Highway (MOORS_CAIRNS).
+ */
+const MOORS: Place[] = [
+  { area: "Cairnwatch", kind: "lk_peat_stack", n: 4, gap: 4 },
+  { area: "The Grey Barrow Moors", kind: "lk_peat_stack", n: 1, box: [71, 686, 13, 13], near: byLandmark("beacon", 6, true) },
+  { area: "The Grey Barrow Moors", kind: "lk_peat_bank", n: 3, gap: 6, box: [55, 687, 45, 37], near: (tx, ty) => byArea("Cairnwatch", 9)(tx, ty) && !byArea("Cairnwatch", 1)(tx, ty) },
+];
+/** A way-cairn about every this many tiles of the Moors Highway's middle line, 3 to 5 tiles off it. */
+const CAIRN_EVERY = 22;
+/**
+ * The badlands drive cattle and dig cinnabar: longhorns and a trough in the Rustwater Post's drovers' pen (its fence row
+ * and the palisade's south-east corner), more of the herd grazing outside the palisade, ore carts by the Cinnabar Pits'
+ * headframe. (No cart in the post: its yard is the lane from the south gate to the square.)
+ */
+const BADLANDS: Place[] = [
+  { area: "The Rustwater Post", kind: "lk_trough", n: 1, near: inBox(238, 876, 244, 878) },
+  { area: "The Rustwater Post", kind: "lk_longhorn", n: 3, gap: 2, near: inBox(238, 876, 244, 878) },
+  { area: "The Red Badlands", kind: "lk_longhorn", n: 3, gap: 4, box: [213, 853, 42, 36], near: (tx, ty) => byArea("The Rustwater Post", 9)(tx, ty) && !byArea("The Rustwater Post", 2)(tx, ty) },
+  { area: "The Cinnabar Pits", kind: "lk_ore_cart", n: 2, gap: 4, near: byLandmark("headframe", 7) },
+];
+
+/** Way-cairns beside a land's highway: every CAIRN_EVERY tiles of each leg, on the first free tile 3-5 off either side. */
+function cairns(out: KitSpot[], land: Act, area: string, kind: LkKind) {
+  const h = HIGHWAYS.find((q) => q.land === land), a = AREAS.find((r) => r.name === area);
+  if (!h || !a) return;
+  for (const leg of h.legs) {
+    const line = legLine(h, leg);
+    for (let i = CAIRN_EVERY / 2; i + 2 < line.length; i += CAIRN_EVERY) {
+      const [x0, y0] = [line[i - 2] % MW, Math.floor(line[i - 2] / MW)], [x1, y1] = [line[i + 2] % MW, Math.floor(line[i + 2] / MW)];
+      const mx = line[i] % MW, my = Math.floor(line[i] / MW), dl = Math.hypot(x1 - x0, y1 - y0) || 1, nx = -(y1 - y0) / dl, ny = (x1 - x0) / dl;
+      const side = hash(mx, my, 77) < 0.5 ? 1 : -1;
+      found: for (const sd of [side, -side]) for (const off of [3, 4, 5]) {
+        const tx = Math.round(mx + nx * off * sd), ty = Math.round(my + ny * off * sd);
+        if (tx < a.x || ty < a.y || tx >= a.x + a.w || ty >= a.y + a.h || !kitFree(tx, ty, out, 8)) continue;
+        out.push({ kind, land: actOfTile(tx, ty), area, x: (tx + 0.5) * TILE, y: (ty + 0.5) * TILE, flip: hash(tx, ty, 5) < 0.5 });
+        break found;
+      }
+    }
+  }
+}
+
 /** Up to `p.n` free spots for `p.kind` in the area, picked by a fixed hash (the same on every client). */
 function scatter(out: KitSpot[], p: Place) {
   const a = AREAS.find((r) => r.name === p.area);
   if (!a) return;
+  const r = p.box ? { x: p.box[0], y: p.box[1], w: p.box[2], h: p.box[3] } : a;
   let placed = 0;
   for (let k = 0; k < 600 && placed < p.n; k++) {
-    const tx = a.x + Math.floor(hash(k, p.n, p.kind.length * 31 + a.x) * a.w), ty = a.y + Math.floor(hash(p.n, k, p.kind.length * 17 + a.y * 3) * a.h);
-    if (!kitFree(tx, ty, out, p.gap ?? 3, ON_FIELD.has(p.kind)) || (p.near && !p.near(tx, ty))) continue;
+    const tx = r.x + Math.floor(hash(k, p.n, p.kind.length * 31 + r.x) * r.w), ty = r.y + Math.floor(hash(p.n, k, p.kind.length * 17 + r.y * 3) * r.h);
+    if (tx < a.x || ty < a.y || tx >= a.x + a.w || ty >= a.y + a.h) continue;
+    if (!kitFree(tx, ty, out, p.gap ?? 3, ON_FIELD.has(p.kind), IN_PEN.has(p.kind)) || (p.near && !p.near(tx, ty))) continue;
     // the foot jitters inside its tile so a row of stooks doesn't stand on the grid
     const jx = (hash(tx, ty, 11) - 0.5) * 0.5, jy = (hash(tx, ty, 12) - 0.5) * 0.5;
     out.push({ kind: p.kind, land: actOfTile(tx, ty), area: p.area, x: (tx + 0.5 + jx) * TILE, y: (ty + 0.5 + jy) * TILE, flip: hash(tx, ty, 5) < 0.5 });
@@ -129,7 +196,9 @@ function scatter(out: KitSpot[], p: Place) {
 
 function build(): KitSpot[] {
   const out: KitSpot[] = [];
-  for (const p of OAKVALE) scatter(out, p);
+  for (const p of [...OAKVALE, ...MOORS]) scatter(out, p);
+  cairns(out, 3, "The Grey Barrow Moors", "lk_way_cairn");
+  for (const p of BADLANDS) scatter(out, p);
   return out;
 }
 
@@ -139,4 +208,9 @@ export const LAND_KIT_SPOTS: readonly KitSpot[] = build();
 export const buildLandKit = build;
 
 /** The sheet each landmark is drawn with (shared/landmarks.ts id -> kit sheet). */
-export const LANDMARK_SHEET: Record<string, LkKind> = { windmill: "lk_windmill" };
+export const LANDMARK_SHEET: Record<string, LkKind> = { windmill: "lk_windmill", beacon: "lk_beacon", headframe: "lk_headframe" };
+/**
+ * Landmarks that shine after dusk, from a fire you can see on the sheet (the game's rule: no light without a source).
+ * `lift` raises the glow to the flame (world px above the foot), `scale` its size.
+ */
+export const LANDMARK_LIGHT: Record<string, { lift: number; color: number; scale: number }> = { beacon: { lift: 52, color: 0xff9a3a, scale: 4.5 } };

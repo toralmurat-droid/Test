@@ -18,6 +18,7 @@ import { hiResTexture } from "./smooth";
 import { paintBonfire, smokeTexture } from "./bonfireArt";
 import { SALT_TOWN } from "../../shared/saltmere";
 import { SALT_PERCHES, SALT_SMOKE, type SaltPoint } from "./saltmereReg";
+import { PEAT_SMOKE } from "./houseLand";
 import { saltmereNight } from "./saltmereArt";
 
 /**
@@ -534,6 +535,18 @@ export class Ambient {
     }
   }
 
+  /** Cairnwatch's peat fires (houseLand.ts PEAT_SMOKE): a thicker, blue-grey plume from every chimney, all of them lit. */
+  private peatDone = false;
+  private peatSmoke() {
+    this.peatDone = true;
+    for (const s of PEAT_SMOKE) {
+      const sm = this.smoke(s.x, s.y - s.z, 1.35);
+      (sm as unknown as Phaser.GameObjects.Particles.ParticleEmitter).setParticleTint(0x9aa6b8);
+      isoAnchor(sm, { x: s.x, y: s.y });
+      staticObj(this.scene, sm, { box: plumeBox(s.x, s.y - s.z, s.x, s.y), warm: SMOOTH ? 6500 : 3800 });
+    }
+  }
+
   private smoke(x: number, y: number, scale: number) {
     if (SMOOTH) {
       // pixel smoke in the fire's style: dithered grey puffs that rise slowly, spread and fade, drifting with the wind
@@ -827,6 +840,7 @@ export class Ambient {
     this.updateMist(dtMs, t);
     this.updateSpores(t);
     this.updateGulls(now);
+    if (!this.peatDone && PEAT_SMOKE.length) this.peatSmoke();
     if (now > this.nextRipple) { this.ripple(); this.nextRipple = now + 350 + Math.random() * 500; }
     if (now > this.nextFlock) this.spawnFlock(now);
   }
