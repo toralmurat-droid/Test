@@ -1,5 +1,5 @@
 import { MAP_W, type Act } from "./constants";
-import { buildCity, CITIES, cityGates, plotBox, type City, type CityArea, type CityTiles } from "./capitals";
+import { buildCity, CITIES, cityGates, citySideGates, plotBox, type City, type CityArea, type CityTiles } from "./capitals";
 import { highwayTiles, type Highway } from "./highways";
 import { LAND_ROWS } from "./borders";
 import type { TileBox } from "./crown";
@@ -61,10 +61,23 @@ export const CITY_LAND: Partial<Record<ClanKey, CityLandFit>> = {
     trims: [{ x: 28, y: 38, w: 18, h: 17, top: 42, gap: [35, 37] }],
     posts: [{ x: 94, y: 25, to: ["Hearthhold", "North Meadow", "Old Watchtower"] }],
   },
+  // Scarwall: a few tiles of track out of the east gate onto the head of Gallows Canyon, its post above them (the south
+  // gate is on the highway, its post is the highway's: shared/highways.ts); no west gate (the band's edge cliffs)
+  redfang: {
+    roads: [[[61, 808], [64, 808]]],
+    trims: [],
+    posts: [{ x: 63, y: 806, to: ["Scarwall", "Gallows Canyon"] }],
+  },
 };
 
-/** The streets through a city in its land that count as roads (local tiles): the cross street gate to gate, and the gate square's middle to the main gate. */
-const THROUGH = [{ x: 0, y: 25, w: 52, h: 3 }, { x: 24, y: 28, w: 3, h: 12 }] as const;
+/**
+ * The streets through a city in its land that count as roads (local tiles): the cross street from wall to wall (into the
+ * side gates it has: the wall's tile is a road only where it is a gate), and the gate square's middle to the main gate.
+ */
+const through = (c: City) => {
+  const s = citySideGates(c), x0 = s.includes("west") ? 0 : 1, x1 = s.includes("east") ? 51 : 50;
+  return [{ x: x0, y: 25, w: x1 - x0 + 1, h: 3 }, { x: 24, y: 28, w: 3, h: 12 }];
+};
 
 /** A gate road's tiles (map tiles), 4-connected, all of it (the carve stops at the first road tile). */
 export function gateRoadTiles(pts: readonly (readonly [number, number])[]): { x: number; y: number }[] {
@@ -143,7 +156,7 @@ export function carveCitiesInLand(T: CityLandT, ground: number[][], objects: num
     areas.push(...buildCity(c, T, ground, objects, EMPTY));
     // roads: none inside the walls but the through streets and the gates
     for (const k of [...roads]) if (inBox(k % MAP_W, Math.floor(k / MAP_W))) roads.delete(k);
-    for (const r of THROUGH) for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) roads.add((b.y + y) * MAP_W + b.x + x);
+    for (const r of through(c)) for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) roads.add((b.y + y) * MAP_W + b.x + x);
     for (const g of cityGates(c)) for (const t of g.tiles) roads.add(t.y * MAP_W + t.x);
     // the gate roads: dirt out to the old roads, nature cleared, never over water, a bridge or anything built
     for (const r of fit?.roads ?? []) for (const t of gateRoadTiles(r)) {

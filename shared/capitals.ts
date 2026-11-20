@@ -12,9 +12,9 @@ import { TITLES } from "./cosmetics";
  * inside logs back in at that land's town.
  *
  * Settlement network step 5: one by one the cities leave the band and stand in their homelands (`site`, shared/cityLand.ts
- * builds them there): heroes walk in through three open gates (south, west, east) on the land's roads, and a gate ward
- * (server/cityGates.ts) keeps W7's entry rules. Hearthhold stands in Oakvale's north-west; its strip plot stays rock until
- * all five have moved.
+ * builds them there): heroes walk in through open gates (south, and west and east where the land allows: `sideGates`) on
+ * the land's roads, and a gate ward (server/cityGates.ts) keeps W7's entry rules. Hearthhold stands in Oakvale's
+ * north-west, Scarwall in the Red Badlands' north-west; their strip plots stay rock until all five have moved.
  *
  * Every city is the same plan (CITY_TEMPLATE, local tiles 0..w-1 x 0..h-1, the gate in the south wall) dressed in its
  * clan's style (walls, roofs, ground): gate square with the waystone and the stash, market with the quartermaster,
@@ -177,10 +177,12 @@ export const CITIES: readonly City[] = [
     style: { wall: "WALL_STONE", roof: "ROOF_SLATE", roof2: "ROOF_SLATE", street: "COBBLE", ground: ["HEATHER", "GRASS_DARK", "RUBBLE"], yard: "DIRT" },
     sprites: { leader: "cap_host_leader", quartermaster: "steward_host", oathkeeper: "cap_host_oathkeeper", trainer: "cap_host_trainer" },
   },
-  // The Redfang Compact's Scarwall: its city gate stands on the open sand north of Fangrock's stockade (which has no
-  // north gate), thirty tiles and more from every post of the garrison. A red palisade, clay streets.
+  // The Redfang Compact's Scarwall: in the Red Badlands' north-west (settlement network step 5), on the plain north of
+  // Fangrock, its back to the band's edge cliffs (so no west gate). The highway runs from its south gate down to Fangrock's
+  // east gate; its east gate opens onto the head of Gallows Canyon (the walls cover the plain's only way north into it).
+  // Its old city gate stood on the sand north of Fangrock (shared/cityLand.ts OLD_CITY_GATES). A red palisade, clay streets.
   {
-    clan: "redfang", act: 4, plot: 3, outer: { x: 20, y: 821 }, outerBox: { x0: 15, x1: 25, y0: 817, y1: 826 },
+    clan: "redfang", act: 4, plot: 3, outer: { x: 34, y: 822 }, outerBox: { x0: 9, x1: 60, y0: 782, y1: 821 }, site: { x: 9, y: 782 }, sideGates: ["east"],
     style: { wall: "PALISADE", roof: "ROOF_RED", roof2: "ROOF_THATCH", street: "CLAY", ground: ["SAND", "GRAVEL", "CLAY"], yard: "GRAVEL" },
     sprites: { leader: "cap_redfang_leader", quartermaster: "steward_redfang", oathkeeper: "cap_redfang_oathkeeper", trainer: "cap_redfang_trainer" },
   },
