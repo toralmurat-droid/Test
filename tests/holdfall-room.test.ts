@@ -50,7 +50,7 @@ test("hold works (room): works stand, soldiers come out of the barracks, the Hol
     room.state.mobs.forEach((m: any, mid: string) => { if (m.kind !== "trooper") room.state.mobs.delete(mid); });
     room.holdWorks.tick(Date.now());
     const tier = holdTier(warState()!, LAND.id), want = holdWorks(LAND.id, OWN, tier);
-    const works = () => { const out: [string, any][] = []; room.state.mobs.forEach((m: any, mid: string) => { if (!m.dead && parseWork(m.weapon) && room.holdWorks.owns(mid)) out.push([mid, m]); }); return out; };
+    const works = () => { const out: [string, any][] = []; room.state.mobs.forEach((m: any, mid: string) => { if (!m.dead && parseWork(m.weapon) && room.holdWorks.placed.get(mid)?.t === LAND.id) out.push([mid, m]); }); return out; };
     assert.equal(works().length, want.length, "every work stands");
     assert.ok(works().every(([, m]) => parseWork(m.weapon)!.clan === OWN && m.hp > 0 && m.title));
     // only a hero the holder's soldiers fight may hurt a work
@@ -118,7 +118,7 @@ test("hold works (room): renown only for legal wrecks, capped per war tick; work
     room.state.mobs.forEach((m: any, mid: string) => { if (m.kind !== "trooper") room.state.mobs.delete(mid); });
     const before = room.warTroops.h.reserved();
     room.holdWorks.tick(Date.now());
-    const works = () => { const out: [string, any][] = []; room.state.mobs.forEach((m: any, mid: string) => { if (!m.dead && parseWork(m.weapon) && room.holdWorks.owns(mid)) out.push([mid, m]); }); return out; };
+    const works = () => { const out: [string, any][] = []; room.state.mobs.forEach((m: any, mid: string) => { if (!m.dead && parseWork(m.weapon) && room.holdWorks.placed.get(mid)?.t === LAND.id) out.push([mid, m]); }); return out; };
     assert.ok(works().length >= 4);
     assert.equal(room.warTroops.h.reserved(), before, "standing works take no troop budget");
     const kill = (mid: string, m: any) => { m.hp = 0; room.mobDied(m, mid, id, p.name); };
@@ -160,7 +160,7 @@ test("hold works (room, follower): the fall waits on the owner with the ruin kep
     room.state.mobs.forEach((m: any, mid: string) => { if (m.kind !== "trooper") room.state.mobs.delete(mid); });
     room.holdWorks.tick(Date.now());
     const tier = holdTier(warState()!, LAND.id), want = holdWorks(LAND.id, OWN, tier);
-    const works = () => { const out: [string, any][] = []; room.state.mobs.forEach((m: any, mid: string) => { if (!m.dead && parseWork(m.weapon) && room.holdWorks.owns(mid)) out.push([mid, m]); }); return out; };
+    const works = () => { const out: [string, any][] = []; room.state.mobs.forEach((m: any, mid: string) => { if (!m.dead && parseWork(m.weapon) && room.holdWorks.placed.get(mid)?.t === LAND.id) out.push([mid, m]); }); return out; };
     assert.equal(works().length, want.length);
     _setWarRole("follower");
     (HOLD_FALL as any).wreckRenownPerTick = 0; // (only the fall's own rewards are looked at here)
