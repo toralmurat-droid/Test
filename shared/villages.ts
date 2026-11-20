@@ -14,7 +14,8 @@ import { LAND_ROWS } from "./borders";
  * `roads` tile): a new T-junction would make a junction fort anchor (standards.ts). Pure data plus the carve: no map.ts
  * import, so the map can call it (like highways.ts). Tiles are map x and the land's local y (like highways.ts).
  */
-export type VillageId = "turfhallow" | "staithe" | "barrowstead" | "redlode" | "hornstead" | "windlass" | "hempfield" | "saltglass" | "lastwell";
+export type VillageId = "turfhallow" | "staithe" | "barrowstead" | "redlode" | "hornstead" | "windlass" | "hempfield" | "saltglass" | "lastwell"
+  | "listsend" | "vigilsrest" | "kneelstone" | "sawyersend" | "furrowby";
 type Pt = { x: number; y: number };
 /** A cottage: roof rows over two rows of wall, a door in the middle of the front (bottom) wall. Box offsets. */
 export interface VillageHouse { dx: number; dy: number; w: number; h: number }
@@ -89,6 +90,21 @@ export const VILLAGES: readonly Village[] = [
     spur: [[88, 136]], post: { x: 87, y: 135 }, gate: { x: 88, y: 137 } },
   { id: "lastwell", name: "Last Well", land: 2, patron: "The Humpback Mesas", x: 124, y: 58, w: 12, h: 9, mirror: true, roof: "adobe", centre: "well",
     exit: { dx: 11, dy: 4 }, spur: [[124, 54], [120, 54]], post: { x: 121, y: 55 }, gate: { x: 118, y: 53 } },
+  // The Crown of the Marches (PR 3), plain stone cottages: the squires' and farriers' row for the Lists beside the Greenward
+  // road above the highway, the pilgrims' hostel under the Vigil Courts on the Sun road, and the stonecutters who mend
+  // the Field of Statues
+  { id: "listsend", name: "Lists End", land: 6, patron: "The Tourney Grounds", x: 87, y: 24, w: 12, h: 8, mirror: false, roof: "slate", centre: "well",
+    spur: [[100, 30]], post: { x: 99, y: 31 }, gate: { x: 102, y: 37 } },
+  { id: "vigilsrest", name: "Vigil's Rest", land: 6, patron: "The Vigil Courts", x: 194, y: 103, w: 12, h: 9, mirror: true, roof: "slate", centre: "well",
+    spur: [[196, 114]], post: { x: 197, y: 113 }, gate: { x: 198, y: 117 } },
+  { id: "kneelstone", name: "Kneelstone", land: 6, patron: "The Field of Statues", x: 68, y: 76, w: 12, h: 9, mirror: false, roof: "slate", centre: "stone",
+    spur: [[77, 88]], post: { x: 78, y: 86 }, gate: { x: 80, y: 90 } },
+  // Oakvale (PR 3): the sawmill on the woods' edge off the Eastmarch road below the Cinder Scar, and the grain and hive
+  // farm above the Sunken Lake road that feeds Saltmere (its patron the Saltwind Coast: the nearer lands are havens)
+  { id: "sawyersend", name: "Sawyer's End", land: 1, patron: "Cinder Scar", x: 242, y: 67, w: 12, h: 9, mirror: true, roof: "red", centre: "well",
+    exit: { dx: 11, dy: 4 }, spur: [[232, 71]], post: { x: 233, y: 72 }, gate: { x: 231, y: 70 } },
+  { id: "furrowby", name: "Furrowby", land: 1, patron: "Saltwind Coast", x: 84, y: 166, w: 12, h: 9, mirror: false, roof: "thatch", centre: "well",
+    exit: { dx: 11, dy: 4 }, spur: [[105, 170]], post: { x: 104, y: 171 }, gate: { x: 106, y: 168 } },
 ];
 
 /** Map row of a village's local row. */

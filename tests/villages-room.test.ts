@@ -1,7 +1,8 @@
 // Settlement network step 4 (shared/villages.ts) in the real room: walking into Turfhallow wakes its stone, a hero
 // travels there from Cairnwatch's and lands in front of it, Old Maddock gives "Lost Spades", the spades and the wights
 // finish it and pay the arc reward, and his `after` line follows. PR 2: the same for Saltglass in the Sunscar (from Kel
-// Ashar's stone; Salt-mistress Nadira's sledges and scorpions). A save from before the villages loads as not begun.
+// Ashar's stone; Salt-mistress Nadira's sledges and scorpions). PR 3: Furrowby in Oakvale (from Oakvale's stone; Goody
+// Marrow's hives and warrior blobs on the Saltwind Coast). A save from before the villages loads as not begun.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { TILE } from "../shared/constants";
@@ -131,6 +132,64 @@ test("room: Saltglass's stone wakes and takes travellers from Kel Ashar; Salt-mi
     const snap = room.snapshot(p) as unknown as Record<string, unknown>;
     assert.deepEqual([snap.saltglassId, snap.saltglassStage, snap.saltglassVer], [1, 0, 1], "saved under the arc's own names");
     assert.ok((snap.portals as string[]).includes("saltglass"), "the woken stone is saved");
+    await c.leave();
+  } finally {
+    await srv.stop();
+  }
+});
+
+const fi = CHAINS.findIndex((c) => c.id === "furrowby");
+const [hives] = CHAINS[fi].quests;
+
+test("room: Furrowby's stone wakes and takes travellers from Oakvale; Goody Marrow's hives and warrior blobs finish Trampled Hives", async () => {
+  const srv = await startRoom();
+  try {
+    const c = await srv.join({ cls: "summoner" });
+    await wait(200);
+    const room = srv.room, id = c.sessionId, p = room.state.players.get(id);
+    p.quests.set("tut", packQuest(TUT, 0, 0));
+    p.level = hives.minLevel; p.invulnUntil = Date.now() + 600_000;
+
+    const stone = PORTALS.find((q) => q.id === "furrowby")!, oak = PORTALS.find((q) => q.id === "oakvale")!;
+    p.x = stone.x; p.y = stone.y + TILE;
+    assert.ok(await until(() => p.portals.has("furrowby")), "Furrowby's stone woke");
+    assert.equal(townAt(p.x, p.y)?.id, "furrowby", "standing in the village");
+    p.portals.add("oakvale");
+    p.x = oak.x; p.y = oak.y + TILE * 0.5;
+    await wait(100);
+    c.send("travel", { to: "furrowby" });
+    const at = arrivalOf(stone);
+    assert.ok(await until(() => p.x === at.x && p.y === at.y), "travelled to the village's stone");
+    assert.ok(!isSolidAt(p.x, p.y), "on free ground in front of it");
+
+    const marrow = npcById(hives.giver)!;
+    assert.equal(marrow.name, "Goody Marrow");
+    const toHer = () => { p.x = marrow.x; p.y = marrow.y + 10; };
+    toHer();
+    await wait(100);
+    const offer = questDialog(marrow.id, p);
+    assert.ok(offer?.accept?.startsWith(hives.acceptText) && offer.text[0] === hives.offer[0], "her dialog offers Trampled Hives");
+    c.send("quest", { chain: fi });
+    assert.ok(await until(() => chainState(p, fi)!.questStage === 1), "accepted");
+    assert.equal(p.quests.get("furrowby"), packQuest(0, 1, 0), "kept under the village's id");
+
+    for (const o of hives.steps[0].objects!) {
+      p.x = o.x + TILE * 0.5; p.y = o.y;
+      await wait(60);
+      c.send("use", { id: o.id });
+      await wait(120);
+    }
+    assert.ok(await until(() => chainState(p, fi)!.questStage === 2), "three hives searched: on to the warrior blobs");
+
+    const gold0 = p.gold;
+    for (let i = 0; i < 6; i++) room.questKill(id, p, { kind: "warriorblob", x: p.x, y: p.y }, fi);
+    assert.ok(await until(() => chainState(p, fi)!.questId === 1), "Trampled Hives done");
+    assert.equal(p.gold, gold0 + hives.reward.gold, "the arc reward's gold");
+    toHer();
+    assert.ok(JSON.stringify(questDialog(marrow.id, p)).includes(hives.after.slice(0, 30)), "her after line follows");
+    const snap = room.snapshot(p) as unknown as Record<string, unknown>;
+    assert.deepEqual([snap.furrowbyId, snap.furrowbyStage, snap.furrowbyVer], [1, 0, 1], "saved under the arc's own names");
+    assert.ok((snap.portals as string[]).includes("furrowby"), "the woken stone is saved");
     await c.leave();
   } finally {
     await srv.stop();

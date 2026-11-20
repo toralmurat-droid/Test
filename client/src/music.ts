@@ -82,8 +82,8 @@ const BADLANDS_TOWNS = ["The Rustwater Post", "Rustwater Post", ...VILLAGES.filt
 const SINKHOLES_TOWNS = ["Ropewell", ...VILLAGES.filter((v) => v.land === 5).map((v) => v.name)]; // (and the sinkholes' villages)
 /** Act 1 areas with their own calm song (Saltmere's sea shanty), else the village tune. */
 const SALTMERE = ["Saltmere"];
-/** Act 6 calm area that plays the Tollcross tune (the Truce Market outside the Keep), else the village tune. */
-const CROWN_TOWNS = ["Tollcross"];
+/** Act 6 calm areas that play the Tollcross tune (the Truce Market outside the Keep), else the village tune. */
+const CROWN_TOWNS = ["Tollcross", ...VILLAGES.filter((v) => v.land === 6).map((v) => v.name)]; // (and the Crown's villages, shared/villages.ts)
 /** The clans' capital cities (shared/capitals.ts): every area name inside a plot (city and district names) -> the city's clan. */
 const CITY_AREAS = new Map<string, string>(CITIES.flatMap((c) => [cityText(c).name, ...Object.values(cityText(c).districts)].map((n) => [n, c.clan] as [string, string])));
 const OASES = ["Palmshade Oasis", "Mirage Wells", "Jackal Springs"];
@@ -91,7 +91,7 @@ const BURIED = ["Kharsun, the Buried City", "The Veiled Sanctum"];
 const FURNACE = "The Sun Furnace";
 const UNDEAD = ["skeleton", "skeletonmage", "necromancer", "sanddead", "wight", "bonehound", "mistwraith", "legionary", "cairnlord", "barrowking", "oathbreaker", "crownguard", "hollowherald", "thronewarden", "rivenking"];
 const FIGHT = ["slime", "shooterblob", "warriorblob", "healerblob", "motherblob", "bandit", "venomblob", "frostblob", "fireblob", "stormblob", "nomad", "scorpion", "veiled", "camelfolk", "sphinx", "sunwright", "nightraider", "boghag", "outrider", "crossbowman", "firebrand", "warhound", "vulture", "rattler", "redcaptain", "rourke", "delver", "cackler", "stagkin", "quillback", "stitcher", "sinkworm", "hidechief", "mawfather", "gildhound", "courtmagus", "crowncrow", "pretender"];
-const TOWNS = ["Oakvale", "Market Square", "Chapel of the Dawn", "The Rusty Tankard", "The Smithy", "Saltmere", "Hunter's Camp"];
+const TOWNS = ["Oakvale", "Market Square", "Chapel of the Dawn", "The Rusty Tankard", "The Smithy", "Saltmere", "Hunter's Camp", ...VILLAGES.filter((v) => v.land === 1).map((v) => v.name)]; // (and Oakvale's villages)
 
 const FADE_IN = 2.5;
 const FADE_OUT = 0.8;

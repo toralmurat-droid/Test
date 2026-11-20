@@ -252,9 +252,46 @@ Roadmap: client/src/roadmap.ts, "Settlement network".
     Bench tickAvg 4.15-5.64 ms before, 4.07-4.16 after; 22 fewer monsters (the no-mob rects).
   - Not done: the optional third villages (Pulley Cross, Halfway Khan: owner, no), new art or sprites (owner: none).
 
+- Step 4, PR 3: villages in the Crown of the Marches and Oakvale, on the same framework. **Step 4 is done**: every land has
+  its highway villages (Moors and Crown 3, the others 2; no optional third villages, owner).
+  - Villages (`shared/villages.ts`, appended): Lists End (the Tourney Grounds) beside the old spire path above the Greenward
+    road, Vigil's Rest (the Vigil Courts) above the Sun road, Kneelstone (the Field of Statues) above the Red road; Sawyer's
+    End (Cinder Scar) off the Eastmarch road and Furrowby (Saltwind Coast) above the Sunken Lake road. Lists End sits 5 tiles
+    west of the plan's box and is 12x8 (the spire path runs down the plan box's east side, statues stand above it, and 9 rows
+    came within 3 of the highway's middle line); its path joins the spire path, its gate stands on that path by the highway.
+    Sawyer's End and Furrowby use `exit` (the square's top corner) for a straight path to the highway. Furrowby's patron is the
+    Saltwind Coast (plan Q3: the nearer lands are havens), which it shares with Saltmere: a hand-over there contests both.
+    None touches the Crown Keep, the Throne Hall, the Crownway gates (48+ tiles), the King's Hunt pennants or the Lists.
+  - Looks: plain stone cottages in the Crown (slate over fieldstone, no dress, owner Q8), Oakvale's plain timber cottages
+    (red tile at Sawyer's End, thatch at Furrowby). No new tiles or art.
+  - People: Sir Brannoc and Wat Hammel (Kel Ashar's armour steps: the Crown has no armourer) at Lists End; Brother Cuthwin and
+    Old Agnes at Vigil's Rest; Master Mason Joss and Brenna at Kneelstone; Garth Holloway and Hew at Sawyer's End; Goody
+    Marrow and Pip Tansy (the chandler's small flasks) at Furrowby; a reeve each and steward names for every clan. Existing
+    sprites and stock (no new item ids).
+  - Quests (appended last in `SIDE_ARCS`): Stolen Pennons (3 pennons, 6 oathbroken knights), The Wayside Candles (3 candles,
+    6 hollow heralds), Defaced Plinths (3 plinths, 6 crownguard), Smouldering Logs (3 log stacks, 6 fire blobs), Trampled
+    Hives (3 hives, 6 warrior blobs). Objects 4+ tiles from every other quest object (the King's Hunt pennants included).
+  - War: five more `TOWNS` villages, `fort: false`, income 0.5 (18 capturable towns). No WAR_API bump.
+  - Saves: `ACCOUNT_API` 3 -> 4 (PR 2 merged and released first; its `cleanPortals` would drop the five new stones). Quest
+    fields are new top-level fields. `ACCOUNT_MIN_READER` stays 1.
+  - The map: the 13c nature disk already skips every village stone (`EARLY_STONES`), so the reachability pass is unchanged.
+    The Act 1 hash (tests/badlands.test.ts) now masks `VILLAGE_MASK` too: the same hash on the map before and after Oakvale's
+    villages. The Crown band's rebuild test carves land 6's villages as before. map-metrics: 100% reachable.
+  - Client: music lists (Oakvale's villages the village tune, the Crown's the Tollcross tune); `VILLAGE_KIT` appended (a
+    quintain and two pavilions at Lists End, staves and a candle shrine at Vigil's Rest, staves and ribbon posts at Kneelstone,
+    a cart and a hide frame at Sawyer's End, hives in Furrowby with stooks and a scarecrow on the Sunken Lake's edge above it):
+    Oakvale 26 -> 32, Crown 13 -> 21 props (budget 40). Roadmap note mentions step 4.
+  - Tests: `tests/villages.test.ts` (the five boxes, stone cottages in the Crown, homes Oakvale and Tollcross, PR 2's stones,
+    towns, posts and arcs pinned), `tests/villages-room.test.ts` (Furrowby's stone from Oakvale's, Trampled Hives to its
+    reward), tests/warTowns.test.ts (Saltmere and Furrowby contested together), tests/landKit.test.ts (the Way's ribbon posts
+    leave out Kneelstone's), tests/accountVersions.test.ts (4).
+  - Numbers: land shares unchanged; the Crown's villages slow the Crown's turnover (3.81 -> 2.58 changes a war
+    day, overall 4.86 -> 3.75; a control run without them: 3.71 / 4.85), contests 0.02 -> 2.15 a day; no clan over 30% for
+    3+ days in 0.5% of runs. Bench within noise, 51 fewer monsters.
+  - Open (owner): the Crown villages' war income (keep 0.5, lower it, or leave them out of the war).
+
 ## Next
-- Step 4, PR 3: villages in the Crown of the Marches and Oakvale, on the same framework.
-- Step 3 optional follow-ups (none blocks step 4): working townsfolk for Millbrook, Cairnwatch, the Rustwater Post,
+- Step 3 optional follow-ups: working townsfolk for Millbrook, Cairnwatch, the Rustwater Post,
   Ropewell and Tollcross (plan Q5); the small props left out (spare millstone, turf drying rack, creels, tailings heap,
   skulls on gateposts, rope ladders, hitching rails and water jars at the oases, herald shield boards); a light for the
   Lift's lantern and the candle shrine; real stalls in Tollcross with step 4 (Murat: cosmetic pavilions for now).

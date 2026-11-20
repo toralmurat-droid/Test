@@ -70,6 +70,22 @@ const VILLAGE_FOLK: Record<VillageId, { land: string; giver: VillageNpc; folk: V
   lastwell: { land: "the Sunscar",
     giver: { id: "wellwarden", name: "Old Hadiya", title: "Keeper of the Last Well", sprite: "wellkeeper", where: "before the well-house" },
     folk: { id: "wellsutler", name: "Samira", title: "Caravan sutler", sprite: "spicetrader", shop: "lastwell", where: "before her house" } },
+  // PR 3: the Crown of the Marches and Oakvale
+  listsend: { land: "the Crown of the Marches",
+    giver: { id: "squiremaster", name: "Sir Brannoc", title: "Squire-master", sprite: "guard", where: "before the squires' hall" },
+    folk: { id: "listsarmourer", name: "Wat Hammel", title: "Farrier and armourer to the Lists", sprite: "blacksmith", shop: "listsend", where: "before his forge" } },
+  vigilsrest: { land: "the Crown of the Marches",
+    giver: { id: "hosteller", name: "Brother Cuthwin", title: "Hosteller", sprite: "monk", where: "before the pilgrims' hostel" },
+    folk: { id: "pilgrim", name: "Old Agnes", title: "Pilgrim", sprite: "elder", where: "before the guest-house" } },
+  kneelstone: { land: "the Crown of the Marches",
+    giver: { id: "mastermason", name: "Master Mason Joss", title: "Master mason", sprite: "labourer", where: "before the masons' lodge" },
+    folk: { id: "stonecutter", name: "Brenna", title: "Stonecutter", sprite: "peasant", where: "before her cottage" } },
+  sawyersend: { land: "Oakvale",
+    giver: { id: "sawmaster", name: "Garth Holloway", title: "Saw-master", sprite: "forester", where: "before the saw-hall" },
+    folk: { id: "sawyer", name: "Hew", title: "Sawyer", sprite: "peasant", where: "before his cottage" } },
+  furrowby: { land: "Oakvale",
+    giver: { id: "hivewife", name: "Goody Marrow", title: "Beekeeper", sprite: "farmwife", where: "before the farmhouse" },
+    folk: { id: "graindealer", name: "Pip Tansy", title: "Grain-factor and flask-seller", sprite: "villager", shop: "furrowby", where: "before his barn" } },
 };
 
 export const NPCS: Npc[] = [
