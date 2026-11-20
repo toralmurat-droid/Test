@@ -312,6 +312,10 @@ Roadmap: client/src/roadmap.ts, "Settlement network".
     joining the old line at (47,63) (old segment [[26,44],[47,63]] retired); musters can't stand in or against an in-land
     city (standards.ts); in-land city posts below the overworld were dropped by a MAP_H/FULL_H mix-up in #572, fixed;
     city waystones keep the level rule from any stone; no dust or mist inside city walls.
+- PR 3 Duskveil (PR #574, branch `claude/duskveil-in-land`): site {230,404} in the Saffron Dunes below the Thornspire,
+  south and west gates; new highway leg "Duskveil Gate -> Mirage Wells"; the old dais legs keep their points, renamed
+  ("The Sanctum's fork -> The Veiled Sanctum", "The Veiled Sanctum -> Mirage Wells"); south gate dirt road west above
+  dune_totem3. Client: desert adobe walls whole and clan-tinted inside cities, city doors drawn plain.
 
 ## Next
 - Step 3 optional follow-ups: working townsfolk for Millbrook, Cairnwatch, the Rustwater Post,
