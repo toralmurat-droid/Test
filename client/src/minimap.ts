@@ -7,9 +7,10 @@ import { AREAS, areaAt, EMPTY, GROUND, OBJECTS, T } from "../../shared/map";
 import { createTilesetCanvas, tileColors } from "./tileset";
 import { ISO } from "./isoflag";
 import { pixelText } from "./pixeltext";
+import { layerOn, legendPanel, type MapLayer } from "./mapLayers";
 import { clasp, frameBorderImage, plaque, FRAME } from "./mapframe";
 import type { WarColumns } from "./warColumns";
-import { drawWarTable, warTableOn, setWarTableOn, warTablePick } from "./warTable";
+import { drawWarTable, warTableOn, setWarTableOn, warTablePan, warTablePick, warTableResetView, warTableZoom, warTableZoomCentre, warTableZoomed } from "./warTable";
 import { drawHereOnMap, pickAt, type ExitRow } from "./warHere";
 import { hereAt, hereCaption, nodeTile } from "./warRoute";
 import type { WarTowns } from "./warTowns";
@@ -93,7 +94,7 @@ type P = { x: number; y: number };
 export type OtherHero = P & { name?: string };
 const ALLY = "#5ec8ff"; // other players (own hero is gold)
 /** Something to point at on the maps: a quest giver ("!" / "?"), a trader, or a quest area (circle). */
-export interface MapMarker { x: number; y: number; glyph: string; color: string; r?: number; label?: string; track?: boolean; /** a drawn stair icon (the Mawdeep's ways down and up) */ stair?: "down" | "up"; /** a drawn stone arch (Act 2's waygate); "awake" fills it with light */ gate?: "asleep" | "awake"; /** only once that spot is discovered */ fogged?: boolean; /** a border road's end (client/src/borders.ts): named on the world map */ road?: boolean }
+export interface MapMarker { x: number; y: number; glyph: string; color: string; r?: number; label?: string; track?: boolean; /** a drawn stair icon (the Mawdeep's ways down and up) */ stair?: "down" | "up"; /** a drawn stone arch (Act 2's waygate); "awake" fills it with light */ gate?: "asleep" | "awake"; /** shown even where the hero has not been (a quest's own target); everything else waits until its spot is discovered */ known?: boolean; /** the legend row that shows or hides it (mapLayers.ts); default quests */ layer?: MapLayer; /** a border road's end (client/src/borders.ts): named on the world map */ road?: boolean }
 
 /**
  * Minimap with fog of war: only places the player has been near are shown, and the minimap only
@@ -205,7 +206,7 @@ export class Minimap {
     // Big world map overlay
     this.overlay = document.createElement("div");
     this.overlay.id = "worldmap";
-    this.overlay.innerHTML = `<div class="wm-box"><div class="wm-title"></div><canvas class="wm-map"></canvas><div class="wm-hint"><button type="button" class="wm-center" tabindex="-1" title="Centre on your hero (C)">◎ Centre</button><button type="button" class="wm-war" tabindex="-1" title="Show who holds each land in the clan war, with you on it">War table</button><span class="wm-here"></span><span class="wm-keys-war">M / Esc to close</span><span class="wm-keys"><span class="wm-pick">Click a territory to pick it · </span>Drag or I J K L to move · Wheel to zoom · C centres · M / Esc closes</span><span class="wm-touch">Drag · Pinch to zoom · Double-tap to centre</span></div></div>`;
+    this.overlay.innerHTML = `<div class="wm-box"><div class="wm-title"></div><canvas class="wm-map"></canvas><div class="wm-hint"><button type="button" class="wm-center" tabindex="-1" title="Centre on your hero (C)">◎ Centre</button><button type="button" class="wm-war" tabindex="-1" title="Show who holds each land in the clan war, with you on it">War table</button><span class="wm-here"></span><span class="wm-zoom"><button type="button" class="wm-zin" tabindex="-1" title="Zoom in (wheel or +)">+</button><button type="button" class="wm-zout" tabindex="-1" title="Zoom out (wheel or -)">-</button><button type="button" class="wm-zall" tabindex="-1" title="Show the whole continent">Whole map</button></span><span class="wm-keys-war">Wheel or + / - to zoom · Drag to move · M / Esc to close</span><span class="wm-keys"><span class="wm-pick">Click a territory to pick it · </span>Drag or I J K L to move · Wheel to zoom · C centres · M / Esc closes</span><span class="wm-touch">Drag · Pinch to zoom · Double-tap to centre</span></div></div>`;
     this.big = this.overlay.querySelector("canvas")!;
     // Ornate frame: iron-bound oak with gem corners, a title plaque on top and clasps on the sides
     const box = this.overlay.querySelector<HTMLDivElement>(".wm-box")!;
@@ -228,6 +229,7 @@ export class Minimap {
     const l = clasp(true), r = clasp(true), bt = clasp(false);
     l.classList.add("wm-l"); r.classList.add("wm-r"); bt.classList.add("wm-b");
     box.append(l, r, bt);
+    box.append(legendPanel()); // what each line and icon means, and a switch to hide each kind (mapLayers.ts)
     document.body.appendChild(this.overlay);
     // Only a click on the dark backdrop closes the map: the map itself is dragged and zoomed
     this.overlay.addEventListener("click", (ev) => { if (ev.target === this.overlay) this.toggle(false); });
@@ -238,6 +240,15 @@ export class Minimap {
     war.classList.toggle("on", warTableOn());
     war.addEventListener("mousedown", (ev) => ev.preventDefault());
     war.addEventListener("click", () => { war.blur(); this.switchView(); });
+    // The war table's zoom buttons (shown only on the table): around the frame's centre
+    const zoomBtn = (sel: string, act: () => void) => {
+      const b = this.overlay.querySelector<HTMLButtonElement>(sel)!;
+      b.addEventListener("mousedown", (ev) => ev.preventDefault());
+      b.addEventListener("click", () => { b.blur(); act(); });
+    };
+    zoomBtn(".wm-zin", () => warTableZoomCentre(1.5));
+    zoomBtn(".wm-zout", () => warTableZoomCentre(1 / 1.5));
+    zoomBtn(".wm-zall", () => warTableResetView());
     this.bindMapInput();
     el.addEventListener("click", () => this.toggle(true));
     el.title = "Open map (M)";
@@ -401,7 +412,7 @@ export class Minimap {
 
   /** Moves the world map by a canvas-pixel offset (screen directions, even on the turned iso map). */
   private pan(dx: number, dy: number) {
-    if (this.tableUp) return; // the war table is fixed
+    if (this.tableUp) { warTablePan(dx, dy); return; } // the war table moves its own sheet
     const c = this.camera(), [mx, my] = this.unturn(dx, dy);
     c.cx += mx / c.s; c.cy += my / c.s;
     this.follow = false;
@@ -410,7 +421,7 @@ export class Minimap {
 
   /** Zooms the world map by `f`, keeping the spot under canvas point (px, py) in place. */
   private zoomAt(f: number, px: number, py: number) {
-    if (this.tableUp) return;
+    if (this.tableUp) { warTableZoom(f, px, py); return; }
     const c = this.camera(), [ox, oy] = this.unturn(px - this.big.width / 2, py - this.big.height / 2);
     const tx = c.cx + ox / c.s, ty = c.cy + oy / c.s; // tile under the point
     c.s *= f;
@@ -653,12 +664,13 @@ export class Minimap {
     c.fillStyle = FOG;
     c.fillRect(0, 0, this.el.width, this.el.height);
     c.drawImage(this.colors, -sx * mpx, -sy * mpx, MAP_W * mpx, MAP_H * mpx);
-    c.drawImage(this.fog, -sx * mpx, -sy * mpx, MAP_W * mpx, MAP_H * mpx);
     const dot = this.dot.bind(this);
-    const wd = this.warData();
+    const wd = layerOn("war") ? this.warData() : undefined;
+    // the war's lines go under the fog, so they only show in discovered land
     if (wd) drawWarWorld(c, wd, { mini: true, s: mpx, ox: sx, oy: sy, now, wall: Date.now(), upright: (g) => { if (ISO) g.rotate(-Math.PI / 4); } });
+    c.drawImage(this.fog, -sx * mpx, -sy * mpx, MAP_W * mpx, MAP_H * mpx);
     // Other online heroes: blue dots with a dark outline, shown even in unexplored parts
-    for (const o of others) { dot(c, o, mpx, sx, sy, "#000", 3); dot(c, o, mpx, sx, sy, ALLY, 2); }
+    if (layerOn("heroes")) for (const o of others) { dot(c, o, mpx, sx, sy, "#000", 3); dot(c, o, mpx, sx, sy, ALLY, 2); }
     this.drawMarkers(c, mpx, sx, sy, true);
     if (wd) drawRimArrows(c, rimTargets(wd.war, this.clan, this.writ, me), mpx, sx, sy);
     if (me) { dot(c, me, mpx, sx, sy, "#000", 3); dot(c, me, mpx, sx, sy, "#ffd166", 2); }
@@ -699,7 +711,7 @@ export class Minimap {
       for (const k of this.held) { const d = PAN_KEYS[k]; if (d) { px += d[0]; py += d[1]; } }
       if (px || py) { const n = Math.hypot(px, py); this.pan((px / n) * PAN_SPEED * dt, (py / n) * PAN_SPEED * dt); }
       const zf = (this.held.has("+") ? 1 : 0) - (this.held.has("-") ? 1 : 0);
-      if (zf) this.zoomAt(Math.pow(ZOOM_SPEED, zf * dt), cw / 2, ch / 2);
+      if (zf) { if (this.tableUp) warTableZoomCentre(Math.pow(ZOOM_SPEED, zf * dt)); else this.zoomAt(Math.pow(ZOOM_SPEED, zf * dt), cw / 2, ch / 2); }
     }
     if (this.follow && me && this.cam) { this.cam.cx = me.x / TILE; this.cam.cy = me.y / TILE; }
     this.clampCam();
@@ -711,7 +723,7 @@ export class Minimap {
       this.big.style.cursor = "default"; this.warCursor = true;
       const here = this.caption(me);
       const over = this.hover ? warTablePick(this.hover.x, this.hover.y) : undefined;
-      this.big.style.cursor = over !== undefined ? "pointer" : "default";
+      this.big.style.cursor = over !== undefined ? "pointer" : this.ptrs.size && this.dragged ? "grabbing" : warTableZoomed() ? "grab" : "default"; // zoomed in: it can be dragged
       drawWarTable(g, this.war, PF, now, this.hover, { here, area: me ? areaAt(me.x, me.y) : undefined, sel: this.sel, woken: this.woken, ground: this.colors });
       return;
     }
@@ -731,20 +743,22 @@ export class Minimap {
     g.save();
     if (ISO) { g.translate(cw / 2, ch / 2); g.rotate(Math.PI / 4); g.scale(K, K); g.translate(-cw / 2, -ch / 2); }
     g.drawImage(this.colors, -R.x * BIG, -R.y * BIG, MAP_W * BIG, MAP_H * BIG);
+    // the war's lines and icons go under the fog: only discovered land shows them (Murat 2026-11-19)
+    const wd = layerOn("war") ? this.warData() : undefined;
+    if (wd) drawWarWorld(g, wd, { mini: false, s: BIG, ox: R.x, oy: R.y, now, wall: Date.now(), upright: (u) => { if (ISO) { u.rotate(-Math.PI / 4); u.scale(1 / K, 1 / K); } } });
     g.drawImage(this.fog, -R.x * BIG, -R.y * BIG, MAP_W * BIG, MAP_H * BIG);
     this.turned = ISO;
     this.drawMarkers(g, BIG, R.x, R.y, false);
-    const wd = this.warData();
-    if (wd) drawWarWorld(g, wd, { mini: false, s: BIG, ox: R.x, oy: R.y, now, wall: Date.now(), upright: (u) => { if (ISO) { u.rotate(-Math.PI / 4); u.scale(1 / K, 1 / K); } } });
     this.turned = false;
-    for (const o of others) { dot(g, o, BIG, R.x, R.y, "#000", 5); dot(g, o, BIG, R.x, R.y, ALLY, 3); }
+    const heroes = layerOn("heroes");
+    if (heroes) for (const o of others) { dot(g, o, BIG, R.x, R.y, "#000", 5); dot(g, o, BIG, R.x, R.y, ALLY, 3); }
     if (me) { dot(g, me, BIG, R.x, R.y, "#000", 6); dot(g, me, BIG, R.x, R.y, "#ffd166", 4); }
     g.restore();
     g.font = `13px ${PF}`;
     g.textAlign = "center";
     const named = new Set<string>();
     const boxes: [number, number, number][] = [];
-    for (const a of AREAS) {
+    for (const a of layerOn("names") ? AREAS : []) {
       if (named.has(a.name) || a.w * a.h > 2500) continue; // skip the huge background regions
       const ax = Math.floor(a.x + a.w / 2), ay = Math.floor(a.y + a.h / 2);
       if (this.seen[ay * MAP_W + ax] < 200) continue;
@@ -757,13 +771,13 @@ export class Minimap {
     }
     // Other online heroes: name above their dot (the dots are drawn with the map, above)
     g.font = `11px ${PF}`; g.textAlign = "center"; g.textBaseline = "alphabetic";
-    for (const o of others) {
+    for (const o of heroes ? others : []) {
       if (!o.name) continue;
       const [px, py] = T((o.x / TILE - R.x) * BIG, (o.y / TILE - R.y) * BIG), lx = Math.round(px), ly = Math.round(py) - 8;
       g.fillStyle = "#000"; g.fillText(o.name, lx + 1, ly + 1);
       g.fillStyle = ALLY; g.fillText(o.name, lx, ly);
     }
-    this.exitRows = drawHereOnMap(g, { me: me ? { x: me.x / TILE, y: me.y / TILE } : undefined, toScreen: (tx, ty) => T((tx - R.x) * BIG, (ty - R.y) * BIG), s: BIG, w: cw, h: ch, now, font: PF, here: here ?? { near: false }, sel: this.sel, woken: this.woken });
+    this.exitRows = drawHereOnMap(g, { me: me ? { x: me.x / TILE, y: me.y / TILE } : undefined, toScreen: (tx, ty) => T((tx - R.x) * BIG, (ty - R.y) * BIG), s: BIG, w: cw, h: ch, now, font: PF, here: here ?? { near: false }, sel: this.sel, woken: this.woken, seen: (x, y) => this.isSeen(x, y), lands: layerOn("lands"), ways: layerOn("ways"), exits: layerOn("exits") });
     // War overlay UI in canvas px: the calls-to-arms list and the hold / siege tooltip
     if (wd) {
       this.calls = currentCalls(wd, me, now);
@@ -792,9 +806,12 @@ export class Minimap {
     const W = g.canvas.width, H = g.canvas.height, cx = W / 2, cy = H / 2, rim = W / 2 - 9;
     const t = performance.now() / 1000;
     for (const m of this.markers) {
+      if (!layerOn(m.layer ?? "quests")) continue;
       let x = (m.x / TILE - ox) * s, y = (m.y / TILE - oy) * s;
       const off = mini && Math.hypot(x - cx, y - cy) > rim;
       if (off && !m.track) continue;
+      // fog of war: a mark waits until its spot is discovered (a tracked one still points the way from the minimap's rim)
+      if (!off && !m.known && !this.isSeen(Math.floor(m.x / TILE), Math.floor(m.y / TILE))) continue;
       if (m.r && !off) {
         // Quest area: pulsing dashed circle
         g.save();
@@ -814,7 +831,6 @@ export class Minimap {
         g.restore();
         continue;
       }
-      if (m.fogged && this.seen[Math.floor(m.y / TILE) * MAP_W + Math.floor(m.x / TILE)] < 100) continue;
       if (m.stair) {
         // a little flight of steps and an arrow, drawn in pixels so it reads at any size
         const u = mini ? 2 : 3;

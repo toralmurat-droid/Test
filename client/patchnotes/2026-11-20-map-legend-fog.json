@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-20",
+  "patch": 336,
+  "title": "Clearer zone map",
+  "changes": [
+    "The zone map has a legend that says what each line and icon means. Click a row to hide or show that kind of mark.",
+    "Places you have not discovered yet stay hidden: gates, stairs, people, boards and clan war marks only appear once you have been near them.",
+    "Fewer look-alike lines: your territory is a plain light line, the picked one is dashed blue, and clan front lines are red."
+  ]
+}

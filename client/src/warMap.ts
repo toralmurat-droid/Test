@@ -4,6 +4,7 @@
  * land and a "calls to arms" list. Cosmetic: it draws the server's "war" snapshot, the clan's "warplan" and the "writ"
  * and "tunnels" messages, and decides nothing. The pure helpers (layout, geometry, texts) have tests (tests/warMap.test.ts).
  */
+import { MAP_LINE } from "./mapLayers";
 import { TILE } from "../../shared/constants";
 import { CITIES, cityText } from "../../shared/capitals";
 import type { ClanKey } from "../../shared/war/clans";
@@ -236,7 +237,7 @@ export function drawWarWorld(g: CanvasRenderingContext2D, d: WarMapData, v: WarM
   for (const [x0, y0, x1, y1] of frontSegments(war.owner)) {
     g.beginPath(); g.moveTo((x0 - v.ox) * v.s, (y0 - v.oy) * v.s); g.lineTo((x1 - v.ox) * v.s, (y1 - v.oy) * v.s);
     g.strokeStyle = "rgba(13,10,7,0.8)"; g.lineWidth = mini ? 3 : 5; g.stroke();
-    g.strokeStyle = EMBER; g.lineWidth = mini ? 1.5 : 2.5; g.stroke();
+    g.strokeStyle = MAP_LINE.front; g.lineWidth = mini ? 1.5 : 2.5; g.stroke(); // red: not gold like quest areas (legend, mapLayers.ts)
   }
   // The active writ's land, outlined in gold
   if (d.writ && TERRITORIES[d.writ.t] && (!d.writ.clan || d.writ.clan === d.clan)) {
