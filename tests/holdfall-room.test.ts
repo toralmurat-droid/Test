@@ -119,12 +119,10 @@ test("hold works (room): renown only for legal wrecks, capped per war tick; work
     const before = room.warTroops.h.reserved();
     room.holdWorks.tick(Date.now());
     const works = () => { const out: [string, any][] = []; room.state.mobs.forEach((m: any, mid: string) => { if (!m.dead && parseWork(m.weapon) && room.holdWorks.owns(mid)) out.push([mid, m]); }); return out; };
-    assert.ok(works().length >= 3);
+    assert.ok(works().length >= 4);
     assert.equal(room.warTroops.h.reserved(), before, "standing works take no troop budget");
     const kill = (mid: string, m: any) => { m.hp = 0; room.mobDied(m, mid, id, p.name); };
-    // an unsworn hero (no war counts it) earns no renown
-    const [a, am] = works()[0]; kill(a, am);
-    assert.equal(p.renown, 0, "no renown for a wreck the war does not count");
+    assert.equal(p.renown, 0);
     // a hero at war with the holder: paid up to the cap per war tick, then again in a new tick
     (HOLD_FALL as any).wreckRenownPerTick = 1;
     p.clan = FOE;
@@ -137,6 +135,13 @@ test("hold works (room): renown only for legal wrecks, capped per war tick; work
     room.holdWorks.tick(Date.now());
     const [d, dm] = works()[0]; kill(d, dm);
     assert.ok(p.renown > one, "a new war tick pays again");
+    // the last works brought down by a sworn hero whose clan's war does not reach this land: the Hold falls, nothing is paid
+    const st = warState()!, OFF = CLAN_KEYS.find((k) => k !== OWN && !(atWar(k, OWN) && targetsOf(st, k).includes(LAND.id))) ?? OWN;
+    p.clan = OFF; const paid = p.renown;
+    assert.ok(works().length >= 1, "works left for the out-of-war hero");
+    for (const [mid, m] of works()) kill(mid, m);
+    assert.ok(isFallen(warState()!, LAND.id), "the Hold fell");
+    assert.equal(p.renown, paid, "no fall renown for a kill the war does not count");
   } finally { (HOLD_FALL as any).wreckRenownPerTick = cap; await srv.stop(); _resetHoldWorks(); }
 });
 

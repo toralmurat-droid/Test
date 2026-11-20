@@ -50,9 +50,9 @@ const falling = new Map<number, number>();
 const FALL_WAIT_MS = 3 * 60_000;
 /** Bumped on every wreck, rebuild or reset (rooms send "holdworks" when it moved). */
 let version = 0;
-/** Tests: forget every wreck. */
 /** Works each hero (by name: the cap holds across relogs and rooms) was paid wreck renown for in a war tick. */
 const earned = new Map<string, { tick: number; n: number }>();
+/** Tests: forget every wreck. */
 export function _resetHoldWorks() { lands.clear(); falling.clear(); earned.clear(); version++; }
 
 /** The works state of land t for its holder `clan` at live tier `tier` (a new holder starts afresh; the tier follows the Hold while nothing is wrecked). */

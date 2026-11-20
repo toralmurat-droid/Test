@@ -312,7 +312,7 @@ async function takeOver(now: number) {
 }
 /** Taking over: the sacks and claims made here while following and not written to the queue yet, applied at once. */
 function applyPendingActs(now: number) {
-  const acts = pendingActs; pendingActs = []; claimedHere.clear(); claimingHere.clear(); claimingHere.clear();
+  const acts = pendingActs; pendingActs = []; claimedHere.clear(); claimingHere.clear();
   for (const a of acts) applyAct(a, now);
   if (acts.length) void save(now);
 }
@@ -967,7 +967,7 @@ export function _setWarRole(r: "owner" | "follower") { role = r; }
 /** Tests: start from a given state without a store or a clock. */
 export function _resetWar(s?: Saved, store?: Kv) {
   stopWar(); saved = s ?? fresh(Date.now()); saved.names ??= namesNow(); kv = store;
-  role = "owner"; lease = undefined; seenRow = ""; pendingValor = []; pendingActs = []; claimedHere.clear(); VALOR_Q.reset(); ACTS_Q.reset(); pulsing = false; stopping = false; ours.clear(); valor = TERRITORIES.map(() => ({})); lastOrders = undefined; lastStrikes = []; lastPlans = {}; lastRaided = []; relate(saved.rel ?? []);
+  role = "owner"; lease = undefined; seenRow = ""; pendingValor = []; pendingActs = []; claimedHere.clear(); claimingHere.clear(); VALOR_Q.reset(); ACTS_Q.reset(); pulsing = false; stopping = false; ours.clear(); valor = TERRITORIES.map(() => ({})); lastOrders = undefined; lastStrikes = []; lastPlans = {}; lastRaided = []; relate(saved.rel ?? []);
   marches = []; paths.clear(); meets = undefined; seenLive.clear(); halting.clear(); joined.clear(); dirtyAt = 0; colVersion++;
   pendingLive.clear(); fielded.clear(); captainRoom.clear(); bannerReports.clear(); scoredWin.clear(); heroCaps.clear(); clanCaps.clear(); battleNews.length = 0; cleanBattles(); battleVer++;
   heldGate.clear(); cleanTowns(); townVer++; // (W6)
