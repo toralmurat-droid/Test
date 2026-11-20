@@ -90,6 +90,7 @@ export function validateCouncil(raw: unknown, s: Pick<WarState, "owner">, k: Cla
       if (typeof t !== "number" || !Number.isInteger(t)) errors.push(`${at}: not a territory id (a whole number)`);
       else if (!ter || t >= s.owner.length) errors.push(`${at}: no territory ${t} (ids 0-${Math.min(TERRITORIES.length, s.owner.length) - 1})`);
       else if (ter.reckoningOnly) errors.push(`${at}: ${ter.name} is the Crown Keep; only a Reckoning moves it`);
+      else if (ter.haven) errors.push(`${at}: ${ter.name} is a heartland haven; no army strikes it`);
       else if (ter.capitalOf) errors.push(`${at}: ${ter.name} is a capital; capitals never fall`);
       else if (s.owner[t] === k) errors.push(`${at}: ${ter.name} is already yours`);
       else if (!legal.has(t)) errors.push(`${at}: ${ter.name} is not a legal target (not on your border)`);

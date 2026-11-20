@@ -174,7 +174,7 @@ export function migrateWar(saved: Saved, oldNames: readonly string[], names: rea
     siege: pick(st.siege, () => null).map((x) => x && { ...x }), pressure: pick(st.pressure, () => 0), army: { ...st.army },
   };
   for (let i = 0; i < names.length; i++) {
-    const cap = ts.find((x) => x.name === names[i])?.capitalOf;
+    const t = ts.find((x) => x.name === names[i]), cap = t?.capitalOf ?? t?.haven; // (a heartland haven goes home too: coherence review 2026-11-20)
     if (cap && state.owner[i] !== cap) { state.owner[i] = cap; state.control[i] = 100; state.siege[i] = null; }
   }
   const to = new Map<number, number>();

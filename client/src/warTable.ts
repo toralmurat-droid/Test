@@ -499,6 +499,7 @@ export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, font: stri
       col = k ? hex(MAP[k]) : "#888";
       lines.push(t.name, `${k ? short(k) : "Unclaimed"}${t.capitalOf ? "  (capital)" : ""}  ·  ${NAMES[t.region] ?? ""}`, `Level ${t.levels[0]}-${t.levels[1]}  Control ${v.control[hovered] ?? 0}`);
       if (t.reckoningOnly) lines.push("Falls only at a Reckoning");
+      if (t.haven) lines.push("Heartland: the war never reaches it");
       else if (t.region === CROWN_LAND && t.wards) lines.push(`Crownway land, first held by ${short(t.wards)} (${gateReq(CROWN_LAND)})`);
       if (sg) lines.push(`Siege by ${short(CLAN_KEYS[sg[1]])}`);
     }

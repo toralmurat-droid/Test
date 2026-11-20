@@ -90,6 +90,7 @@ export class WarHolds {
     if (!HOLD_SACK.live || !p || p.dead || !v || !at || !TERRITORIES[t]) return "There is no banner to raise here.";
     if (p.level < STANDARD.minLevel) return `Only heroes of level ${STANDARD.minLevel} and above take part in the clan war.`;
     if (TERRITORIES[t].reckoningOnly) return `${TERRITORIES[t].name} is not won by sacking: it changes hands only at a Reckoning.`;
+    if (TERRITORIES[t].haven) return `${TERRITORIES[t].name} is heartland: the war never comes this far in.`;
     if (underground(p.y) || Math.hypot(p.x - at.x, p.y - at.y) > HOLD_SACK.useTiles * TILE) return "Stand at the banner in the middle of the Hold.";
     if (isSafeZone(p.x, p.y) || inVillage(p.x, p.y)) return "Not here: blood is never spilled on safe ground.";
     const holder = CLAN_KEYS[v.owner[t]];

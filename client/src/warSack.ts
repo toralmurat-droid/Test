@@ -93,6 +93,7 @@ export class WarSack {
       if (!at || !k || Math.hypot(at.x - me.x, at.y - me.y) > HOLD_SACK.useTiles * TILE) continue;
       // the Crown Keep is never sacked (server/warHolds.ts): a note instead of the prompt
       if (TERRITORIES[hd.t]?.reckoningOnly) { reckon = this.h.stance(k) !== "ally"; break; }
+      if (TERRITORIES[hd.t]?.haven) break; // heartland: never sacked, no prompt
       if (this.h.stance(k) === "enemy" && !this.h.besieged(hd.t) && !this.sackedMap.has(hd.t)) near = hd.t;
       break;
     }

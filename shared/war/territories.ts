@@ -33,6 +33,8 @@ export interface Territory {
    * border to defend either. Only a Reckoning (Crown PR4) hands it on. The Crown Keep.
    */
   reckoningOnly?: true;
+  /** Part of its land's war-free heartland (regions.ts haven): held by this clan, the home clan, for good; nobody strikes it. */
+  haven?: ClanKey;
   /** Ids of territories close enough to fight over (gap between the zones' rects <= WAR_MAP.adjacentTiles). */
   near: number[];
 }
@@ -96,7 +98,12 @@ export function buildTerritories(allZones: readonly SpawnZone[], regions: readon
     for (const o of by.slice(0, WAR_MAP.minNeighbours)) link(t.id, o.id);
   }
   // Lands meet through their links: the waygate joins the territory nearest Oakvale's south gate and the one nearest the Sunstone Circle
-  for (const p of linkPairs(out, links)) {
+  const pairs = linkPairs(out, links);
+  for (const t of out) {
+    const r = regions.find((x) => x.key === t.region);
+    if (r?.haven && r.home && !t.capitalOf && t.levels[1] <= r.haven.maxLevel && !pairs.some((p) => p.a === t.id || p.b === t.id)) t.haven = r.home;
+  }
+  for (const p of pairs) {
     link(p.a, p.b);
     // a wards land's gate territory starts with the home clan of the land behind the gate (the first link wins)
     for (const [mine, other, land] of [[p.b, p.a, p.link.a], [p.a, p.b, p.link.b]] as const) {
@@ -111,6 +118,8 @@ export const TERRITORIES: Territory[] = buildTerritories(SPAWN_ZONES);
 /** The live links between lands on today's map (the war table draws them). */
 export const LAND_LINKS = linkPairs(TERRITORIES);
 export const territoryByName = (name: string) => TERRITORIES.find((t) => t.name === name);
+/** Ground no army may strike, besiege, sack or raid: the Crown Keep (a Reckoning moves it) and the heartland havens. */
+export const warProof = (t: Territory | undefined) => !!t && (!!t.reckoningOnly || !!t.haven);
 
 /** The territories of `wards` lands (the Crown): claimed after every homeland, so those lands start as before. */
 const inWardsLand = (ts: readonly Territory[], regions: readonly Region[] = REGIONS) => {
@@ -133,7 +142,7 @@ export function leastLanded(owner: readonly (ClanKey | undefined)[]): ClanKey {
  */
 export function initialOwners(ts: readonly Territory[] = TERRITORIES, preset?: readonly (ClanKey | undefined)[]): ClanKey[] {
   const wardsLand = inWardsLand(ts);
-  const owner: (ClanKey | undefined)[] = ts.map((t, i) => preset?.[i] ?? t.capitalOf);
+  const owner: (ClanKey | undefined)[] = ts.map((t, i) => preset?.[i] ?? t.capitalOf ?? t.haven);
   const count = (k: ClanKey) => owner.filter((o) => o === k).length;
   const claim = (open: (t: Territory) => boolean) => {
     for (;;) {
