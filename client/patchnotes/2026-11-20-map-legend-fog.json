@@ -1,5 +1,6 @@
 {
   "date": "2026-11-20",
+  "patch": 336,
   "title": "Clearer zone map",
   "changes": [
     "The zone map has a legend that says what each line and icon means. Click a row to hide or show that kind of mark.",
