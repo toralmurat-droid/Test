@@ -193,6 +193,19 @@ export const SHOPS: Record<string, Shop> = {
     stock: [...potionStock("potion", [1, 2]), ...potionStock("mpotion", [1, 2])],
     buys: ["rune"],
   },
+  // The villages (settlement network step 4, shared/villages.ts): traders on existing stock, nothing new. Cobb at
+  // Blackwater Staithe sells the moors' flasks (Ysolde's Medium and Greater, buys nothing); Ilse at Redlode the Rustwater
+  // Post's armour steps. In a capturable village, its holder's sworn pay TOWN.discount less (shared/war/towns.ts)
+  staithe: {
+    greeting: "Cobb. Eels on the left, flasks on the right, and don't mix them up. The boats bring the flasks up from Cairnwatch with the peat. Red for the blood, blue for the head. Mind the mist on your way out: it follows the lanterns.",
+    stock: [...potionStock("potion", [1, 2]), ...potionStock("mpotion", [1, 2])],
+  },
+  redlode: {
+    greeting: "Ilse Copperhand. Boiled hide and riveted plate, the same as the Post sells, and the rivets come out of our own pits. A rattler won't get its teeth through this, and a Redfang bolt will have to try hard. Try something on.",
+    stock: armourStock("rustarmourer"),
+    buys: ARMOUR_SLOTS,
+    levelHeads: true,
+  },
   ropearmourer: {
     greeting: "Hesta Coil. Stitched hide over riveted plate, and every strap is Ropewell rope. A Delver comes up under your feet and a Stagkin comes straight at your chest: dress for both.",
     stock: armourStock("ropearmourer"),

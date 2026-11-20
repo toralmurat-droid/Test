@@ -7,6 +7,7 @@ import { HOLDS, MUSTERS } from "../../shared/war/standards";
 import { TOWNS } from "../../shared/war/townSites";
 import { CAPITAL_FORTS, FORT_SKIP, HIGHWAYS, legLine } from "../../shared/highways";
 import { LANDMARKS } from "../../shared/landmarks";
+import { VILLAGES, villageBox, type VillageId } from "../../shared/villages";
 import { BOARDS } from "../../shared/bounty";
 import { allObjects } from "../../shared/quests";
 import { WORLD_PROP_SPOTS } from "./worldPropSpots";
@@ -20,7 +21,8 @@ import { LK_SHEETS, type LkKind } from "./landKitSheets";
  * reads this file. The solid landmarks are shared/landmarks.ts.
  */
 export { LK_SHEETS, type LkKind };
-export interface KitSpot { kind: LkKind; land: Act; area: string; x: number; y: number; flip: boolean }
+/** `village`: one of a highway village's props (shared/villages.ts; VILLAGE_KIT below). */
+export interface KitSpot { kind: LkKind; land: Act; area: string; x: number; y: number; flip: boolean; village?: VillageId }
 
 /** At most this many kit props per land (draw cost, and so the towns don't drown in clutter). */
 export const KIT_BUDGET = 40;
@@ -106,6 +108,8 @@ interface Place {
   area: string; kind: LkKind; n: number; gap?: number; near?: (tx: number, ty: number) => boolean;
   /** Sample only this box of tiles (x, y, w, h) of the area: a few spots near a town in a land-wide area. */
   box?: readonly [number, number, number, number];
+  /** The highway village these props dress (KitSpot.village). */
+  village?: VillageId;
 }
 /** Kinds that stand in a field or crop rather than beside it. */
 export const ON_FIELD: ReadonlySet<LkKind> = new Set<LkKind>(["lk_scarecrow"]);
@@ -193,6 +197,27 @@ const SUNSCAR: Place[] = [
   { area: "The Glasswind Flats", kind: "lk_salt_stack", n: 1, box: [138, 426, 22, 14] },
 ];
 
+/** Within `r` tiles of a village's box (shared/villages.ts), outside it by at least `out`. */
+const byVillage = (id: string, r: number, out = 0) => { const b = villageBox(VILLAGES.find((v) => v.id === id)!); return (tx: number, ty: number) =>
+  tx >= b.x0 - r && tx <= b.x1 + r && ty >= b.y0 - r && ty <= b.y1 + r && !(tx >= b.x0 - out && tx <= b.x1 + out && ty >= b.y0 - out && ty <= b.y1 + out); };
+/** A village's box widened by `r` (a `Place.box` sampling round it in its land-wide area). */
+const villageAround = (id: string, r: number): [number, number, number, number] => { const b = villageBox(VILLAGES.find((v) => v.id === id)!); return [b.x0 - r, b.y0 - r, b.x1 - b.x0 + 1 + 2 * r, b.y1 - b.y0 + 1 + 2 * r]; };
+/**
+ * The villages along the highways (settlement network step 4) carry their land's kit: peat stacks by Turfhallow's and
+ * the Staithe's cottages and cut banks outside Turfhallow, way-cairns round Barrowstead (the Staithe keeps the highway's
+ * way-cairn below its square); ore carts by Redlode, longhorns and a trough round Hornstead. Placed after every other
+ * kit, so the older spots never move.
+ */
+const VILLAGE_KIT: Place[] = [
+  { area: "Turfhallow", kind: "lk_peat_stack", n: 1, gap: 3, village: "turfhallow" },
+  { area: "The Grey Barrow Moors", kind: "lk_peat_bank", n: 2, gap: 5, box: villageAround("turfhallow", 7), near: byVillage("turfhallow", 7, 2), village: "turfhallow" },
+  { area: "The Grey Barrow Moors", kind: "lk_peat_stack", n: 1, box: villageAround("staithe", 4), near: byVillage("staithe", 4, 1), village: "staithe" },
+  { area: "The Grey Barrow Moors", kind: "lk_way_cairn", n: 2, gap: 6, box: villageAround("barrowstead", 6), near: byVillage("barrowstead", 6, 2), village: "barrowstead" },
+  { area: "The Red Badlands", kind: "lk_ore_cart", n: 2, gap: 4, box: villageAround("redlode", 5), near: byVillage("redlode", 5, 1), village: "redlode" },
+  { area: "The Red Badlands", kind: "lk_longhorn", n: 3, gap: 3, box: villageAround("hornstead", 6), near: byVillage("hornstead", 6, 2), village: "hornstead" },
+  { area: "The Red Badlands", kind: "lk_trough", n: 1, box: villageAround("hornstead", 5), near: byVillage("hornstead", 5, 1), village: "hornstead" },
+];
+
 /** Way-cairns beside a land's highway: every CAIRN_EVERY tiles of each leg, on the first free tile 3-5 off either side. */
 function cairns(out: KitSpot[], land: Act, area: string, kind: LkKind) {
   const h = HIGHWAYS.find((q) => q.land === land), a = AREAS.find((r) => r.name === area);
@@ -225,7 +250,7 @@ function scatter(out: KitSpot[], p: Place) {
     if (!kitFree(tx, ty, out, p.gap ?? 3, ON_FIELD.has(p.kind), IN_PEN.has(p.kind)) || (p.near && !p.near(tx, ty))) continue;
     // the foot jitters inside its tile so a row of stooks doesn't stand on the grid
     const jx = (hash(tx, ty, 11) - 0.5) * 0.5, jy = (hash(tx, ty, 12) - 0.5) * 0.5;
-    out.push({ kind: p.kind, land: actOfTile(tx, ty), area: p.area, x: (tx + 0.5 + jx) * TILE, y: (ty + 0.5 + jy) * TILE, flip: hash(tx, ty, 5) < 0.5 });
+    out.push({ kind: p.kind, land: actOfTile(tx, ty), area: p.area, x: (tx + 0.5 + jx) * TILE, y: (ty + 0.5 + jy) * TILE, flip: hash(tx, ty, 5) < 0.5, ...(p.village ? { village: p.village } : {}) });
     placed++;
   }
 }
@@ -235,6 +260,7 @@ function build(): KitSpot[] {
   for (const p of [...OAKVALE, ...MOORS]) scatter(out, p);
   cairns(out, 3, "The Grey Barrow Moors", "lk_way_cairn");
   for (const p of [...BADLANDS, ...SINKHOLES, ...SUNSCAR]) scatter(out, p);
+  for (const p of VILLAGE_KIT) scatter(out, p);
   return out;
 }
 

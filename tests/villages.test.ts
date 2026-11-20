@@ -1,0 +1,281 @@
+// Settlement network step 4 (shared/villages.ts): villages along the land highways. Their sites keep the survey's rules
+// (docs/settlement-network-progress.md), the carve stays inside VILLAGE_MASK and is deterministic, each village has its
+// cottages, square, stone, people, quest and war gate, and nothing that stood before moved: forts, musters, chests,
+// siege sites, landmarks, the older portal stones and the signposts.
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { MAP_H, MAP_W, TILE, WORLD_H, actOfTile } from "../shared/constants";
+import { BORDER_BOXES, BORDERS, endPath } from "../shared/borders";
+import { CAPITAL_FORTS, HIGHWAYS, highwayTiles } from "../shared/highways";
+import { AREAS, EMPTY, GROUND, HIGHWAY_TILES, isSafeZone, isSolidTile, NATURE, OBJECTS, PORTAL_SPOTS, SIGNPOSTS, T, VILLAGE_POSTS, WORLD } from "../shared/map";
+import {
+  carveVillages, doorOf, spurTiles, VILLAGE_MASK, VILLAGE_PLAN, VILLAGES, villageBox, villageGate, villageHouses, villagePost, villageSpots, vy, type Village,
+} from "../shared/villages";
+import { HOLDS, MUSTERS } from "../shared/war/standards";
+import { CHESTS } from "../shared/chests";
+import { SIEGE_SITES } from "../shared/siege";
+import { LANDMARKS } from "../shared/landmarks";
+import { NPCS, npcById } from "../shared/npcs";
+import { CITIES } from "../shared/capitals";
+import { arrivalOf, PORTAL_LANDS, PORTALS, portalLand } from "../shared/portals";
+import { noMobsAt, NO_MOB_AREAS, randomPointInZone, SPAWN_ZONES } from "../shared/spawns";
+import { TERRITORIES } from "../shared/war/territories";
+import { TOWNS, townAt, townPatron } from "../shared/war/towns";
+import { roadPairs, warRoad } from "../shared/war/roads";
+import { allObjects, CHAINS, SIDE_ARCS, type QuestObject } from "../shared/quests";
+import { stepObjects } from "../shared/questSteps";
+import { SHOPS } from "../shared/shops";
+import { LAND_KIT_SPOTS } from "../client/src/landKit";
+
+const fnv = (s: string) => { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(16); };
+const digest = <X>(a: readonly X[], f: (x: X) => unknown) => `${a.length}:${fnv(JSON.stringify(a.map(f)))}`;
+/** Chebyshev gap from a point (tile coords, fractional allowed) to a box (inclusive tiles); 0 inside. */
+const gap = (px: number, py: number, b: { x0: number; y0: number; x1: number; y1: number }) => Math.max(b.x0 - px, px - b.x1 - 1, b.y0 - py, py - b.y1 - 1, 0);
+/** Gap between two boxes as the survey measured it (the difference of their facing edges; 0 when they overlap). */
+const boxGap = (a: { x0: number; y0: number; x1: number; y1: number }, b: { x0: number; y0: number; x1: number; y1: number }) =>
+  Math.max(a.x0 - b.x1, b.x0 - a.x1, a.y0 - b.y1, b.y0 - a.y1, 0);
+const VNAMES = new Set(VILLAGES.map((v) => v.name)), VIDS = new Set<string>(VILLAGES.map((v) => v.id));
+const OLD_PORTALS = PORTAL_SPOTS.slice(0, PORTAL_SPOTS.length - VILLAGES.length);
+const villageNpc = (id: string) => VILLAGES.some((v) => [`steward_${v.id}`].includes(id)) || VILLAGES.some((v) => { const s = villageSpots(v); return NPCS.some((n) => n.id === id && [s.giver, s.folk].some((p) => Math.floor(n.x / TILE) === p.x && Math.floor(n.y / TILE) === p.y)); });
+const VILLAGE_ARCS = SIDE_ARCS.slice(SIDE_ARCS.length - VILLAGES.length);
+
+test("villages: PR 1 builds the moors' three and the badlands' two, as the plan names and places them", () => {
+  assert.deepEqual(VILLAGES.map((v) => [v.id, v.name, v.land, v.x, v.y, v.w, v.h]), [
+    ["turfhallow", "Turfhallow", 3, 90, 136, 12, 9], ["staithe", "Blackwater Staithe", 3, 176, 90, 12, 8], ["barrowstead", "Barrowstead", 3, 154, 152, 12, 9],
+    ["redlode", "Redlode", 4, 157, 68, 12, 9], ["hornstead", "Hornstead", 4, 77, 109, 12, 9],
+  ]);
+  for (const v of VILLAGES) {
+    const b = villageBox(v);
+    assert.equal(actOfTile(b.x0, b.y0), v.land); assert.equal(actOfTile(b.x1, b.y1), v.land);
+    const a = AREAS.find((r) => r.name === v.name)!;
+    assert.deepEqual([a.x, a.y, a.w, a.h], [b.x0, b.y0, v.w, v.h], `${v.id}: its area is its box`);
+    assert.equal(AREAS.indexOf(a), AREAS.findIndex((r) => VNAMES.has(r.name)) + VILLAGES.indexOf(v), "village areas come first (they win over the land-wide areas)");
+  }
+});
+
+test("villages: sites keep the survey's rules (highway 4-9, forts, gates, musters, chests, siege sites, landmarks, NPCs, stones, seats, war roads)", () => {
+  const warTiles = new Set<number>();
+  for (const { a, b } of roadPairs()) {
+    const r = warRoad(a, b); if (!r) continue;
+    for (let i = 0; i + 1 < r.pts.length; i++) {
+      const p = r.pts[i], q = r.pts[i + 1], n = Math.ceil(Math.hypot(q.x - p.x, q.y - p.y) / (TILE / 2));
+      for (let k = 0; k <= n; k++) warTiles.add(Math.floor((p.y + (q.y - p.y) * k / n) / TILE) * MAP_W + Math.floor((p.x + (q.x - p.x) * k / n) / TILE));
+    }
+  }
+  const settle = AREAS.filter((a) => [...NO_MOB_AREAS, ...HIGHWAYS.flatMap((h) => [...h.towns, h.seat])].includes(a.name) && !VNAMES.has(a.name)).map((a) => ({ x0: a.x, y0: a.y, x1: a.x + a.w - 1, y1: a.y + a.h - 1 }));
+  for (const v of VILLAGES) {
+    const b = villageBox(v), h = HIGHWAYS.find((q) => q.land === v.land)!, { mid } = highwayTiles(h), g = villageGate(v);
+    const hd = Math.min(...[...mid].map((k) => Math.max(b.x0 - (k % MAP_W), (k % MAP_W) - b.x1, b.y0 - Math.floor(k / MAP_W), Math.floor(k / MAP_W) - b.y1, 0)));
+    assert.ok(v.id === "barrowstead" ? hd <= 9 : hd >= 4 && hd <= 9, `${v.id}: ${hd} tiles from its highway's middle line`);
+    for (const f of HOLDS) {
+      assert.ok(gap(f.x / TILE, f.y / TILE, b) >= 12, `${v.id}: a fort ${gap(f.x / TILE, f.y / TILE, b)} tiles off`);
+      assert.ok(Math.max(Math.abs(f.x / TILE - g.x), Math.abs(f.y / TILE - g.y)) >= 16, `${v.id}: its gate 16+ from every fort`);
+    }
+    for (const m of MUSTERS) assert.ok(gap(m.x / TILE, m.y / TILE, b) >= 8, `${v.id}: muster`);
+    for (const c of CHESTS) assert.ok(gap(c.x / TILE, c.y / TILE, b) >= 6, `${v.id}: chest ${c.id}`);
+    for (const s of SIEGE_SITES) assert.ok(gap(s.tx, s.ty, b) >= 8, `${v.id}: siege site`);
+    for (const l of LANDMARKS) assert.ok(gap(l.x, l.y, b) >= 6, `${v.id}: landmark ${l.id}`);
+    for (const n of NPCS) if (!villageNpc(n.id)) assert.ok(gap(n.x / TILE, n.y / TILE, b) >= 5, `${v.id}: NPC ${n.id}`);
+    for (const p of OLD_PORTALS) assert.ok(gap(p.x, p.y, b) >= 6, `${v.id}: portal ${p.id}`);
+    for (const [fx, fy] of CAPITAL_FORTS) assert.ok(Math.max(Math.abs(fx - (b.x0 + b.x1) / 2), Math.abs(fy - (b.y0 + b.y1) / 2)) >= 24, `${v.id}: clan seat`);
+    for (const c of CITIES) assert.ok(boxGap(b, c.outerBox) >= 6, `${v.id}: city box`);
+    for (const B of BORDER_BOXES) assert.ok(boxGap(b, B) >= 4, `${v.id}: border box`);
+    for (const s of settle) assert.ok(boxGap(b, s) >= 14, `${v.id}: settlement ${JSON.stringify(s)}`);
+    for (const o of VILLAGES) if (o !== v) assert.ok(boxGap(b, villageBox(o)) >= 14, `${v.id} and ${o.id}`);
+    for (let y = b.y0 - 2; y <= b.y1 + 2; y++) for (let x = b.x0 - 2; x <= b.x1 + 2; x++) assert.ok(!warTiles.has(y * MAP_W + x), `${v.id}: a war road at ${x},${y}`);
+    // the patron: an ordinary land of the village's own
+    const t = TERRITORIES.find((q) => q.name === v.patron)!;
+    assert.ok(t && !t.capitalOf && !t.haven && t.act === v.land, `${v.id}: patron ${v.patron}`);
+  }
+});
+
+test("villages: the carve stays inside VILLAGE_MASK, clears only nature, never water or roads, and is deterministic", () => {
+  const before = WORLD.villageBefore;
+  assert.ok(before.size > 300);
+  const roads = WORLD.roads;
+  for (const [k, b] of before) {
+    const x = k % MAP_W, y = Math.floor(k / MAP_W);
+    assert.ok(VILLAGE_MASK.has(k), `${x},${y}: inside the mask`);
+    assert.ok(b.g !== T.WATER && b.g !== T.BRIDGE, `${x},${y}: no water or bridge built over`);
+    assert.ok(b.o === EMPTY || NATURE.has(b.o) || b.o === T.CACTUS || b.o === T.BONES, `${x},${y}: only nature cleared (was ${b.o})`);
+    assert.ok(!roads.has(k) || HIGHWAY_TILES.has(k) === false, `${x},${y}`);
+  }
+  for (const v of VILLAGES) spurTiles(v).forEach((t, i, all) => assert.ok(!roads.has(t.y * MAP_W + t.x) || i === all.length - 1, `${v.id}: its path is no road (${t.x},${t.y})`));
+  // carve again on the map before the villages: the same map
+  const g = GROUND.map((r) => [...r]), o = OBJECTS.map((r) => [...r]);
+  for (const [k, b] of before) { g[Math.floor(k / MAP_W)][k % MAP_W] = b.g; o[Math.floor(k / MAP_W)][k % MAP_W] = b.o; }
+  const posts = carveVillages(g, o, roads, T, EMPTY, (v) => { const h = HIGHWAYS.find((q) => q.land === v.land)!; return [v.name, h.seat, h.town]; });
+  for (let y = 0; y < WORLD_H; y++) { assert.deepEqual(g[y], GROUND[y], `row ${y} ground`); assert.deepEqual(o[y], OBJECTS[y], `row ${y} objects`); }
+  assert.deepEqual(posts, VILLAGE_POSTS);
+});
+
+test("villages: three cottages in the land's look round a flagged square, a centrepiece, a path to the road and a signpost", () => {
+  for (const v of VILLAGES) {
+    const hs = villageHouses(v), roof = v.land === 3 ? T.ROOF_SLATE : [T.ROOF_RED, T.ROOF_THATCH], wall = v.land === 3 ? T.WALL_STONE : T.WALL_TIMBER;
+    assert.equal(hs.length, 3);
+    for (const h of hs) {
+      for (let j = 0; j < h.h; j++) for (let i = 0; i < h.w; i++) {
+        const ob = OBJECTS[h.y + j][h.x + i];
+        if (j < h.h - 2) assert.ok(([] as number[]).concat(roof).includes(ob), `${v.id}: roof at ${h.x + i},${h.y + j}`);
+        else assert.ok([wall, T.DOOR, T.WINDOW_STONE, T.WINDOW_TIMBER].includes(ob), `${v.id}: wall at ${h.x + i},${h.y + j}`);
+      }
+      const d = doorOf(h);
+      assert.equal(OBJECTS[d.y][d.x], T.DOOR);
+    }
+    const s = villageSpots(v), P = VILLAGE_PLAN.square;
+    assert.equal(OBJECTS[s.centre.y][s.centre.x], v.centre === "well" ? T.WELL : T.STANDING_STONE);
+    let flags = 0;
+    for (let j = 0; j < P.h; j++) for (let i = 0; i < P.w; i++) { const b = villageBox(v), x = v.mirror ? b.x1 - P.dx - i : b.x0 + P.dx + i; if (GROUND[b.y0 + P.dy + j][x] === T.FLAGS) flags++; }
+    assert.equal(flags, P.w * P.h, `${v.id}: the square is flagged`);
+    // the path: dirt, open, 4-connected, from the box's edge to a road tile
+    const sp = spurTiles(v), end = sp[sp.length - 1];
+    assert.ok(WORLD.roads.has(end.y * MAP_W + end.x), `${v.id}: the path ends on a road`);
+    for (let i = 0; i + 1 < sp.length; i++) {
+      assert.equal(Math.abs(sp[i].x - sp[i + 1].x) + Math.abs(sp[i].y - sp[i + 1].y), 1, `${v.id}: 4-connected`);
+      assert.ok(!isSolidTile(sp[i].x, sp[i].y), `${v.id}: path tile ${sp[i].x},${sp[i].y} open`);
+      if (i > 0) assert.equal(GROUND[sp[i].y][sp[i].x], T.DIRT, `${v.id}: dirt at ${sp[i].x},${sp[i].y}`);
+    }
+    const p = villagePost(v), post = SIGNPOSTS.find((q) => q.x === p.x && q.y === p.y)!;
+    assert.equal(OBJECTS[p.y][p.x], T.SIGNPOST);
+    assert.ok(post && post.dirs[0].name === v.name, `${v.id}: its signpost's first board names it`);
+    assert.ok(post.dirs.length >= 2, `${v.id}: and the road's ways`);
+    assert.ok(sp.some((t) => Math.abs(t.x - p.x) + Math.abs(t.y - p.y) === 1), `${v.id}: the post beside the path`);
+    const h = HIGHWAYS.find((q) => q.land === v.land)!;
+    assert.deepEqual(VILLAGE_POSTS.find((q) => q.x === p.x && q.y === p.y)!.to, [v.name, h.seat, h.town]);
+  }
+});
+
+test("villages: stone, people, gate and banners on free ground; each portal stone reaches its land's town on foot", () => {
+  const free = (x: number, y: number) => !isSolidTile(x, y);
+  const homes: Record<number, string> = { 3: "cairnwatch", 4: "rustwater" };
+  for (const v of VILLAGES) {
+    const s = villageSpots(v), g = villageGate(v), b = villageBox(v);
+    for (const p of [s.portal, s.giver, s.folk, s.steward, ...s.banners, g]) assert.ok(free(p.x, p.y), `${v.id}: ${p.x},${p.y} free`);
+    for (const p of [s.portal, s.giver, s.folk, s.steward, ...s.banners]) assert.ok(gap(p.x, p.y, b) === 0, `${v.id}: inside the box`);
+    const stone = PORTALS.find((q) => q.id === v.id)!, a = arrivalOf(stone);
+    assert.ok(free(Math.floor(a.x / TILE), Math.floor(a.y / TILE)), `${v.id}: arrival free`);
+    // flood from the arrival to the land's town's stone
+    const home = PORTAL_SPOTS.find((q) => q.id === homes[v.land])!, seen = new Uint8Array(MAP_W * MAP_H), q = [Math.floor(a.y / TILE) * MAP_W + Math.floor(a.x / TILE)];
+    seen[q[0]] = 1;
+    for (let i = 0; i < q.length && !seen[(home.y + 1) * MAP_W + home.x]; i++) {
+      const x = q[i] % MAP_W, y = (q[i] / MAP_W) | 0;
+      for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) if (!seen[ny * MAP_W + nx] && free(nx, ny)) { seen[ny * MAP_W + nx] = 1; q.push(ny * MAP_W + nx); }
+    }
+    assert.ok(seen[(home.y + 1) * MAP_W + home.x], `${v.id}: ${home.name} on foot from the stone`);
+  }
+});
+
+test("villages: portal stones appended (ids = the villages'), grouped with their land; the older stones did not move", () => {
+  assert.equal(digest(OLD_PORTALS, (p) => [p.id, p.x, p.y]), "29:6a70cae7", "the 29 older stones, as before step 4");
+  assert.deepEqual(PORTAL_SPOTS.slice(-VILLAGES.length).map((p) => p.id), VILLAGES.map((v) => v.id));
+  for (const v of VILLAGES) {
+    const p = PORTALS.find((q) => q.id === v.id)!, land = portalLand(p);
+    assert.equal(land.key, v.land === 3 ? "moors" : "badlands");
+    assert.ok(land.portals.indexOf(p) >= land.portals.length - VILLAGES.filter((o) => o.land === v.land).length, `${v.id}: after its land's older stones`);
+    assert.equal(p.name, v.name);
+  }
+  assert.equal(PORTAL_LANDS.reduce((n, l) => n + l.portals.length, 0), PORTALS.length);
+});
+
+test("villages: forts, musters, chests, siege sites, landmarks and signposts stand where they stood (25 forts, 14 of 20 passes)", () => {
+  assert.equal(HOLDS.length, 25);
+  let n = 0;
+  for (const b of BORDERS) for (const e of [b.a, b.b]) { const [x, y] = endPath(e)[0]; if (HOLDS.some((h) => Math.hypot(h.x / TILE - x, h.y / TILE - y) <= 30)) n++; }
+  assert.equal(n, 14, `${n} of ${BORDERS.length * 2} pass ends guarded`);
+  assert.equal(BORDERS.length * 2, 20);
+  // the digests tests/landKit.test.ts pins (taken before step 3; unchanged by the villages)
+  assert.equal(digest(HOLDS, (h) => [h.t, Math.round(h.x), Math.round(h.y)]), "25:9caa51d");
+  assert.equal(digest(MUSTERS, (h) => [h.t, Math.round(h.x), Math.round(h.y)]), "72:82341353");
+  assert.equal(digest(CHESTS, (c) => [c.id, Math.round(c.x), Math.round(c.y)]), "53:e7366e42");
+  assert.equal(digest(SIEGE_SITES, (s) => [s.tx, s.ty]), "14:cac2c0c9");
+  assert.equal(digest(LANDMARKS, (l) => [l.id, l.x, l.y, l.solid ?? null]), "5:894e42c8");
+  assert.ok(!HOLDS.some((h) => VIDS.has(h.anchor)), "no fort anchored at a village gate (fort: false)");
+  // every older signpost stays; the villages add one each
+  const old = SIGNPOSTS.filter((p) => !VILLAGE_POSTS.some((q) => q.x === p.x && q.y === p.y));
+  assert.equal(digest(old, (p) => [p.x, p.y]), "88:1d1dbb68");
+  assert.equal(VILLAGE_POSTS.length, VILLAGES.length);
+});
+
+test("villages: no monster spawns or walks inside a village (area + 2), and no highway paving lies in that rect", () => {
+  for (const v of VILLAGES) {
+    assert.ok(NO_MOB_AREAS.includes(v.name));
+    const b = villageBox(v);
+    for (let y = b.y0 - 2; y <= b.y1 + 2; y++) for (let x = b.x0 - 2; x <= b.x1 + 2; x++) {
+      assert.ok(noMobsAt((x + 0.5) * TILE, (y + 0.5) * TILE), `${v.id}: ${x},${y} no-mob`);
+      assert.ok(!HIGHWAY_TILES.has(y * MAP_W + x), `${v.id}: highway paving at ${x},${y} inside the no-mob rect`);
+    }
+    assert.ok(!isSafeZone((b.x0 + 1) * TILE, (b.y0 + 1) * TILE), `${v.id}: casting allowed (no safe square)`);
+    for (const z of SPAWN_ZONES.filter((q) => q.x <= b.x1 + 2 && q.x + q.w > b.x0 - 2 && q.y <= b.y1 + 2 && q.y + q.h > b.y0 - 2)) {
+      for (let i = 0; i < 4000; i++) { const p = randomPointInZone(z); if (!p) continue; assert.ok(gap(p.x / TILE, p.y / TILE, { x0: b.x0 - 2, y0: b.y0 - 2, x1: b.x1 + 2, y1: b.y1 + 2 }) > 0, `${v.id}: a ${z.name} spawn inside`); }
+    }
+  }
+});
+
+test("villages: a capturable village each (no fort anchor, half a town's income), the reeve on the square, the gate outside on the road", () => {
+  for (const v of VILLAGES) {
+    const t = TOWNS.find((q) => q.id === v.id)!, s = villageSpots(v);
+    assert.ok(t, `${v.id}: in TOWNS`);
+    assert.deepEqual([t.kind, t.area, t.patron, t.fort, t.income], ["village", v.name, v.patron, false, 0.5]);
+    assert.deepEqual(t.gate, villageGate(v)); assert.deepEqual(t.steward, s.steward); assert.deepEqual(t.banners, s.banners);
+    assert.ok(townPatron(v.id) >= 0);
+    assert.equal(townAt((s.portal.x + 0.5) * TILE, (s.portal.y + 0.5) * TILE)?.id, v.id, "its shops' discount goes by its area");
+    assert.ok(WORLD.roads.has(t.gate.y * MAP_W + t.gate.x) || spurTiles(v).some((q) => q.x === t.gate.x && q.y === t.gate.y), `${v.id}: the gate on the road or the path`);
+    const n = npcById(`steward_${v.id}`)!;
+    assert.equal(n.title, "Village Reeve");
+  }
+  assert.equal(TOWNS.filter((t) => t.fort === false).length, VILLAGES.length, "only the highway villages skip the fort anchor");
+});
+
+test("villages: a giver with one quest arc each (appended), a townsperson or trader on existing stock, objects in the patron's zone", () => {
+  assert.deepEqual(VILLAGE_ARCS.map((a) => [a.id, a.name]), VILLAGES.map((v) => [v.id, v.name]), "one arc per village, named after it, at the end of SIDE_ARCS");
+  assert.deepEqual(SIDE_ARCS.slice(0, SIDE_ARCS.length - VILLAGES.length).map((a) => a.id), ["letters", "penance", "badlands", "sinkholes", "saltways", "throne"], "the older arcs keep their places");
+  assert.deepEqual(CHAINS.slice(-VILLAGES.length).map((c) => [c.id, c.packed, ...c.keys, c.verKey]), VILLAGES.map((v) => [v.id, v.id, `${v.id}Id`, `${v.id}Stage`, `${v.id}Count`, `${v.id}Ver`]));
+  const others: QuestObject[] = allObjects().filter((o) => !VILLAGE_ARCS.some((a) => a.quests.some((d) => d.steps.some((s) => stepObjects(s).includes(o)))));
+  const existingItems = new Set(Object.entries(SHOPS).filter(([id]) => !VIDS.has(id)).flatMap(([, s]) => s.stock.map((e) => `${e.item}:${e.size ?? ""}:${e.qty ?? ""}`)));
+  for (const [i, v] of VILLAGES.entries()) {
+    const arc = VILLAGE_ARCS[i], s = villageSpots(v), [d] = arc.quests, t = TERRITORIES.find((q) => q.name === v.patron)!;
+    assert.equal(arc.quests.length, 1);
+    const giver = npcById(d.giver)!;
+    assert.deepEqual([Math.floor(giver.x / TILE), Math.floor(giver.y / TILE)], [s.giver.x, s.giver.y], `${v.id}: the giver stands before the hall`);
+    assert.ok(giver.where?.startsWith(v.name), `${v.id}: the log says where`);
+    assert.equal(d.minLevel, t.levels[0], `${v.id}: from its patron land's level`);
+    assert.deepEqual(d.steps.map((q) => q.type), ["use", "kill"]);
+    const [use, kill] = d.steps;
+    assert.equal(use.zone, v.patron);
+    const z = SPAWN_ZONES.find((q) => q.name === v.patron)!;
+    for (const o of use.objects!) {
+      const tx = Math.floor(o.x / TILE), ty = Math.floor(o.y / TILE);
+      assert.ok(tx >= z.x && ty >= z.y && tx < z.x + z.w && ty < z.y + z.h, `${o.id}: in ${v.patron}`);
+      assert.ok(!isSolidTile(tx, ty), `${o.id}: free`);
+      for (const p of others) assert.ok(Math.hypot(p.x - o.x, p.y - o.y) >= 4 * TILE, `${o.id}: 4+ tiles from ${p.id}`);
+      for (const f of [...HOLDS, ...MUSTERS]) assert.ok(Math.hypot(f.x - o.x, f.y - o.y) >= 6 * TILE, `${o.id}: off a fort or muster`);
+    }
+    assert.equal(use.chest, false, "no story chest (chests stay where they are)");
+    const kz = SPAWN_ZONES.find((q) => q.name === kill.zone)!;
+    for (const k of kill.kinds!) assert.ok((kz.mobs[k] ?? 0) > 0, `${v.id}: ${k} live in ${kill.zone}`);
+    // the townsperson or trader
+    const folk = NPCS.find((n) => Math.floor(n.x / TILE) === s.folk.x && Math.floor(n.y / TILE) === s.folk.y)!;
+    assert.ok(folk && folk.where?.startsWith(v.name), `${v.id}: someone before the cottage`);
+    if (folk.shop) for (const e of SHOPS[folk.shop].stock) assert.ok(existingItems.has(`${e.item}:${e.size ?? ""}:${e.qty ?? ""}`), `${folk.shop}: ${e.item} is sold elsewhere already (no new item)`);
+    assert.ok(!folk.shop || !SHOPS[folk.shop].buys?.includes("rune"), "no new rune fuser");
+  }
+});
+
+test("villages: their kit props stand round them, in their land", () => {
+  const kit = LAND_KIT_SPOTS.filter((s) => s.village);
+  for (const v of VILLAGES) {
+    const mine = kit.filter((s) => s.village === v.id), b = villageBox(v);
+    assert.ok(mine.length >= 1, `${v.id}: dressed`);
+    for (const s of mine) { assert.equal(s.land, v.land); assert.ok(gap(s.x / TILE, s.y / TILE, b) <= 8, `${v.id}: ${s.kind} near`); }
+  }
+  const kinds = (id: string) => new Set(kit.filter((s) => s.village === id).map((s) => s.kind));
+  assert.ok(kinds("turfhallow").has("lk_peat_stack") && kinds("turfhallow").has("lk_peat_bank"));
+  assert.ok(kinds("redlode").has("lk_ore_cart") && kinds("hornstead").has("lk_longhorn") && kinds("hornstead").has("lk_trough"));
+  // the Staithe keeps the highway's way-cairn below its square
+  assert.ok(LAND_KIT_SPOTS.some((s) => s.kind === "lk_way_cairn" && !s.village && gap(s.x / TILE, s.y / TILE, villageBox(VILLAGES[1])) <= 2), "the Staithe's way-cairn");
+});
+
+test("villages: the layout fits a 12x8 box too (the Staithe), every spot inside", () => {
+  const v: Village = VILLAGES.find((q) => q.h === 8)!;
+  for (const h of villageHouses(v)) assert.ok(h.y + h.h - 1 <= vy(v, v.y) + v.h - 1);
+});

@@ -9,6 +9,7 @@ import { AREAS, isSafeZone, isSolidAt, OBJECTS, T, VILLAGE } from "./map";
 import { LANDMARK_SOLIDS } from "./landmarks";
 import { CAMP_POSTS, campMobs } from "./bandits";
 import { AMBUSH_ROOMS, chamberAtPx, FLOORS, LAIRS, LANDING, pointInChamber } from "./dungeon";
+import { VILLAGES } from "./villages";
 
 /**
  * Monster spawn zones. Each zone keeps up to `mobs[kind]` monsters alive. Every `respawnMs` its timer fires
@@ -36,7 +37,8 @@ export const NO_MOB_AREAS = ["Saltmere", "Kel Ashar", "The Sunstone Circle", "Th
   "Cairnwatch", "The Moorgate", // Act 3: the outpost (walls and all) and the moorgate's arrival clearing
   "The Rustwater Post", "The Red Pass", // Act 4: the outpost (walls and all) and the Red Pass's arrival clearing
   "Ropewell", "The Sinkway", // Act 5: the outpost (walls and all) and the Sinkway's arrival clearing
-  "Tollcross", ...CROWNWAYS.map((c) => c.name)]; // Act 6: the Truce Market and the five Crownways' daises on the rim
+  "Tollcross", ...CROWNWAYS.map((c) => c.name), // Act 6: the Truce Market and the five Crownways' daises on the rim
+  ...VILLAGES.map((v) => v.name)]; // the villages along the highways (settlement network step 4, shared/villages.ts)
 const NO_MOB_RECTS = NO_MOB_AREAS.flatMap((n) => AREAS.filter((a) => a.name === n)).map((a) => ({ x0: a.x - 2, y0: a.y - 2, x1: a.x + a.w + 2, y1: a.y + a.h + 2 }));
 /** True where monsters may not go (pixel coords). */
 export function noMobsAt(px: number, py: number): boolean {

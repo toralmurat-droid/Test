@@ -8,11 +8,16 @@ import type { TownId } from "./towns";
 
 /** The steward's name per clan and town. */
 export const STEWARD_NAMES: Record<ClanKey, Record<TownId, string>> = {
-  wardens: { saltmere: "Reeve Aldous Marsh", rustwater: "Reeve Gwen Tallow", ropewell: "Reeve Osric Fenn", millbrook: "Reeve Hob Threshold" },
-  redfang: { saltmere: "Quartermaster Scar-Jory", rustwater: "Quartermaster Dagna Nine-Toes", ropewell: "Quartermaster Rusk", millbrook: "Quartermaster Fat Merrick" },
-  host: { saltmere: "Clerk Ossian Vale", rustwater: "Clerk Hollis Grey", ropewell: "Clerk Mirren Ash", millbrook: "Clerk Thane Dust" },
-  hidekin: { saltmere: "Burrow-Warden Gnarl", rustwater: "Burrow-Warden Snuff", ropewell: "Burrow-Warden Old Root", millbrook: "Burrow-Warden Mudtooth" },
-  veiled: { saltmere: "Envoy Sera of the Mask", rustwater: "Envoy Calder Veil", ropewell: "Envoy Isolde Noon", millbrook: "Envoy Wren the Quiet" },
+  wardens: { saltmere: "Reeve Aldous Marsh", rustwater: "Reeve Gwen Tallow", ropewell: "Reeve Osric Fenn", millbrook: "Reeve Hob Threshold",
+    turfhallow: "Reeve Agna Peatfield", staithe: "Reeve Dunstan Wade", barrowstead: "Reeve Cuthbert Lowe", redlode: "Reeve Marta Slag", hornstead: "Reeve Tobias Fenn" },
+  redfang: { saltmere: "Quartermaster Scar-Jory", rustwater: "Quartermaster Dagna Nine-Toes", ropewell: "Quartermaster Rusk", millbrook: "Quartermaster Fat Merrick",
+    turfhallow: "Quartermaster Smoke-Tam", staithe: "Quartermaster Eelbite", barrowstead: "Quartermaster Grave-Hal", redlode: "Quartermaster Red Ottla", hornstead: "Quartermaster Branded Wil" },
+  host: { saltmere: "Clerk Ossian Vale", rustwater: "Clerk Hollis Grey", ropewell: "Clerk Mirren Ash", millbrook: "Clerk Thane Dust",
+    turfhallow: "Clerk Aldwin Moss", staithe: "Clerk Merrow Still", barrowstead: "Clerk Edric Pale", redlode: "Clerk Ivo Cinder", hornstead: "Clerk Selby Horne" },
+  hidekin: { saltmere: "Burrow-Warden Gnarl", rustwater: "Burrow-Warden Snuff", ropewell: "Burrow-Warden Old Root", millbrook: "Burrow-Warden Mudtooth",
+    turfhallow: "Burrow-Warden Peatnose", staithe: "Burrow-Warden Wetwhisker", barrowstead: "Burrow-Warden Bonedigger", redlode: "Burrow-Warden Rustclaw", hornstead: "Burrow-Warden Hoofmark" },
+  veiled: { saltmere: "Envoy Sera of the Mask", rustwater: "Envoy Calder Veil", ropewell: "Envoy Isolde Noon", millbrook: "Envoy Wren the Quiet",
+    turfhallow: "Envoy Aster of the Smoke", staithe: "Envoy Lior Stillwater", barrowstead: "Envoy Maren the Pale", redlode: "Envoy Cassia Red", hornstead: "Envoy Darius Dust" },
 };
 
 /** Talk lines per clan; `{town}` is the town's name. */

@@ -247,10 +247,13 @@ const fortCap = (k: ClanKey) => WAR.fortMax * (CLANS[k].doctrine === "palisade" 
 export interface TickExtra { phase?: number; valor?: Partial<Record<ClanKey, number>>[]; march?: { t: number; k: ClanKey; mult: number }[]; battle?: BattleOutcome[]; towns?: Partial<Record<ClanKey, number>> }
 /** Most towns one clan can count in TickExtra.towns (validated: a bad count is dropped, a big one capped). */
 export const TOWNS_MAX = 16;
-/** Clan k's held towns from TickExtra.towns (W6): a whole number 0..TOWNS_MAX, 0 for junk. */
+/**
+ * Clan k's held towns from TickExtra.towns (W6): 0..TOWNS_MAX in steps of a half (a highway village counts half a town:
+ * shared/war/townSites.ts Town.income), 0 for junk.
+ */
 export const townCount = (towns: TickExtra["towns"], k: ClanKey): number => {
   const n = towns?.[k];
-  return typeof n === "number" && Number.isFinite(n) && n > 0 ? Math.min(TOWNS_MAX, Math.floor(n)) : 0;
+  return typeof n === "number" && Number.isFinite(n) && n > 0 ? Math.min(TOWNS_MAX, Math.floor(n * 2) / 2) : 0;
 };
 
 /** W5 big battles (shared/war/battles.ts): a pitched battle at fixed times, a storming at a siege's gate, a meeting of two columns. */

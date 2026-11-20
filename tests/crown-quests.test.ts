@@ -15,7 +15,7 @@ const named = new Set([...SPAWN_ZONES.map((z) => z.name), ...AREAS.map((a) => a.
 
 test("throne chain: a side arc appended last (no chain index moves), seven quests from the Herald-Marshal climbing to the Riven King", () => {
   assert.ok(arc && ci >= ZONE_ARCS.length, "a side arc after the zone arcs");
-  assert.equal(SIDE_ARCS.at(-1), arc, "appended last");
+  assert.equal(SIDE_ARCS.indexOf(arc), SIDE_ARCS.findIndex((a) => a.id === "saltways") + 1, "appended after Saltmere Ways (the highway villages' arcs follow it: tests/villages.test.ts)");
   assert.equal(CHAINS.filter((c) => c.id === "throne").length, 1);
   assert.ok(CHAINS.some((c) => c.id === "crown") && CHAINS.find((c) => c.id === "crown") !== CHAINS[ci], "the Hollow Crown keeps its own id");
   assert.equal(arc.name, "The Riven Throne");

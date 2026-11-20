@@ -190,7 +190,7 @@ function buildSites(): { holds: Hold[]; musters: Hold[] } {
   const anchors: Anchor[] = [];
   for (const t of terr) if (t.capitalOf) anchors.push({ x: Math.floor(t.cx), y: Math.floor(t.cy), site: "capital", anchor: t.name, t: t.id });
   for (const b of BORDERS) for (const e of [b.a, b.b]) { const [x, y] = endPath(e)[0]; anchors.push({ x, y, site: "pass", anchor: b.id }); }
-  for (const tw of TOWNS) anchors.push({ x: tw.gate.x, y: tw.gate.y, site: "town", anchor: tw.id });
+  for (const tw of TOWNS) if (tw.fort !== false) anchors.push({ x: tw.gate.x, y: tw.gate.y, site: "town", anchor: tw.id }); // (not the highway villages': Town.fort)
   const junc: Anchor[] = [];
   for (const k of [...roads].sort((p, q) => p - q)) {
     const x = k % W, y = Math.floor(k / W);
