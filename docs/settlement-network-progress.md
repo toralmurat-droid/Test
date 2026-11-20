@@ -303,11 +303,15 @@ Roadmap: client/src/roadmap.ts, "Settlement network".
   - Deviations: windmill stays 0.6 tiles off the east wall (walkable gap tested); champions family-share floor 0.90 -> 0.88
     (Oakvale lost ~160 blobs); city through streets join the road set.
 
-- PR 2 Scarwall (branch `claude/scarwall-in-land`, in progress): framework for the other four (`City.sideGates`,
+- PR 2 Scarwall (PR #573, branch `claude/scarwall-in-land`): framework for the other four (`City.sideGates`,
   `OLD_CITY_GATES`, per-land retired legs, land filter on `carveCitiesInLand`, bandit clearance, table-driven
   cityLand tests) plus Scarwall in the Badlands' north-west (x 9..60, y 782..821), south and east gates, highway to
   Fangrock. Then Duskveil (Sunscar, below the Thornspire east of Mirage Wells), Marrowkeep (Moors, north of
   Kingsbarrow), Deepden (Sinkholes, on the back way west of Hidehall), merged one at a time; the strip stays rock.
+  - Built: Scarwall site {9,782}, east gate onto Gallows Canyon (4-tile dirt stub + post), highway leg from the south gate
+    joining the old line at (47,63) (old segment [[26,44],[47,63]] retired); musters can't stand in or against an in-land
+    city (standards.ts); in-land city posts below the overworld were dropped by a MAP_H/FULL_H mix-up in #572, fixed;
+    city waystones keep the level rule from any stone; no dust or mist inside city walls.
 
 ## Next
 - Step 3 optional follow-ups: working townsfolk for Millbrook, Cairnwatch, the Rustwater Post,
