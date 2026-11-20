@@ -44,3 +44,35 @@ test("a hero's dash and a beast's rush toward the headframe stop before it and w
     }
   } finally { await srv.stop(); }
 });
+
+// the Lists on the Tourney Grounds (a monster zone): the tilt barrier is thin, so a slide must not skip across it
+test("a hero's dash and a beast's rush north at the Lists' tilt barrier stop south of it and walk on", async () => {
+  const lists = LANDMARKS.find((l) => l.id === "lists")!, [tx, ty, tw, th] = lists.parts![0];
+  const inTilt = (x: number, y: number) => x >= tx * TILE && x < (tx + tw) * TILE && y >= ty * TILE && y < (ty + th) * TILE;
+  const walksBack = (x: number, y: number) => !blocked(x, y) && moveStep(x, y, { up: false, down: true, left: false, right: false } as never, 0.1).y > y;
+  const srv = await startRoom();
+  try {
+    const c = await srv.join({ cls: "wizard" });
+    await until(() => !!srv.room.state.players.get(c.sessionId));
+    const room = srv.room, p = room.state.players.get(c.sessionId);
+    const midX = (tx + tw / 2) * TILE, south = (ty + th + 3) * TILE;
+    p.x = midX; p.y = south; p.hp = p.maxHp = 1e7;
+    room.host.move(c.sessionId, 0, -1, 6 * TILE);
+    assert.ok(p.y < south - TILE, `the dash went nowhere (${p.y})`);
+    assert.ok(p.y > (ty + th) * TILE, `the hero dashed over the tilt to ${p.y / TILE}`);
+    assert.ok(!inTilt(p.x, p.y) && walksBack(p.x, p.y), `the hero stopped in the tilt at ${p.x / TILE},${p.y / TILE}`);
+    const [id, m] = ([...room.state.mobs.entries()] as [string, any][]).find(([, q]) => (q.kind === "scorpion" || q.kind === "tuskborn") && !q.dead)!;
+    p.x = midX + 4 * TILE; p.y = (ty - 3) * TILE;
+    m.homeX = midX; m.homeY = south; m.hidden = false; m.target = c.sessionId; m.specialAt = 0; m.specialKind = "";
+    for (let k = 0; k < 3; k++) {
+      m.x = midX; m.y = south;
+      m.rushUntil = Date.now() + 900; m.rushKind = "gore"; m.rushVX = 0; m.rushVY = -380; m.rushHit = []; m.rushTurn = 0;
+      await until(() => !m.rushUntil, 3000);
+      assert.ok(!m.rushUntil, `${m.kind} ${id}: the rush never ended`);
+      assert.ok(m.y < south - 8, `${m.kind} didn't rush (${m.y})`);
+      assert.ok(m.y > (ty + th) * TILE, `${m.kind} rushed over the tilt to ${m.y / TILE}`);
+      assert.ok(!inTilt(m.x, m.y) && walksBack(m.x, m.y), `${m.kind} ended its rush in the tilt at ${m.x / TILE},${m.y / TILE}`);
+      await wait(50);
+    }
+  } finally { await srv.stop(); }
+});

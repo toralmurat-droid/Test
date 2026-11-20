@@ -2,12 +2,13 @@ import Phaser from "phaser";
 import { TILE } from "../../shared/constants";
 import { LANDMARKS } from "../../shared/landmarks";
 import { staticObj } from "./staticChunks";
-import { LAND_KIT_SPOTS, LANDMARK_LIGHT, LANDMARK_SHEET, LK_SHEETS, type LkKind } from "./landKit";
+import { LAND_KIT_SPOTS, LANDMARK_LIGHT, LANDMARK_PARTS, LANDMARK_SHEET, LK_SHEETS, type LkKind } from "./landKit";
 
 /**
  * Draws the land kits and landmarks (landKit.ts, shared/landmarks.ts) from their baked sheets
  * (tools/art/paint/landKit/). Cosmetic: the windmill's sails turn and the beacon burns here, their solid boxes are
- * shared. A sheet that failed to load is skipped, so a missing file costs a prop, never a missing-texture box.
+ * shared; a landmark in parts (the Lists) draws each part at its own foot. A sheet that failed to load is skipped, so
+ * a missing file costs a prop, never a missing-texture box.
  */
 const TX = 1.5; // texels per world px
 
@@ -39,6 +40,7 @@ export function addLandKit(scene: Phaser.Scene, light?: (x: number, y: number, c
     const k = LANDMARK_SHEET[l.id], g = LANDMARK_LIGHT[l.id];
     if (!k || !ok(k)) continue;
     place(scene, k, l.x * TILE, l.y * TILE, false);
+    for (const p of LANDMARK_PARTS[l.id] ?? []) if (ok(p.kind)) place(scene, p.kind, p.x * TILE, p.y * TILE, false);
     if (g) light?.(l.x * TILE, l.y * TILE, g.color, g.scale, g.lift);
   }
 }

@@ -14,7 +14,7 @@ import {
 import { HOLDS, MUSTERS } from "../shared/war/standards";
 import { CHESTS } from "../shared/chests";
 import { SIEGE_SITES } from "../shared/siege";
-import { LANDMARKS } from "../shared/landmarks";
+import { landmarkBoxes, LANDMARKS } from "../shared/landmarks";
 import { NPCS, npcById } from "../shared/npcs";
 import { CITIES } from "../shared/capitals";
 import { arrivalOf, PORTAL_LANDS, PORTALS, portalLand } from "../shared/portals";
@@ -74,7 +74,8 @@ test("villages: sites keep the survey's rules (highway 4-9, forts, gates, muster
     for (const m of MUSTERS) assert.ok(gap(m.x / TILE, m.y / TILE, b) >= 8, `${v.id}: muster`);
     for (const c of CHESTS) assert.ok(gap(c.x / TILE, c.y / TILE, b) >= 6, `${v.id}: chest ${c.id}`);
     for (const s of SIEGE_SITES) assert.ok(gap(s.tx, s.ty, b) >= 8, `${v.id}: siege site`);
-    for (const l of LANDMARKS) assert.ok(gap(l.x, l.y, b) >= 6, `${v.id}: landmark ${l.id}`);
+    for (const l of LANDMARKS) for (const [x, y, w, h] of [[l.x, l.y, 0, 0], ...landmarkBoxes(l)]) for (const [px, py] of [[x, y], [x + w, y + h]])
+      assert.ok(gap(px, py, b) >= 6, `${v.id}: landmark ${l.id}`); // its foot and every box (the Lists has two)
     for (const n of NPCS) if (!villageNpc(n.id)) assert.ok(gap(n.x / TILE, n.y / TILE, b) >= 5, `${v.id}: NPC ${n.id}`);
     for (const p of OLD_PORTALS) assert.ok(gap(p.x, p.y, b) >= 6, `${v.id}: portal ${p.id}`);
     for (const [fx, fy] of CAPITAL_FORTS) assert.ok(Math.max(Math.abs(fx - (b.x0 + b.x1) / 2), Math.abs(fy - (b.y0 + b.y1) / 2)) >= 24, `${v.id}: clan seat`);
@@ -188,7 +189,8 @@ test("villages: forts, musters, chests, siege sites, landmarks and signposts sta
   assert.equal(digest(MUSTERS, (h) => [h.t, Math.round(h.x), Math.round(h.y)]), "72:82341353");
   assert.equal(digest(CHESTS, (c) => [c.id, Math.round(c.x), Math.round(c.y)]), "53:e7366e42");
   assert.equal(digest(SIEGE_SITES, (s) => [s.tx, s.ty]), "14:cac2c0c9");
-  assert.equal(digest(LANDMARKS, (l) => [l.id, l.x, l.y, l.solid ?? null]), "5:894e42c8");
+  assert.equal(digest(LANDMARKS.filter((l) => l.id !== "lists"), (l) => [l.id, l.x, l.y, l.solid ?? null]), "5:894e42c8");
+  assert.equal(digest(LANDMARKS, (l) => [l.id, l.x, l.y, landmarkBoxes(l)]), "6:78da6c25"); // with the Crown's Lists (PR #568), every box
   assert.ok(!HOLDS.some((h) => VIDS.has(h.anchor)), "no fort anchored at a village gate (fort: false)");
   // every older signpost stays; the villages add one each
   const old = SIGNPOSTS.filter((p) => !VILLAGE_POSTS.some((q) => q.x === p.x && q.y === p.y));
