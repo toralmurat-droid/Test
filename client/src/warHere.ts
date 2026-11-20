@@ -4,6 +4,7 @@
  * the land and territory it leads to, and shows the route to the picked territory as a card. Also the small text helpers
  * (wrap, card) the war table's side panel shares. Cosmetic: nothing here is sent to the server.
  */
+import { MAP_LINE } from "./mapLayers";
 import { regionName } from "../../shared/war/regions";
 import { TERRITORIES } from "../../shared/war/territories";
 import { findRoute, hereAt, landOfNode, nodeName, routeLines, STONES, WAYS, type Here, type Step } from "./warRoute";
@@ -50,6 +51,8 @@ export interface HereView {
   here: Here; sel?: number; woken?: ReadonlySet<string>;
   /** The hero, in map tiles (floats). */
   me?: { x: number; y: number };
+  /** Is this tile discovered (gate ends wait for it)? And the legend's layers (mapLayers.ts): outlines, gates, the "Ways out" card. */
+  seen?: (tx: number, ty: number) => boolean; lands?: boolean; ways?: boolean; exits?: boolean;
 }
 
 /** A row of the "Ways out" card: where it sits on the canvas and the tile it leads you to. */
@@ -70,11 +73,11 @@ function chip(g: CanvasRenderingContext2D, x: number, y: number, lines: string[]
 }
 
 /** Outline of a tile rect through the map's turn, dashed, in `color`. */
-function outline(g: CanvasRenderingContext2D, v: HereView, t: { x: number; y: number; w: number; h: number }, color: string, phase: number) {
+function outline(g: CanvasRenderingContext2D, v: HereView, t: { x: number; y: number; w: number; h: number }, color: string, phase: number, dashed: boolean) {
   const P = [v.toScreen(t.x, t.y), v.toScreen(t.x + t.w, t.y), v.toScreen(t.x + t.w, t.y + t.h), v.toScreen(t.x, t.y + t.h)];
   g.save(); g.beginPath(); P.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.closePath();
   g.lineWidth = 4; g.strokeStyle = "rgba(0,0,0,0.7)"; g.stroke();
-  g.lineWidth = 2; g.strokeStyle = color; g.setLineDash([8, 5]); g.lineDashOffset = -phase * 14; g.stroke();
+  g.lineWidth = 2; g.strokeStyle = color; if (dashed) { g.setLineDash([8, 5]); g.lineDashOffset = -phase * 14; } g.stroke();
   g.restore();
   return P;
 }
@@ -85,9 +88,10 @@ export function drawHereOnMap(g: CanvasRenderingContext2D, v: HereView): ExitRow
   const onScreen = (x: number, y: number) => x > -20 && y > -20 && x < v.w + 20 && y < v.h + 20;
   g.save(); g.imageSmoothingEnabled = false;
   // the territory you stand in, and the one you picked (when it is in this land)
-  for (const [id, color, tag] of [[v.here.terr, GOLD, "You are here"], [v.sel, CYAN, "Picked"]] as const) {
-    if (id === undefined || !TERRITORIES[id]) continue;
-    const T = TERRITORIES[id], P = outline(g, v, T, color, t);
+  // (the legend's colours: a calm solid line for yours, dashed for the picked one; no longer gold like quest areas)
+  for (const [id, color, tag] of [[v.here.terr, MAP_LINE.here, "You are here"], [v.sel, MAP_LINE.picked, "Picked"]] as const) {
+    if (id === undefined || !TERRITORIES[id] || v.lands === false) continue;
+    const T = TERRITORIES[id], P = outline(g, v, T, color, t, tag === "Picked");
     const top = P.reduce((a, b) => (b[1] < a[1] ? b : a)), cx = P.reduce((a, b) => a + b[0], 0) / 4;
     if (onScreen(cx, top[1])) chip(g, cx, Math.max(14, top[1] + 12), [T.name, tag === "Picked" ? "Picked" : `You are here · ${short(regionName(T.region))}`], color, v.font);
   }
@@ -105,7 +109,7 @@ export function drawHereOnMap(g: CanvasRenderingContext2D, v: HereView): ExitRow
   const firstGate = route?.find((s) => s.via === "gate")?.way;
   for (const w of WAYS) for (const [mine, there, tile] of [[w.a, w.b, w.ta], [w.b, w.a, w.tb]] as const) {
     const [x, y] = v.toScreen(tile.x + 0.5, tile.y + 0.5);
-    if (!onScreen(x, y)) continue;
+    if (!onScreen(x, y) || v.ways === false || (v.seen && !v.seen(tile.x, tile.y))) continue; // undiscovered gates stay hidden
     const lit = firstGate === w && landOfNode(mine) === v.here.land;
     if (lit) { g.strokeStyle = GOLD; g.lineWidth = 3; g.globalAlpha = 0.5 + 0.5 * pulse; g.beginPath(); g.arc(x, y, 16 + 4 * pulse, 0, Math.PI * 2); g.stroke(); g.globalAlpha = 1; }
     const where = regionName(landOfNode(there));
@@ -113,12 +117,12 @@ export function drawHereOnMap(g: CanvasRenderingContext2D, v: HereView): ExitRow
     chip(g, x, y + 30, [`${w.name}: to ${short(where)}`, `${nodeName(there)}${req ? " · " + req : ""}`], lit ? GOLD : "#96d7ff", v.font);
   }
   for (const s of STONES) {
-    if (!v.woken?.has(s.id)) continue;
+    if (!v.woken?.has(s.id) || v.ways === false) continue;
     const [x, y] = v.toScreen(s.tile.x + 0.5, s.tile.y + 0.5);
     if (!onScreen(x, y) || v.s < 2) continue;
     chip(g, x, y + 22, [`Portal stone: ${s.name}`], "#ff9a3c", v.font);
   }
-  const rows = exitCard(g, v);
+  const rows = v.exits === false ? [] : exitCard(g, v);
   // the route to the picked territory, as a card in the bottom-left corner
   if (v.sel !== undefined && v.sel !== v.here.node) {
     const lines = routeCard(route, v.sel);

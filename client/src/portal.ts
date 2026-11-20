@@ -121,7 +121,7 @@ export class PortalLayer {
   wokenIds(): ReadonlySet<string> { return this.found; }
 
   markers(): MapMarker[] {
-    return PORTALS.filter((p) => this.found.has(p.id)).map((p) => ({ x: p.x, y: p.y, glyph: "◆", color: "#ff9a3c", label: p.name }));
+    return PORTALS.filter((p) => this.found.has(p.id)).map((p) => ({ x: p.x, y: p.y, glyph: "◆", color: "#ff9a3c", label: p.name, layer: "ways" as const }));
   }
 
   /** The art this stone should show: dark until found, burning once woken, with one ring block lit per woken portal. */

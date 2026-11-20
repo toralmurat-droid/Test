@@ -153,7 +153,7 @@ export class BountyUI {
 
   /** The boards on the minimap and world map. */
   markers(): MapMarker[] {
-    return BOARDS.map((b) => ({ x: b.x, y: b.y, glyph: this.active ? "▪" : "!", color: "#e3bf6a", label: b.name }));
+    return BOARDS.map((b) => ({ x: b.x, y: b.y, glyph: this.active ? "▪" : "!", color: "#e3bf6a", label: b.name, layer: "boards" as const }));
   }
 
   update(me: { x: number; y: number } | undefined, blocked: boolean) {
