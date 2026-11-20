@@ -64,12 +64,13 @@ export class WarCapitals {
 
   /**
    * A hero tries to enter `city` (its city gate or its waystone): true lets them in; otherwise they get a note saying
-   * why and stay where they are. The same check for both ways in, so the waystone is no way round the gate.
+   * why and stay where they are. The same check for both ways in (CITY.minLevel included), so the waystone is no way
+   * round the gate.
    */
   admit(id: string, city: City, now = Date.now()): boolean {
     const p = this.h.hero(id);
     if (!p) return false;
-    const why = admitOf(p, city, now);
+    const why = p.level < CITY.minLevel ? "level" : admitOf(p, city, now);
     if (why === "ok") return true;
     this.refuse(id, city, why, now);
     return false;

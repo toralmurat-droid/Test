@@ -8,6 +8,7 @@ import { BORDERS, endPath } from "../borders";
 import { CR, CROWN_LANDS } from "../crown";
 import { isSafeZone, isSolidAt, PORTAL_SPOTS, WORLD } from "../map";
 import { noMobsAt } from "../spawns";
+import { inLandCities, plotBox } from "../capitals";
 import { inVillage } from "../wrath";
 import { CLANS, type ClanKey } from "./clans";
 import { TERRITORIES, warProof } from "./territories";
@@ -98,6 +99,9 @@ function buildMusters(): Hold[] {
   // local copies: under tsx (the tests) each use of an import is a getter call, slow in these tile loops
   const TILE_ = TILE, solidAt = isSolidAt, portals = PORTAL_SPOTS;
   const INNER = 2; // the inner 5x5 must hold no solid tile at all: the ground layer paints over map objects there
+  // never in or against a city in its land (settlement network step 5): its streets are open ground, but a safe zone
+  const cities = inLandCities().map(plotBox), R = HOLD_RADIUS;
+  const byCity = (tx: number, ty: number) => cities.some((b) => tx + R >= b.x && tx - R < b.x + b.w && ty + R >= b.y && ty - R < b.y + b.h);
   for (const t of TERRITORIES) {
     const mine = STANDARDS.filter((s) => s.t === t.id);
     let best: { x: number; y: number; score: number } | undefined;
@@ -106,12 +110,12 @@ function buildMusters(): Hold[] {
       const x = (patch.x + 0.5) * TILE_, y = (patch.y + 0.5) * TILE_;
       let clear = !portals.some((p) => Math.hypot(p.x - patch.x, p.y - patch.y) < KEEP_CLEAR) && mine.every((s) => Math.hypot(s.x - x, s.y - y) > STANDARD.range + 2 * TILE_);
       for (let dy = -INNER; dy <= INNER && clear; dy++) for (let dx = -INNER; dx <= INNER; dx++) if (solidAt(x + dx * TILE_, y + dy * TILE_)) clear = false;
-      if (clear) { out.push({ t: t.id, x, y }); continue; }
+      if (clear && !byCity(patch.x, patch.y)) { out.push({ t: t.id, x, y }); continue; }
     }
     // only the outer ring of the 7x7 clearing may relax and the fort may hang over the land's edge by a tile before the land gets none
     for (const [ringMax, edge] of [[3, HOLD_RADIUS + 1], [8, HOLD_RADIUS + 1], [24, HOLD_RADIUS + 1], [24, INNER + 1], [24, 1]]) {
       for (let ty = t.y + edge; ty < t.y + t.h - edge; ty++) for (let tx = t.x + edge; tx < t.x + t.w - edge; tx++) {
-        if (portals.some((p) => Math.hypot(p.x - tx, p.y - ty) < KEEP_CLEAR)) continue; // leave the portal stone room
+        if (portals.some((p) => Math.hypot(p.x - tx, p.y - ty) < KEEP_CLEAR) || byCity(tx, ty)) continue; // leave the portal stone room
         let inner = 0, ring = 0;
         for (let dy = -HOLD_RADIUS; dy <= HOLD_RADIUS; dy++) for (let dx = -HOLD_RADIUS; dx <= HOLD_RADIUS; dx++)
           if (solidAt((tx + dx + 0.5) * TILE_, (ty + dy + 0.5) * TILE_)) { if (Math.max(Math.abs(dx), Math.abs(dy)) <= INNER) inner++; else ring++; }

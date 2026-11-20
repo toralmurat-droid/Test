@@ -24,7 +24,7 @@ test("room: Hearthhold's south gate admits the right heroes, its waystone the sa
     await wait(300);
     const room = srv.room, pid = c.sessionId, p = room.state.players.get(pid), client = room.clients.getById(pid);
     // Hearthhold stands in its land (settlement network step 5): a hero walks up from outside the south gate into its gap,
-    // and the gate ward (server/cityGates.ts) lets them in or puts them back (tests/hearthhold-room.test.ts: every gate)
+    // and the gate ward (server/cityGates.ts) lets them in or puts them back (tests/cityLand-room.test.ts: every gate of every city in its land)
     const S = cityGates(W).find((g) => g.side === "south")!, px = (t: { x: number; y: number }) => ({ x: (t.x + 0.5) * TILE, y: (t.y + 0.5) * TILE });
     const out = px(S.out), inn = px(cityTile(W, { x: 25, y: 37 }));
     const tryGate = () => {
@@ -198,14 +198,14 @@ test("room: home and capPaid are saved and restored, old and broken saves load w
   } finally { await srv.stop(); }
 });
 
-test("room: the other four capitals' gates let in and out, refuse their enemies, give their sworn the discount; logging out inside keeps the land", async () => {
+test("room: the band capitals' gates let in and out, refuse their enemies, give their sworn the discount; logging out inside keeps the land", async () => {
   const srv = await startRoom();
   try {
     const c = await srv.join();
     await wait(300);
     const room = srv.room, pid = c.sessionId, p = room.state.players.get(pid), client = room.clients.getById(pid);
     p.level = 5;
-    for (const C of CITIES.filter((o) => o.clan !== "wardens")) {
+    for (const C of CITIES.filter((o) => !o.site)) { // (the cities in their lands: tests/cityLand-room.test.ts)
       const out = waygateById(`citygate_${C.clan}`)!, inn = waygateById(`cityexit_${C.clan}`)!;
       const tryGate = () => { at(p, out.x, out.y); p.gateNoteAt = 0; room.caps.noted.clear(); room.useWaygate(client); return cityAtPx(p.x, p.y); };
       p.clan = undefined; p.feud = {};

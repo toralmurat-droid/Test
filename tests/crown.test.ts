@@ -22,6 +22,7 @@ import { regionOf } from "../shared/war/regions";
 import { TERRITORIES } from "../shared/war/territories";
 import { startRoom, until, wait } from "./helpers/room";
 import { carveVillages, VILLAGE_MASK, VILLAGES } from "../shared/villages";
+import { CITY_MASK, OLD_CITY_GATES } from "../shared/cityLand";
 
 const tileOf = (p: { x: number; y: number }) => [Math.floor(p.x / TILE), Math.floor(p.y / TILE)] as const;
 const C0 = CROWN_Y0, C1 = CROWN_Y0 + CROWN_H;
@@ -167,16 +168,20 @@ test("crown: every homeland's Crownway dais is open ground joined to its land, c
   // The villages (shared/villages.ts VILLAGE_MASK, settlement network step 4) the same way: the moors' and the badlands'
   // re-hashed with the mask on the map before them, the same with and without the villages cut (no tile outside it moved);
   // step 4 PR 2 the Sunscar's and the sinkholes' the same way (the moors' and the badlands' hashes did not change).
+  // The clans' cities in their lands (settlement network step 5, shared/cityLand.ts CITY_MASK: box, apron, gate roads and
+  // posts, retired highway legs) and their old gate daises (OLD_CITY_GATES) too: each land re-hashed with them masked on
+  // the map before its city moved, the same with and without it (the badlands' with Scarwall, step 5 PR 2).
   const hash = (y0: number, y1: number, B: TileBox) => {
-    const boxes = [B, ...CITIES.map((c) => c.outerBox), ...BORDER_BOXES]; // (the border roads, shared/borders.ts, cut only inside theirs)
-    const h = createHash("sha256"), inB = (x: number, y: number) => boxes.some((b) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1) || HIGHWAY_MASK.has(y * MAP_W + x) || VILLAGE_MASK.has(y * MAP_W + x);
+    const boxes = [B, ...CITIES.map((c) => c.outerBox), ...Object.values(OLD_CITY_GATES), ...BORDER_BOXES]; // (the border roads, shared/borders.ts, cut only inside theirs)
+    const h = createHash("sha256"), inB = (x: number, y: number) => boxes.some((b) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1)
+      || HIGHWAY_MASK.has(y * MAP_W + x) || VILLAGE_MASK.has(y * MAP_W + x) || CITY_MASK.has(y * MAP_W + x);
     for (let y = y0; y < y1; y++) h.update(GROUND[y].map((g, x) => (inB(x, y) ? -9 : g)).join(",") + "|" + OBJECTS[y].map((o, x) => (inB(x, y) ? -9 : o)).join(",") + "\n");
     return h.digest("hex");
   };
   const box = (from: string) => CROWNWAYS.find((c) => c.from === from)!.box;
   assert.equal(hash(DESERT_Y0, DESERT_Y0 + DESERT_H, box("sunscar")), "55c973c27a14baa6f9472c8cf3394fdb1505b90c61e046aa1b08bc754538c574", "the Sunscar");
   assert.equal(hash(MOORS_Y0, MOORS_Y0 + MOORS_H, box("moors")), "3975c6c0a2d061a7f984743cd53b3ea1cb9c11fa03f45889ed4a9bd9f508e9f0", "the moors");
-  assert.equal(hash(BADLANDS_Y0, BADLANDS_Y0 + BADLANDS_H, box("badlands")), "cf33174c9a231d88c14ff07e23b05a9d4ea56e553ab25efd892082654835f85f", "the badlands");
+  assert.equal(hash(BADLANDS_Y0, BADLANDS_Y0 + BADLANDS_H, box("badlands")), "e1eec094bea2c76867ffd1b66142ab951b55ca637d7861cafa7fcbc243ac5045", "the badlands");
   assert.equal(hash(SINKHOLES_Y0, SINKHOLES_Y0 + SINKHOLES_H, box("sinkholes")), "0fc7776c1db9d2af5660678a1fb586964ba5e864ce8a37687770a58a5eba24d0", "the sinkholes");
 });
 

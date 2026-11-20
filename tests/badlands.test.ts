@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import {
   ACT_LEVEL, actMobLevel, actOfTile, actSpecialLevel, BADLANDS_H, BADLANDS_LEVEL, BADLANDS_Y0, DEEP_END, MAP_H, MAP_W, MOORS_H, MOORS_Y0, SINKHOLES_Y0, TILE, WORLD_H, inCitiesBand,
 } from "../shared/constants";
-import { EMPTY, GROUND, HIGHWAY_POSTS, HIGHWAY_SKIP, isSafeZone, isSolidAt, isSolidTile, MIRROR_POND, OBJECTS, randomSpawn, T, TILE_COUNT, NATURE, PORTAL_SPOTS } from "../shared/map";
+import { CITY_POSTS, EMPTY, GROUND, HIGHWAY_POSTS, HIGHWAY_SKIP, isSafeZone, isSolidAt, isSolidTile, MIRROR_POND, OBJECTS, randomSpawn, T, TILE_COUNT, NATURE, PORTAL_SPOTS } from "../shared/map";
 import {
   ARCHES, BR, buildBadlands, FANGROCK, inBadlandsRow, REDPASS, REDPASS_BADLANDS, REDPASS_OAKVALE, RUSTWATER_POST, RUSTWATER_SQUARE, TALON_FORT,
 } from "../shared/badlands";
@@ -24,7 +24,7 @@ import { TERRITORIES } from "../shared/war/territories";
 import { REGIONS, regionOf } from "../shared/war/regions";
 import { startRoom, until, wait } from "./helpers/room";
 import { carveVillages, VILLAGE_MASK, VILLAGES } from "../shared/villages";
-import { CITY_MASK, OLD_HEARTHHOLD_GATE } from "../shared/cityLand";
+import { carveCitiesInLand, CITY_MASK, OLD_CITY_GATES } from "../shared/cityLand";
 
 /** 4-way flood over free tiles from (sx, sy). */
 function flood(sx: number, sy: number) {
@@ -55,7 +55,9 @@ test("badlands: a band of its own under the moors, built the same every time", (
     const r = buildBadlands(T, g, o, EMPTY);
     for (const c of CITIES) if (c.act === 4) cityGateDais(c, T, g, o, EMPTY, (t) => NATURE.has(t)); // the capital's city gate (W7), cut in after the land
     carveBorders(g, o, new Set(), T, EMPTY); // the border roads (shared/borders.ts), cut last
-    const rd = new Set(r.roads); carveHighways(g, o, rd, T, EMPTY, HIGHWAY_SKIP, [4]); for (const p of HIGHWAY_POSTS) o[p.y][p.x] = T.SIGNPOST; // the land highway and its posts (shared/highways.ts), after them
+    const rd = new Set(r.roads);
+    carveCitiesInLand(T, g, o, EMPTY, rd, [...r.posts], () => T.SAND, undefined, [4]); for (const p of CITY_POSTS) o[p.y][p.x] = T.SIGNPOST; // Scarwall (shared/cityLand.ts, settlement network step 5) and its posts, after them
+    carveHighways(g, o, rd, T, EMPTY, HIGHWAY_SKIP, [4]); for (const p of HIGHWAY_POSTS) o[p.y][p.x] = T.SIGNPOST; // the land highway and its posts (shared/highways.ts), after it
     carveVillages(g, o, rd, T, EMPTY, () => [], undefined, VILLAGES.filter((v) => v.land === 4).map((v) => v.id)); // its villages (shared/villages.ts), last
     return { g: g.slice(B0, B1), o: o.slice(B0, B1), areas: r.areas, roads: [...r.roads], posts: r.posts };
   };
@@ -149,12 +151,12 @@ test("badlands: the Red Pass (and the Sinkway) leave the rest of Act 1 exactly a
   // (and Oakvale's village stones' boxes) on the map before Oakvale's villages, the same with and without them, settlement
   // network step 4 PR 3; Hearthhold in Oakvale's lands, settlement network step 5: shared/cityLand.ts CITY_MASK, which holds
   // the city's box, apron, gate road and posts, the trimmed field and the retired highway legs, and its old gate's box
-  // OLD_HEARTHHOLD_GATE, re-hashed with them masked on the map before the move: the same with and without it).
+  // OLD_CITY_GATES (the clans' old city gate daises), re-hashed with them masked on the map before the move: the same with and without it).
   // A deliberate change to the overworld map must update this hash.
   const S = SINKWAY_BOX, C = crownwayFrom("oakvale").box;
   const STONE_BOXES = PORTAL_SPOTS.slice(10 + CITIES.length).map((p) => ({ x0: p.x - 3, x1: p.x + 3, y0: p.y - 3, y1: p.y + 3 }));
   const box = (x: number, y: number) => (x <= 14 && y >= 113 && y <= 123) || (x >= S.x0 && x <= S.x1 && y >= S.y0 && y <= S.y1)
-    || [...SALT_BOXES, C, ...CITIES.map((c) => c.outerBox), OLD_HEARTHHOLD_GATE, ...BORDER_BOXES, ...STONE_BOXES].some((b) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1)
+    || [...SALT_BOXES, C, ...CITIES.map((c) => c.outerBox), ...Object.values(OLD_CITY_GATES), ...BORDER_BOXES, ...STONE_BOXES].some((b) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1)
     || HIGHWAY_MASK.has(y * MAP_W + x) || VILLAGE_MASK.has(y * MAP_W + x) || CITY_MASK.has(y * MAP_W + x);
   const h = createHash("sha256");
   for (let y = 0; y < WORLD_H; y++) h.update(GROUND[y].map((g, x) => (box(x, y) ? -9 : g)).join(",") + "|" + OBJECTS[y].map((o, x) => (box(x, y) ? -9 : o)).join(",") + "\n");

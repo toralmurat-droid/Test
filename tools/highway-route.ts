@@ -50,7 +50,7 @@ const LEGS: Record<number, { from: string; to: string; via: P[] }[]> = {
     { from: "Cairnwatch", to: "The Ashen Pass", via: [[78, 717], [117, 742], [145, 739], [146, 740]] },
   ],
   4: [
-    { from: "Scarwall Gate", to: "Fangrock", via: [[26, 824], [47, 843], [48, 855], [50, 857]] },
+    { from: "Scarwall Gate", to: "Fangrock", via: [[34, 823], [35, 831], [47, 843], [48, 855], [50, 857]] },
     { from: "Fangrock", to: "Vulture's Roost", via: [[50, 857], [119, 852]] },
     { from: "Fangrock", to: "The Rattler's Way", via: [[60, 851], [76, 908]] },
     { from: "Vulture's Roost", to: "The Rustwater Post", via: [[119, 852], [181, 866], [221, 872]] },

@@ -2,6 +2,8 @@ import { TILE, type MobKind } from "./constants";
 import { isSolidAt, isSolidTile, REDFANG, REDFANG_TOWERS, T } from "./map";
 import { BR, FANGROCK, FANGROCK_KEEP, FANGROCK_TOWERS, LEDGES, TALON_FORT, TALON_TOWERS } from "./badlands";
 import { HIDEHALL, HIDEHALL_BURROWS, HIDEHALL_TOWERS, SR } from "./sinkholes";
+import { CITY, cityGates, inLandCities, plotBox } from "./capitals";
+import { CITY_APRON } from "./cityLand";
 
 /**
  * Redfang Hollow (Murat 2026-11-03): a small, organised outlaw camp instead of a crowd of bandits.
@@ -87,9 +89,29 @@ export interface BanditPost {
   route?: [number, number][];
 }
 
+/**
+ * True when no city in its land (settlement network step 5) claims map tile (x, y): outside every such city's walls and
+ * apron, and at least CITY.gateClear from each of its gates' outside tiles (the spawn zones keep the same ring clear).
+ */
+export function cityClear(x: number, y: number): boolean {
+  for (const c of inLandCities()) {
+    const b = plotBox(c), r = CITY_APRON;
+    if (x >= b.x - r && y >= b.y - r && x < b.x + b.w + r && y < b.y + b.h + r) return false;
+    if (cityGates(c).some((g) => Math.hypot(x - g.out.x, y - g.out.y) < CITY.gateClear)) return false;
+  }
+  return true;
+}
+/**
+ * A camp's posts with none in a city in its land or by its gates (cityClear): a post standing there (a burrow or ledge
+ * ambusher, a guard) is dropped, a patrol keeps the route points outside. Every other post stays as it was, in order.
+ */
+export function clearOfCities(posts: BanditPost[]): BanditPost[] {
+  return posts.filter((p) => cityClear(p.at[0], p.at[1])).map((p) => (p.route?.some(([x, y]) => !cityClear(x, y)) ? { ...p, route: p.route.filter(([x, y]) => cityClear(x, y)) } : p));
+}
+
 const B = REDFANG;
 /** Every bandit of Redfang Hollow, in the order the posts are filled (lookouts first, patrols last). */
-export const CAMP_POSTS: BanditPost[] = [
+export const CAMP_POSTS: BanditPost[] = clearOfCities([
   ...REDFANG_TOWERS.map(([x, y]): BanditPost => ({ role: "lookout", at: [x, y] })),
   { role: "brute", at: [B.x + 11, B.y + 8] }, // on the lane, facing the north gate
   { role: "brute", at: [B.x + 11, B.y + 15] }, // by the south gate
@@ -104,14 +126,14 @@ export const CAMP_POSTS: BanditPost[] = [
   // Ambushers: two per grove, up in the trees beside the trails round the camp (the bandits' own woods)
   ...([[236, 94], [256, 94], [234, 106], [244, 127], [271, 113]] as [number, number][])
     .flatMap((at): BanditPost[] => [{ role: "ambusher", at }, { role: "ambusher", at }]),
-];
+]);
 
 /** A Fangrock / Talon Fort post (local badlands tiles) held by one of the clan's kinds. */
 const bp = (kind: MobKind, role: BanditRole, x: number, y: number, route?: [number, number][]): BanditPost =>
   ({ kind, role, at: [x, BR(y)], ...(route ? { route: route.map(([rx, ry]): [number, number] => [rx, BR(ry)]) } : {}) });
 const FK = FANGROCK_KEEP, F = FANGROCK, TF = TALON_FORT;
 /** Fangrock's garrison (the Redfang seat, Lv 36-38): crossbowmen on the towers, two captains, the clan's men and dogs. */
-export const FANGROCK_POSTS: BanditPost[] = [
+export const FANGROCK_POSTS: BanditPost[] = clearOfCities([
   ...FANGROCK_TOWERS.map(([x, y]) => bp("crossbowman", "lookout", x, y)),
   bp("redcaptain", "brute", 37, 78),                  // on the main lane inside the east gate
   bp("redcaptain", "brute", FK.x + FK.w + 2, FK.y + 6), // before the keep's gate
@@ -126,9 +148,9 @@ export const FANGROCK_POSTS: BanditPost[] = [
   bp("warhound", "cutthroat", 29, F.y + F.h + 1, [[29, F.y + F.h + 1], [35, 100], [49, 99], [60, 94]]),
   // ambushers: two on each ledge-pair by the roads (shared/badlands.ts LEDGES)
   ...LEDGES.filter(([x]) => x < 100).map(([x, y]) => bp("outrider", "ambusher", x, y + 1)),
-];
+]);
 /** Talon Fort's garrison (Lv 32-35): a captain, three lookouts, a patrol down the river road, two ambushers on its ledges. */
-export const TALON_POSTS: BanditPost[] = [
+export const TALON_POSTS: BanditPost[] = clearOfCities([
   ...TALON_TOWERS.map(([x, y]) => bp("crossbowman", "lookout", x, y)),
   bp("redcaptain", "brute", TF.x + 9, TF.y + 7),
   bp("firebrand", "archer", 122, 26), bp("crossbowman", "archer", 127, 23), bp("outrider", "cutthroat", 131, 26),
@@ -136,14 +158,14 @@ export const TALON_POSTS: BanditPost[] = [
   bp("outrider", "cutthroat", 127, TF.y + TF.h + 1, [[127, TF.y + TF.h + 1], [136, 44], [146, 62]]),
   bp("warhound", "cutthroat", 128, TF.y + TF.h + 1, [[128, TF.y + TF.h + 1], [137, 44], [147, 62]]),
   ...LEDGES.filter(([x]) => x > 100).map(([x, y]) => bp("outrider", "ambusher", x, y + 1)),
-];
+]);
 
 /** A Hidehall post (local sinkholes tiles) held by one of the Hide-Kin. */
 const hp = (kind: MobKind, role: BanditRole, x: number, y: number, route?: [number, number][]): BanditPost =>
   ({ kind, role, at: [x, SR(y)], ...(route ? { route: route.map(([rx, ry]): [number, number] => [rx, SR(ry)]) } : {}) });
 const HH = HIDEHALL;
 /** Hidehall's garrison (the Hide-Kin's seat, Lv 40-43): quillbacks on the towers, two Hide-Chieftains, stitchers, packs and chargers. */
-export const HIDEHALL_POSTS: BanditPost[] = [
+export const HIDEHALL_POSTS: BanditPost[] = clearOfCities([
   ...HIDEHALL_TOWERS.map(([x, y]) => hp("quillback", "lookout", x, y)),
   hp("hidechief", "brute", 248, 135),   // on the main lane inside the north gate
   hp("hidechief", "brute", 256, 151),   // before the great hall's door
@@ -158,7 +180,7 @@ export const HIDEHALL_POSTS: BanditPost[] = [
   hp("stagkin", "cutthroat", HH.x - 1, 143, [[HH.x - 1, 143], [218, 147], [190, 151]]),
   // ambushers: a Delver under each burrow mound by the roads (shared/sinkholes.ts HIDEHALL_BURROWS)
   ...HIDEHALL_BURROWS.map(([x, y]) => hp("delver", "ambusher", x, y + 1)),
-];
+]);
 
 /**
  * The organised camps (Murat 2026-11-03's Redfang Hollow and the badlands' forts): the spawn zone they belong to, their

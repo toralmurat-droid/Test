@@ -229,7 +229,7 @@ test("landmarks: solid boxes on open ground in their area and land, blocking mov
         const g = GROUND[ty][tx], o = OBJECTS[ty][tx];
         assert.ok(g !== T.WATER && g !== T.COBBLE && g !== T.BRIDGE && !HIGHWAY_TILES.has(ty * MW + tx), `${l.id}: road or water at ${tx},${ty}`);
         // (a city's wall may stand in the ring, owner's default for Hearthhold, settlement network step 5: the windmill stays
-        // where it stood, 0.6 tiles off the east wall; tests/hearthhold.test.ts keeps a body's way open between them)
+        // where it stood, 0.6 tiles off the east wall; tests/cityLand.test.ts keeps a body's way open between them)
         assert.ok(o === EMPTY || NATURE.has(o) || !!cityAt(tx, ty), `${l.id}: built object at ${tx},${ty}`);
       }
       for (const p of [...PORTAL_SPOTS.map((q) => [q.x + 0.5, q.y + 0.5]), ...SIGNPOSTS.map((q) => [q.x + 0.5, q.y + 0.5]), ...[...NPCS, ...CHESTS, ...HOLDS, ...MUSTERS].map((q) => [q.x / TILE, q.y / TILE])])

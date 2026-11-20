@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CITIES, cityAtPx } from "../shared/capitals";
+import { CITIES, cityAtPx, cityGates } from "../shared/capitals";
 import { cityFolkPlan, folkFree, folkLine, inCityBox, routeAt, routeLength } from "../client/src/cityFolk";
 
 test("every city has 30..40 people, and a post or route for each", () => {
@@ -11,7 +11,7 @@ test("every city has 30..40 people, and a post or route for each", () => {
     for (const q of p.people) assert.ok(q.spot || q.route, `${c.clan}: ${q.job} has nothing to do`);
     const by = (j: string) => p.people.filter((q) => q.job === j).length;
     assert.equal(by("patrol"), 4); assert.equal(by("recruit"), 3); assert.equal(by("keeper"), 4); assert.equal(by("shopper"), 6);
-    assert.equal(by("warden"), c.site ? 6 : 2); assert.equal(by("crier"), 1); assert.equal(by("monk"), 2);
+    assert.equal(by("warden"), 2 * (c.site ? cityGates(c).length : 1), "two at each gate"); assert.equal(by("crier"), 1); assert.equal(by("monk"), 2);
   }
 });
 

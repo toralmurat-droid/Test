@@ -12,9 +12,9 @@ import { TITLES } from "./cosmetics";
  * inside logs back in at that land's town.
  *
  * Settlement network step 5: one by one the cities leave the band and stand in their homelands (`site`, shared/cityLand.ts
- * builds them there): heroes walk in through three open gates (south, west, east) on the land's roads, and a gate ward
- * (server/cityGates.ts) keeps W7's entry rules. Hearthhold stands in Oakvale's north-west; its strip plot stays rock until
- * all five have moved.
+ * builds them there): heroes walk in through open gates (south, and west and east where the land allows: `sideGates`) on
+ * the land's roads, and a gate ward (server/cityGates.ts) keeps W7's entry rules. Hearthhold stands in Oakvale's
+ * north-west, Scarwall in the Red Badlands' north-west; their strip plots stay rock until all five have moved.
  *
  * Every city is the same plan (CITY_TEMPLATE, local tiles 0..w-1 x 0..h-1, the gate in the south wall) dressed in its
  * clan's style (walls, roofs, ground): gate square with the waystone and the stash, market with the quartermaster,
@@ -147,12 +147,17 @@ export interface City {
   sprites: Record<CityRole, string>;
   /** Built in its land (settlement network step 5): the map tile of its plot's top-left corner. Unset: in the band's plot. */
   site?: { x: number; y: number };
+  /**
+   * A city in its land: which side walls have a gate besides the south wall's (unset: both). A side against the land's
+   * edge cliffs or a lake has none, so no gate opens onto rock.
+   */
+  sideGates?: readonly ("west" | "east")[];
 }
 
 export const CITIES: readonly City[] = [
   // The Wardens' Hearthhold: in Oakvale's north-west (settlement network step 5), north of Goldenreach Farms and the
   // King's Highway, a short walk up the road from Oakvale's north gate. Its city gate used to stand at Goldenreach
-  // (shared/cityLand.ts OLD_HEARTHHOLD_GATE); the farm's Hold (26, 58) and standards (30, 49 / 34, 68) stay where they were.
+  // (shared/cityLand.ts OLD_CITY_GATES); the farm's Hold (26, 58) and standards (30, 49 / 34, 68) stay where they were.
   {
     clan: "wardens", act: 1, plot: 0, outer: { x: 66, y: 41 }, outerBox: { x0: 41, x1: 92, y0: 1, y1: 40 }, site: { x: 41, y: 1 },
     style: { wall: "WALL_STONE", roof: "ROOF_SLATE", roof2: "ROOF_RED", street: "COBBLE", ground: ["GRASS", "GRASS_DARK", "FLOWERS"], yard: "DIRT" },
@@ -172,10 +177,12 @@ export const CITIES: readonly City[] = [
     style: { wall: "WALL_STONE", roof: "ROOF_SLATE", roof2: "ROOF_SLATE", street: "COBBLE", ground: ["HEATHER", "GRASS_DARK", "RUBBLE"], yard: "DIRT" },
     sprites: { leader: "cap_host_leader", quartermaster: "steward_host", oathkeeper: "cap_host_oathkeeper", trainer: "cap_host_trainer" },
   },
-  // The Redfang Compact's Scarwall: its city gate stands on the open sand north of Fangrock's stockade (which has no
-  // north gate), thirty tiles and more from every post of the garrison. A red palisade, clay streets.
+  // The Redfang Compact's Scarwall: in the Red Badlands' north-west (settlement network step 5), on the plain north of
+  // Fangrock, its back to the band's edge cliffs (so no west gate). The highway runs from its south gate down to Fangrock's
+  // east gate; its east gate opens onto the head of Gallows Canyon (the walls cover the plain's only way north into it).
+  // Its old city gate stood on the sand north of Fangrock (shared/cityLand.ts OLD_CITY_GATES). A red palisade, clay streets.
   {
-    clan: "redfang", act: 4, plot: 3, outer: { x: 20, y: 821 }, outerBox: { x0: 15, x1: 25, y0: 817, y1: 826 },
+    clan: "redfang", act: 4, plot: 3, outer: { x: 34, y: 822 }, outerBox: { x0: 9, x1: 60, y0: 782, y1: 821 }, site: { x: 9, y: 782 }, sideGates: ["east"],
     style: { wall: "PALISADE", roof: "ROOF_RED", roof2: "ROOF_THATCH", street: "CLAY", ground: ["SAND", "GRAVEL", "CLAY"], yard: "GRAVEL" },
     sprites: { leader: "cap_redfang_leader", quartermaster: "steward_redfang", oathkeeper: "cap_redfang_oathkeeper", trainer: "cap_redfang_trainer" },
   },
@@ -202,6 +209,8 @@ export const plotBox = (c: City | number) => (typeof c === "number" ? stripBox(c
 export const cityTile = (c: City, t: { x: number; y: number }) => { const b = plotBox(c); return { x: b.x + t.x, y: b.y + t.y }; };
 /** A local city point (tiles, fractional) in px. */
 export const cityPx = (c: City, x: number, y: number) => { const b = plotBox(c); return { x: (b.x + x) * TILE, y: (b.y + y) * TILE }; };
+/** The side walls with a gate of a city in its land (City.sideGates; both when unset), west first. */
+export const citySideGates = (c: City): ("west" | "east")[] => (["west", "east"] as const).filter((s) => !c.sideGates || c.sideGates.includes(s));
 /** The cities built in their lands (City.site), not in the band. */
 export const inLandCities = (): City[] => CITIES.filter((c) => c.site);
 
@@ -243,17 +252,20 @@ export const CITY_SOLIDS: [number, number, number, number][] = CITIES.flatMap((c
 export interface CityGate { side: "south" | "west" | "east"; tiles: { x: number; y: number }[]; out: { x: number; y: number } }
 /**
  * The walk-in gates of a city in its land (City.site): the main gate's gap in the south wall and the cross street's ends in
- * the west and east walls. A band city has none (its waygate pair, shared/act2.ts, is its way in). The gate ward
- * (server/cityGates.ts), the spawn ring (shared/spawns.ts nearCityGate) and the client's gatehouses read these.
+ * the side walls it has a gate in (citySideGates), south first, then west, then east. A band city has none (its waygate
+ * pair, shared/act2.ts, is its way in). The gate ward (server/cityGates.ts), the spawn ring (shared/spawns.ts
+ * nearCityGate) and the client's gatehouses read these.
  */
 export function cityGates(c: City): CityGate[] {
   if (!c.site) return [];
   const b = plotBox(c), P = CITY_TEMPLATE, [r0, r1] = P.sideGateRows, rows = Array.from({ length: r1 - r0 + 1 }, (_, i) => b.y + r0 + i);
   const mid = b.y + Math.round((r0 + r1) / 2);
+  const side = (s: "west" | "east"): CityGate => (s === "west"
+    ? { side: "west", tiles: rows.map((y) => ({ x: b.x, y })), out: { x: b.x - 1, y: mid } }
+    : { side: "east", tiles: rows.map((y) => ({ x: b.x + b.w - 1, y })), out: { x: b.x + b.w, y: mid } });
   return [
     { side: "south", tiles: Array.from({ length: P.gateGap[1] - P.gateGap[0] + 1 }, (_, i) => ({ x: b.x + P.gateGap[0] + i, y: b.y + b.h - 1 })), out: { ...c.outer } },
-    { side: "west", tiles: rows.map((y) => ({ x: b.x, y })), out: { x: b.x - 1, y: mid } },
-    { side: "east", tiles: rows.map((y) => ({ x: b.x + b.w - 1, y })), out: { x: b.x + b.w, y: mid } },
+    ...citySideGates(c).map(side),
   ];
 }
 /**
@@ -320,7 +332,7 @@ export function buildCities(T: CityTiles, ground: number[][], objects: number[][
 
 /**
  * Builds one city on its box (plotBox: its band plot, or its site in its land), every tile of the box, and returns its
- * areas, districts first. A city in its land also opens its west and east gates (CITY_TEMPLATE.sideGateRows). Deterministic.
+ * areas, districts first. A city in its land also opens its side gates (citySideGates, CITY_TEMPLATE.sideGateRows). Deterministic.
  */
 export function buildCity(c: City, T: CityTiles, ground: number[][], objects: number[][], EMPTY: number): CityArea[] {
   const areas: CityArea[] = [];
@@ -336,7 +348,7 @@ export function buildCity(c: City, T: CityTiles, ground: number[][], objects: nu
     setO(x, y, edge ? T[S.wall] : EMPTY);
   });
   for (let x = P.gateGap[0]; x <= P.gateGap[1]; x++) { setO(x, b.h - 1, EMPTY); setG(x, b.h - 1, T.FLAGS); }
-  if (c.site) for (let y = P.sideGateRows[0]; y <= P.sideGateRows[1]; y++) for (const x of [0, b.w - 1]) { setO(x, y, EMPTY); setG(x, y, T[S.street]); }
+  if (c.site) for (let y = P.sideGateRows[0]; y <= P.sideGateRows[1]; y++) for (const s of citySideGates(c)) { const x = s === "west" ? 0 : b.w - 1; setO(x, y, EMPTY); setG(x, y, T[S.street]); }
   for (const r of P.yards) rect(r, (x, y) => setG(x, y, T[hash(b.x + x, b.y + y, 702) < 0.15 ? S.ground[1] : S.yard]));
   for (const r of P.courts) rect(r, (x, y) => setG(x, y, T.FLAGS));
   for (const r of P.streets) rect(r, (x, y) => setG(x, y, T[S.street]));

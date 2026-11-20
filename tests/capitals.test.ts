@@ -66,7 +66,7 @@ test("capitals: the cities' band is appended under the Crown, five plots side by
   }
 });
 
-// (the cities in their lands, City.site, have three gates onto their land: tests/hearthhold.test.ts)
+// (the cities in their lands, City.site, have walk-in gates onto their land: tests/cityLand.test.ts)
 for (const W of CITIES.filter((c) => !c.site)) test(`capitals: ${W.clan}'s city is walled shut but for its gate, every tile reachable from the gate, at least 50x36 inside, all safe`, () => {
   const b = plotBox(W), [gx, gy] = tileOf(waygateArrival(waygateById(`cityexit_${W.clan}`)!));
   assert.ok(cityAt(gx, gy) === W && !isSolidTile(gx, gy), "the arrival is free, inside the city");
@@ -154,10 +154,13 @@ for (const W of CITIES) test(`capitals: ${W.clan}'s people, shop, waystone, stas
   }
 });
 
-test("capitals: Hearthhold stands in Oakvale's lands with walk-in gates, no waygate pair; the band cities' gates open from Lv 5", () => {
-  // Hearthhold (settlement network step 5): no city gate dais at Goldenreach and no waygate pair (tests/hearthhold.test.ts has the city)
-  assert.ok(W.site && cityAt(W.outer.x, W.outer.y - 1) === W && cityAt(W.outer.x, W.outer.y) === undefined, "its outer tile is just outside the south gate");
-  assert.equal(waygateById("citygate_wardens"), undefined); assert.equal(waygateById("cityexit_wardens"), undefined);
+test("capitals: the cities in their lands have walk-in gates, no waygate pair; the band cities' gates open from Lv 5", () => {
+  // Hearthhold and Scarwall (settlement network step 5): no city gate dais and no waygate pair (tests/cityLand.test.ts has the cities)
+  assert.deepEqual(CITIES.filter((c) => c.site).map((c) => c.clan), ["wardens", "redfang"]);
+  for (const C of CITIES.filter((c) => c.site)) {
+    assert.ok(cityAt(C.outer.x, C.outer.y - 1) === C && cityAt(C.outer.x, C.outer.y) === undefined, `${C.clan}: its outer tile is just outside the south gate`);
+    assert.equal(waygateById(`citygate_${C.clan}`), undefined); assert.equal(waygateById(`cityexit_${C.clan}`), undefined);
+  }
   assert.equal(WAYGATES.filter((g) => cityGateOf(g)).length, 2 * CITIES.filter((c) => !c.site).length);
   assert.equal(cityGateOf(waygateById("oakvale")!), undefined);
   // the band cities' gates: open at CITY.minLevel; the way out never shuts
@@ -180,7 +183,7 @@ const LANDS: Record<string, { entry: string; seat: string }> = {
   veiled: { entry: "desert", seat: "The Veiled Sanctum" }, host: { entry: "moors", seat: "The Host's Muster" },
   redfang: { entry: "badlands", seat: "Fangrock" }, hidekin: { entry: "sinkholes", seat: "Hidehall" },
 };
-for (const C of CITIES.filter((c) => c.act !== 1)) test(`capitals: ${C.clan}'s city gate beside ${LANDS[C.clan].seat}, reachable, on open ground, out of its camps' sight`, () => {
+for (const C of CITIES.filter((c) => !c.site)) test(`capitals: ${C.clan}'s city gate beside ${LANDS[C.clan].seat}, reachable, on open ground, out of its camps' sight`, () => {
   const L = LANDS[C.clan], out = waygateById(`citygate_${C.clan}`)!, inn = waygateById(`cityexit_${C.clan}`)!;
   assert.equal(out.to, `cityexit_${C.clan}`); assert.equal(inn.to, `citygate_${C.clan}`);
   assert.deepEqual(cityGateOf(out), { city: C, inner: false });
