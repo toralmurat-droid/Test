@@ -177,8 +177,9 @@ export const CITIES: readonly City[] = [
   },
   // The Ossuary Host's Marrowkeep: on the moor north of Kingsbarrow (settlement network step 5), its back to the band's
   // northern crags, the Barrow-King's Mound just below its south wall. The highway runs from its south gate down
-  // Kingsbarrow's east edge to the fork below the Host's Muster; its west gate opens onto the Nine Widows road (no east
-  // gate: the crags). Its old city gate stood on the heather west of the Muster (shared/cityLand.ts OLD_CITY_GATES).
+  // Kingsbarrow's east edge to the fork below the Host's Muster; a short track leaves its west gate towards the Nine Widows
+  // road and stops five tiles short of it (joined, the fork would move a fort: shared/cityLand.ts) (no east gate: the
+  // crags). Its old city gate stood on the heather west of the Muster (shared/cityLand.ts OLD_CITY_GATES).
   // Black stone and bone.
   {
     clan: "host", act: 3, plot: 2, outer: { x: 255, y: 641 }, outerBox: { x0: 230, x1: 281, y0: 601, y1: 640 }, site: { x: 230, y: 601 }, sideGates: ["west"],
