@@ -205,6 +205,7 @@ function blobPartsLayout(id: string, parts: string[]): BlobPart[] {
 }
 
 interface Entity {
+  running?: boolean; runX?: number; runY?: number; runT?: number; runV?: number; // hero run cycle: run or walk now, last sprite sample, smoothed speed
   wall?: boolean; troopRole?: string; // a courtyard archer standing on a live Hold wall tile (drawn raised); its role mark, read once
   merged?: number; // blobs fused into this monster (MERGE)
   base?: number; // a monster's resting scale (kind size x merge growth): every squash/stretch starts and ends there
