@@ -10,6 +10,7 @@
  * and pass each tick on to their rooms, their heroes' valor reaching the owner through a queue per server. A save of a
  * newer version (shared/war/api.ts) is never written over: shown read-only when it allows, else hidden.
  */
+import { holdOf } from "../shared/war/standards";
 import { TILE } from "../shared/constants";
 import { CLANS, CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import { newMinds, type Mind } from "../shared/war/doctrine";
@@ -179,7 +180,7 @@ export function migrateWar(saved: Saved, oldNames: readonly string[], names: rea
   for (let i = 0; i < names.length; i++) {
     const t = ts.find((x) => x.name === names[i]), cap = t?.capitalOf ?? t?.haven; // (a heartland haven goes home too: coherence review 2026-11-20)
     if (cap && state.owner[i] !== cap) { state.owner[i] = cap; state.control[i] = 100; state.siege[i] = null; }
-    if (cap && state.fallen) state.fallen[i] = 0; // (a capital never stands fallen)
+    if (state.fallen && (cap || (t && !holdOf(t.id)))) state.fallen[i] = 0; // (a capital never stands fallen; a land left without a fort has no ruin to show or reclaim)
   }
   const to = new Map<number, number>();
   from.forEach((o, i) => { if (o !== undefined) to.set(o, i); });

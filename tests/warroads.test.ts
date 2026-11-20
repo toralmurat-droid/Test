@@ -9,7 +9,6 @@ import { LAND_LINKS, TERRITORIES, territoryByName } from "../shared/war/territor
 import { caravanRoute } from "../shared/war/caravans";
 import { MAP_W } from "../shared/constants";
 /** The neighbour pairs of one land the search cannot join today (W4 plan; with Saltwind Coast's fort by the road west of Saltmere it reaches Brinewood and Heronwreck Strand, no longer Gullrock Cove): their columns are simulated on a straight track. */
-/** The four neighbour pairs of one land the search cannot join today (W4 plan): their columns are simulated on a straight track. */
 const NO_ROAD = [["North Meadow", "Old Watchtower"], ["North Meadow", "Old Ruins"], ["Gullrock Cove", "Saltwind Coast"]]
   .map(([a, b]) => [territoryByName(a)!.id, territoryByName(b)!.id].sort((x, y) => x - y).join("-"));
 
