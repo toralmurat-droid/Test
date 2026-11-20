@@ -47,7 +47,7 @@ export class BorderLayer {
   markers(): MapMarker[] {
     return BORDERS.flatMap((b) => [b.a, b.b].map((e) => {
       const [x, y] = edgeTile(e), [ox, oy] = outward(e.side);
-      return { x: (x + 0.5 - ox * 2) * TILE, y: (y + 0.5 - oy * 2) * TILE, glyph: "◆", color: "#e8dcc0", road: true, label: `${b.name} (to ${LAND_NAMES[otherEnd(b, e).land]}, ${landBand(otherEnd(b, e).land)})`, fogged: true };
+      return { x: (x + 0.5 - ox * 2) * TILE, y: (y + 0.5 - oy * 2) * TILE, glyph: "◆", color: "#e8dcc0", road: true, label: `${b.name} (to ${LAND_NAMES[otherEnd(b, e).land]}, ${landBand(otherEnd(b, e).land)})`, layer: "ways" };
     }));
   }
 

@@ -349,7 +349,7 @@ export class DungeonView {
 
   /** Minimap markers for the ways down and up (Murat 2026-11-07: show the stairs on the map). */
   markers(): MapMarker[] {
-    return LINKS.map((l) => ({ x: l.x, y: l.y, glyph: "", color: l.down ? "#ffb347" : "#c8d8e8", label: l.label, stair: l.down ? "down" as const : "up" as const, fogged: l.floor === 0 }));
+    return LINKS.map((l) => ({ x: l.x, y: l.y, glyph: "", color: l.down ? "#ffb347" : "#c8d8e8", label: l.label, stair: l.down ? "down" as const : "up" as const, layer: "ways" as const }));
   }
 
   /** The server's open gates changed: open/shut them here too (collisions, click-to-walk paths, the barricades). */

@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-19",
+  "patch": 335,
+  "pr": 547,
+  "title": "Monsters roam freely again",
+  "changes": [
+    "Idle monsters no longer twitch on one spot at the edge of their ground: Dune Scorpions, Gildhounds and every other wandering monster now turn back smoothly and stroll about.",
+    "A monster that bumps into a rock or a wall while wandering now picks another way at once instead of pushing against it."
+  ]
+}

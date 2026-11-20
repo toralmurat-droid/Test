@@ -103,6 +103,18 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 18
 @media (hover: none) and (pointer: coarse) { #worldmap .wm-keys { display: none; } #worldmap .wm-touch { display: inline; } }
 #worldmap .wm-war { margin-left: 6px; color: #c9b89a; }
 #worldmap .wm-war.on { color: #ffd166; border-color: #e8c27a; }
+#worldmap .wm-legend { position: absolute; left: 20px; top: 30px; z-index: 2; background: rgba(13,10,7,.9); border: 2px solid #3a2a1c; padding: 4px 6px; text-align: left; cursor: default; }
+#worldmap.war .wm-legend { display: none; }
+#worldmap .wm-lg-head { font: 14px var(--pixel-font); -webkit-font-smoothing: none; color: #e8c27a; background: none; border: 0; padding: 0 2px; cursor: pointer; text-shadow: 2px 2px #000; }
+#worldmap .wm-lg-list { display: none; flex-direction: column; gap: 1px; margin-top: 3px; }
+#worldmap .wm-legend.open .wm-lg-list { display: flex; }
+#worldmap .wm-lg-row { display: flex; align-items: center; gap: 6px; font: 13px var(--pixel-font); -webkit-font-smoothing: none; color: #e6d6b8; background: none; border: 0; padding: 1px 2px; cursor: pointer; text-shadow: 1px 1px #000; text-align: left; }
+#worldmap .wm-lg-row:hover { background: #2a1d12; }
+#worldmap .wm-lg-row.off { color: #6e6252; }
+#worldmap .wm-lg-row.off .wm-lg-sample { opacity: .25; }
+#worldmap .wm-lg-tick { width: 10px; height: 10px; border: 2px solid #6b4a2a; background: #ffd166; box-shadow: inset 0 0 0 2px #2a1d12; flex: none; }
+#worldmap .wm-lg-row.off .wm-lg-tick { background: #2a1d12; }
+#worldmap .wm-lg-sample { width: 36px; height: 18px; image-rendering: pixelated; flex: none; }
 #worldmap .wm-center:hover, #worldmap .wm-war:hover { background: #3a2817; border-color: #e8c27a; }
 #location { width: 234px; max-width: 100%; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 18px; font-family: var(--pixel-font); color: #ffd166; text-shadow: 2px 2px #000; }
 #landline { width: 234px; max-width: 100%; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14px; font-family: var(--pixel-font); color: #c9b89a; text-shadow: 2px 2px #000; margin-top: -2px; }

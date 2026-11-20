@@ -207,7 +207,7 @@ export class QuestCarry {
   /** Minimap and world-map rings for the hiding places that are not already marked as quest targets (the next and last reached are). */
   markers(): MapMarker[] {
     const u = this.unseen;
-    return !u ? [] : this.checkpoints().flatMap((c, i) => i < u.cp - 1 ? [{ x: c.x, y: c.y, r: c.r, glyph: "", color: "#7f8aa0", label: c.label }] : []);
+    return !u ? [] : this.checkpoints().flatMap((c, i) => i < u.cp - 1 ? [{ x: c.x, y: c.y, r: c.r, glyph: "", color: "#7f8aa0", label: c.label, known: true }] : []);
   }
 
   /** Tracker blocks (HTML) for the light meter and the hold countdown; "" when neither is on. */
