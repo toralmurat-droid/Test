@@ -170,7 +170,7 @@ test("crown: every homeland's Crownway dais is open ground joined to its land, c
   const box = (from: string) => CROWNWAYS.find((c) => c.from === from)!.box;
   assert.equal(hash(DESERT_Y0, DESERT_Y0 + DESERT_H, box("sunscar")), "7e3ee02863d2887fca92fd002c76e6e19eac972f6fd51160f8149fc38709dfbb", "the Sunscar");
   assert.equal(hash(MOORS_Y0, MOORS_Y0 + MOORS_H, box("moors")), "f10c4c2f2e0b5244d9da9a21f526da8e6cf8707cb5812fc86483980b007d7c7e", "the moors");
-  assert.equal(hash(BADLANDS_Y0, BADLANDS_Y0 + BADLANDS_H, box("badlands")), "eec44f2bd30a87f2fac5a5a0c80a56b7320a282e96b6a2db8843a94ef13b24ea", "the badlands");
+  assert.equal(hash(BADLANDS_Y0, BADLANDS_Y0 + BADLANDS_H, box("badlands")), "b83585b7d6bcda629419f8fe2c1f9da18bd4d79b2ddb5674d3cafed9e35a49f9", "the badlands");
   assert.equal(hash(SINKHOLES_Y0, SINKHOLES_Y0 + SINKHOLES_H, box("sinkholes")), "37a76beb2b8f29433a8f30110060d0d309af1419484c6ab5193f8c651259f9ae", "the sinkholes");
 });
 

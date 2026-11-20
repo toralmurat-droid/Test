@@ -112,6 +112,22 @@ export const HIGHWAYS: readonly Highway[] = [
     { x: 81, y: 123, to: ["The Host's Muster", "Cairnwatch", "Thane's Rest", "The Moorgate"] }, // below Cairnwatch's south gate: the Eastmarch and Thane's Rest
     { x: 138, y: 135, to: ["The Host's Muster", "Cairnwatch", "Thane's Rest"] }, // Thane's Rest, above the Ashen Pass
   ] },
+  // The Red Badlands: from Scarwall's gate south round Fangrock's east wall to its east gate, then the old road east past
+  // Vulture's Roost and the Cinnabar Pits to the Rustwater Post, and out of its south and east gates to the Redgate and
+  // Red Road passes; from below Fangrock south down the Rattler's Way. Talon Fort is a sight up its own track
+  { land: 4, name: "The Badlands Highway", seat: "Fangrock", town: "The Rustwater Post", towns: ["Fangrock", "The Rustwater Post"], legs: [
+    { from: "Scarwall Gate", to: "Fangrock", pts: [[26, 44], [47, 63], [48, 76], [50, 77]] },
+    { from: "Fangrock", to: "Vulture's Roost", pts: [[50, 77], [57, 76], [67, 70], [72, 70], [79, 74], [82, 74], [93, 78], [99, 78], [107, 74], [119, 74]] },
+    { from: "Fangrock", to: "The Rattler's Way", pts: [[60, 73], [62, 73], [65, 76], [60, 90], [60, 98], [64, 109], [72, 125], [76, 128]] },
+    { from: "Vulture's Roost", to: "The Rustwater Post", pts: [[119, 74], [120, 75], [134, 76], [150, 84], [152, 83], [157, 84], [167, 80], [174, 80], [181, 83], [187, 83], [191, 86], [200, 89], [205, 89], [207, 91], [221, 92]] },
+    { from: "The Rustwater Post", to: "The Redgate Road", pts: [[234, 100], [231, 102], [231, 110]] },
+    { from: "The Rustwater Post", to: "The Red Road", pts: [[246, 92], [257, 96], [260, 95], [271, 96]] },
+  ], posts: [
+    { x: 52, y: 79, to: ["Fangrock", "The Rustwater Post", "Gallows Canyon"] }, // by Fangrock's east gate, where Scarwall's leg comes down
+    { x: 66, y: 69, to: ["Fangrock", "The Rustwater Post", "Rattlesnake Gulch", "Vulture's Roost"] }, // the Rattler's Way leaves the east road
+    { x: 237, y: 101, to: ["Fangrock", "The Rustwater Post", "The Saltlick Flats"] }, // below the Rustwater Post's south gate
+    { x: 250, y: 95, to: ["Fangrock", "The Rustwater Post", "The Red Pass"] }, // the Red Road east of the Post
+  ] },
 ];
 
 /** A leg's middle line in map tiles (row * MAP_W + x), in walking order, without repeats. */

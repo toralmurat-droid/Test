@@ -48,6 +48,14 @@ const LEGS: Record<number, { from: string; to: string; via: P[] }[]> = {
     { from: "Cairnwatch", to: "The Eastmarch Pass", via: [[77, 714], [52, 720]] },
     { from: "Cairnwatch", to: "The Ashen Pass", via: [[78, 717], [117, 742], [145, 739], [146, 740]] },
   ],
+  4: [
+    { from: "Scarwall Gate", to: "Fangrock", via: [[26, 824], [47, 843], [48, 855], [50, 857]] },
+    { from: "Fangrock", to: "Vulture's Roost", via: [[50, 857], [119, 852]] },
+    { from: "Fangrock", to: "The Rattler's Way", via: [[60, 851], [76, 908]] },
+    { from: "Vulture's Roost", to: "The Rustwater Post", via: [[119, 852], [181, 866], [221, 872]] },
+    { from: "The Rustwater Post", to: "The Redgate Road", via: [[240, 880], [231, 890]] },
+    { from: "The Rustwater Post", to: "The Red Road", via: [[246, 872], [271, 876]] },
+  ],
 };
 
 const W = MAP_W, roads = WORLD.roads, NAT = new Set<number>([...NATURE, T.CACTUS, T.BONES, T.STUMP]);
@@ -72,7 +80,7 @@ function route(a: P, b: P, y0: number, y1: number): P[] {
     if (inSkip(x, y)) return road ? 1 : inKeep(x, y) ? Infinity : 4; // a town's broken street: joined (`join`)
     let c = road ? 1 : NAT.has(OBJECTS[y][x]) && isSolidTile(x, y) ? 7 : 3;
     for (let j = -HIGHWAY_HALF; j <= HIGHWAY_HALF; j++) for (let i = -HIGHWAY_HALF; i <= HIGHWAY_HALF; i++) if (hard(x + i, y + j)) c += 8; // room for 3 wide
-    if (forts.some(([fx, fy]) => Math.max(Math.abs(fx - x), Math.abs(fy - y)) <= 9)) c += 10; // keep off the forts' clearings
+    if (!process.env.NOFORT && forts.some(([fx, fy]) => Math.max(Math.abs(fx - x), Math.abs(fy - y)) <= 9)) c += 10; // keep off the forts' clearings (NOFORT=1: ride the old road past them)
     return c;
   };
   const n = W * (y1 - y0), dist = new Float64Array(n).fill(Infinity), prev = new Int32Array(n).fill(-1), heap: [number, number][] = [];

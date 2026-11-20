@@ -4,7 +4,7 @@ import { carveBorders, LAND_ROWS } from "./borders";
 import { carveHighways, fortSkipBoxes, HIGHWAYS, highwayTiles } from "./highways";
 import { buildDesert, D, inDesertRow, KEL_MARKET, WAYGATE_OAKVALE } from "./desert";
 import { buildMoors, CAIRN_PORTAL, CAIRN_SQUARE, MOORSGATE_OAKVALE, MR } from "./moors";
-import { BR, buildBadlands, REDPASS_OAKVALE, RUSTWATER_PORTAL, RUSTWATER_SQUARE } from "./badlands";
+import { BR, buildBadlands, LEDGES, REDPASS_OAKVALE, RUSTWATER_PORTAL, RUSTWATER_SQUARE } from "./badlands";
 import { buildSinkholes, ROPEWELL_PORTAL, ROPEWELL_SQUARE, SINKWAY_OAKVALE, SR } from "./sinkholes";
 import { buildCrown, CR, crownwayDais, crownwayFrom, TOLLCROSS_SQUARE, type TileBox } from "./crown";
 import { buildCities, cityGateDais as carveCityGate, CITIES, CITY_TEMPLATE, cityAt, cityText, cityTile } from "./capitals";
@@ -1131,7 +1131,8 @@ function buildWorld() {
   // to its towns, villages and pass ends. Cut after everything else, so nothing overwrites it; never inside a town or
   // village, a city gate's box or round a capital's fort (there it rides the old streets), then its signposts beside it
   const skip: TileBox[] = [{ x0: V.x0 - 4, x1: V.x1 + 4, y0: V.y0 - 4, y1: V.y1 + 4 }, { x0: SALT_TOWN.x, x1: SALT_TOWN.x + SALT_TOWN.w - 1, y0: SALT_TOWN.y, y1: SALT_TOWN.y + SALT_TOWN.h - 1 },
-    ...CITIES.map((c) => c.outerBox), ...fortSkipBoxes()];
+    ...CITIES.map((c) => c.outerBox), ...fortSkipBoxes(),
+    ...LEDGES.map(([x, y]) => ({ x0: x, x1: x, y0: BR(y), y1: BR(y) }))]; // (the badlands' ambush ledges keep their boulders: shared/bandits.ts)
   for (const h of HIGHWAYS) for (const name of h.towns) {
     const a = areas.find((o) => o.name === name);
     if (a) skip.push({ x0: a.x, x1: a.x + a.w - 1, y0: a.y, y1: a.y + a.h - 1 });
