@@ -13,6 +13,7 @@ import { ISO, animatedTilesShown, isoAnchor, isoX, isoY } from "./iso";
 import { StaticChunks, staticObj } from "./staticChunks";
 import { SMOOTH } from "./isoflag";
 import { smoothTrees } from "./smoothArt";
+import { hasTree3d, TREE3D, tree3dOrigin, WIND_FRAMES, WIND_LIVE } from "./trees3d";
 import { hiResTexture } from "./smooth";
 import { paintBonfire, smokeTexture } from "./bonfireArt";
 import { SALT_TOWN } from "../../shared/saltmere";
@@ -33,6 +34,29 @@ const SOLID_BUILDING = new Set<number>([
 ]);
 const ROOFS = new Set<number>([T.ROOF_THATCH, T.ROOF_RED, T.ROOF_SLATE]);
 const TREES = new Set<number>([T.TREE, T.PINE, T.BUSH, T.PALM]);
+/** The 3D-built trees (trees3d.ts) by kind, [key, weight]: mostly full green oaks, now and then a sickly, autumn or dead one. */
+const OAKS3D: [string, number][] = [["tr3_oak_a", 5], ["tr3_oak_b", 4], ["tr3_oak_c", 3], ["tr3_oak_e", 3], ["tr3_oak_h", 3], ["tr3_oak_d", 1.2], ["tr3_oak_g", 0.8], ["tr3_oak_f", 0.8]];
+const PINES3D: [string, number][] = [["tr3_pine", 3], ["tr3_pine_b", 1]];
+const BUSHES3D: [string, number][] = [["tr3_bush", 1], ["tr3_bush_b", 1.4]];
+const GRASS3D: [string, number][] = [["tr3_grass_a", 2], ["tr3_grass_b", 1], ["tr3_grass_c", 2]];
+const PALMS3D: [string, number][] = [["tr3_palm_a", 1], ["tr3_palm_b", 1], ["tr3_palm_c", 1]];
+const WILLOWS3D: [string, number][] = [["tr3_willow_a", 1], ["tr3_willow_b", 1]];
+const FERNS3D: [string, number][] = [["tr3_fern_a", 1], ["tr3_fern_b", 1]];
+const SCRUB3D: [string, number][] = [["tr3_scrub_a", 1], ["tr3_scrub_b", 1]];
+const GORSE3D: [string, number][] = [["tr3_gorse_a", 1], ["tr3_gorse_b", 1]];
+/** Steady per-tile random in [0,1). */
+function tileHash(x: number, y: number, k: number) {
+  let h = (Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(k, 982451653)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+function pick3d(list: [string, number][], u: number) {
+  let w = u * list.reduce((a, [, k]) => a + k, 0);
+  for (const [key, k] of list) if ((w -= k) < 0) return key;
+  return list[list.length - 1][0];
+}
+/** Baked trees are drawn in their own colours, just dimmed a touch toward the painted world's cold light. */
+const BAKED_TINT = 0xe2e4de;
 
 const hex = (c: number) => "#" + c.toString(16).padStart(6, "0");
 const obj = (x: number, y: number) => (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H ? EMPTY : OBJECTS[y][x]);
@@ -91,12 +115,15 @@ function disc(px: Px, cx: number, cy: number, rx: number, ry: number, c: number 
 }
 
 function makeTextures(scene: Phaser.Scene) {
-  if (SMOOTH) smoothTrees(scene, K); // painted trees and bushes (same keys: the pixel ones below are then skipped)
+  // painted trees and bushes: only a fallback now, when the baked 3D sheets (trees3d.ts) did not load
+  const painted = !Object.keys(TREE3D).every((k) => hasTree3d(scene, k));
+  if (SMOOTH && painted) smoothTrees(scene, K); // (same keys: the pixel ones below are then skipped)
   // Oak: 24x28, 2 sway frames. Trunk base sits at the bottom centre (the collision tile).
   for (const [key, seed, dark, mid, light, hi] of [
     ["oak_a", 3, 0x2a5f26, 0x3a8031, 0x4f9c3e, 0x74bf55],
     ["oak_b", 7, 0x2d6329, 0x3f8a35, 0x56a845, 0x7cc95e],
   ] as const) {
+    if (!painted) break;
     canvasTex(scene, key, 24, 28, 2, (px, f) => {
       const r = rng(seed);
       disc(px, 12, 25.5, 8, 2.2, 0x000000, 0.22);
@@ -122,7 +149,7 @@ function makeTextures(scene: Phaser.Scene) {
     }, K);
   }
   // Pine: 20x30 design pixels, 2 sway frames (top sways more than the bottom). Drawn per screen pixel.
-  canvasTex(scene, "pine", 20, 30, 2, (px, f) => {
+  if (painted) canvasTex(scene, "pine", 20, 30, 2, (px, f) => {
     disc(px, 10, 27.5, 6.5, 2, 0x000000, 0.22);
     for (let y = 22 * K; y < 28 * K; y++) for (let x = 9 * K; x < 11 * K; x++) px.fine(x, y, x < 10 * K ? 0x5a3a1e : 0x4a2f18);
     const tiers: [number, number, number][] = [[0, 9, 1], [6, 16, 2.5], [12, 24, 4]];
@@ -140,7 +167,7 @@ function makeTextures(scene: Phaser.Scene) {
     px.fine(10 * K + f, 0, 0x4e9a6a); px.fine(10 * K + f - 1, 1, 0x4e9a6a);
   }, K);
   // Bush: 16x16, 2 frames.
-  canvasTex(scene, "bush", 16, 16, 2, (px, f) => {
+  if (painted) canvasTex(scene, "bush", 16, 16, 2, (px, f) => {
     disc(px, 8, 14.5, 6.5, 1.6, 0x000000, 0.22);
     disc(px, 8 + f * 0.5, 10.5, 6.8, 5, 0x1f4a1d);
     disc(px, 8 + f * 0.5, 10.5, 6.2, 4.5, 0x2f6b2a);
@@ -390,6 +417,7 @@ export class Ambient {
     this.buildShadows();
     this.buildShore();
     this.buildTrees();
+    this.buildGrass();
     this.buildChimneys();
     this.buildSpores();
     this.buildCampfires();
@@ -426,6 +454,7 @@ export class Ambient {
   }
 
   private buildTrees() {
+    WIND_LIVE.clear(); // a fresh scene: the iso dead trees register again
     const r = rng(42);
     const tints = SMOOTH ? [0xd4d8d4, 0xc6ccc8, 0xdcdfd8, 0xbcc4c0, 0xcfd2cc] : [0xffffff, 0xffffff, 0xf0fae8, 0xe6f2dc, 0xfffbe8]; // painted world: cold, dim
     for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
@@ -434,20 +463,50 @@ export class Ambient {
       const oaks = SMOOTH ? ["oak_a", "oak_b", "oak_c", "oak_d", "oak_e", "oak_a", "oak_b", "oak_f"] : ["oak_a", "oak_b"];
       const pines = SMOOTH ? ["pine", "pine", "pine_b"] : ["pine"];
       const city = y >= CITIES_Y0 - 4, crown = y >= CROWN_Y0 - 4 && !city, sink = y >= SINKHOLES_Y0 - 4 && !crown && !city, badl = y >= BADLANDS_Y0 - 4 && !sink && !crown && !city, desert = y >= DESERT_Y0 && y < MOORS_Y0 - 4, moors = y >= MOORS_Y0 - 4 && y < BADLANDS_Y0 - 4;
-      const lush = sink && (t === T.BUSH || t === T.TREE) ? (t === T.TREE ? willowTexture(this.scene, Math.floor(r() * 4)) : fernTexture(this.scene, Math.floor(r() * 3), Math.floor(r() * 4))) : undefined; // the sinkholes' willows and ferns (sinkholesArt.ts)
-      const scrub = badl && t === T.BUSH ? scrubTexture(this.scene, Math.floor(r() * 2), Math.floor(r() * 4)) : undefined; // the badlands' thorn scrub and tumbleweed (badlandsArt.ts)
-      const gorse = lush ?? scrub ?? (moors && t === T.BUSH ? gorseTexture(this.scene, Math.floor(r() * 4)) : undefined); // the moors' gorse (moorsArt.ts) instead of the plain bush
-      const key = gorse ? gorse.key : t === T.PALM ? palmTexture(this.scene, Math.floor(r() * 3)) : t === T.PINE ? pines[Math.floor(r() * pines.length)] : t === T.BUSH ? "bush" : oaks[Math.floor(r() * oaks.length)];
-      const s = this.scene.add.image((x + 0.5) * TILE + (t === T.BUSH ? 0 : Math.round((r() * 2 - 1) * K)), (y + 1) * TILE, key, 0)
-        .setOrigin(gorse ? (lush ? skOrigin(lush) : scrub ? blOrigin(scrub) : origin(gorse)).x : 0.5, gorse ? (lush ? skOrigin(lush) : scrub ? blOrigin(scrub) : origin(gorse)).y : 1).setDepth((y + 1) * TILE - 2).setTint(tints[Math.floor(r() * tints.length)]);
-      if (gorse) s.clearTint();
+      const u3 = r(), base = t === T.PALM ? pick3d(PALMS3D, u3) : sink && t === T.TREE ? pick3d(WILLOWS3D, u3) : sink && t === T.BUSH ? pick3d(FERNS3D, u3)
+        : badl && t === T.BUSH ? pick3d(SCRUB3D, u3) : moors && t === T.BUSH ? pick3d(GORSE3D, u3) : t === T.PINE ? pick3d(PINES3D, u3) : t === T.BUSH ? pick3d(BUSHES3D, u3) : pick3d(OAKS3D, u3);
+      const baked = base && hasTree3d(this.scene, base) ? base : undefined; // the 3D-built tree (trees3d.ts) when its sheet loaded
+      const lush = !baked && sink && (t === T.BUSH || t === T.TREE) ? (t === T.TREE ? willowTexture(this.scene, Math.floor(r() * 4)) : fernTexture(this.scene, Math.floor(r() * 3), Math.floor(r() * 4))) : undefined; // the sinkholes' willows and ferns (sinkholesArt.ts)
+      const scrub = !baked && badl && t === T.BUSH ? scrubTexture(this.scene, Math.floor(r() * 2), Math.floor(r() * 4)) : undefined; // the badlands' thorn scrub and tumbleweed (badlandsArt.ts)
+      const gorse = lush || scrub || (!baked && moors && t === T.BUSH ? gorseTexture(this.scene, Math.floor(r() * 4)) : undefined); // the moors' gorse (moorsArt.ts) instead of the plain bush
+      const key = baked ?? (gorse ? gorse.key : t === T.PALM ? palmTexture(this.scene, Math.floor(r() * 3)) : t === T.PINE ? pines[Math.floor(r() * pines.length)] : t === T.BUSH ? "bush" : oaks[Math.floor(r() * oaks.length)]);
+      const o3 = baked ? tree3dOrigin(baked) : undefined;
+      const s = this.scene.add.image((x + 0.5) * TILE + (t === T.BUSH ? 0 : Math.round((r() * 2 - 1) * K)), (y + (o3 ? 0.5 : 1)) * TILE, key, 0)
+        .setOrigin(o3 ? o3.x : gorse ? (lush ? skOrigin(lush) : scrub ? blOrigin(scrub) : origin(gorse)).x : 0.5, o3 ? o3.y : gorse ? (lush ? skOrigin(lush) : scrub ? blOrigin(scrub) : origin(gorse)).y : 1)
+        .setDepth((y + 1) * TILE - 2 - (o3 ? TILE / 2 - 8 : 0)).setTint(o3 ? BAKED_TINT : tints[Math.floor(r() * tints.length)]);
+      if (gorse && !baked) s.clearTint();
       const land = elementLandAt(x + 0.5, y + 0.5, 3); // the elemental wilds: frosted, blighted, charred or storm-grey trees
       if (land && ((x * 7919 + y * 104729) % 97) / 97 < 0.35 + land.k * 0.65) s.setTint(LAND_TREE_TINT[land.land.el]);
       if (desert && t === T.BUSH) s.setTint(DESERT_BUSH_TINT); // thorn scrub, sun-bleached
       if (t === T.PALM) s.setTint(0xffffff);
-      if (r() < (SMOOTH ? 0.5 : t === T.BUSH ? 0 : 0.25)) s.setFlipX(true);
-      if (SMOOTH) s.setScale(t === T.BUSH ? 0.85 + r() * 0.3 : 0.82 + r() * 0.36); // no two trees the same size
+      if (r() < (SMOOTH ? 0.5 : t === T.BUSH ? 0 : 0.25) && !baked) s.setFlipX(true); // never a baked one: its lean would blow against the wind
+      if (SMOOTH && !baked) s.setScale(t === T.BUSH ? 0.85 + r() * 0.3 : 0.82 + r() * 0.36); // no two trees the same size
+      if (baked) s.setData("wf", WIND_FRAMES);
       s.setData("ph", r() * 0.6);
+      this.trees.push(staticObj(this.scene, s, { onLive: (on) => { if (on) this.liveTrees.add(s); else this.liveTrees.delete(s); } }));
+    }
+  }
+
+  /** Everything near the view that sways: ambient's trees and tufts, and iso.ts's baked dead trees. */
+  private *windList() { yield* this.liveTrees; yield* WIND_LIVE; }
+
+  /**
+   * Tall grass that bends in the same gusts as the trees: a baked 3D tuft (trees3d.ts) on about one tall-grass tile in
+   * three of the green lands (and the odd meadow tile), kept by the static chunks like the trees, so only tufts near the view cost anything.
+   */
+  private buildGrass() {
+    if (!GRASS3D.every(([k]) => hasTree3d(this.scene, k))) return;
+    for (let y = 0; y < Math.min(MAP_H, DESERT_Y0); y++) for (let x = 0; x < MAP_W; x++) {
+      const g = GROUND[y][x];
+      if ((g !== T.TALL_GRASS && g !== T.GRASS && g !== T.GRASS_DARK) || OBJECTS[y][x] !== EMPTY) continue;
+      const h = tileHash(x, y, 7);
+      if (h > (g === T.TALL_GRASS ? 0.3 : 0.035)) continue; // thick in the tall grass, the odd tuft on a meadow
+      const key = pick3d(GRASS3D, tileHash(x, y, 8)), o = tree3dOrigin(key);
+      const wx = (x + 0.2 + tileHash(x, y, 9) * 0.6) * TILE, wy = (y + 0.2 + tileHash(x, y, 10) * 0.6) * TILE;
+      const s = this.scene.add.image(wx, wy, key, 0).setOrigin(o.x, o.y).setDepth(wy + 6).setTint(BAKED_TINT);
+      const land = elementLandAt(x + 0.5, y + 0.5, 3);
+      if (land) s.setTint(LAND_TREE_TINT[land.land.el]);
+      s.setData("ph", h * 2.3).setData("wf", WIND_FRAMES);
       this.trees.push(staticObj(this.scene, s, { onLive: (on) => { if (on) this.liveTrees.add(s); else this.liveTrees.delete(s); } }));
     }
   }
@@ -735,12 +794,16 @@ export class Ambient {
     this.swayTimer += dtMs;
     if (this.swayTimer > 110) {
       this.swayTimer = 0;
-      for (const s of StaticChunks.get(scene) ? this.liveTrees : this.trees) {
+      const chunked = !!StaticChunks.get(scene);
+      for (const s of chunked ? this.windList() : this.trees) {
         const on = !(s.x < cam.x - 24 * K || s.x > cam.right + 24 * K || s.y < cam.y || s.y > cam.bottom + 40 * K);
         if (s.visible !== on) s.setVisible(on); // off-screen trees are skipped entirely by the renderer
         if (!on) continue;
         const gust = Math.sin((s.x * 0.018 + s.y * 0.006) / K - t * 1.3) + 0.35 * Math.sin(t * 0.7 + s.getData("ph") * 10);
-        s.setFrame(gust > 0.75 ? 1 : 0);
+        const wf: number | undefined = s.getData("wf");
+        // baked trees: a pose from a little upwind to a full lean as the gust passes; painted ones: two frames
+        const fr = wf ? Math.max(0, Math.min(wf - 1, Math.round(((gust + 0.55) / 1.9) * (wf - 1)))) : gust > 0.75 ? 1 : 0;
+        if (s.frame.name !== (fr as unknown)) s.setFrame(fr);
       }
     }
 
