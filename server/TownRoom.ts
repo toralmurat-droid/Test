@@ -5703,7 +5703,8 @@ export class TownRoom extends Room<TownState> {
   // ---- Combat -------------------------------------------------------------
 
   /** All live, hittable targets (players and mobs) within `r` of (x,y), except `exclude`. */
-  private targetsAround(x: number, y: number, r: number, exclude: string, mobPad?: (m: Mob) => number): string[] {
+  /** `strike` (default): area damage and blows also catch a neutral clan's soldiers (canHurtMob); false when a skill picks one foe. */
+  private targetsAround(x: number, y: number, r: number, exclude: string, mobPad?: (m: Mob) => number, strike = true): string[] {
     const out: string[] = [];
     const me = this.state.players.get(exclude);
     this.state.players.forEach((t, tid) => {
@@ -5713,7 +5714,7 @@ export class TownRoom extends Room<TownState> {
     });
     // Only the monsters in the squares around (bodies < 64 px), not the thousands on the map
     for (const [mid, m] of this.state.mobs.inBox(x, y, mobPad ? r + 64 : r)) {
-      if (me && !this.canHurtMob(exclude, m, true)) continue; // own / group / protected heroes' summons, own clan's troops (a neutral clan's soldiers are caught in it: hitTarget)
+      if (me && !this.canHurtMob(exclude, m, strike)) continue; // own / group / protected heroes' summons, own clan's troops (a neutral clan's soldiers are caught in it: hitTarget)
       if (!m.dead && !m.hidden && Math.hypot(m.x - x, m.y - y) <= r + (mobPad ? mobPad(m) : 0)) out.push(mid);
     }
     return out;
@@ -7055,7 +7056,7 @@ export class TownRoom extends Room<TownState> {
   private portalShot(a: Player, id: string, s: Projectile) {
     const off = aimOf(a);
     let best: { x: number; y: number } | undefined, bd = Infinity;
-    for (const e of this.host.enemies(a.x, a.y, s.range, id)) {
+    for (const e of this.host.enemies(a.x, a.y, s.range, id, true)) {
       const t = this.state.players.get(e) ?? this.state.mobs.get(e);
       if (!t) continue;
       const dx = t.x - a.x, dy = t.y - a.y, d = Math.hypot(dx, dy) || 1;
@@ -7110,9 +7111,9 @@ export class TownRoom extends Room<TownState> {
       const p = this.state.players.get(id);
       return !!p && !p.dead && Date.now() >= p.stunUntil && !p.broken;
     },
-    enemies: (x, y, r, of) => {
+    enemies: (x, y, r, of, pick) => {
       const now = Date.now();
-      return this.targetsAround(x, y, r, of).filter((tid) => {
+      return this.targetsAround(x, y, r, of, undefined, !pick).filter((tid) => {
         const t = this.state.players.get(tid);
         return !t || (!isSafeZone(t.x, t.y) && now >= t.invulnUntil);
       });

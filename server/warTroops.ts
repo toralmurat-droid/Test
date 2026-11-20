@@ -146,9 +146,9 @@ export class WarTroops {
   }
 
   /**
-   * May this hero hurt that trooper? Only a hero the troops fight (sworn to another clan, of oath level), never on the
-   * safe square: allies and neutrals can't touch them, so nobody starts a fight by a stray Blizzard (the client's
-   * attack cursor reads the same stance).
+   * May this hero hurt that trooper? A hero the troops fight (sworn to another clan, of oath level), never on the safe
+   * square; with `strike` (the hero's own blows and area damage) also a hero they leave alone, which provokes them
+   * (mayProvoke). Skill picks (chain hops, nearest targets) and summons pass no `strike`: they never start a fight.
    */
   canHurt(heroId: string, m: TroopMob, strike = false): boolean {
     const tr = parseTroop(m.weapon);

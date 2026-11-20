@@ -318,6 +318,8 @@ test("feuds (room): a blow or area damage on a neutral clan's soldier lands and 
     // unsworn, in a party: the area catches it, the blow lands and the party has a grudge
     p.clan = undefined; p.party = mate.p.party = "aoeparty";
     assert.ok(room.targetsAround(m.x, m.y, 40, id).includes(mid), "a neutral clan's soldier is caught in the area");
+    assert.ok(room.host.enemies(m.x, m.y, 40, id).includes(mid), "skill area damage catches it too");
+    assert.ok(!room.host.enemies(m.x, m.y, 40, id, true).includes(mid), "a skill that picks one foe (chain hop, nearest, link) skips it");
     room.hitTarget(id, mid, 50, [0, 0], {});
     assert.ok(m.hp < hp0, "the blow lands");
     assert.ok((p.feud[owner]?.until ?? 0) > Date.now() + FEUD.grudgeMs - 3000, "marked: a grudge with that clan");
