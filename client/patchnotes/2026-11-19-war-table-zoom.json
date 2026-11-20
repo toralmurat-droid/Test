@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-19",
+  "pr": 550,
+  "title": "Zoom on the war table",
+  "changes": [
+    "You can now zoom in and out on the war table with the mouse wheel, the + and - keys or the new + / - buttons, and drag to move around. \"Whole map\" shows the full continent again."
+  ]
+}
