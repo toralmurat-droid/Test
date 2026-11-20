@@ -41,6 +41,9 @@ export const RETIRED_LEGS: readonly { land: Act; pts: readonly [number, number][
   { land: 4, pts: [[26, 44], [47, 63]] },
   // the Grey Barrow Moors: the stub from Marrowkeep's old gate dais west of the Host's Muster down to the fork below it
   { land: 3, pts: [[242, 79], [249, 85], [250, 84]] },
+  // the Mawdeep Sinkholes: the stub from Deepden's old gate dais north-west of Hidehall up to the old road east of the Maw
+  // (the leg from its east gate takes the same hollow, so the stub's upper tiles are paved again)
+  { land: 5, pts: [[206, 111], [207, 99]] },
 ];
 /** Signposts the moves took away (local tiles of their land): the King's Highway's post where it met the North Meadow road (now inside Hearthhold's walls). */
 export const RETIRED_POSTS: readonly { land: Act; x: number; y: number }[] = [{ land: 1, x: 50, y: 20 }];
