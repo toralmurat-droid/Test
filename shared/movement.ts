@@ -6,11 +6,17 @@ import { holdWallPx } from "./war/holdWalls";
 /** Map tiles, the props around the village traders (shared/npcs.ts) and the walls of the clan Holds as held now (shared/war/holdWalls.ts). */
 const isSolidAt = (x: number, y: number) => mapSolidAt(x, y) || isDecorSolidAt(x, y) || holdWallPx(x, y);
 /**
- * What movement treats as solid, for code that puts a body down at a point (a monster budded, raised or called, a
- * champion's blink): the map alone misses the landmarks (shared/landmarks.ts) and the capitals' props, and a body put
- * inside one could never step out.
+ * For code that puts a body down or slides it (a monster budded, raised or called, a champion's blink, a rush, a hero's
+ * dash or pull): the map at the point, as before, plus the feet box (PLAYER_RADIUS) against the landmarks
+ * (shared/landmarks.ts), the capitals' props and the Hold walls. The map alone misses those, and a body left with its
+ * feet in one could never walk out (moveStep refuses every step whose feet box overlaps a solid), so a dash stops
+ * before the box, as walking does. Map walls keep the old point test, so moves along them are unchanged.
  */
-export const bodySolidAt = isSolidAt;
+export function bodySolidAt(x: number, y: number): boolean {
+  if (mapSolidAt(x, y)) return true;
+  const r = PLAYER_RADIUS, off = (px: number, py: number) => isDecorSolidAt(px, py) || holdWallPx(px, py);
+  return off(x - r, y - r) || off(x + r, y - r) || off(x - r, y + r) || off(x + r, y + r);
+}
 
 /** True when a hero's feet box at (x, y) overlaps a wall, water or a solid prop. */
 export function blocked(x: number, y: number): boolean {

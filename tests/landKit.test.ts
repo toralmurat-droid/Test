@@ -193,8 +193,8 @@ test("no monster spawns inside a landmark's solid box (it could never step out)"
   }
 });
 
-test("monsters put down by the room (budded, raised, called, a champion's blink, an ambush landing) can't land in a landmark", async () => {
-  // server/TownRoom.ts tests those points with bodySolidAt (what movement treats as solid), not the map's isSolidAt
+test("bodySolidAt blocks every landmark box and the feet's reach round it (the map alone does not); hide spots never step out under one", async () => {
+  // the room's placements and slides test bodySolidAt; tests/landmarkBodies.test.ts drives a dash and a rush in a room
   const { findHideSpot, underLandmark } = await import("../shared/spawns");
   for (const [x, y, w, h] of LANDMARK_SOLIDS) {
     for (const [fx, fy] of [[0.05, 0.05], [0.5, 0.5], [0.95, 0.95], [0.05, 0.95], [0.95, 0.05]]) {
@@ -202,6 +202,10 @@ test("monsters put down by the room (budded, raised, called, a champion's blink,
       assert.ok(bodySolidAt(px, py), `${px / TILE},${py / TILE}: open to a body`);
       assert.ok(!isSolidAt(px, py), "the map alone does not block it (the case this guards)");
     }
+    // a body centred just outside the box would have its feet in it: blocked too; a little farther out it is free
+    const mid = (y + h / 2) * TILE;
+    assert.ok(bodySolidAt(x * TILE - 3, mid) && bodySolidAt((x + w) * TILE + 3, mid), "the feet box reaches into the landmark");
+    assert.ok(!bodySolidAt(x * TILE - 8, mid) && !bodySolidAt((x + w) * TILE + 8, mid), "blocked too far from the box");
     // a tree ambusher's step-out spot never falls under one
     const s = findHideSpot("rattler", (x + w / 2) * TILE, (y + h / 2) * TILE, 8, new Set(), [T.TREE, T.PINE, T.ROCK, T.CACTUS, T.BARROW, T.BONE_PILE, T.GRAVE]);
     if (s) assert.ok(!underLandmark(Math.floor(s.outX / TILE), Math.floor(s.outY / TILE)), "hide spot steps out under a landmark");

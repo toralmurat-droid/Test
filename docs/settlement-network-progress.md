@@ -114,6 +114,16 @@ Roadmap: client/src/roadmap.ts, "Settlement network".
     `canStand`, the Crown monsters' `canStand`, budded bloblings, raised skeletons, called reinforcements and a tree
     ambusher's landing now test `bodySolidAt` (shared/movement.ts: what movement treats as solid). `findHideSpot`'s
     step-out spot skips tiles under a landmark. Spawn zones were already covered by `underLandmark`.
+  - Review of #566: every other room path that slides or puts down a body now tests `bodySolidAt` too: beast rushes
+    (pounce, swoop, gore, stampede), the skill host's `move` and `place` (hero dashes and leaps, pulls and pushes on
+    monsters), the Black Hole's void-hop, summon placement and recall, the brides, the Colossus split, chest guards, the
+    rite's demon, the Chief's Leap landing, raiseServant and raiseKin. `bodySolidAt` is the map at the point (as before,
+    so moves along map walls are unchanged) plus the feet box (PLAYER_RADIUS) against decor and Hold walls: a dash
+    stops before a landmark as walking does, never with its feet in it (moveStep would then refuse every step out).
+    Before, a tuskborn's gore ran straight through the headframe. Left on the map test: line of sight, spark hazards,
+    projectiles (they still fly through landmarks), and wisps (they fly, no walls). tools/balance/duel.ts shares none of
+    this (its own host, no walls); with Math.random seeded the same, its output is byte-identical before and after.
+    `tests/landmarkBodies.test.ts` (room): a hero's dash and a beast's gore at the headframe stop west of it and walk on.
   - Tests (tests/landKit.test.ts): each land's kit and landmark, the pen, ore carts by the headframe, way-cairns 2.5-6 tiles
     off the highway, the beacon's light, `bodySolidAt` inside every landmark box, hide spots; the NPC_DECOR check is per
     landmark (its id, sheet and box), the seat test reads FORT_SKIP + SEAT_MARGIN. No map tile changed.
