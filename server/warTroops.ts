@@ -71,6 +71,8 @@ export interface WarTroopsHost {
   ranked(heroId: string, rank: string): void;
   /** Troopers the caravans hold out of WAR_TROOPS.maxTroops right now (server/warCaravans.ts). */
   reserved?(): number;
+  /** Where land t's new soldiers come out: its barracks (server/warHoldWorks.ts), null while it lies wrecked (none come), undefined: the Hold gate as before. */
+  barracks?(t: number): { x: number; y: number } | null | undefined;
 }
 
 /** An archer's shot: the client's projectile kind, its speed (px/s), range (px) and radius (px). */
@@ -338,7 +340,7 @@ export class WarTroops {
     near.sort((a, b) => (atBanner.has(b[0]) ? 1 : 0) - (atBanner.has(a[0]) ? 1 : 0) || a[1] - b[1]);
     let budget = Math.max(0, WAR_TROOPS.maxTroops - (this.h.reserved?.() ?? 0)); // caravans (server/warCaravans.ts) claim their share first
     for (const [t] of near) {
-      const land = this.lands.get(t)!, clan = CLAN_KEYS[v!.owner[t]];
+      const land = this.lands.get(t)!, clan = v!.fallen?.includes(t) ? undefined : CLAN_KEYS[v!.owner[t]]; // (a fallen Hold fields nobody: shared/war/holdFall.ts)
       if (!clan) { this.clearLand(land); continue; }
       const flipped = !!land.clan && land.clan !== clan;
       if (flipped) this.clearLand(land);
@@ -359,12 +361,13 @@ export class WarTroops {
       // fewer men now (lower control, a siege, the room's cap): the extra ones go
       for (const s of land.slots) if (!slots.slice(0, want).includes(s) && s.id) this.drop(s);
       land.slots = slots.slice(0, want);
+      const door = this.h.barracks?.(t); // (its barracks wrecked: no new soldier at all; standing: they come out of it)
       for (const s of land.slots) {
         if (s.id) { const tr = this.troops.get(s.id); if (tr) this.perch(tr, this.h.mob(s.id)); continue; } // (the Hold's tier may have changed: on or off the wall)
-
+        if (door === null) continue;
         if (s.fellAt !== SLEEPING && now - s.fellAt < WAR_TROOPS.respawnMs) continue;
         // a land that just woke has its men at their posts; a new holder, the fallen and new recruits come out of the Hold gate
-        this.spawn(land, s, fresh && !flipped && s.fellAt === SLEEPING ? this.postOf(t, s, now) : { ...patrolOf(t)!.pts[0] }, clan);
+        this.spawn(land, s, fresh && !flipped && s.fellAt === SLEEPING ? this.postOf(t, s, now) : door ? { ...door } : { ...patrolOf(t)!.pts[0] }, clan);
       }
     }
   }

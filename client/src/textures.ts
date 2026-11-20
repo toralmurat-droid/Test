@@ -5,6 +5,7 @@ import { AFFIX_KEYS, AFFIXES, CHAMP_WEAPON_SHEETS as CHAMP_SHEETS } from "../../
 import { TILE_COUNT } from "../../shared/map";
 import { troopLook } from "../../shared/war/patrols";
 import { parseTroop } from "../../shared/war/troops";
+import { CLAN_KEYS as WAR_WORK_CLANS } from "../../shared/war/clans";
 import { COMMON_ROWS, ROWS, drawTileset } from "./tileset";
 import { SMOOTH } from "./isoflag";
 import { hiResTexture } from "./smooth";
@@ -374,6 +375,11 @@ const PAINTED_LOOK: Record<string, { top: number; bar: number; oy: number; scale
   ...Object.fromEntries(WAR_CART_CLANS.map((c) => [`war_cart_${c}`, { top: 36, bar: 30, oy: 40 / 44 }])),
   // the Host's siege ram (shared/war/works.ts): the same 72x44 frame layout as the carts
   war_ram_host: { top: 36, bar: 30, oy: 40 / 44 },
+  // a Hold's works (shared/war/holdFall.ts; tools/art/paint/warWorks.ts): props on their own sheets, fortifications as an empty
+  // body over the fort's tower or gate (only the name and HP bar show, high up on the tower)
+  ...Object.fromEntries(WAR_WORK_CLANS.flatMap((c) => [[`war_work_barracks_${c}`, { top: 55, bar: 56, oy: 58 / 64 }], [`war_work_stores_${c}`, { top: 30, bar: 30, oy: 36 / 40 }],
+    [`war_work_rack_${c}`, { top: 36, bar: 28, oy: 40 / 44 }], [`war_work_rubble_${c}`, { top: 26, bar: 26, oy: 32 / 36 }]])),
+  war_work_tower: { top: 58, bar: 30, oy: 0.5 }, war_work_gate: { top: 40, bar: 30, oy: 0.5 }, war_work_mark: { top: 40, bar: 30, oy: 0.5 },
   // the Hide-Kin tunnel mouth (tools/art/paint/warTunnel.ts): 80x44 frames, about 2.5 tiles wide, the ground line at 40/44
   war_tunnel_hidekin: { top: 38, bar: 30, oy: 40 / 44 },
   // Act 2, the Sunscar
@@ -409,6 +415,10 @@ export const WAR_LEGACY: Record<string, string> = {
 /** The art key ("war_redfang_chief"...) a server trooper wears: its clan and rank ride in Mob.weapon (shared/war/troops.ts). */
 export function trooperArt(weapon: string): string {
   const t = parseTroop(weapon);
+  if (t?.part === "work") { // a Hold's work (shared/war/holdFall.ts): a prop's own sheet; a fortification is the fort's art itself (only its name and HP bar show)
+    if (t.work === "tower" || t.work === "gate") return t.work === "tower" ? "war_work_tower" : "war_work_gate";
+    return warMissing.has(`mob_war_work_${t.work}_${t.clan}`) ? `war_cart_${t.clan}` : `war_work_${t.work}_${t.clan}`;
+  }
   if (t?.part === "mouth") return warMissing.has(`mob_war_tunnel_${t.clan}`) ? `war_cart_${t.clan}` : `war_tunnel_${t.clan}`; // a tunnel mouth: its own sheet, the clan's cart until that exists
   if (t?.part === "ram") return warMissing.has(`mob_war_ram_${t.clan}`) ? `war_cart_${t.clan}` : `war_ram_${t.clan}`; // a siege ram: its own sheet, the clan's cart until that exists
   if (t?.cart) return `war_cart_${t.clan}`; // a supply cart: its own sheet (not a soldier's)
@@ -438,6 +448,10 @@ lookStandins();
 export function mobTexture(scene: Phaser.Scene, kind: string, level = 1, weapon = "", bones = 0, champion = false): string {
   const standin = MOORS_STANDIN[kind];
   if (standin && !PAINTED_MOBS.includes(kind)) return mobTexture(scene, standin[0], level, standin[1], bones, champion);
+  if (kind === "trooper" && parseTroop(weapon)?.part === "work") { // a Hold's work: its painted sheet, or no body at all (a fortification, or until the sheet loads)
+    const art = trooperArt(weapon);
+    return (art !== "war_work_tower" && art !== "war_work_gate" && warSoldierTexture(scene, art)) || blankWorkTexture(scene);
+  }
   if (kind === "trooper") { // a clan soldier: its painted sheet once loaded, an old monster look meanwhile (the watchman is a hero sheet: a bandit stands in)
     const art = trooperArt(weapon), painted = warSoldierTexture(scene, art);
     if (painted) return painted;
@@ -515,6 +529,16 @@ export function warTunnelTexture(scene: Phaser.Scene): string | null {
 /** A champion affix's painted detail (tools/art/paint/mobs.ts champOverlay, 2 frames), or null (pixel look, not loaded). */
 export function champOverlayTexture(scene: Phaser.Scene, k: string): string | null {
   return SMOOTH ? paintedSheet(scene, `mob_champ_${k}`) : null;
+}
+
+/**
+ * An empty 14-frame sheet (art key "war_work_mark") for a Hold's fortification works (shared/war/holdFall.ts): the fort's
+ * own tower or gate art is its body, the entity only carries the name and the HP bar. Art only.
+ */
+export function blankWorkTexture(scene: Phaser.Scene): string {
+  const key = "mob_war_work_mark";
+  if (!scene.textures.exists(key)) hiResTexture(scene, key, 32, 48, 14, 1, () => {});
+  return key;
 }
 
 /** A painted monster sheet (assets/hd/mobs) turned into a frame texture once; null while it is not loaded. */

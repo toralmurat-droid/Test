@@ -71,6 +71,7 @@ export const MILESTONES: Milestone[] = [
       { name: "Forts kept clear of wild monsters", owner: "Gameplay Engineers", status: "done", note: "Wild monsters walk round clan forts; the clan's troops guard them", pr: 531 },
       { name: "Archers, pikes and riders for every clan", owner: "Gameplay + Art", status: "done", note: "Wall archers, bracing pikes and charging riders in Holds, patrols, columns, caravans, sieges and battles (#532, #534)", pr: 535 },
       { name: "Troop roles in tunnels, rituals and town gates", owner: "Gameplay Engineers", status: "doing", pr: 537 },
+      { name: "Holds fall: barracks, works to wreck, claim the ruin", owner: "Gameplay + Art", status: "doing", note: "Soldiers come out of a barracks; wreck every work and the Hold falls until a clan claims it" },
     ],
   },
   {
@@ -84,6 +85,7 @@ export const MILESTONES: Milestone[] = [
       { name: "The Grey Barrow Moors (Ossuary Host homeland, north-east)", owner: "World + Art + Narrative", status: "done", note: "Open: the Moorgate, Cairnwatch (outpost, portal stone, bounty board), seven new monsters, the Barrow-King and a quest chain. At war: 11 territories, the Host's seat at the Muster, the Wardens' Grey Ring, the Barrowgate to Oakvale", pr: 442 },
       { name: "The Mawdeep Sinkholes (Hide-Kin homeland, south)", owner: "World + Art + Narrative", status: "done", note: "Open: the Sinkway at level 30 (a cave on the beach south of Sunken Lake), Ropewell (shops, portal), eight Hide-Kin monsters and a quest chain to the Maw-Father. At war: 10 Hide-Kin territories, the Hide-Kin seat at Hidehall, the Sinkway to Oakvale", pr: 449 },
       { name: "Walk between the lands: border roads between neighbours", owner: "World + Client", status: "done", note: "Ten roads join all six lands on foot (Murat 2026-11-19); each ends in a mountain pass where the mist takes you on into the next land, open at that land's level. The gates stay as quick ways" },
+      { name: "Settlement network: capitals, towns and villages on roads, forts guarding them, more portal stones by land", owner: "World + Client", status: "doing", note: "Murat 2026-11-19: each land gets its own look and a capital-town-village road chain; capitals move into their homelands. Step 1: portal stones grouped by land" },
       { name: "The Crown of the Marches (neutral prize in the middle)", owner: "World + Gameplay", status: "done", note: "Built: the land (Lv 40-50), the five Crownways from every homeland, Tollcross, the Crown Keep, the Riven Court's monsters, The Riven Throne quest chain, the Riven King in the Throne Hall and the war for the Crown (ten territories; the Keep held by the clan with the least land). The Reckoning (#482): once a month the clans settle who holds the Keep" },
     ],
   },
