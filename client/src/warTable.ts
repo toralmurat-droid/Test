@@ -514,7 +514,7 @@ export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, font: stri
       para(`${route.length} step${route.length === 1 ? "" : "s"}`, "#a39680", 11, 13);
       routeLines(route).forEach((l, i) => { para(`${i + 1}. ${l}`, "#d8c8a0", 11, 13, 4); });
     }
-  } else if (hn !== undefined) { para(tgt === hn ? "This is where you stand." : "Click a territory to see the way there.", "#a39680", 11, 13); if (tgt !== hn) para("The dotted lines are gates between lands.", "#a39680", 11, 13); }
+  } else if (hn !== undefined) { para(tgt === hn ? "This is where you stand." : "Click a territory to see the way there.", "#a39680", 11, 13); if (tgt !== hn) para("The dotted lines are gates and roads between lands.", "#a39680", 11, 13); }
   y += 6; g.fillStyle = "#3a2a1c"; g.fillRect(lx + 4, y - 3, lw - 12, 1); y += 10;
   if (!tight || y < bot - 150) { text("The Riven Marches", lx + 4, y, "#f6b040", 14); y += 15; }
   const rk = v.reck;
