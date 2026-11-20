@@ -1,3 +1,4 @@
+import { preloadTrees3d } from "./trees3d";
 import Phaser from "phaser";
 import { MobFeed } from "./mobFeed";
 import type { MobViewMsg } from "../../shared/mobView";
@@ -84,6 +85,7 @@ import { WarRituals } from "./warRituals";
 import { WarTroops } from "./warTroops";
 import { WarStandards } from "./warStandards";
 import { WarSack } from "./warSack";
+import { HoldRuins } from "./holdRuins";
 import { WarTowns } from "./warTowns";
 import { hereAt, nodeName } from "./warRoute";
 import { regionName } from "../../shared/war/regions";
@@ -489,6 +491,7 @@ export class TownScene extends Phaser.Scene {
   private feud?: WarFeud; // feuds: provoke, Wanted badge and marks ("feud", "wanted", server/warFeuds.ts)
   private city?: CityLayer; // the capital cities: props, guards, the war table and the NPC panels (capitals.ts)
   private warTowns2?: WarTowns; // capturable towns: banners, watch, claim prompt ("towns", "townclaim", server/warTowns.ts)
+  private holdRuins?: HoldRuins; // ruins of wrecked Hold works and fallen Holds (client/src/holdRuins.ts)
   private sack?: WarSack; // sacking Holds: banner prompt, progress, sacked banners ("holds", "sack", server/warHolds.ts)
   /** W4 marching columns: the war roads and the columns as last sent (server/warMarches.ts); kept for the map overlay to draw. */
   warRoads: RoadEntry[] = [];
@@ -521,6 +524,7 @@ export class TownScene extends Phaser.Scene {
     preloadGear(this);
     preloadPaintedMobs(this);
     preloadBakedProps(this);
+    preloadTrees3d(this);
     preloadShotSheets(this);
   }
 
@@ -1734,7 +1738,10 @@ export class TownScene extends Phaser.Scene {
     this.sack = new WarSack({ // sacking Holds (client/src/warSack.ts): the server decides in server/warHolds.ts
       stance: (k) => this.feud?.stance(k) ?? "neutral", holder: (t) => clanOfIndex(this.warLast?.owner[t] ?? -1),
       besieged: (t) => !!this.warLast?.sieges.some((x) => x[0] === t), send: (type, msg) => this.room.send(type, msg),
+      fallen: (t) => !!this.warLast?.fallen?.includes(t), myClan: () => this.warStd?.clan || undefined,
     });
+    this.holdRuins = new HoldRuins(this); // wrecked Hold works and fallen Holds (client/src/holdRuins.ts; server/warHoldWorks.ts)
+    this.room.onMessage("holdworks", (m) => this.holdRuins?.setWorks(m));
     this.sack.onChange = (m) => this.warStd?.setSacked(m); // the sacker's banner over the Hold (the war map reads sack.sacked)
     this.room.onMessage("holds", (m) => { this.sack?.setHolds(m); (this.warPlaque ??= new WarPlaque(document.getElementById("hud")!)).setSack(this.sack!); });
     this.room.onMessage("sack", (m) => this.sack?.setSack(m));
@@ -1748,7 +1755,9 @@ export class TownScene extends Phaser.Scene {
     this.room.send("city");
     this.room.onMessage("war", (v) => {
       // the Hold walls follow the holders (shared/war/holdWalls.ts): prediction and click-to-walk routes see the new forts
-      const flipped = setHoldOwners(Array.isArray(v?.owner) ? v.owner : [], Array.isArray(v?.tier) ? v.tier : undefined); // (and their tiers, W3)
+      const fallen = new Set<number>(Array.isArray(v?.fallen) ? v.fallen : []); // (a fallen Hold has no walls: shared/war/holdFall.ts)
+      const flipped = setHoldOwners(Array.isArray(v?.owner) ? v.owner.map((o: number, t: number) => (fallen.has(t) ? -1 : o)) : [], Array.isArray(v?.tier) ? v.tier : undefined); // (and their tiers, W3)
+      this.holdRuins?.setWar(v);
       if (flipped.length) refreshWalk(flipped.flatMap(holdTiles));
       this.warTroops?.setWar(v); (this.warPlaque ??= new WarPlaque(document.getElementById("hud")!)).set(v); this.warPlaque.setColumns(this.warCols); this.warStd?.setWar(v); this.warLast = v; });
     this.room.onMessage("clan", (m) => this.warStd?.setClan(m));
@@ -3705,7 +3714,7 @@ export class TownScene extends Phaser.Scene {
         } else e.sprite.setFrame(FRAME_BASE[dir] + step);
         if (e.mob && p.job >= 0) { const wf = this.siege.update(id, e, p, now, moving); if (wf !== undefined) e.sprite.setFrame(wf); } // siege works
         if (e.mob && p.kind === "trooper") this.trooperFrame(e, p, now);
-        e.sprite.setFlipX(dir === "left" && !(p.kind === "trooper" && parseTroop(p.weapon)?.part === "mouth")); // a tunnel mouth never turns
+        e.sprite.setFlipX(dir === "left" && !(p.kind === "trooper" && (parseTroop(p.weapon)?.part === "mouth" || parseTroop(p.weapon)?.part === "work"))); // a tunnel mouth (or a Hold's work) never turns
         if (p.kind === "crawler" && e.sprite.isCropped) e.sprite.setAngle(dir === "left" ? -16 : dir === "right" ? 16 : 0); // leaning on its arms
         if (e.mob) e.sprite.setVisible((!p.dead || (p.kind === "trooper" && !!e.artOn)) && !p.hidden);
         else e.sprite.setAlpha(p.dead ? 0.35 : 1).setAngle(p.dead ? 90 : 0);
@@ -3907,6 +3916,7 @@ export class TownScene extends Phaser.Scene {
       this.warTroops?.update(meEnt.state.dead ? undefined : meEnt.sprite, now);
       this.warBattle.update(meEnt.state.dead ? undefined : meEnt.sprite);
       this.warRituals?.update(meEnt.state.dead ? undefined : meEnt.sprite); // the Veiled ritual circle (warRituals.ts)
+      this.holdRuins?.update(meEnt.sprite);
       this.sack?.update(meEnt.state.dead ? undefined : meEnt.sprite, !!this.npcs?.isOpen || !!this.npcs?.busy || !!this.chests?.near || !!this.stash?.near || !!this.bounty?.near || !!this.portals?.near); // a hostile Hold's banner (warSack.ts)
       this.city?.update(meEnt.state.dead ? undefined : meEnt.sprite, !!this.npcs?.isOpen || !!this.npcs?.busy || !!this.chests?.near || !!this.stash?.near || !!this.portals?.near || !!this.waygates?.near);
       this.warTowns2?.update(meEnt.state.dead ? undefined : meEnt.sprite, !!this.npcs?.isOpen || !!this.npcs?.busy || !!this.chests?.near || !!this.stash?.near || !!this.bounty?.near || !!this.portals?.near); // town banners, watch and the gate prompt (warTowns.ts)

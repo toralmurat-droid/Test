@@ -66,6 +66,10 @@ export const BATTLE = {
   leashPx: 6 * TILE,
   /** The lines stand this far either side of the field's centre (tiles); the banners are counted this often (ms). */
   lineGapTiles: 3, scoreMs: 2000,
+  /** Murat 2026-11-20 ("energetic and dense"): from waking, the lines march in and close over advanceMs until the front
+   * lines stand meetTiles from the centre (archers come on half as far, staying behind their line); a battle soldier sees
+   * a foe from sightTiles, so the wings and the second line join the clash instead of standing. */
+  advanceMs: 6000, meetTiles: 0.4, sightTiles: 8,
   /** A hero counts as active (field time, banner rings) for this long after moving, dealing or taking battle damage (ms);
    *  the field reaches this many tiles past the pitched box; a room's report of the men it fields goes stale after this (ms). */
   idleMs: 15_000, fieldMarginTiles: 4, roomStaleMs: 5000,

@@ -31,6 +31,8 @@ export interface WarView {
   tier?: number[];
   /** Pairs of clans at war (shared/war/feuds.ts pairOf), from the server's memory of the borders; the client takes them as they are. */
   wars?: number[];
+  /** Territories whose Hold fell (shared/war/holdFall.ts) and stands neutral until a clan claims it; absent when none. */
+  fallen?: number[];
   /** The Reckoning (shared/war/crown.ts): the next or current window, the scores while it runs, the crowned clan, the last result; absent from older servers. */
   reck?: ReckonView;
 }
@@ -44,6 +46,8 @@ export function warView(s: WarState, next: number, raided: readonly number[] = [
   if (hunt) v.hunt = CLAN_KEYS.indexOf(hunt);
   if (hit.length) v.raided = [...hit];
   if (rally) v.rally = CLAN_KEYS.indexOf(rally);
+  const fallen = (s.fallen ?? []).flatMap((f, t) => (f === 1 ? [t] : []));
+  if (fallen.length) v.fallen = fallen;
   const hot = s.pressure.flatMap((p, t) => (p > 0 ? [t] : []));
   if (hot.length) v.hot = hot;
   return v;

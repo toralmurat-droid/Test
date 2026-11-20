@@ -25,11 +25,14 @@ export interface HoldWallHost {
   keep?(id: string): boolean;
 }
 
+/** The holders whose walls stand: a fallen Hold (shared/war/holdFall.ts) has none until a clan claims it. */
+const standing = (s: Pick<WarState, "owner" | "fallen">): (ClanKey | undefined)[] => s.fallen ? s.owner.map((k, t) => (s.fallen![t] === 1 ? undefined : k)) : s.owner;
+
 export class HoldWalls {
   constructor(private h: HoldWallHost) {}
 
   /** Walls as `owner` holds the lands at `tier` (holdTiers; undefined owner: no war, no walls), then everyone out of them. Returns how many were moved. */
-  sync(owner: readonly ClanKey[] | undefined, tier?: readonly number[]): number {
+  sync(owner: readonly (ClanKey | undefined)[] | undefined, tier?: readonly number[]): number {
     setHoldOwners(owner ?? [], tier);
     let moved = 0;
     for (const [, b] of this.h.heroes()) if (this.free(b)) moved++;
@@ -45,12 +48,12 @@ export class HoldWalls {
   }
 
   /** sync for the live war state (undefined: no war): its holders and the tiers their Holds stand at. */
-  syncWar(s: Pick<WarState, "owner" | "fort" | "control"> | undefined): number { return this.sync(s?.owner, s && holdTiers(s)); }
+  syncWar(s: Pick<WarState, "owner" | "fort" | "control" | "fallen"> | undefined): number { return this.sync(s && standing(s), s && holdTiers(s)); }
   /** admit for the live war state. */
-  admitWar(b: WallBody, s: Pick<WarState, "owner" | "fort" | "control"> | undefined): boolean { return this.admit(b, s?.owner, s && holdTiers(s)); }
+  admitWar(b: WallBody, s: Pick<WarState, "owner" | "fort" | "control" | "fallen"> | undefined): boolean { return this.admit(b, s && standing(s), s && holdTiers(s)); }
 
   /** A hero coming in (a login, a resume after an update) at a spot a fort has walled since: out at once, not at the next sweep. */
-  admit(b: WallBody, owner: readonly ClanKey[] | undefined, tier?: readonly number[]): boolean {
+  admit(b: WallBody, owner: readonly (ClanKey | undefined)[] | undefined, tier?: readonly number[]): boolean {
     setHoldOwners(owner ?? [], tier);
     return this.free(b);
   }
