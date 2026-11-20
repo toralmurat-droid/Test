@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { ART_K as K, BADLANDS_Y0, CITIES_Y0, DESERT_Y0, MAP_H, CROWN_Y0, MAP_W, MOORS_Y0, SINKHOLES_H, SINKHOLES_Y0, TILE } from "../../shared/constants";
+import { cityAt } from "../../shared/capitals";
 import { gorseTexture, origin } from "./moorsArt";
 import { origin as blOrigin, scrubTexture } from "./badlandsArt";
 import { fernTexture, origin as skOrigin, willowTexture } from "./sinkholesArt";
@@ -255,7 +256,7 @@ export class Ambient {
   /** The hero's tile: sets how thick the moors mist lies (none outside Act 3, thick in the MIST_HOLLOWS). */
   setHero(tx: number, ty: number) {
     this.dust = ty >= BADLANDS_Y0 - 4 && ty < SINKHOLES_Y0 - 4;
-    if (ty >= CITIES_Y0 - 4) { this.dust = false; this.mistWant = 0; return; } // a capital city: clear air, no Crown haze (W7)
+    if (ty >= CITIES_Y0 - 4 || cityAt(tx, ty)) { this.dust = false; this.mistWant = 0; return; } // a capital city (also Scarwall inside its walls in the badlands): clear air, no dust or Crown haze (W7)
     if (ty >= CROWN_Y0 - 4) { this.mistWant = 0.12; return; } // the Crown: only a faint pale haze (the embers and ash are drawn by the Crown pass)
     if (ty >= SINKHOLES_Y0 - 4) { this.mistWant = 0.3; return; } // the sinkholes: a thin damp haze (cool tint, no dust)
     if (this.dust) { this.mistWant = 0.55; return; } // the badlands: dust in the heat, no hollows
