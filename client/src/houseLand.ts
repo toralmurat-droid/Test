@@ -4,9 +4,11 @@ import { rng } from "./smoothProps";
  * Land house looks (settlement network step 3, "land identity"), painted over the low cottage (isobuild.ts house):
  * Cairnwatch's "cairn" halls get rough fieldstone walls and sod roofs with grass over the eaves; the Rustwater Post's
  * "drover" houses get bleached plank walls with hides stretched on them, a longhorn skull on the gable and a patched
- * shingle roof, so the post no longer looks like Ropewell. Cosmetic only. Points are world px: x, y on the ground, z up.
+ * shingle roof, so the post no longer looks like Ropewell; Ropewell's "ropewright" halls (tall, houseLife.ts) stand on
+ * short timber stilts with braced lower walls, their thatch held down by rope nets weighted with hanging stones.
+ * Cosmetic only. Points are world px: x, y on the ground, z up.
  */
-export type LandDress = "cairn" | "drover";
+export type LandDress = "cairn" | "drover" | "ropewright";
 /** Chimney tops of Cairnwatch's halls (world px, z up): ambient.ts gives each a peat-smoke plume. Filled by isobuild.ts. */
 export const PEAT_SMOKE: { x: number; y: number; z: number }[] = [];
 type Pt = { x: number; y: number };
@@ -38,6 +40,29 @@ export function landWalls(ctx: CanvasRenderingContext2D, S: Proj, dress: LandDre
       }
       // moss and wet at the foot
       for (let k = 0; k < len / 3; k++) { const p = face(R(), R() * 6); dot(ctx, p, 1 + Math.floor(R() * 2), 1, ["rgba(60,82,44,0.55)", "rgba(44,62,34,0.5)", "rgba(80,96,54,0.45)"][Math.floor(R() * 3)]); }
+    }
+    return;
+  }
+  if (dress === "ropewright") {
+    // on stilts: the crawl space under the floor is dark, short posts stand in it, a sill beam lies on them
+    const SZ = 7;
+    for (const [face, len, dk] of [[front, X1 - X0, 0.92], [side, Y1 - Y0, 0.96]] as const) {
+      quad(ctx, [face(0, SZ), face(1, SZ), face(1, 0), face(0, 0)], `rgba(12,8,6,${dk})`);
+      for (let u = 2; u < len; u += 13 + R() * 3) {
+        const a = face(u / len, SZ), f = face(u / len, 0);
+        ctx.fillStyle = "#4a3420"; ctx.fillRect(Math.round(a.x) - 1, Math.round(a.y), 3, Math.round(f.y - a.y) + 1);
+        ctx.fillStyle = "rgba(190,150,100,0.4)"; ctx.fillRect(Math.round(a.x) - 1, Math.round(a.y), 1, Math.round(f.y - a.y) + 1);
+      }
+      quad(ctx, [face(0, SZ + 2.5), face(1, SZ + 2.5), face(1, SZ), face(0, SZ)], "#3a2818");
+      line(ctx, face(0, SZ + 2.5), face(1, SZ + 2.5), "rgba(200,160,110,0.45)", 0.7);
+    }
+    // the lower storey braced like a scaffold: a diagonal timber across each end of the side wall and the plain front tiles
+    const T0 = SZ + 2.5, T1 = Math.min(H, 30);
+    for (const f0 of [0.04, 0.56]) { line(ctx, side(f0, T0), side(f0 + 0.4, T1), "#3e2a18", 2); line(ctx, side(f0, T0 + 0.6), side(f0 + 0.4, T1 + 0.6), "rgba(190,150,100,0.35)", 0.6); }
+    const TILE = 32;
+    for (const i of b.plain.slice(0, 3)) {
+      const u0 = (i * TILE + 3) / (X1 - X0), u1 = ((i + 1) * TILE - 3) / (X1 - X0);
+      line(ctx, front(u0, T0), front(u1, T1), "#3e2a18", 2); line(ctx, front(u1, T0), front(u0, T1), "#3e2a18", 2);
     }
     return;
   }
@@ -100,6 +125,27 @@ export function landRoof(ctx: CanvasRenderingContext2D, S: Proj, dress: LandDres
       dot(ctx, { x: r.x, y: r.y - t }, 1, t, R() < 0.5 ? "#4e6230" : "#6a7a3a");
     }
     for (let k = 0; k < 4; k++) { const p = sp(0.12 + k * 0.25 + R() * 0.05, 0.92); ctx.fillStyle = "#6e6a64"; ctx.beginPath(); ctx.ellipse(p.x, p.y - 1, 2.4, 1.6, 0, 0, Math.PI * 2); ctx.fill(); dot(ctx, { x: p.x - 1, y: p.y - 2 }, 2, 1, "#9a948c"); }
+    return;
+  }
+  if (dress === "ropewright") {
+    // a net of tarred rope over the thatch: lines down the slope and along it, knotted where they cross
+    const nS = Math.max(5, Math.round(len / 9)), nT = 4;
+    for (let i = 0; i <= nS; i++) line(ctx, sp(i / nS, 0), sp(i / nS + 0.02, 1), "rgba(44,32,18,0.7)", 0.8);
+    for (let j = 1; j <= nT; j++) line(ctx, sp(0, j / (nT + 0.4)), sp(1, j / (nT + 0.4)), "rgba(44,32,18,0.6)", 0.8);
+    for (let i = 0; i <= nS; i++) for (let j = 1; j <= nT; j++) dot(ctx, sp(i / nS + 0.02 * j / nT, j / (nT + 0.4)), 1, 1, "rgba(150,120,72,0.9)");
+    // the stones that weight the net, hung on short ropes below the eave
+    for (let i = 1; i < nS; i += 2) {
+      const e = sp(i / nS + 0.02, 1), h = 3 + Math.floor(R() * 3);
+      line(ctx, e, { x: e.x, y: e.y + h }, "rgba(70,54,32,0.9)", 0.6);
+      ctx.fillStyle = R() < 0.5 ? "#6e6a64" : "#5a5650"; ctx.beginPath(); ctx.ellipse(e.x, e.y + h + 1.6, 1.8, 1.6, 0, 0, Math.PI * 2); ctx.fill();
+      dot(ctx, { x: e.x - 1, y: e.y + h + 0.6 }, 1, 1, "#9a948c");
+    }
+    // a pulley block hooked under the gable's peak
+    const g = alongX ? S(X1 + o + 1, (Y0 + Y1) / 2, top - 4) : S((X0 + X1) / 2, Y1 + o + 1, top - 4);
+    line(ctx, { x: g.x, y: g.y - 3 }, { x: g.x, y: g.y + 3 }, "#2a2622", 1.2);
+    ctx.fillStyle = "#4a3420"; ctx.beginPath(); ctx.ellipse(g.x, g.y + 5, 2.4, 3, 0, 0, Math.PI * 2); ctx.fill();
+    dot(ctx, { x: g.x - 1, y: g.y + 4 }, 2, 2, "#8a8274");
+    line(ctx, { x: g.x + 2, y: g.y + 6 }, { x: g.x + 2, y: g.y + 22 }, "rgba(150,120,72,0.95)", 0.7);
     return;
   }
   // drover: grey shingles bleached by the sun, courses down the slope, patched with new red-brown ones, a few missing

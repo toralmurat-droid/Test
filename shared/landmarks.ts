@@ -17,6 +17,7 @@ export interface Landmark {
   area: string;
   x: number;
   y: number;
+  /** Blocks movement here; none when it stands on ground the map already blocks (the lift over its pit). */
   solid?: readonly [number, number, number, number];
 }
 
@@ -27,6 +28,12 @@ export const LANDMARKS: readonly Landmark[] = [
   { id: "beacon", land: 3, area: "The Grey Barrow Moors", x: 77, y: 692, solid: [76.1, 691.1, 1.8, 1.8] },
   // a mine headframe and winch over the shaft at the Cinnabar Pits, by the Badlands Highway (the muster stays 15 tiles off)
   { id: "headframe", land: 4, area: "The Cinnabar Pits", x: 174.5, y: 883.5, solid: [173.1, 882.1, 2.8, 2.8] },
+  // the Ropewell Lift: a windlass gantry over the tame sinkhole in Ropewell's square, its cage going up and down. It stands
+  // on the pit tiles (115-116, 989-990), which the map already blocks, so it needs no box of its own
+  { id: "lift", land: 5, area: "Ropewell", x: 116, y: 990 },
+  // the caravan halt outside Kel Ashar's east gate: a loaded litter under a striped canopy (solid), the couched camels
+  // round it walk-through like the kit
+  { id: "caravan", land: 2, area: "The Sunscar", x: 168.6, y: 404.6, solid: [167.9, 404.05, 1.4, 1.1] },
 ];
 
 /** The blocking boxes, for the decor collision grid. */

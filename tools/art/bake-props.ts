@@ -21,6 +21,8 @@ import { DEEP3D } from "./paint/deep3d";
 import { OAKVALE_KIT } from "./paint/landKit/oakvale";
 import { MOORS_KIT } from "./paint/landKit/moors";
 import { BADLANDS_KIT } from "./paint/landKit/badlands";
+import { SINKHOLES_KIT } from "./paint/landKit/sinkholes";
+import { SUNSCAR_KIT } from "./paint/landKit/sunscar";
 import * as painted from "../../client/src/isoProps";
 import { BLACKR, REDR } from "../../client/src/isoProps";
 import { cow } from "../../client/src/farmArt";
@@ -63,7 +65,7 @@ mkdirSync(OUT, { recursive: true });
 const PREVIEW = process.env.PREVIEW;
 if (PREVIEW) mkdirSync(PREVIEW, { recursive: true });
 // the land kits (settlement network step 3): one file per land in paint/landKit/
-for (const P of [...PROPS3D, ...SIEGE_WORKS, ...DUNGEON3D, ...DEEP3D, ...WRECK3D, ...ELEMENTS3D, ...TENT3D, ...SHARDS3D, ...STANDARDS3D, ...OAKVALE_KIT, ...MOORS_KIT, ...BADLANDS_KIT]) {
+for (const P of [...PROPS3D, ...SIEGE_WORKS, ...DUNGEON3D, ...DEEP3D, ...WRECK3D, ...ELEMENTS3D, ...TENT3D, ...SHARDS3D, ...STANDARDS3D, ...OAKVALE_KIT, ...MOORS_KIT, ...BADLANDS_KIT, ...SINKHOLES_KIT, ...SUNSCAR_KIT]) {
   if (only.length && !only.includes(P.key)) continue;
   const t0 = Date.now();
   const sheet = bakeSheet(P.w, P.h, P.frames, (f) => renderProp(P.model(f), P.w, P.h, P.ox, P.oy), (P as { shadow?: number }).shadow ?? 0);

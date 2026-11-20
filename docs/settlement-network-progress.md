@@ -130,7 +130,37 @@ Roadmap: client/src/roadmap.ts, "Settlement network".
   - Not done: working townsfolk for Cairnwatch and Rustwater (plan Q5), the turf drying rack, creels by the doors, the
     tailings heap, skulls on the gateposts (the skull is on the gables instead).
 
+- Step 3, PR 3: the Mawdeep Sinkholes and the Sunscar.
+  - Landmarks (`shared/landmarks.ts`): the Ropewell Lift (`lk_lift`, 12 frames: two A-frames astride the square's
+    sinkhole, head beam, pulley, windlass, the cage going down into the pit and up again), foot 116,990 on the pit tiles
+    115-116, 989-990. Those tiles already block (map PIT), so the lift has **no `solid` box** (`Landmark.solid` is now
+    documented as optional for that case). The caravan halt outside Kel Ashar's east gate (`lk_caravan`: a loaded litter
+    under a striped canopy, the camel string couched round it, a hitching rail), foot 168.6,404.6, solid 167.9,404.05
+    1.4x1.1 round the canopy only (the camels are walk-through). It stands a little west of the plan's box: a rock is at
+    171,405. It lies in The Sunscar's monster zone: `underLandmark` covers its spawns (the spawn test checks it).
+  - Kit (`tools/art/paint/landKit/sinkholes.ts`, `sunscar.ts`): rope coils, a rope walk (stakes, the jack's hooks turning,
+    the traveller), a tripod gantry with a swinging cage basket; kneeling camels (saddled, salt-loaded), salt-slab stacks,
+    a salt pan with its rake.
+  - Placement (landKit.ts `SINKHOLES`, `SUNSCAR`): the rope walk north-south in Ropewell's east yard, 2 coils in its west
+    yard; a gantry and a coil by the pits in Hollowbrook Dells, 2 gantries on the Great Maw's pits (`byObject`); a loaded
+    camel, a camel and a salt stack by the caravan halt; 2 salt stacks in Kel Ashar, 2 at Jackal Springs (no camels there:
+    Hamid's ran), 2 camels and a stack at Palmshade, a loaded camel and a stack at Mirage Wells, 3 pans and a stack on the
+    Glasswind Flats. Sinkholes 7, Sunscar 16 props (budget 40). Hidehall and the Veiled Sanctum stay undressed.
+  - House looks: Ropewell is `{ style: "ropewright", dress: "ropewright" }` in `LAND_LOOK`, the only new tall style
+    (houseLife.ts: a ropewright in the door with a coil over the shoulder, rope inside, a hoist beam with a pulley and cage
+    basket, coils on pegs on the side wall and by the door; houseLand.ts: the halls stand on short stilts over a dark crawl
+    space with a sill beam, braced lower walls, a tarred rope net over the thatch with hanging stones, a pulley block under
+    the gable). Ropewell no longer matches the Rustwater Post. Kel Ashar: the door tiles already had striped awnings
+    (desertArt.ts), so this adds wind-catchers (`windCatcherTexture`, iso.ts `windCatchers`): a plastered tower with
+    louvred vents and a striped flap on the back corner of the upper storey of the three biggest houses that have one.
+  - Text: the ropewarden's IDLE line (the rope walk and the Lift), a new IDLE line for Hamid the caravaneer (salt slabs,
+    the east gate halt), Hesta Coil's and Zahra's greetings. No item ids, no stock change.
+  - Tests (tests/landKit.test.ts): the two lands' kinds and landmarks, the rope walk in the east yard, gantries by pits,
+    camels by the halt, every oasis and the Flats dressed, the two seats undressed; a landmark with no box stands on ground
+    the map blocks (only the lift, all four pit tiles solid to the map and to bodies). No map tile changed.
+  - Not done: Ropewell's working townsfolk (plan Q5), rope ladders into pits, hitching rails and water jars at the oases
+    (the halt has a rail), a light for the Lift's lantern (LANDMARK_LIGHT stays the beacon only).
+
 ## Next
-- Step 3, PR 3: Sinkholes + Sunscar (ropewright style in `LAND_LOOK`, Ropewell Lift, rope kit; caravan halt, salt kit,
-  Kel Ashar awnings). PR 4: Crown. Each adds a `tools/art/paint/landKit/<land>.ts` and its `Place` list in landKit.ts.
+- Step 3, PR 4: Crown. It adds `tools/art/paint/landKit/crown.ts` and its `Place` list in landKit.ts.
 - Later: 3-wide bridges (client isobridge.ts), per-land cobble palettes, highways on the war table (all owner calls: no for now).

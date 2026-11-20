@@ -130,7 +130,7 @@ const WALL_H = 34;
 interface LandLook { style?: HouseStyle; dress?: LandDress }
 const LAND_LOOK: Record<string, LandLook> = {
   Saltmere: { style: "fisher" }, "Millbrook Mill": { style: "mill" }, "Redfang Hollow": { style: "barracks" },
-  Cairnwatch: { dress: "cairn" }, "The Rustwater Post": { dress: "drover" },
+  Cairnwatch: { dress: "cairn" }, "The Rustwater Post": { dress: "drover" }, Ropewell: { style: "ropewright", dress: "ropewright" },
 };
 const lookAt = (x: number, y: number): LandLook | undefined => {
   const a = AREAS.find((r) => LAND_LOOK[r.name] && x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h);
