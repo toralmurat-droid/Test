@@ -7,7 +7,7 @@ import {
 import {
   CITIES, CITY, CITY_TEMPLATE, cityAt, cityGates, cityNpcId, cityNpcPx, cityText, cityTile, inLandCities, plotBox, relocateCitySpot, stripBox,
 } from "../shared/capitals";
-import { carveCitiesInLand, CITY_APRON, CITY_LAND, CITY_MASK, OLD_HEARTHHOLD_GATE, RETIRED_LEGS } from "../shared/cityLand";
+import { carveCitiesInLand, CITY_APRON, CITY_LAND, CITY_MASK, OLD_CITY_GATES, RETIRED_LEGS } from "../shared/cityLand";
 import { HIGHWAYS, legLine } from "../shared/highways";
 import { waygateById, WAYGATES } from "../shared/act2";
 import { NPCS } from "../shared/npcs";
@@ -150,9 +150,9 @@ test("hearthhold: its gates join the highways and roads: south to Oakvale and Go
   assert.ok(oakH.legs.some((l) => l.from === "Hearthhold Gate" && l.to === "Oakvale"));
   assert.equal(oakH.seat, "Goldenreach Farms", "the seat stays (owner's default)");
   for (const leg of oakH.legs) for (const k of legLine(oakH, leg)) assert.ok(!inBox(k % MAP_W, Math.floor(k / MAP_W)), `${leg.from} -> ${leg.to}: no leg inside the walls`);
-  for (const pts of RETIRED_LEGS) assert.ok(!oakH.legs.some((l) => JSON.stringify(l.pts) === JSON.stringify(pts)), "a retired leg");
+  for (const r of RETIRED_LEGS.filter((l) => l.land === 1)) assert.ok(!oakH.legs.some((l) => JSON.stringify(l.pts) === JSON.stringify(r.pts)), "a retired leg");
   // no city gate dais left at Goldenreach (farmland again)
-  const O = OLD_HEARTHHOLD_GATE;
+  const O = OLD_CITY_GATES.wardens;
   for (let y = O.y0; y <= O.y1; y++) for (let x = O.x0; x <= O.x1; x++) assert.ok(GROUND[y][x] !== T.FLAGS && GROUND[y][x] !== T.RUBBLE, `old dais at ${x},${y}`);
 });
 

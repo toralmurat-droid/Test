@@ -24,7 +24,7 @@ import { TERRITORIES } from "../shared/war/territories";
 import { REGIONS, regionOf } from "../shared/war/regions";
 import { startRoom, until, wait } from "./helpers/room";
 import { carveVillages, VILLAGE_MASK, VILLAGES } from "../shared/villages";
-import { CITY_MASK, OLD_HEARTHHOLD_GATE } from "../shared/cityLand";
+import { CITY_MASK, OLD_CITY_GATES } from "../shared/cityLand";
 
 /** 4-way flood over free tiles from (sx, sy). */
 function flood(sx: number, sy: number) {
@@ -149,12 +149,12 @@ test("badlands: the Red Pass (and the Sinkway) leave the rest of Act 1 exactly a
   // (and Oakvale's village stones' boxes) on the map before Oakvale's villages, the same with and without them, settlement
   // network step 4 PR 3; Hearthhold in Oakvale's lands, settlement network step 5: shared/cityLand.ts CITY_MASK, which holds
   // the city's box, apron, gate road and posts, the trimmed field and the retired highway legs, and its old gate's box
-  // OLD_HEARTHHOLD_GATE, re-hashed with them masked on the map before the move: the same with and without it).
+  // OLD_CITY_GATES (the clans' old city gate daises), re-hashed with them masked on the map before the move: the same with and without it).
   // A deliberate change to the overworld map must update this hash.
   const S = SINKWAY_BOX, C = crownwayFrom("oakvale").box;
   const STONE_BOXES = PORTAL_SPOTS.slice(10 + CITIES.length).map((p) => ({ x0: p.x - 3, x1: p.x + 3, y0: p.y - 3, y1: p.y + 3 }));
   const box = (x: number, y: number) => (x <= 14 && y >= 113 && y <= 123) || (x >= S.x0 && x <= S.x1 && y >= S.y0 && y <= S.y1)
-    || [...SALT_BOXES, C, ...CITIES.map((c) => c.outerBox), OLD_HEARTHHOLD_GATE, ...BORDER_BOXES, ...STONE_BOXES].some((b) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1)
+    || [...SALT_BOXES, C, ...CITIES.map((c) => c.outerBox), ...Object.values(OLD_CITY_GATES), ...BORDER_BOXES, ...STONE_BOXES].some((b) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1)
     || HIGHWAY_MASK.has(y * MAP_W + x) || VILLAGE_MASK.has(y * MAP_W + x) || CITY_MASK.has(y * MAP_W + x);
   const h = createHash("sha256");
   for (let y = 0; y < WORLD_H; y++) h.update(GROUND[y].map((g, x) => (box(x, y) ? -9 : g)).join(",") + "|" + OBJECTS[y].map((o, x) => (box(x, y) ? -9 : o)).join(",") + "\n");

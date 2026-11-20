@@ -147,12 +147,17 @@ export interface City {
   sprites: Record<CityRole, string>;
   /** Built in its land (settlement network step 5): the map tile of its plot's top-left corner. Unset: in the band's plot. */
   site?: { x: number; y: number };
+  /**
+   * A city in its land: which side walls have a gate besides the south wall's (unset: both). A side against the land's
+   * edge cliffs or a lake has none, so no gate opens onto rock.
+   */
+  sideGates?: readonly ("west" | "east")[];
 }
 
 export const CITIES: readonly City[] = [
   // The Wardens' Hearthhold: in Oakvale's north-west (settlement network step 5), north of Goldenreach Farms and the
   // King's Highway, a short walk up the road from Oakvale's north gate. Its city gate used to stand at Goldenreach
-  // (shared/cityLand.ts OLD_HEARTHHOLD_GATE); the farm's Hold (26, 58) and standards (30, 49 / 34, 68) stay where they were.
+  // (shared/cityLand.ts OLD_CITY_GATES); the farm's Hold (26, 58) and standards (30, 49 / 34, 68) stay where they were.
   {
     clan: "wardens", act: 1, plot: 0, outer: { x: 66, y: 41 }, outerBox: { x0: 41, x1: 92, y0: 1, y1: 40 }, site: { x: 41, y: 1 },
     style: { wall: "WALL_STONE", roof: "ROOF_SLATE", roof2: "ROOF_RED", street: "COBBLE", ground: ["GRASS", "GRASS_DARK", "FLOWERS"], yard: "DIRT" },
@@ -202,6 +207,8 @@ export const plotBox = (c: City | number) => (typeof c === "number" ? stripBox(c
 export const cityTile = (c: City, t: { x: number; y: number }) => { const b = plotBox(c); return { x: b.x + t.x, y: b.y + t.y }; };
 /** A local city point (tiles, fractional) in px. */
 export const cityPx = (c: City, x: number, y: number) => { const b = plotBox(c); return { x: (b.x + x) * TILE, y: (b.y + y) * TILE }; };
+/** The side walls with a gate of a city in its land (City.sideGates; both when unset), west first. */
+export const citySideGates = (c: City): ("west" | "east")[] => (["west", "east"] as const).filter((s) => !c.sideGates || c.sideGates.includes(s));
 /** The cities built in their lands (City.site), not in the band. */
 export const inLandCities = (): City[] => CITIES.filter((c) => c.site);
 
@@ -243,17 +250,20 @@ export const CITY_SOLIDS: [number, number, number, number][] = CITIES.flatMap((c
 export interface CityGate { side: "south" | "west" | "east"; tiles: { x: number; y: number }[]; out: { x: number; y: number } }
 /**
  * The walk-in gates of a city in its land (City.site): the main gate's gap in the south wall and the cross street's ends in
- * the west and east walls. A band city has none (its waygate pair, shared/act2.ts, is its way in). The gate ward
- * (server/cityGates.ts), the spawn ring (shared/spawns.ts nearCityGate) and the client's gatehouses read these.
+ * the side walls it has a gate in (citySideGates), south first, then west, then east. A band city has none (its waygate
+ * pair, shared/act2.ts, is its way in). The gate ward (server/cityGates.ts), the spawn ring (shared/spawns.ts
+ * nearCityGate) and the client's gatehouses read these.
  */
 export function cityGates(c: City): CityGate[] {
   if (!c.site) return [];
   const b = plotBox(c), P = CITY_TEMPLATE, [r0, r1] = P.sideGateRows, rows = Array.from({ length: r1 - r0 + 1 }, (_, i) => b.y + r0 + i);
   const mid = b.y + Math.round((r0 + r1) / 2);
+  const side = (s: "west" | "east"): CityGate => (s === "west"
+    ? { side: "west", tiles: rows.map((y) => ({ x: b.x, y })), out: { x: b.x - 1, y: mid } }
+    : { side: "east", tiles: rows.map((y) => ({ x: b.x + b.w - 1, y })), out: { x: b.x + b.w, y: mid } });
   return [
     { side: "south", tiles: Array.from({ length: P.gateGap[1] - P.gateGap[0] + 1 }, (_, i) => ({ x: b.x + P.gateGap[0] + i, y: b.y + b.h - 1 })), out: { ...c.outer } },
-    { side: "west", tiles: rows.map((y) => ({ x: b.x, y })), out: { x: b.x - 1, y: mid } },
-    { side: "east", tiles: rows.map((y) => ({ x: b.x + b.w - 1, y })), out: { x: b.x + b.w, y: mid } },
+    ...citySideGates(c).map(side),
   ];
 }
 /**
@@ -320,7 +330,7 @@ export function buildCities(T: CityTiles, ground: number[][], objects: number[][
 
 /**
  * Builds one city on its box (plotBox: its band plot, or its site in its land), every tile of the box, and returns its
- * areas, districts first. A city in its land also opens its west and east gates (CITY_TEMPLATE.sideGateRows). Deterministic.
+ * areas, districts first. A city in its land also opens its side gates (citySideGates, CITY_TEMPLATE.sideGateRows). Deterministic.
  */
 export function buildCity(c: City, T: CityTiles, ground: number[][], objects: number[][], EMPTY: number): CityArea[] {
   const areas: CityArea[] = [];
@@ -336,7 +346,7 @@ export function buildCity(c: City, T: CityTiles, ground: number[][], objects: nu
     setO(x, y, edge ? T[S.wall] : EMPTY);
   });
   for (let x = P.gateGap[0]; x <= P.gateGap[1]; x++) { setO(x, b.h - 1, EMPTY); setG(x, b.h - 1, T.FLAGS); }
-  if (c.site) for (let y = P.sideGateRows[0]; y <= P.sideGateRows[1]; y++) for (const x of [0, b.w - 1]) { setO(x, y, EMPTY); setG(x, y, T[S.street]); }
+  if (c.site) for (let y = P.sideGateRows[0]; y <= P.sideGateRows[1]; y++) for (const s of citySideGates(c)) { const x = s === "west" ? 0 : b.w - 1; setO(x, y, EMPTY); setG(x, y, T[S.street]); }
   for (const r of P.yards) rect(r, (x, y) => setG(x, y, T[hash(b.x + x, b.y + y, 702) < 0.15 ? S.ground[1] : S.yard]));
   for (const r of P.courts) rect(r, (x, y) => setG(x, y, T.FLAGS));
   for (const r of P.streets) rect(r, (x, y) => setG(x, y, T[S.street]));

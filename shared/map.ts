@@ -1239,7 +1239,7 @@ export const VILLAGE_POSTS: readonly { x: number; y: number; to: string[] }[] = 
 /** The signposts by the gate roads of the cities in their lands (shared/cityLand.ts CITY_LAND posts). */
 export const CITY_POSTS: readonly { x: number; y: number; to: string[] }[] = WORLD.cityPosts;
 export { VILLAGE_MASK } from "./villages";
-export { CITY_MASK, OLD_HEARTHHOLD_GATE } from "./cityLand";
+export { CITY_MASK, OLD_CITY_GATES } from "./cityLand";
 
 /**
  * Mawdeep gates (Murat 2026-11-05: "doors to open"; 2026-11-08: "part should be like a prison wall and only part a

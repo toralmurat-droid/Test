@@ -22,6 +22,7 @@ import { regionOf } from "../shared/war/regions";
 import { TERRITORIES } from "../shared/war/territories";
 import { startRoom, until, wait } from "./helpers/room";
 import { carveVillages, VILLAGE_MASK, VILLAGES } from "../shared/villages";
+import { CITY_MASK, OLD_CITY_GATES } from "../shared/cityLand";
 
 const tileOf = (p: { x: number; y: number }) => [Math.floor(p.x / TILE), Math.floor(p.y / TILE)] as const;
 const C0 = CROWN_Y0, C1 = CROWN_Y0 + CROWN_H;
@@ -167,9 +168,13 @@ test("crown: every homeland's Crownway dais is open ground joined to its land, c
   // The villages (shared/villages.ts VILLAGE_MASK, settlement network step 4) the same way: the moors' and the badlands'
   // re-hashed with the mask on the map before them, the same with and without the villages cut (no tile outside it moved);
   // step 4 PR 2 the Sunscar's and the sinkholes' the same way (the moors' and the badlands' hashes did not change).
+  // The clans' cities in their lands (settlement network step 5, shared/cityLand.ts CITY_MASK: box, apron, gate roads and
+  // posts, retired highway legs) and their old gate daises (OLD_CITY_GATES) too: each land re-hashed with them masked on
+  // the map before its city moved, the same with and without it.
   const hash = (y0: number, y1: number, B: TileBox) => {
-    const boxes = [B, ...CITIES.map((c) => c.outerBox), ...BORDER_BOXES]; // (the border roads, shared/borders.ts, cut only inside theirs)
-    const h = createHash("sha256"), inB = (x: number, y: number) => boxes.some((b) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1) || HIGHWAY_MASK.has(y * MAP_W + x) || VILLAGE_MASK.has(y * MAP_W + x);
+    const boxes = [B, ...CITIES.map((c) => c.outerBox), ...Object.values(OLD_CITY_GATES), ...BORDER_BOXES]; // (the border roads, shared/borders.ts, cut only inside theirs)
+    const h = createHash("sha256"), inB = (x: number, y: number) => boxes.some((b) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1)
+      || HIGHWAY_MASK.has(y * MAP_W + x) || VILLAGE_MASK.has(y * MAP_W + x) || CITY_MASK.has(y * MAP_W + x);
     for (let y = y0; y < y1; y++) h.update(GROUND[y].map((g, x) => (inB(x, y) ? -9 : g)).join(",") + "|" + OBJECTS[y].map((o, x) => (inB(x, y) ? -9 : o)).join(",") + "\n");
     return h.digest("hex");
   };
