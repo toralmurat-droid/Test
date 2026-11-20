@@ -217,6 +217,18 @@ export const SHOPS: Record<string, Shop> = {
     greeting: "Samira. The last sweet water before the Ashen Pass, and the last flasks too. Red for the blood, blue for the head. Fill your skins at the well: that part's free. The flasks are not.",
     stock: [...potionStock("potion", [1, 2]), ...potionStock("mpotion", [1, 2])],
   },
+  // PR 3: Wat at Lists End sells Kel Ashar's armour steps (the Crown has no armourer of its own; Lv 32-48), Pip at
+  // Furrowby the chandler's small flasks (buys nothing)
+  listsend: {
+    greeting: "Wat Hammel. I shoe the knights' horses and I mend the knights, near enough. Plate and helms off the Kel Ashar caravans, fitted at my own anvil. An oathbreaker's blade doesn't care whose son you are.",
+    stock: armourStock("sandarmourer"),
+    buys: ARMOUR_SLOTS,
+    levelHeads: true,
+  },
+  furrowby: {
+    greeting: "Pip Tansy. Grain for Saltmere, mostly, but the carts come back with flasks. Red for the blood, blue for the head. The honey's Goody Marrow's, and she doesn't sell it to strangers.",
+    stock: [...potionStock("potion", [0, 1]), ...potionStock("mpotion", [0, 1])],
+  },
   ropearmourer: {
     greeting: "Hesta Coil. Stitched hide over riveted plate, and every strap is Ropewell rope. A Delver comes up under your feet and a Stagkin comes straight at your chest: dress for both.",
     stock: armourStock("ropearmourer"),

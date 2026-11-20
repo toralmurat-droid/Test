@@ -24,7 +24,8 @@ const C = (x: number, y: number) => ({ x: (x + 0.5) * TILE, y: (y + 0.5) * TILE 
 
 test("towns: the table (patrons exist and are not capitals, spots on free ground, gates off town ground and safe squares)", () => {
   // the highway villages (settlement network step 4, shared/villages.ts) after the first four, appended
-  assert.deepEqual(TOWN_IDS, ["saltmere", "rustwater", "ropewell", "millbrook", "turfhallow", "staithe", "barrowstead", "redlode", "hornstead", "windlass", "hempfield", "saltglass", "lastwell"]);
+  assert.deepEqual(TOWN_IDS, ["saltmere", "rustwater", "ropewell", "millbrook", "turfhallow", "staithe", "barrowstead", "redlode", "hornstead", "windlass", "hempfield", "saltglass", "lastwell",
+    "listsend", "vigilsrest", "kneelstone", "sawyersend", "furrowby"]);
   assert.equal(new Set(TOWN_IDS).size, TOWNS.length);
   for (const n of ["Oakvale", "Cairnwatch", "Hunter's Camp", "Kel Ashar"]) assert.ok(!TOWNS.some((t) => t.area === n || t.name === n), `${n} is never capturable`);
   for (const t of TOWNS) {
@@ -95,7 +96,7 @@ test("towns: townPrice gives the holder's sworn 10% off, never a surcharge; the 
   assert.deepEqual(townCounts({ saltmere: { k: "wardens" }, ropewell: { k: "wardens" }, millbrook: { k: "host" } }), { wardens: 2, host: 1 });
   // the highway villages count half a town each (owner question Q1 of step 4: half the income); Millbrook stays whole
   assert.deepEqual(townCounts({ saltmere: { k: "wardens" }, turfhallow: { k: "wardens" }, redlode: { k: "host" }, hornstead: { k: "host" }, staithe: { k: "veiled" } }), { wardens: 1.5, host: 1, veiled: 0.5 });
-  assert.deepEqual(TOWNS.map((t) => townIncome(t)), [1, 1, 1, 1, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]);
+  assert.deepEqual(TOWNS.map((t) => townIncome(t)), [1, 1, 1, 1, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]);
   assert.equal(townCount({ wardens: 1.5 }, "wardens"), 1.5);
   assert.equal(townCount({ wardens: 1.7 }, "wardens"), 1.5, "steps of a half");
   assert.equal(townCount({ wardens: 0.5 }, "wardens"), 0.5);
@@ -154,21 +155,25 @@ test("towns (war): a land changing hands contests its town; held gates extend; i
   assert.equal(_stepTowns().length, 0, "no town is contested while its land stays");
   assert.equal(townHeld("saltmere"), false, "a gate is only held in a contest");
   s.owner[p] = foe;
-  let ev = _stepTowns();
+  // (Furrowby, a highway village, shares Saltmere's patron, the Saltwind Coast: its events are left out here)
+  const step = () => _stepTowns().filter((e) => e.town === "saltmere");
+  const first = _stepTowns();
+  assert.deepEqual(first.map((e) => [e.town, e.change]).sort(), [["furrowby", "contested"], ["saltmere", "contested"]], "the coast's two towns, both contested");
+  let ev = first.filter((e) => e.town === "saltmere");
   assert.equal(ev.length, 1); assert.equal(ev[0].kind, "town"); assert.equal(ev[0].change, "contested"); assert.equal(ev[0].by, foe);
   assert.deepEqual(warTowns().saltmere.c, { by: foe, until: s.tick + TOWN.graceTicks, ext: 0 });
   assert.equal(townsNow().list.find((x) => x.id === "saltmere")!.c!.by, CLAN_KEYS.indexOf(foe));
   s.tick++; assert.ok(townHeld("saltmere")); assert.deepEqual(_townsHeld(), ["saltmere"]);
-  _stepTowns(); assert.equal(warTowns().saltmere.c!.ext, 1, "held: a tick more"); assert.deepEqual(_townsHeld(), [], "cleared each tick");
-  for (let i = 0; i < 2; i++) { s.tick++; _stepTowns(); }
+  step(); assert.equal(warTowns().saltmere.c!.ext, 1, "held: a tick more"); assert.deepEqual(_townsHeld(), [], "cleared each tick");
+  for (let i = 0; i < 2; i++) { s.tick++; step(); }
   assert.ok(warTowns().saltmere.c);
-  s.tick++; ev = _stepTowns();
+  s.tick++; ev = step();
   assert.equal(ev[0]?.change, "submitted"); assert.deepEqual(warTowns().saltmere, { k: foe });
   // the land goes back during a contest: called off
-  s.owner[p] = own; s.tick++; assert.equal(_stepTowns()[0]?.change, "contested");
-  s.owner[p] = foe; s.tick++; assert.equal(_stepTowns()[0]?.change, "off"); assert.deepEqual(warTowns().saltmere, { k: foe });
+  s.owner[p] = own; s.tick++; assert.equal(step()[0]?.change, "contested");
+  s.owner[p] = foe; s.tick++; assert.equal(step()[0]?.change, "off"); assert.deepEqual(warTowns().saltmere, { k: foe });
   // a claim: only by the contester, at once
-  s.owner[p] = own; s.tick++; _stepTowns();
+  s.owner[p] = own; s.tick++; step();
   const third = CLAN_KEYS.find((k) => k !== own && k !== foe)!;
   assert.equal(townClaim("saltmere", third), false); assert.equal(townClaim("saltmere", foe), false); assert.equal(townClaim("atlantis", own), false);
   assert.equal(townClaim("saltmere", own, "Tester"), true);

@@ -136,7 +136,8 @@ const LAND_LOOK: Record<string, LandLook> = {
   Cairnwatch: { dress: "cairn" }, "The Rustwater Post": { dress: "drover" }, Ropewell: { style: "ropewright", dress: "ropewright" },
   // the villages along the highways (settlement network step 4) wear their land's cottage dress: the moors' cairn, the
   // badlands' drover, the sinkholes' rope nets and stilts (the ropewright dress; the tall ropewright halls stay Ropewell's).
-  // The Sunscar's are mud-brick (T.ADOBE, drawn by iso.ts isoDesert like Kel Ashar's), no cottage to dress
+  // The Sunscar's are mud-brick (T.ADOBE, drawn by iso.ts isoDesert like Kel Ashar's), no cottage to dress. The Crown's
+  // (slate over fieldstone) and Oakvale's (thatch or red tile over timber) keep the plain low cottage (owner: no new art)
   ...Object.fromEntries(VILLAGES.filter((v) => VILLAGE_DRESS[v.land]).map((v) => [v.name, { dress: VILLAGE_DRESS[v.land] } as LandLook])),
 };
 const lookAt = (x: number, y: number): LandLook | undefined => {

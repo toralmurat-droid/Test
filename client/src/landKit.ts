@@ -228,7 +228,8 @@ const villageAround = (id: string, r: number): [number, number, number, number] 
  * The villages along the highways (settlement network step 4) carry their land's kit: peat stacks by Turfhallow's and
  * the Staithe's cottages and cut banks outside Turfhallow, way-cairns round Barrowstead (the Staithe keeps the highway's
  * way-cairn below its square); ore carts by Redlode, longhorns and a trough round Hornstead; rope and a gantry at Windlass and
- * Hempfield, salt and camels at Saltglass and Last Well. Placed after every other kit, so the older spots never move.
+ * Hempfield, salt and camels at Saltglass and Last Well; pavilions, staves, a candle shrine and ribbon posts in the Crown's
+ * three, a cart and a frame at Sawyer's End, hives and stooks at Furrowby. Placed after every other kit, so the older spots never move.
  */
 const VILLAGE_KIT: Place[] = [
   { area: "Turfhallow", kind: "lk_peat_stack", n: 1, gap: 3, village: "turfhallow" },
@@ -248,6 +249,22 @@ const VILLAGE_KIT: Place[] = [
   { area: "The Sunscar", kind: "lk_salt_pan", n: 2, gap: 4, box: villageAround("saltglass", 6), near: byVillage("saltglass", 6, 2), village: "saltglass" },
   { area: "The Sunscar", kind: "lk_camel", n: 2, gap: 4, box: villageAround("lastwell", 5), near: byVillage("lastwell", 5, 1), village: "lastwell" },
   { area: "The Sunscar", kind: "lk_salt_stack", n: 1, box: villageAround("lastwell", 4), near: byVillage("lastwell", 4, 1), village: "lastwell" },
+  // PR 3 (appended, so the older spots never move): a quintain at Lists End with a red and a blue pavilion outside it,
+  // pilgrims' staves and a candle shrine at Vigil's Rest, staves and ribbon posts at Kneelstone; a cart and a frame at
+  // Sawyer's End (the Whispering Woods round it), hives in Furrowby and stooks and a scarecrow on the ground above it
+  // (the Sunken Lake's edge: no other named area round it in the open country)
+  { area: "Lists End", kind: "lk_quintain", n: 1, village: "listsend" },
+  { area: "The Crown of the Marches", kind: "lk_pavilion", n: 1, gap: 5, box: villageAround("listsend", 6), near: byVillage("listsend", 6, 2), village: "listsend" },
+  { area: "The Crown of the Marches", kind: "lk_pavilion_blue", n: 1, gap: 5, box: villageAround("listsend", 6), near: byVillage("listsend", 6, 2), village: "listsend" },
+  { area: "The Crown of the Marches", kind: "lk_pilgrim_staves", n: 1, box: villageAround("vigilsrest", 5), near: byVillage("vigilsrest", 5, 1), village: "vigilsrest" },
+  { area: "The Crown of the Marches", kind: "lk_candle_shrine", n: 1, box: villageAround("vigilsrest", 5), near: byVillage("vigilsrest", 5, 1), village: "vigilsrest" },
+  { area: "Kneelstone", kind: "lk_pilgrim_staves", n: 1, village: "kneelstone" },
+  { area: "The Crown of the Marches", kind: "lk_ribbon_post", n: 2, gap: 4, box: villageAround("kneelstone", 6), near: byVillage("kneelstone", 6, 2), village: "kneelstone" },
+  { area: "Sawyer's End", kind: "lk_grain_cart", n: 1, village: "sawyersend" },
+  { area: "Whispering Woods", kind: "lk_hide_frame", n: 1, box: villageAround("sawyersend", 5), near: byVillage("sawyersend", 5, 1), village: "sawyersend" },
+  { area: "Furrowby", kind: "lk_beehives", n: 1, village: "furrowby" },
+  { area: "Sunken Lake", kind: "lk_stook", n: 2, gap: 2.2, box: villageAround("furrowby", 8), near: byVillage("furrowby", 8, 2), village: "furrowby" },
+  { area: "Sunken Lake", kind: "lk_scarecrow", n: 1, box: villageAround("furrowby", 8), near: byVillage("furrowby", 8, 2), village: "furrowby" },
 ];
 
 /** Way-cairns beside a land's highway: every CAIRN_EVERY tiles of each leg, on the first free tile 3-5 off either side. */

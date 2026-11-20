@@ -3093,6 +3093,83 @@ const LASTWELL_QUESTS = villageQuest({
   after: "Three strings watered this morning and every trough sweet. Samira's selling flasks faster than she can count them. Drink before you climb.",
 });
 
+// PR 3: the Crown of the Marches and Oakvale
+const LISTS_QUESTS = villageQuest({
+  id: "listspennons", title: "Stolen Pennons", giver: "squiremaster", zone: "The Tourney Grounds", level: 42,
+  description: "Lists End keeps the squires, the horses and the harness for the Lists. Oathbroken knights raided the pavilions and carried off three house pennons. Sir Brannoc wants them back before the next tilt, and the knights put down.",
+  offer: [
+    "Lists End. Squires, grooms, a farrier and an old knight to shout at them. Everything a tourney needs but the glory, and we hand that over at the Lists, a short ride south.",
+    "Three nights back the oathbroken knights came through the pavilions. They took nothing of worth. They took the pennons: three house banners, the ones the riders carry down the tilt.",
+    "A knight who rides without his pennon rides as nobody. They know it, and they've hung them out on the Tourney Grounds to mock us. Bring the three back, and put down six of the oathbroken knights.",
+  ],
+  acceptText: "I'll bring the pennons home",
+  use: { objects: [obj("lists_pennon1", "clue", "Torn house pennon", "Take down", "The Tourney Grounds", 0.12, 0.2), obj("lists_pennon2", "clue", "Torn house pennon", "Take down", "The Tourney Grounds", 0.55, 0.12), obj("lists_pennon3", "clue", "Torn house pennon", "Take down", "The Tourney Grounds", 0.9, 0.25)],
+    text: "Recover 3 stolen pennons on the Tourney Grounds", banner: ["New quest", "Stolen Pennons"], obj: "Pennons recovered: {n} / {goal}", nag: "{n} of {goal}. Trampled, torn and staked out where riders will see them. Look for the colours." },
+  kill: { zone: "The Tourney Grounds", kinds: ["oathbreaker"], goal: 6, text: "Put down 6 Oathbroken Knights on the Tourney Grounds", banner: ["The pennons are home", "Put down 6 Oathbroken Knights"], obj: "Oathbroken Knights put down: {n} / {goal}", nag: "{n} of {goal}. They walk the old lists as if they still had the right. Show them otherwise." },
+  outro: ["The last oathbroken knight falls across the barrier. Three pennons hang from your belt, muddy and slashed and still bright.", "Lists End's squires will be up all night with needle and thread."],
+  after: "Pennons mended and back on their lances. Wat says the stitching's better than the weaving. Don't tell the houses that.",
+});
+const VIGIL_QUESTS = villageQuest({
+  id: "vigilcandles", title: "The Wayside Candles", giver: "hosteller", zone: "The Vigil Courts", level: 44,
+  description: "Pilgrims bound for the Throne Hall walk the Sun road through the Vigil Courts by the light of three wayside candles. The hollow heralds have snuffed them out. Brother Cuthwin wants them lit again and the heralds silenced.",
+  offer: [
+    "Vigil's Rest keeps the pilgrims who walk to the Crown: a bed, a bowl, and a blessing before they go on into the Courts. Most of them come back. More of them used to.",
+    "Out in the Vigil Courts, three candles burn in the wayside niches. They have burned since the old king's day, and a pilgrim walks from one to the next and is never lost.",
+    "The hollow heralds snuff them. They cry the old king's names into the dark and put out every light that answers. Relight the three candles, and silence six of the heralds.",
+  ],
+  acceptText: "I'll light the candles",
+  use: { objects: [obj("vigil_candle1", "wardlamp", "Snuffed wayside candle", "Light", "The Vigil Courts", 0.2, 0.3), obj("vigil_candle2", "wardlamp", "Snuffed wayside candle", "Light", "The Vigil Courts", 0.5, 0.15), obj("vigil_candle3", "wardlamp", "Snuffed wayside candle", "Light", "The Vigil Courts", 0.7, 0.6)],
+    text: "Relight 3 wayside candles in the Vigil Courts", banner: ["New quest", "The Wayside Candles"], obj: "Candles relit: {n} / {goal}", nag: "{n} of {goal}. Stone niches in the courts' walls, wax run down to the floor." },
+  kill: { zone: "The Vigil Courts", kinds: ["hollowherald"], goal: 6, text: "Silence 6 Hollow Heralds in the Vigil Courts", banner: ["The candles burn", "Silence 6 Hollow Heralds"], obj: "Hollow Heralds silenced: {n} / {goal}", nag: "{n} of {goal}. Listen for the names. They cry them louder near a light." },
+  outro: ["The last herald's cry breaks off mid-name. In the niches, three small flames lean and steady.", "On the Sun road, a line of pilgrims starts walking again."],
+  after: "Three candles burning and not one pilgrim lost this week. Agnes has been out to see them twice. She says the walk does her knees good. It doesn't.",
+});
+const KNEEL_QUESTS = villageQuest({
+  id: "kneelplinths", title: "Defaced Plinths", giver: "mastermason", zone: "The Field of Statues", level: 40,
+  description: "Kneelstone's masons mend the kneeling statues in the Field of Statues, and need each plinth's carved name to know whom they are mending. The crownguard have hacked three names away. Master Mason Joss wants what is left of them read, and the crownguard driven off.",
+  offer: [
+    "Every statue in that field kneels to the Crown, and every one stands on a plinth with its name cut in it. Kneelstone mends them: noses, hands, the odd head. We're stonecutters, not sculptors, but the pilgrims don't know that.",
+    "You can't mend a lord if you don't know which lord he was. And the crownguard have taken to hacking the names off the plinths. Three of them, this month. As if the old king were still angry.",
+    "Read what's left on the three defaced plinths, and I'll recut them from the rest. Then drive off six of the crownguard before they start on the faces.",
+  ],
+  acceptText: "I'll read the plinths",
+  use: { objects: [obj("kneel_plinth1", "cairn", "Defaced plinth", "Read", "The Field of Statues", 0.25, 0.2), obj("kneel_plinth2", "cairn", "Defaced plinth", "Read", "The Field of Statues", 0.55, 0.45), obj("kneel_plinth3", "cairn", "Defaced plinth", "Read", "The Field of Statues", 0.5, 0.8)],
+    text: "Read 3 defaced plinths in the Field of Statues", banner: ["New quest", "Defaced Plinths"], obj: "Plinths read: {n} / {goal}", nag: "{n} of {goal}. Fresh chisel scars on old stone. Feel for the letters with your fingers." },
+  kill: { zone: "The Field of Statues", kinds: ["crownguard"], goal: 6, text: "Drive off 6 Crownguard in the Field of Statues", banner: ["The names are read", "Drive off 6 Crownguard"], obj: "Crownguard driven off: {n} / {goal}", nag: "{n} of {goal}. They stand among the statues. The ones that move are not statues." },
+  outro: ["The last crownguard topples like one of the statues it guarded. Three names, rubbed out in chalk on your sleeve: enough for a mason.", "Kneelstone's chisels will ring tomorrow."],
+  after: "All three names recut, and the lords kneeling as they should. Brenna cut one of them crooked. Nobody's told the lord.",
+});
+const SAW_QUESTS = villageQuest({
+  id: "sawlogs", title: "Smouldering Logs", giver: "sawmaster", zone: "Cinder Scar", level: 20,
+  description: "Sawyer's End stacks its logs to season at the edge of the Cinder Scar, where the ground stays warm. Fire blobs from the Scar have crept in among the stacks and set three of them smouldering. Garth Holloway wants them doused and the fire blobs killed.",
+  offer: [
+    "Sawyer's End cuts the timber for half of Oakvale: beams for Millbrook, planks for Saltmere's boats. We stack the logs out by the Scar to season. Warm ground dries them in half the time.",
+    "Warm ground brings fire blobs, though. They've crept in among the stacks, and three of them are smouldering. One good wind and a summer's cutting goes up in a night.",
+    "Douse the three smouldering stacks at the Cinder Scar, then kill six fire blobs before they light the rest.",
+  ],
+  acceptText: "I'll douse the stacks",
+  use: { objects: [obj("saw_stack1", "nest", "Smouldering log stack", "Douse", "Cinder Scar", 0.3, 0.45), obj("saw_stack2", "nest", "Smouldering log stack", "Douse", "Cinder Scar", 0.3, 0.8), obj("saw_stack3", "nest", "Smouldering log stack", "Douse", "Cinder Scar", 0.25, 0.15)],
+    text: "Douse 3 smouldering log stacks at the Cinder Scar", banner: ["New quest", "Smouldering Logs"], obj: "Log stacks doused: {n} / {goal}", nag: "{n} of {goal}. Follow the smoke. The stacks stand on the warm ground at the Scar's western edge." },
+  kill: { zone: "Cinder Scar", kinds: ["fireblob"], goal: 6, text: "Kill 6 Fire Blobs at the Cinder Scar", banner: ["The stacks are out", "Kill 6 Fire Blobs"], obj: "Fire Blobs killed: {n} / {goal}", nag: "{n} of {goal}. They glow at dusk. Don't stand downwind." },
+  outro: ["The last fire blob gutters out with a hiss. The three stacks steam, blackened on the outside and sound at the heart.", "Sawyer's End will have its beams."],
+  after: "Stacks seasoning, saws singing, and no smoke but the hearth's. Hew wants to move the stacks off the Scar. I want them dry by spring. We'll see who wins.",
+});
+const FURROW_QUESTS = villageQuest({
+  id: "furrowhives", title: "Trampled Hives", giver: "hivewife", zone: "Saltwind Coast", level: 17,
+  description: "Furrowby sets its hives out on the clover and sea-thrift above the Saltwind Coast every summer. Blobs come up off the shore and roll right through them. Goody Marrow wants three overturned hives searched for their queens, and the blobs driven back to the sea.",
+  offer: [
+    "Furrowby grows the grain that feeds Saltmere, and the bees that make the grain grow. Every summer the hives go down to the clover above the Saltwind Coast. Best honey in Oakvale.",
+    "And every summer the blobs come up off the shore and roll through the hives like they weren't there. Three hives knocked flat this week. If the queens are dead, the swarms are gone.",
+    "Search the three trampled hives on the coast for their queens, and kill six of the warrior blobs that keep rolling through. The bees will do the rest.",
+  ],
+  acceptText: "I'll look for the queens",
+  use: { objects: [obj("furrow_hive1", "clue", "Trampled beehive", "Search", "Saltwind Coast", 0.06, 0.25), obj("furrow_hive2", "clue", "Trampled beehive", "Search", "Saltwind Coast", 0.1, 0.6), obj("furrow_hive3", "clue", "Trampled beehive", "Search", "Saltwind Coast", 0.14, 0.7)],
+    text: "Search 3 trampled hives on the Saltwind Coast", banner: ["New quest", "Trampled Hives"], obj: "Hives searched: {n} / {goal}", nag: "{n} of {goal}. Straw skeps knocked over in the clover, above the shore. Mind the bees: they're angry." },
+  kill: { zone: "Saltwind Coast", kinds: ["warriorblob"], goal: 6, text: "Kill 6 Warrior Blobs on the Saltwind Coast", banner: ["The queens live", "Kill 6 Warrior Blobs"], obj: "Warrior Blobs killed: {n} / {goal}", nag: "{n} of {goal}. The big ones that charge. They come up the shore at the turn of the tide." },
+  outro: ["The last warrior blob bursts in the clover. In each trampled skep, under the broken comb, the queen is alive and furious.", "Furrowby will have honey this year."],
+  after: "Three hives humming again and the blobs back on the sand. Pip says the honey's the best in years. Pip says that every year, but this year he's right.",
+});
+
 /** Side arcs (QuestChain.local, after ZONE_ARCS in CHAINS): `needs` gates the first offer (Saltmere Ways: every offer). */
 export const SIDE_ARCS: { id: string; name: string; quests: QuestDef[]; needs?: (p: Quester | undefined) => boolean }[] = [
   { id: "letters", name: "Two Letters", quests: LETTER_QUESTS, needs: (p) => chainDone(p, RED_CHAIN) },
@@ -3115,6 +3192,11 @@ export const SIDE_ARCS: { id: string; name: string; quests: QuestDef[]; needs?: 
   { id: "hempfield", name: "Hempfield", quests: HEMP_QUESTS },
   { id: "saltglass", name: "Saltglass", quests: SALTGLASS_QUESTS },
   { id: "lastwell", name: "Last Well", quests: LASTWELL_QUESTS },
+  { id: "listsend", name: "Lists End", quests: LISTS_QUESTS },
+  { id: "vigilsrest", name: "Vigil's Rest", quests: VIGIL_QUESTS },
+  { id: "kneelstone", name: "Kneelstone", quests: KNEEL_QUESTS },
+  { id: "sawyersend", name: "Sawyer's End", quests: SAW_QUESTS },
+  { id: "furrowby", name: "Furrowby", quests: FURROW_QUESTS },
 ];
 const ARC_OBJECTS: QuestObject[] = [...ZONE_ARCS, ...SIDE_ARCS].flatMap((a) => a.quests.flatMap((d) => d.steps.flatMap(stepObjects)));
 
@@ -3402,6 +3484,9 @@ const IDLE: Record<string, string> = {
   eeltrapper: "Eels in the creels, flasks on the shelf. The boats bring both up the fen. You'd be amazed how many folk want the one after they've eaten the other.",
   hostelkeeper: "Mourners come from all over the moors to sit by the mounds. We give them a bed and broth and don't ask who they've come to see. The broth's better than it sounds.",
   hempcutter: "Cut it green, sheave it, rot it in the pond, beat it, comb it. By the end the fibre's like a horse's tail and my hands are like a horse's hoof. Ropewell takes every scrap.",
+  pilgrim: "Forty years I've walked to the Throne Hall, and forty years the hosteller's told me I'm too old for it. I've buried two hostellers. Brother Cuthwin's soup is better than theirs was, mind.",
+  stonecutter: "You'd think a statue would sit still to be mended. Then a crownguard walks out from behind it. The stone's the easy part. Kneelstone grey, from the old quarry under the field.",
+  sawyer: "Two on the saw, one on top and one in the pit, and the one in the pit gets the sawdust. Guess which one I am. Millbrook pays for beams by the yard and complains by the inch.",
   saltcutter: "You cut along the grain of the crust, lift the slab whole, and never look at the white too long or you'll see nothing for a day. Two slabs to a camel. A good cutter fills a string by noon.",
   drover: "Longhorns are easy. Point them at Fangrock and walk behind. It's the hounds and the snakes and the dust you have to watch, and the bull with the broken horn. Mostly the bull.",
   huntsman: "Hides on the frames, meat in the smoke. Goldenreach feeds the valley on grain, but someone has to keep the wolves off the sheaves.",

@@ -125,9 +125,10 @@ test("the Crown has its kit and the Lists: pavilions and a shrine round Tollcros
   for (const s of pav) assert.ok(Math.abs(s.x - herald.x) / TILE > 8, `pavilion at ${at(s)}: behind the herald`);
   for (const s of tc.filter((q) => q.kind === "lk_candle_shrine")) assert.ok(at(s)[0] < 134 && at(s)[1] < 1193, `shrine at ${at(s)}: not in the north-west`);
   assert.ok(tc.some((s) => s.kind === "lk_quintain") && crown.some((s) => s.area === "The Tourney Grounds" && s.kind === "lk_quintain"), "a quintain in Tollcross and at the Lists");
-  // ribbon posts beside the Greenward road through the Pilgrims' Way, off its paving
+  // ribbon posts beside the Greenward road through the Pilgrims' Way, off its paving (Kneelstone's are a highway village's
+  // own, by the village: tests/villages.test.ts)
   const h = HIGHWAYS.find((q) => q.land === 6)!, mid = h.legs.flatMap((leg) => legLine(h, leg));
-  const posts = crown.filter((s) => s.kind === "lk_ribbon_post");
+  const posts = crown.filter((s) => s.kind === "lk_ribbon_post" && !s.village);
   assert.ok(posts.length >= 2 && posts.every((s) => s.area === "The Pilgrims' Way"), "ribbon posts on the Way");
   for (const s of posts) {
     const [tx, ty] = at(s), d = Math.min(...mid.map((k) => Math.hypot((k % MW) - tx, Math.floor(k / MW) - ty)));
