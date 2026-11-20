@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import {
   ACT_LEVEL, actMobLevel, actOfTile, actSpecialLevel, BADLANDS_H, BADLANDS_LEVEL, BADLANDS_Y0, DEEP_END, MAP_H, MAP_W, MOORS_H, MOORS_Y0, SINKHOLES_Y0, TILE, WORLD_H, inCitiesBand,
 } from "../shared/constants";
-import { EMPTY, GROUND, isSafeZone, isSolidAt, isSolidTile, MIRROR_POND, OBJECTS, randomSpawn, T, TILE_COUNT, NATURE } from "../shared/map";
+import { EMPTY, GROUND, isSafeZone, isSolidAt, isSolidTile, MIRROR_POND, OBJECTS, randomSpawn, T, TILE_COUNT, NATURE, PORTAL_SPOTS } from "../shared/map";
 import {
   ARCHES, BR, buildBadlands, FANGROCK, inBadlandsRow, REDPASS, REDPASS_BADLANDS, REDPASS_OAKVALE, RUSTWATER_POST, RUSTWATER_SQUARE, TALON_FORT,
 } from "../shared/badlands";
@@ -137,14 +137,16 @@ test("badlands: the Red Pass (and the Sinkway) leave the rest of Act 1 exactly a
   // shared/sinkholes.ts SINKWAY_BOX; the Saltmere rework: shared/saltmere.ts SALT_BOXES; the Greenward Gate, Act 6:
   // shared/crown.ts CROWNWAYS; the capitals' city gates, W7: shared/capitals.ts CITIES outerBox), hashed before any of them was added (the same hash before and after the Saltmere rework;
   // re-hashed with the Greenward Gate's box masked on the map before the Crown, and with Hearthhold's box masked on the
-  // map before W7: the only tiles the city gate changed lie inside it; the border roads' BORDER_BOXES, shared/borders.ts, too: re-hashed with them masked, the same with and without the roads cut). A deliberate change to the overworld
+  // map before W7: the only tiles the city gate changed lie inside it; the border roads' BORDER_BOXES, shared/borders.ts, too: re-hashed with them masked, the same with and without the roads cut; the portal stones added after the capitals' waystones, settlement network 2026-11-19,
+  // each clear the nature in a small disk round them: re-hashed with their boxes masked on the map before them). A deliberate change to the overworld
   // map must update this hash.
   const S = SINKWAY_BOX, C = crownwayFrom("oakvale").box;
+  const STONE_BOXES = PORTAL_SPOTS.slice(10 + CITIES.length).map((p) => ({ x0: p.x - 3, x1: p.x + 3, y0: p.y - 3, y1: p.y + 3 }));
   const box = (x: number, y: number) => (x <= 14 && y >= 113 && y <= 123) || (x >= S.x0 && x <= S.x1 && y >= S.y0 && y <= S.y1)
-    || [...SALT_BOXES, C, ...CITIES.map((c) => c.outerBox), ...BORDER_BOXES].some((b) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1);
+    || [...SALT_BOXES, C, ...CITIES.map((c) => c.outerBox), ...BORDER_BOXES, ...STONE_BOXES].some((b) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1);
   const h = createHash("sha256");
   for (let y = 0; y < WORLD_H; y++) h.update(GROUND[y].map((g, x) => (box(x, y) ? -9 : g)).join(",") + "|" + OBJECTS[y].map((o, x) => (box(x, y) ? -9 : o)).join(",") + "\n");
-  assert.equal(h.digest("hex"), "b730c25551c1e79c35b14e1e6e77c66b66af6fcaa058ef3a86176efeca7a2be6");
+  assert.equal(h.digest("hex"), "b6861b22884d2f4b9ea14d644c83cc82994b7b997484c2cbdad5d9db19c9e778");
 });
 
 test("badlands: Lv 25-40 climbing west, the Red Pass opens at Lv 25, a war land of their own", () => {

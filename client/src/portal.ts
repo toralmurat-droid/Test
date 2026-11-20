@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { icon as pxIcon } from "./pixelicons";
 import { ART_K as K } from "../../shared/constants";
-import { PORTAL_COMBAT_MS, PORTAL_RANGE, PORTALS, portalById, type Portal } from "../../shared/portals";
+import { PORTAL_COMBAT_MS, PORTAL_LANDS, PORTAL_RANGE, PORTALS, portalById, portalLand, type Portal } from "../../shared/portals";
 import { dropPortalTexture, portalTexture, PORTAL_FOOT } from "./portalArt";
 
 /** ?look=... (map viewing aid): paint every stone up front, so a parked camera sees them. */
@@ -26,6 +26,7 @@ export class PortalLayer {
   private menu = document.createElement("div");
   private toast = document.createElement("div");
   private at?: Portal; // the stone we stand at
+  private shut = new Set<string>(); // lands folded shut in the travel list (each opening starts with only the land we stand in open)
   private hurtAt = 0;
   near = false;
 
@@ -48,6 +49,11 @@ export class PortalLayer {
     this.menu.addEventListener("click", (ev) => {
       const b = (ev.target as HTMLElement).closest("button");
       if (!b) return;
+      if (b.dataset.land) { // a land's header folds its list open or shut
+        if (!this.shut.delete(b.dataset.land)) this.shut.add(b.dataset.land);
+        this.render();
+        return;
+      }
       if (b.dataset.to) this.send("travel", { to: b.dataset.to });
       this.close();
     });
@@ -98,6 +104,7 @@ export class PortalLayer {
     if (!this.near || !this.at) return false;
     if (this.isOpen) { this.close(); return true; }
     this.menu.hidden = false;
+    this.shut = new Set(PORTAL_LANDS.filter((l) => l !== portalLand(this.at!)).map((l) => l.key));
     this.render();
     return true;
   }
@@ -106,14 +113,23 @@ export class PortalLayer {
 
   private render() {
     const here = this.at;
-    const list = PORTALS.filter((p) => this.found.has(p.id));
     const fight = Date.now() - this.hurtAt < PORTAL_COMBAT_MS;
-    const rows = list.map((p) => p.id === here?.id
-      ? `<div class="pt-row here">${p.name}<span>You are here</span></div>`
-      : `<button class="pt-row" data-to="${p.id}"${fight ? " disabled" : ""}>${p.name}<span>Travel</span></button>`).join("");
-    const lone = list.length < 2 ? `<p class="pt-note">Find more portal stones out in the wilds to travel between them.</p>` : "";
-    const why = fight && list.length > 1 ? `<p class="pt-note warn">The stone will not open while you are fighting.</p>` : "";
-    this.menu.innerHTML = `<div class="pt-head"><h2>Portal stones</h2><button class="pt-close" aria-label="Close">${pxIcon("close")}</button></div>${rows}${lone}${why}`;
+    const found = PORTALS.filter((p) => this.found.has(p.id)).length;
+    // grouped by land (Murat 2026-11-19), the land we stand in first; lands with no woken stone stay unknown
+    const home = here ? portalLand(here) : undefined;
+    const lands = [...(home ? [home] : []), ...PORTAL_LANDS.filter((l) => l !== home)];
+    const groups = lands.map((l) => {
+      const list = l.portals.filter((p) => this.found.has(p.id));
+      if (!list.length) return "";
+      const open = !this.shut.has(l.key);
+      const rows = !open ? "" : list.map((p) => p.id === here?.id
+        ? `<div class="pt-row here">${p.name}<span>You are here</span></div>`
+        : `<button class="pt-row" data-to="${p.id}"${fight ? " disabled" : ""}>${p.name}<span>Travel</span></button>`).join("");
+      return `<div class="pt-land"><button class="pt-landhead${open ? " open" : ""}" data-land="${l.key}">${l.name}<span>${list.length}/${l.portals.length}</span></button>${rows}</div>`;
+    }).join("");
+    const lone = found < 2 ? `<p class="pt-note">Find more portal stones out in the wilds to travel between them.</p>` : "";
+    const why = fight && found > 1 ? `<p class="pt-note warn">The stone will not open while you are fighting.</p>` : "";
+    this.menu.innerHTML = `<div class="pt-head"><h2>Portal stones</h2><button class="pt-close" aria-label="Close">${pxIcon("close")}</button></div><div class="pt-lands">${groups}</div>${lone}${why}`;
   }
 
   /** Map markers for the woken stones. */
@@ -124,18 +140,20 @@ export class PortalLayer {
     return PORTALS.filter((p) => this.found.has(p.id)).map((p) => ({ x: p.x, y: p.y, glyph: "◆", color: "#ff9a3c", label: p.name }));
   }
 
-  /** The art this stone should show: dark until found, burning once woken, with one ring block lit per woken portal. */
+  /** The art this stone should show: dark until found, burning once woken, with one ring block lit per woken stone of its land. */
   private want(s: Stone) {
+    const land = portalLand(s.p).portals;
     let mask = 0;
-    PORTALS.forEach((q, k) => { if (this.found.has(q.id)) mask |= 1 << k; });
-    return { lit: this.found.has(s.p.id), mask, key: `${this.found.has(s.p.id) ? "lit" : "cold"}:${s.v}_${mask}` };
+    land.forEach((q, k) => { if (this.found.has(q.id)) mask |= 1 << k; });
+    const ring = { key: land.indexOf(s.p), stones: land.length, mask };
+    return { lit: this.found.has(s.p.id), ring, key: `${this.found.has(s.p.id) ? "lit" : "cold"}:${s.v}_${mask}` };
   }
 
   /** Paints and shows this stone's art for its state, dropping the art it showed before. */
   private show(s: Stone) {
     const w = this.want(s);
     if (s.shown === w.key) return;
-    const id = portalTexture(this.scene, s.v, w.lit, w.mask);
+    const id = portalTexture(this.scene, s.v, w.lit, w.ring);
     if (w.lit) s.img.play({ key: `portal_spin_${id}`, startFrame: (s.v * 3) % 8 });
     else { s.img.stop(); s.img.setTexture(`portal_cold_${id}`, 0); }
     s.img.setOrigin(0.5, PORTAL_FOOT).setVisible(true);

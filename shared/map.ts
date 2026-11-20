@@ -108,6 +108,22 @@ export const PORTAL_SPOTS = [
   { id: "ropewell", name: "Ropewell", x: ROPEWELL_PORTAL.x, y: SR(ROPEWELL_PORTAL.y) },
   // the clans' capitals (shared/capitals.ts): each city's waystone in its gate square, id `city_<clan>` (append only)
   ...CITIES.map((c) => ({ id: `city_${c.clan}`, name: cityText(c).waystone, ...cityTile(c, CITY_TEMPLATE.waystone) })),
+  // More stones (Murat 2026-11-19: "more portal stones, grouped by territory"): every town and village gets one, and each
+  // land at least three, on the roads by its settlements and sights (append only: the ring blocks follow this order)
+  { id: "millbrook", name: "Millbrook Mill", x: 104, y: 46 },
+  { id: "huntcamp", name: "Hunter's Camp", x: 38, y: 20 },
+  { id: "kelashar", name: "Kel Ashar", x: 125, y: D(108) },
+  { id: "palmshade", name: "Palmshade Oasis", x: 70, y: D(137) },
+  { id: "mirage", name: "Mirage Wells", x: 217, y: D(120) },
+  { id: "jackal", name: "Jackal Springs", x: 101, y: D(72) },
+  { id: "blackwater", name: "Blackwater Fen", x: 138, y: MR(93) },
+  { id: "thanesrest", name: "Thane's Rest", x: 140, y: MR(140) },
+  { id: "vulture", name: "Vulture's Roost", x: 119, y: BR(71) },
+  { id: "cinnabar", name: "Cinnabar Pits", x: 181, y: BR(87) },
+  { id: "tunneltop", name: "Tunneltop", x: 187, y: SR(68) },
+  { id: "mosslight", name: "Mosslight Fen", x: 49, y: SR(113) },
+  { id: "tollcross", name: "Tollcross", x: 140, y: CR(66) },
+  { id: "pilgrims", name: "The Pilgrims' Way", x: 43, y: CR(28) },
 ] as const;
 export const REDFANG = { x: 240, y: 102, w: 24, h: 18 };
 export const REDFANG_TOWERS: [number, number][] = [[254, 103], [249, 118], [241, 108]];
