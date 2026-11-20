@@ -131,9 +131,8 @@ for (const R of ROWS) {
       const travel = async () => { at(p, from.x, from.y); p.lastHurt = 0; room.caps.noted.clear(); await wait(150); room.travel(client, `city_${C.clan}`); await wait(250); return cityAtPx(p.x, p.y) === C; };
       assert.ok(await travel(), "Lv 5: the waystone takes them, and the ward lets them stay");
       assert.ok(Math.hypot(p.x - ws.x, p.y - ws.y) < 3 * TILE);
-      // a hero who woke the stone and lost a level since: from a stone in the ward's sight (CITY.wardTiles) the gate's rule
-      // holds; the waystone's own check is the war and the Wanted mark (server/TownRoom.ts travel)
-      if (Math.hypot(from.x - ws.x, from.y - ws.y) < CITY.wardTiles + B.w / 2) { p.level = 4; assert.equal(await travel(), false, "Lv 4: put back outside"); }
+      // a hero who woke the stone and lost a level since: the waystone keeps the gate's level rule, from any stone
+      p.level = 4; assert.equal(await travel(), false, "Lv 4: the waystone refuses");
       p.level = 5; p.clan = foe; p.clanAt = 1; setWarPairs([pairOf(foe, C.clan)]);
       assert.equal(await travel(), false, "at war: the waystone refuses");
       _resetWarRelations(); p.clan = undefined;
