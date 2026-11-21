@@ -1,0 +1,114 @@
+{
+ "caption": "kept walking south of oakvale through a portal and ended up in a desert?? there's a whole market town out here, an oasis, and giant scorpions \ud83e\udd82\n\nkel ashar, act 2 of the game. play.fmtpa.ch, link in bio\n\n#pixelart #indiegame #mmorpg #browsergame #gamedev #desert #pixelgame #cozygames #indiedev #retrogaming",
+ "music": "kel-ashar-tune.mp3",
+ "musicStart": 3.6,
+ "shots": [
+  {
+   "cls": "vampire",
+   "time": "day",
+   "grade": false,
+   "goto": [
+    138,
+    402
+   ],
+   "route": [
+    [
+     160,
+     402
+    ]
+   ],
+   "zoom": 3,
+   "ms": 3000,
+   "text": "went through a portal\nsouth of the village...",
+   "textStyle": "voice"
+  },
+  {
+   "cls": "vampire",
+   "time": "day",
+   "grade": false,
+   "goto": [
+    160,
+    411
+   ],
+   "route": [
+    [
+     140,
+     411
+    ]
+   ],
+   "zoom": 3,
+   "ms": 2600,
+   "text": "...and there's a whole\ndesert town back here",
+   "textStyle": "voice"
+  },
+  {
+   "cls": "vampire",
+   "time": "day",
+   "grade": false,
+   "goto": [
+    38,
+    428
+   ],
+   "route": [
+    [
+     64,
+     428
+    ]
+   ],
+   "zoom": 2.8,
+   "ms": 3000,
+   "text": "an actual oasis??",
+   "textStyle": "voice"
+  },
+  {
+   "cls": "vampire",
+   "time": "day",
+   "grade": false,
+   "goto": [
+    100,
+    453
+   ],
+   "route": [
+    [
+     124,
+     453
+    ]
+   ],
+   "zoom": 3,
+   "ms": 3200,
+   "casts": [
+    {
+     "id": "v_tide",
+     "at": 900,
+     "aim": "mob"
+    },
+    {
+     "id": "v_bats",
+     "at": 2000,
+     "aim": "mob"
+    }
+   ],
+   "text": "the locals are\nless friendly",
+   "textStyle": "voice"
+  },
+  {
+   "cls": "vampire",
+   "time": "dusk",
+   "goto": [
+    138,
+    402
+   ],
+   "route": [
+    [
+     156,
+     402
+    ]
+   ],
+   "zoom": 3,
+   "ms": 2800,
+   "text": "kel ashar\nplay.fmtpa.ch",
+   "textAt": "center",
+   "textStyle": "voice"
+  }
+ ]
+}
