@@ -15,3 +15,9 @@ One entry per reel: idea, hook, what we test, numbers after 48 h, lesson.
 ## DROPPED: reels/2026-11-24-world-tour - Murat: 'How big is this browser MMO?' text feels robotic, like a pay-to-win ad. Lesson: creator voice, one biome, discovery feel.
 
 ## QUEUED: reels/2026-11-24-desert-find (reel 4) - rendering, needs Murat's OK before posting (he asked to see it).
+
+## 2026-11-21 rework (Murat: rework all reels, study creators)
+- Research applied (plan.md 'What works'): premise hooks, creator voice, end on a question, 3-5 hashtags.
+- Tried 'skeletons only at night' day/night cut at Barrow Downs: FAILED, day already full of skeletons + clan soldiers and the grade makes noon look dark; no contrast. Don't retry there without DAY_TIME + an empty-by-day spot.
+- Devour: hero must walk next to the blob first ('Nothing to eat here' at 2+ tiles).
+- Outlaw: /max hero survives the village wrath; don't claim he died.
