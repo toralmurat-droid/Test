@@ -45,6 +45,11 @@ export const HOLD_FALL = {
   fallValor: 10, fallRenown: 25,
   /** Valor for the claiming clan in the land, renown for each of its sworn heroes in the reach. */
   claimValor: 10, claimRenown: 20,
+  /**
+   * A hero striking a work rallies the holder's soldiers within `rallyPx` of it onto that hero for `rallyMs` (the
+   * soldiers' call: server/warTroops.ts rally), at most once per `rallyEveryMs` per work.
+   */
+  rallyPx: 12 * 32, rallyMs: 8000, rallyEveryMs: 1000,
 };
 
 /** The letter each work kind carries in Mob.weapon ("<clan>%<code>"). */

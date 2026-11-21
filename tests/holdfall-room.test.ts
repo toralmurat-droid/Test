@@ -183,3 +183,43 @@ test("hold works (room, follower): the fall waits on the owner with the ruin kep
     assert.match(room.holds.sack(id2, { t: LAND.id }), /banner already flies/);
   } finally { (HOLD_FALL as any).wreckRenownPerTick = capF; _setWarRole("owner"); await srv.stop(); _resetHoldWorks(); }
 });
+
+test("hold works (room): striking a work rallies the holder's soldiers near it onto the hero", async () => {
+  const srv = await startRoom();
+  _resetWar({ v: 1, state: newWar(), minds: newMinds(), next: Date.now() + 1e9, log: [] }); _resetHolds(); _resetHoldWorks();
+  try {
+    const c = await srv.join({ cls: "wizard" });
+    await wait(150);
+    const room: any = srv.room, id = c.sessionId, p = room.state.players.get(id);
+    p.level = 30; p.hp = p.maxHp = 1_000_000; p.invulnUntil = Date.now() + 1e9; p.clan = FOE; p.lastAct = Date.now();
+    p.x = SPOT.x; p.y = SPOT.y;
+    room.holds.tick = () => {};
+    room.state.mobs.forEach((m: any, mid: string) => { if (m.kind !== "trooper") room.state.mobs.delete(mid); });
+    const now = Date.now();
+    room.holdWorks.tick(now); room.warTroops.tick(now);
+    const land = room.warTroops._land(LAND.id);
+    const soldiers = (land.slots as any[]).map((s) => s.id).filter((sid: string) => sid && room.state.mobs.get(sid) && !room.state.mobs.get(sid).dead);
+    assert.ok(soldiers.length > 0, "the Hold fields soldiers");
+    let wid = "", wm: any;
+    room.state.mobs.forEach((m: any, mid: string) => { if (!wid && room.holdWorks.placed.get(mid)?.t === LAND.id) { wid = mid; wm = m; } });
+    assert.ok(wid, "a work stands");
+    // bring the soldiers next to the work, out of the hero's plain sight
+    for (const sid of soldiers) { const m = room.state.mobs.get(sid); m.x = wm.x + 20; m.y = wm.y + 20; }
+    const called = room.warTroops.rally(wid, wm, OWN, id, now);
+    assert.deepEqual(new Set(called), new Set(soldiers), "every soldier near the work is called");
+    for (const sid of soldiers) assert.equal(room.warTroops.troops.get(sid).call, id, "called onto the wrecker");
+    assert.deepEqual(room.warTroops.rally(wid, wm, OWN, id, now + 10), [], "once a second per work at most");
+    // a real blow on the work does it too, and the soldiers turn on the hero
+    for (const sid of soldiers) { const f = room.warTroops.troops.get(sid); f.call = ""; f.callUntil = 0; }
+    room.warTroops.hit(id, wm, wid, now + 2000);
+    assert.ok(soldiers.every((sid: string) => room.warTroops.troops.get(sid).call === id), "a blow on a work rallies them");
+    assert.equal(wm.target, "", "the work itself fights nobody");
+    for (const sid of soldiers) { const m = room.state.mobs.get(sid); room.warTroops.troops.get(sid).near = true; room.warTroops.step(m, sid, 0.05, now + 2050); }
+    assert.ok(soldiers.every((sid: string) => room.state.mobs.get(sid).target === id), "they all go for the hero");
+    // a hero the holder does not fight rallies no one
+    p.clan = OWN;
+    for (const sid of soldiers) { const f = room.warTroops.troops.get(sid); f.call = ""; f.callUntil = 0; }
+    room.warTroops.hit(id, wm, wid, now + 4000);
+    assert.ok(soldiers.every((sid: string) => room.warTroops.troops.get(sid).call !== id), "no rally for a friend");
+  } finally { await srv.stop(); _resetHoldWorks(); }
+});
