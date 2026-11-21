@@ -3,7 +3,7 @@
   "title": "Easier paths through the forests",
   "changes": [
     "Trees now only block their trunk, not a whole square: you round them smoothly and slip between trees that only touch at a corner.",
-    "The Whispering Woods and the Thornwood have winding ways through the undergrowth where tree clumps were thinned out.",
-    "Clicking to walk through a forest now takes a much more direct route, and a click right beside a trunk walks you there."
+    "Deep in the Whispering Woods and the Thornwood, many trunks are slim enough to squeeze past, so winding ways open through the thick forest.",
+    "Clicking to walk through a forest takes a much more direct route, and a click right beside a trunk walks you there."
   ]
 }
