@@ -1,5 +1,6 @@
 {
   "date": "2026-11-21",
+  "patch": 367,
   "title": "More natural running",
   "changes": [
     "Heroes and monsters with a sword, axe, dagger, hammer or mace keep it gripped while they run. It swings with the arm instead of dangling at the hip, and spear carriers run with the point held forward.",
