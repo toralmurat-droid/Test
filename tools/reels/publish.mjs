@@ -1,7 +1,9 @@
 // Posts a rendered reel (reels/<slug>/reel.mp4 + the caption in reel.json) to the Instagram account, through the
 // Instagram Graph API with a resumable upload (no public video URL needed). Run by .github/workflows/instagram-reel.yml:
 //   INSTAGRAM_TOKEN=... node tools/reels/publish.mjs reels/<slug> [--publish]
+//   INSTAGRAM_TOKEN=... node tools/reels/publish.mjs --stats <out.json>
 // Without --publish it is a dry run: it checks the token, finds the account and prints what it would post.
+// --stats writes every post's numbers (likes, comments, and views/reach/saves/shares when the token may read insights).
 // The token is only ever sent in headers, never in a URL or the log.
 import { readFileSync, writeFileSync, existsSync, statSync, appendFileSync } from "node:fs";
 import path from "node:path";
@@ -25,8 +27,33 @@ async function api(method, url, body) {
   return j;
 }
 
+async function account() {
+  const pages = (await api("GET", "/me/accounts?fields=name,instagram_business_account{id,username,followers_count,media_count}")).data ?? [];
+  const accts = pages.map((p) => p.instagram_business_account).filter(Boolean);
+  const ig = accts.find((a) => a.username?.toLowerCase() === WANT) ?? (accts.length === 1 ? accts[0] : undefined);
+  if (!ig) throw new Error(`no Instagram account @${WANT} found on the token's Pages (found: ${accts.map((a) => "@" + a.username).join(", ") || "none"})`);
+  return ig;
+}
+
+/** Numbers of every post, newest first, for deciding what to try next. Insights need instagram_manage_insights. */
+async function stats(out) {
+  const ig = await account();
+  const media = (await api("GET", `/${ig.id}/media?fields=id,caption,timestamp,permalink,media_product_type,like_count,comments_count&limit=50`)).data ?? [];
+  for (const m of media) {
+    try {
+      const ins = (await api("GET", `/${m.id}/insights?metric=views,reach,saved,shares,total_interactions${m.media_product_type === "REELS" ? ",ig_reels_avg_watch_time" : ""}`)).data ?? [];
+      for (const i of ins) m[i.name] = i.values?.[0]?.value ?? i.total_value?.value;
+    } catch (e) { m.insights = `unavailable: ${e.message.slice(0, 120)}`; }
+    try { m.comments = ((await api("GET", `/${m.id}/comments?fields=text,timestamp,like_count&limit=20`)).data ?? []).map((c) => ({ text: c.text, at: c.timestamp, likes: c.like_count })); } catch { /* none */ }
+  }
+  const res = { at: new Date().toISOString(), account: ig.username, followers: ig.followers_count, posts: ig.media_count, media };
+  if (out) writeFileSync(out, JSON.stringify(res, null, 1) + "\n");
+  summary("```json\n" + JSON.stringify(res, null, 1).slice(0, 60000) + "\n```");
+}
+
 (async () => {
   if (!TOKEN) throw new Error("INSTAGRAM_TOKEN secret is missing");
+  if (dir === "--stats") return stats(flag);
   if (!dir) throw new Error("usage: node tools/reels/publish.mjs reels/<slug> [--publish]");
   const reel = JSON.parse(readFileSync(path.join(dir, "reel.json"), "utf8"));
   const mp4 = path.join(dir, "reel.mp4");
@@ -41,10 +68,7 @@ async function api(method, url, body) {
     const d = (await api("GET", `/debug_token?input_token=${encodeURIComponent(TOKEN)}`)).data;
     if (d?.expires_at) summary(`Token valid: ${d.is_valid}, expires ${new Date(d.expires_at * 1000).toISOString().slice(0, 10)}`);
   } catch { /* not every token may read debug_token */ }
-  const pages = (await api("GET", "/me/accounts?fields=name,instagram_business_account{id,username}")).data ?? [];
-  const accts = pages.map((p) => p.instagram_business_account).filter(Boolean);
-  const ig = accts.find((a) => a.username?.toLowerCase() === WANT) ?? (accts.length === 1 ? accts[0] : undefined);
-  if (!ig) throw new Error(`no Instagram account @${WANT} found on the token's Pages (found: ${accts.map((a) => "@" + a.username).join(", ") || "none"})`);
+  const ig = await account();
   summary(`Instagram account: @${ig.username}`);
   summary(`Reel: ${mp4} (${(size / 1e6).toFixed(1)} MB)`);
   summary(`Caption:\n\n${caption}\n`);

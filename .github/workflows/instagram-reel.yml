@@ -1,20 +1,23 @@
-# Posts one rendered reel (reels/<slug>/reel.mp4, caption in reel.json) to Instagram @fmtpa.
-# Started by hand only: Actions > Instagram reel > Run workflow. Leave "publish" unticked for a dry run (checks the
-# token and the account, posts nothing). A post is public: only post a reel Murat has watched and approved.
-# Needs the repo secret INSTAGRAM_TOKEN (long-lived user token, ~60 days: renew it before it runs out).
+# Instagram @fmtpa: posts one rendered reel, or reads the numbers of every post.
+# Started by hand or by the promotion runs (workflow_dispatch only). The reel files (reels/<slug>/reel.mp4 + reel.json)
+# live on the branch claude/reels-media, NOT the default branch, so reels and their records never redeploy the game.
+# action "dry-run" checks the token and the account and posts nothing; "post" posts (public!); "stats" saves
+# reels/stats.json on the media branch. The first 3 reels are only posted after Murat said yes to each one.
+# Needs the repo secret INSTAGRAM_TOKEN (long-lived token, ~60 days: renew it before it runs out).
 name: Instagram reel
 
 on:
   workflow_dispatch:
     inputs:
+      action:
+        description: "dry-run, post or stats"
+        type: choice
+        options: [dry-run, post, stats]
+        default: dry-run
       reel:
-        description: "Reel folder, e.g. reels/2026-11-21-first-look"
-        required: true
+        description: "Reel folder, e.g. reels/2026-11-21-first-look (not needed for stats)"
         type: string
-      publish:
-        description: "Really post it (unticked = dry run)"
-        type: boolean
-        default: false
+        default: ""
       caption:
         description: "Caption (empty = the one in reel.json)"
         type: string
@@ -32,33 +35,41 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  post:
+  run:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
           ref: claude/relaxed-wozniak-cjs85z
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/reels-media
+          path: media
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Post the reel
+      - name: Instagram
         env:
           INSTAGRAM_TOKEN: ${{ secrets.INSTAGRAM_TOKEN }}
+          ACTION: ${{ inputs.action }}
           REEL: ${{ inputs.reel }}
           CAPTION: ${{ inputs.caption }}
           FORCE: ${{ inputs.force }}
-          PUBLISH: ${{ inputs.publish }}
         run: |
+          if [ "$ACTION" = "stats" ]; then node tools/reels/publish.mjs --stats media/reels/stats.json; exit; fi
           case "$REEL" in reels/*) ;; *) echo "::error::reel must be a folder under reels/"; exit 1;; esac
-          if [ "$PUBLISH" = "true" ]; then node tools/reels/publish.mjs "$REEL" --publish; else node tools/reels/publish.mjs "$REEL"; fi
-      - name: Remember it was posted
-        if: inputs.publish
+          case "$REEL" in *..*) echo "::error::bad reel path"; exit 1;; esac
+          if [ "$ACTION" = "post" ]; then node tools/reels/publish.mjs "media/$REEL" --publish; else node tools/reels/publish.mjs "media/$REEL"; fi
+      - name: Save the record on the media branch
+        if: inputs.action != 'dry-run'
+        working-directory: media
         env:
-          REEL: ${{ inputs.reel }}
+          MSG: "Instagram ${{ inputs.action }} ${{ inputs.reel }}"
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
-          git add "$REEL/posted.json"
-          git commit -m "Reel posted: $REEL [no patch note]"
-          for i in 1 2 3; do git pull --rebase -q origin claude/relaxed-wozniak-cjs85z && git push -q origin HEAD:claude/relaxed-wozniak-cjs85z && break; sleep 5; done
+          git add -A reels
+          git diff --cached --quiet && exit 0
+          git commit -qm "$MSG"
+          for i in 1 2 3; do git pull --rebase -q origin claude/reels-media && git push -q origin HEAD:claude/reels-media && break; sleep 5; done
