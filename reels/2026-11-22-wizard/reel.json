@@ -1,0 +1,16 @@
+{
+ "caption": "Fire, ice and lightning. The Wizard in our free browser MMO, no download needed.\n\nPlay free: play.fmtpa.ch (link in bio)\n\n#pixelart #indiegame #mmorpg #browsergame #gamedev #rpg #indiedev #pixelgame #wizard #retrogaming",
+ "music": "blob-slayer.mp3",
+ "musicStart": 8.6,
+ "shots": [
+  { "cls": "wizard", "time": "day", "grade": false, "goto": [186, 22], "route": [[200, 22]], "zoom": 3, "ms": 2400,
+    "casts": [{ "id": "w_storm", "at": 150, "aim": "mob" }, { "id": "w_firebolt", "at": 1300, "aim": "mob" }], "text": "Fire. Ice.\nLightning." },
+  { "cls": "wizard", "time": "day", "grade": false, "goto": [96, 14], "route": [[110, 14]], "zoom": 3, "ms": 2600,
+    "casts": [{ "id": "w_blizzard", "at": 150, "aim": "mob" }, { "id": "w_firebolt", "at": 1500, "aim": "mob" }] },
+  { "cls": "wizard", "time": "dusk", "goto": [69, 61], "route": [[86, 61]], "zoom": 3, "ms": 2200 },
+  { "cls": "wizard", "time": "day", "grade": false, "goto": [97, 21], "route": [[108, 21]], "zoom": 3, "ms": 2800,
+    "casts": [{ "id": "w_storm", "at": 100, "aim": "mob" }, { "id": "w_blizzard", "at": 900, "aim": "mob" }, { "id": "w_firebolt", "at": 1900, "aim": "mob" }], "text": "Play the Wizard" },
+  { "cls": "wizard", "time": "day", "grade": false, "goto": [190, 20], "route": [[202, 21]], "zoom": 3, "ms": 2600,
+    "casts": [{ "id": "w_firebolt", "at": 200, "aim": "mob" }, { "id": "w_storm", "at": 1200, "aim": "mob" }], "text": "Free to play\nplay.fmtpa.ch", "textAt": "center" }
+ ]
+}
