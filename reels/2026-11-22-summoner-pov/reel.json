@@ -1,0 +1,133 @@
+{
+ "caption": "POV: you main the Summoner. Black holes, a stone colossus and void blades, all in a free browser MMO.\n\nPlay free: play.fmtpa.ch (link in bio)\n\n#pixelart #indiegame #mmorpg #browsergame #gamedev #rpg #indiedev #pixelgame #summoner #retrogaming",
+ "music": "pale-marshals-march.mp3",
+ "musicStart": 26.8,
+ "shots": [
+  {
+   "cls": "summoner",
+   "time": "day",
+   "grade": false,
+   "goto": [
+    186,
+    22
+   ],
+   "route": [
+    [
+     200,
+     22
+    ]
+   ],
+   "zoom": 3,
+   "ms": 2600,
+   "casts": [
+    {
+     "id": "su_blackhole",
+     "at": 200,
+     "aim": "mob"
+    }
+   ],
+   "text": "POV: you main\nthe Summoner"
+  },
+  {
+   "cls": "summoner",
+   "time": "day",
+   "grade": false,
+   "goto": [
+    96,
+    14
+   ],
+   "route": [
+    [
+     110,
+     14
+    ]
+   ],
+   "zoom": 3,
+   "ms": 2600,
+   "casts": [
+    {
+     "id": "su_blades",
+     "at": 200,
+     "aim": "mob"
+    },
+    {
+     "id": "su_step",
+     "at": 1500,
+     "aim": "mob"
+    }
+   ]
+  },
+  {
+   "cls": "summoner",
+   "time": "day",
+   "grade": false,
+   "goto": [
+    97,
+    21
+   ],
+   "route": [
+    [
+     107,
+     21
+    ]
+   ],
+   "zoom": 3,
+   "ms": 3400,
+   "casts": [
+    {
+     "id": "su_colossus",
+     "at": 150,
+     "aim": "mob"
+    }
+   ],
+   "text": "Summon a colossus"
+  },
+  {
+   "cls": "summoner",
+   "time": "day",
+   "grade": false,
+   "goto": [
+    190,
+    20
+   ],
+   "route": [
+    [
+     202,
+     21
+    ]
+   ],
+   "zoom": 3,
+   "ms": 2800,
+   "casts": [
+    {
+     "id": "su_wisps",
+     "at": 150,
+     "aim": "mob"
+    },
+    {
+     "id": "su_horizon",
+     "at": 1400,
+     "aim": "mob"
+    }
+   ]
+  },
+  {
+   "cls": "summoner",
+   "time": "dusk",
+   "goto": [
+    70,
+    61
+   ],
+   "route": [
+    [
+     88,
+     61
+    ]
+   ],
+   "zoom": 3,
+   "ms": 2700,
+   "text": "Free to play\nplay.fmtpa.ch",
+   "textAt": "center"
+  }
+ ]
+}
