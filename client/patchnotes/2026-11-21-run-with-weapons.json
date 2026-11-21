@@ -1,8 +1,9 @@
 {
   "date": "2026-11-21",
-  "title": "Weapons held up at a run",
+  "title": "More natural running",
   "changes": [
-    "Heroes and monsters running with a sword, axe, dagger, hammer or mace now keep it raised in hand at the ready. Before, it dangled low at the hip and was easy to miss.",
-    "Spear carriers run with the point held forward."
+    "Heroes and monsters with a sword, axe, dagger, hammer or mace keep it gripped while they run. It swings with the arm instead of dangling at the hip, and spear carriers run with the point held forward.",
+    "A shield is held close at the side while running, the same way it is carried at a walk, instead of stuck out in front.",
+    "The vampire's Wolf Form now really gallops: the paws land one after another and push off, and the body rises and falls gently instead of bouncing."
   ]
 }

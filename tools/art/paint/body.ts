@@ -2418,7 +2418,7 @@ function paint3DPix(r: Rig, p: PoseLike, S: number, flash: number, withShadow: b
     head: r.head, nearS: r.nearS, farS: r.farS, nearE: r.nearE, farE: r.farE, nearH: r.nearH, farH: r.farH,
     hips: r.hips, knees: r.knees, feet: r.feet,
     stride: p.stride, phase: p.phase, run: p.run, t: p.t, attack: p.attack, crouch: p.crouch, headDx: p.headDx ?? 0,
-    moving: motion(r), wave: wavePh(r), blink: p.expr === "blink" || p.expr === "x", swing: swing3Of(r, p), carry: p.run ? carryOf(r.L, p, r.info.kind) : undefined,
+    moving: motion(r), wave: wavePh(r), blink: p.expr === "blink" || p.expr === "x", swing: swing3Of(r, p), carry: p.run ? carryOf(r.L, p, r.info.kind) : undefined, hero: !!HERO_BODIES[r.name],
   });
   const m = render3D(model, F);
   if (m.swing) {
