@@ -13,7 +13,7 @@ and send a weekly report.
 - Bright enough on a phone: skill shots in day without colour grade; dusk/night only for mood shots.
 
 ## Rhythm
-- First month (until 2026-12-21): one reel every weekday around 18:00 Zurich (scheduled run Mon-Fri 17:07). Then
+- First month (until 2026-12-21): one reel EVERY day, weekends included, around 18:00 Zurich (scheduled run 17:07). Then
   set the frequency from the data and note it here. Stats read before each run.
 - Judge a reel at 48 h (views, avg watch time, likes+comments+shares+saves per view, follows).
 
