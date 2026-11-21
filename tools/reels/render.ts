@@ -33,7 +33,9 @@ interface Shot {
   look?: [number, number];
   panTo?: [number, number];
   /** skill casts at this many game ms into the shot (aimed east of the hero unless `aim` tile given) */
-  casts?: { id: string; at: number; aim?: [number, number] }[];
+  casts?: { id: string; at: number; aim?: [number, number] | "mob" }[];
+  /** the hero walks (WASD) through these tiles, from a moment before the shot starts, so it never opens static */
+  route?: [number, number][];
   /** keys held: [key, from ms, to ms] */
   keys?: [string, number, number][];
   /** keep the game's moody colour grade (default true); false = plain daylight like the skills page */
@@ -153,13 +155,49 @@ async function session(browser: any, SLOW: number, shots: [number, Shot][], dir:
           sc.tweens.add({ targets: (window as any).__panZone, x: (to[0] + 0.5) * TILE, y: (to[1] + 0.5) * TILE, duration: ms, ease: "Sine.easeInOut" });
         }, { to: s.panTo, ms: s.ms, TILE });
       }
+      const heroAt = () => page.evaluate(() => { const sc = (window as any).__game.scene.scenes.find((x: any) => x.entities); const e = sc.entities.get(sc.me).sprite; return [e.x, e.y] as [number, number]; });
+      // walking: steer with WASD towards each tile of the route in turn
+      let steering = !!s.route?.length;
+      const held = new Set<string>();
+      const steer = (async () => {
+        let i = 0;
+        while (steering && s.route && i < s.route.length) {
+          const [x, y] = await heroAt(), tx = (s.route[i][0] + 0.5) * TILE, ty = (s.route[i][1] + 0.5) * TILE;
+          const dx = tx - x, dy = ty - y;
+          if (Math.hypot(dx, dy) < TILE * 0.6) { i++; continue; }
+          const want = new Set<string>();
+          if (Math.abs(dx) > TILE * 0.3) want.add(dx > 0 ? "d" : "a");
+          if (Math.abs(dy) > TILE * 0.3) want.add(dy > 0 ? "s" : "w");
+          for (const k of [...held]) if (!want.has(k)) { await page.keyboard.up(k); held.delete(k); }
+          for (const k of want) if (!held.has(k)) { await page.keyboard.down(k); held.add(k); }
+          await wait(real(60));
+        }
+        for (const k of held) await page.keyboard.up(k);
+        held.clear();
+      })();
+      if (steering) await wait(real(500)); // already walking on the first frame
       await page.evaluate(() => { (window as any).__rec = { next: performance.now(), frames: [] }; });
       // actions at their game time into the shot
       const acts: [number, () => Promise<unknown>][] = [];
       for (const c of s.casts ?? []) acts.push([c.at, async () => {
-        const me = await page.evaluate(() => { const sc = (window as any).__game.scene.scenes.find((x: any) => x.entities); const e = sc.entities.get(sc.me).sprite; return [e.x, e.y]; });
-        await send("face", c.aim ? { x: (c.aim[0] + 0.5) * TILE, y: (c.aim[1] + 0.5) * TILE } : { x: me[0] + 1.6 * TILE, y: me[1] });
-        await send("cast", c.id);
+        const me = await heroAt();
+        let at = { x: me[0] + 1.6 * TILE, y: me[1] };
+        if (c.aim === "mob") {
+          // the nearest living monster on screen
+          const m = await page.evaluate(([hx, hy]: number[]) => {
+            const sc = (window as any).__game.scene.scenes.find((x: any) => x.entities);
+            let best: number[] | undefined, bd = 1e9;
+            for (const e of sc.entities.values()) {
+              if (!e.mob || !e.sprite.visible || e.state?.dead) continue;
+              const d = Math.hypot(e.sprite.x - hx, e.sprite.y - hy);
+              if (d < bd) { bd = d; best = [e.sprite.x, e.sprite.y]; }
+            }
+            return best;
+          }, me);
+          if (m) at = { x: m[0], y: m[1] };
+        } else if (c.aim) at = { x: (c.aim[0] + 0.5) * TILE, y: (c.aim[1] + 0.5) * TILE };
+        await send("face", at);
+        if (c.id === "attack") await send("attack", undefined); else await send("cast", c.id);
       }]);
       for (const [k, a, b] of s.keys ?? []) { acts.push([a, () => page.keyboard.down(k)]); acts.push([b, () => page.keyboard.up(k)]); }
       acts.sort((a, b) => a[0] - b[0]);
@@ -167,6 +205,8 @@ async function session(browser: any, SLOW: number, shots: [number, Shot][], dir:
       for (const [at, fn] of acts) { const d = real(at) - (Date.now() - t0); if (d > 0) await wait(d); await fn(); }
       const left = real(s.ms) - (Date.now() - t0);
       if (left > 0) await wait(left);
+      steering = false;
+      await steer;
       const rec = await page.evaluate(() => { const r = (window as any).__rec; (window as any).__rec = null; return r; });
       const fdir = path.join(dir, `f${idx}`);
       mkdirSync(fdir, { recursive: true });
