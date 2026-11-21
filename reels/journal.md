@@ -12,6 +12,6 @@ One entry per reel: idea, hook, what we test, numbers after 48 h, lesson.
 
 ## 2026-11-22 wizard (reel 2) - 'Fire. Ice. Lightning.' hook, storm/blizzard/firebolt on live packs, Blob Slayer drop; 12.6 s. Approved by Murat, posts Sun 22 Nov 18:00 from the review thread.
 
-## QUEUED: reels/2026-11-24-world-tour (reel 4)
-- Ready to post, not yet posted. The next scheduled run (Tue 24 Nov) posts THIS reel instead of making a new one, then removes this QUEUED line.
-- Format: world tour, 'How big is this browser MMO?', walks through Oakvale, Kel Ashar, Cairnwatch, Rustwater, Tollcross, ends on a fight; Sand and Steel from 24.8 s; 14 s.
+## DROPPED: reels/2026-11-24-world-tour - Murat: 'How big is this browser MMO?' text feels robotic, like a pay-to-win ad. Lesson: creator voice, one biome, discovery feel.
+
+## QUEUED: reels/2026-11-24-desert-find (reel 4) - rendering, needs Murat's OK before posting (he asked to see it).
