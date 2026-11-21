@@ -1,5 +1,5 @@
 {
- "caption": "kept walking south of oakvale, went through a portal and ended up in a desert?? there's a whole market town out here, an oasis, and giant scorpions \ud83e\udd82\n\nwould you go explore it?\n\nplay.fmtpa.ch (link in bio)\n\n#pixelart #indiegame #mmorpg #browsergame #gamedev",
+ "caption": "i hid a whole desert act behind a portal south of the first village in my browser MMO. market town, oasis, giant scorpions \ud83e\udd82\n\nwould you go explore it?\n\nplay.fmtpa.ch (link in bio)\n\n#pixelart #indiegame #mmorpg #gamedev #indiedev",
  "music": "kel-ashar-tune.mp3",
  "musicStart": 3.6,
  "shots": [
@@ -19,7 +19,7 @@
    ],
    "zoom": 3,
    "ms": 3000,
-   "text": "went through a portal\nsouth of the village...",
+   "text": "i hid a whole desert\nbehind a portal in my game",
    "textStyle": "voice"
   },
   {
@@ -38,7 +38,7 @@
    ],
    "zoom": 3,
    "ms": 2600,
-   "text": "...and there's a whole\ndesert town back here",
+   "text": "there's a market town\nback here",
    "textStyle": "voice"
   },
   {
@@ -57,7 +57,7 @@
    ],
    "zoom": 2.8,
    "ms": 3000,
-   "text": "an actual oasis??",
+   "text": "an actual oasis",
    "textStyle": "voice"
   },
   {
@@ -88,7 +88,7 @@
      "aim": "mob"
     }
    ],
-   "text": "the locals are\nless friendly",
+   "text": "and the locals are\nless friendly",
    "textStyle": "voice"
   },
   {

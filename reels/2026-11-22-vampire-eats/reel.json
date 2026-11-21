@@ -1,0 +1,102 @@
+{
+ "caption": "added a skill to my browser MMO: the vampire eats monsters. blobs make him tougher, bandits make him hit harder, and it stacks forever \ud83e\ude78\n\nwhat should he eat next?\n\nplay.fmtpa.ch (link in bio)\n\n#pixelart #indiegame #mmorpg #gamedev #indiedev",
+ "music": "blob-slayer.mp3",
+ "musicStart": 8.6,
+ "shots": [
+  {
+   "cls": "vampire",
+   "time": "day",
+   "grade": false,
+   "stage": "weak",
+   "zoom": 3.5,
+   "ms": 2800,
+   "casts": [
+    {
+     "id": "v_devour",
+     "at": 1000,
+     "aim": "mob"
+    }
+   ],
+   "text": "i gave my vampire the\npower to eat monsters",
+   "textStyle": "voice",
+   "route": [
+    [
+     101,
+     72
+    ]
+   ]
+  },
+  {
+   "cls": "vampire",
+   "time": "day",
+   "grade": false,
+   "stage": "weak",
+   "zoom": 3.5,
+   "ms": 2600,
+   "casts": [
+    {
+     "id": "v_devour",
+     "at": 950,
+     "aim": "mob"
+    }
+   ],
+   "text": "each blob makes him\ntougher. for good.",
+   "textStyle": "voice",
+   "route": [
+    [
+     101,
+     72
+    ]
+   ]
+  },
+  {
+   "cls": "vampire",
+   "time": "day",
+   "grade": false,
+   "stage": "weak",
+   "zoom": 3.5,
+   "ms": 3400,
+   "casts": [
+    {
+     "id": "v_bite",
+     "at": 950,
+     "aim": "mob"
+    }
+   ],
+   "text": "and a bite turns them\ninto his thralls",
+   "textStyle": "voice",
+   "route": [
+    [
+     101,
+     72
+    ]
+   ]
+  },
+  {
+   "cls": "vampire",
+   "time": "day",
+   "grade": false,
+   "goto": [
+    186,
+    22
+   ],
+   "route": [
+    [
+     202,
+     22
+    ]
+   ],
+   "zoom": 3,
+   "ms": 3000,
+   "casts": [
+    {
+     "id": "v_tide",
+     "at": 400,
+     "aim": "mob"
+    }
+   ],
+   "text": "what should he\neat next?",
+   "textStyle": "voice"
+  }
+ ]
+}
