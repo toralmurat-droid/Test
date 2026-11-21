@@ -263,7 +263,6 @@ async function measureFps(browser: any, dir: string): Promise<number> {
     const txt = path.join(dir, `text${i}.png`);
     const dur = s.ms / 1000, fade = Math.min(0.25, dur / 4);
     let vf = `[0:v]scale=${OW}:${OH}:flags=neighbor${s.dim ? ",eq=brightness=-0.08:saturation=0.8" : ""},format=yuva420p`;
-    vf += i === reel.shots.length - 1 ? `,fade=t=out:st=${(dur - 0.5).toFixed(2)}:d=0.5` : "";
     const args = ["-y", "-loglevel", "error", "-framerate", String(FPS), "-i", path.join(dir, `f${i}`, "%04d.png")];
     if (existsSync(txt)) {
       args.push("-loop", "1", "-framerate", String(FPS), "-i", txt);
@@ -279,7 +278,7 @@ async function measureFps(browser: any, dir: string): Promise<number> {
   const mp4 = path.join(out, "reel.mp4");
   const music = reel.music ? path.join(ROOT, "client/public/assets/music", reel.music) : "";
   const args = ["-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", list];
-  if (music) args.push("-ss", String(reel.musicStart ?? 0), "-i", music, "-filter_complex", `[1:a]afade=t=in:st=0:d=0.3,afade=t=out:st=${(total - 1.5).toFixed(2)}:d=1.5,aresample=48000[a]`, "-map", "0:v", "-map", "[a]", "-c:a", "aac", "-b:a", "192k", "-ar", "48000");
+  if (music) args.push("-ss", String(reel.musicStart ?? 0), "-i", music, "-filter_complex", `[1:a]afade=t=in:st=0:d=0.3,aresample=48000[a]`, "-map", "0:v", "-map", "[a]", "-c:a", "aac", "-b:a", "192k", "-ar", "48000");
   args.push("-t", total.toFixed(3), "-c:v", "libx264", "-preset", "slow", "-crf", "18", "-profile:v", "high", "-pix_fmt", "yuv420p", "-r", String(FPS), "-movflags", "+faststart", mp4);
   execFileSync("ffmpeg", args);
   execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-ss", "1", "-i", mp4, "-frames:v", "1", "-q:v", "3", path.join(out, "cover.jpg")]);
