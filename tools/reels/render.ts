@@ -44,6 +44,8 @@ interface Shot {
   /** text laid over the shot */
   text?: string;
   textAt?: "top" | "center";
+  /** "voice": every line the same middle size, like a creator's caption (default "title": big first line) */
+  textStyle?: "title" | "voice";
   /** darken the frame (end card) */
   dim?: boolean;
 }
@@ -58,13 +60,15 @@ async function textCards(browser: any, reel: Reel, dir: string) {
     .box{position:absolute;left:70px;right:70px;text-align:center;color:#f1d9a0;font-family:T;font-size:84px;line-height:1.15;
       text-shadow:0 6px 0 #1a0f08,6px 0 0 #1a0f08,-6px 0 0 #1a0f08,0 -6px 0 #1a0f08,6px 6px 0 #1a0f08,-6px 6px 0 #1a0f08,6px -6px 0 #1a0f08,-6px -6px 0 #1a0f08}
     .box small{display:block;font-family:X;font-size:52px;color:#e8e0cc;margin-top:24px}
+    .voice{font-size:62px;line-height:1.3}
     .top{top:300px}.center{top:50%;transform:translateY(-50%)}`;
   const page = await browser.newPage({ viewport: { width: OW, height: OH } });
   for (const [i, s] of reel.shots.entries()) {
     if (!s.text) continue;
     const [head, ...rest] = s.text.split("\n");
     const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;");
-    await page.setContent(`<style>${css}</style><div class="box ${s.textAt ?? "top"}">${esc(head)}${rest.length ? `<small>${rest.map(esc).join("<br>")}</small>` : ""}</div>`);
+    const body = s.textStyle === "voice" ? [head, ...rest].map(esc).join("<br>") : `${esc(head)}${rest.length ? `<small>${rest.map(esc).join("<br>")}</small>` : ""}`;
+    await page.setContent(`<style>${css}</style><div class="box ${s.textAt ?? "top"} ${s.textStyle ?? ""}">${body}</div>`);
     await page.evaluate(() => (document as any).fonts.ready);
     await page.screenshot({ path: path.join(dir, `text${i}.png`), omitBackground: true });
   }
