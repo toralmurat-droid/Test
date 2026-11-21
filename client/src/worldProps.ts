@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { CRW } from "./crownWalls";
 import { STD3D, STD3D_KEYS } from "./standard3d";
 import { staticObj } from "./staticChunks";
 import { standingStone, STONE_H, STONE_W, throne, THRONE_H, THRONE_W } from "./throneArt";
@@ -80,6 +81,7 @@ export const BAKED_PROPS: Record<string, [number, number]> = {
 export function preloadBakedProps(scene: Phaser.Scene) {
   for (const [k, [w, h]] of Object.entries(BAKED_PROPS)) if (!scene.textures.exists(k)) scene.load.spritesheet(k, `assets/hd/props/${k}.png`, { frameWidth: w, frameHeight: h });
   for (const k of STD3D_KEYS) if (!scene.textures.exists(k)) scene.load.spritesheet(k, `assets/hd/props/${k}.png`, { frameWidth: STD3D.w, frameHeight: STD3D.h }); // clan war standards (warStandards.ts)
+  if (!scene.textures.exists(CRW.key)) scene.load.spritesheet(CRW.key, `assets/hd/props/${CRW.key}.png`, { frameWidth: CRW.w, frameHeight: CRW.h }); // the Crown Keep's walls (crownWalls.ts)
   preloadLandKit(scene); // the lands' kits and landmarks (landKit.ts)
 }
 
