@@ -81,7 +81,7 @@ async function session(browser: any, SLOW: number, shots: [number, Shot][], dir:
   const saves = mkdtempSync(path.join(tmpdir(), "reel-saves-"));
   const server = spawn("node", ["-r", path.join(ROOT, "tools/skill-clips/slowtime.cjs"), "server-dist/index.cjs"], {
     cwd: ROOT,
-    env: { ...process.env, NODE_ENV: "production", PORT: String(PORT), SLOW: String(SLOW), SKILL_CAPTURE: "1", SAVE_FILE: path.join(saves, "saves.json"), IDEAS_FILE: path.join(saves, "ideas.json"), DATABASE_URL: "" },
+    env: { ...process.env, NODE_ENV: "production", PORT: String(PORT), SLOW: String(SLOW), SKILL_CAPTURE: "1", DAY_TIME: first.time === "dusk" ? "0.685" : first.time ?? "day", SAVE_FILE: path.join(saves, "saves.json"), IDEAS_FILE: path.join(saves, "ideas.json"), DATABASE_URL: "" },
     stdio: ["ignore", "ignore", "inherit"],
   });
   const real = (ms: number) => ms / SLOW;
