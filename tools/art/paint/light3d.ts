@@ -4,7 +4,7 @@
  *
  * What it fixes over the first pass, which lit with a plain Lambert term and dithered every ramp step:
  * - a key light with a clear terminator (lit planes vs shadow planes) instead of a soft CG gradient,
- * - real self-shadow: an arm or a hood throws shade onto the body (the old pass only had a touch of folds),
+ * - real self-shadow on monsters: an arm or a hood throws shade onto the body (heroes skip it, see body3d.ts),
  * - a lifted shadow floor so dark sides keep their colour and form instead of sinking into near-black mush,
  * - ambient occlusion kept to the folds, not a grey wash over the whole body,
  * - a cool, faint back rim on the shadow edge so dark bodies still part from dark ground at night,
@@ -14,12 +14,12 @@
 export type V3 = [number, number, number];
 const clamp = (v: number, a = 0, b = 1) => (v < a ? a : v > b ? b : v);
 const nrm = (v: V3): V3 => { const l = Math.hypot(...v); return [v[0] / l, v[1] / l, v[2] / l]; };
-export const SIN = 0.5, COS = Math.sqrt(3) / 2;
+const SIN = 0.5, COS = Math.sqrt(3) / 2;
 /** World frame of the casters: x screen right, y away from the camera, z up. */
 export const LIGHT: V3 = nrm([-0.5, -0.5, 0.74]);
 /** Toward the camera (30 degrees down). */
 export const VIEW: V3 = [0, -COS, SIN];
-export const HALF: V3 = nrm([LIGHT[0] + VIEW[0], LIGHT[1] + VIEW[1], LIGHT[2] + VIEW[2]]);
+const HALF: V3 = nrm([LIGHT[0] + VIEW[0], LIGHT[1] + VIEW[1], LIGHT[2] + VIEW[2]]);
 const BAYER = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
 const dot = (a: V3, b: V3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 

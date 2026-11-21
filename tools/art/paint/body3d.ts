@@ -1106,8 +1106,9 @@ export function render3D(model: Built, fr: number | Frame3): Ray3Out {
       let nz = scene(ps2, x, y, z + e, null) - scene(ps2, x, y, z - e, null);
       const nl = Math.hypot(nx, ny, nz) || 1; nx /= nl; ny /= nl; nz /= nl;
       const ao = clamp(scene(ps2, x + nx * 1.3, y + ny * 1.3, z + nz * 1.3, null) / 1.3);
-      // self-shadow looks at every part (an arm's shade falls on the body even when the arm is off this ray)
-      const sun = m.glow ? 1 : sunAt((qx, qy, qz) => scene(ps, qx, qy, qz, null), [x + nx * 0.2, y + ny * 0.2, z + nz * 0.2], LIGHT);
+      // self-shadow looks at every part (an arm's shade falls on the body even when the arm is off this ray). Monsters
+      // only: hero gear sheets are diffs against the bare hero, and a hat's shade on the body would leak into them.
+      const sun = m.glow || !monster ? 1 : sunAt((qx, qy, qz) => scene(ps, qx, qy, qz, null), [x + nx * 0.2, y + ny * 0.2, z + nz * 0.2], LIGHT);
       const nn: V3 = [nx, ny, nz];
       let v = light3(nn, ao, sun);
       if (m.spec) v += glint(nn, 18) * m.spec * 0.9 * (0.3 + 0.7 * sun);
