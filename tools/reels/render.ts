@@ -139,9 +139,11 @@ async function session(browser: any, SLOW: number, shots: [number, Shot][], dir:
         cam.setZoom(s.zoom ?? 3);
         if (s.grade === false) { sc.grade?.reset(); cam.postFX?.clear(); sc.grade = undefined; }
         const hero = sc.entities.get(sc.me)?.sprite;
-        const z = s.look ? sc.add.zone((s.look[0] + 0.5) * TILE, (s.look[1] + 0.5) * TILE, 1, 1) : hero;
+        // a skill stage is framed between the hero and the blobs (CAPTURE_SPOT in server/TownRoom.ts)
+        const look = s.look ?? (s.stage ? [100.4, 72] : undefined);
+        const z = look ? sc.add.zone((look[0] + 0.5) * TILE, (look[1] + 0.5) * TILE, 1, 1) : hero;
         cam.startFollow(z, true, 1, 1);
-        (window as any).__panZone = s.look ? z : undefined;
+        (window as any).__panZone = look ? z : undefined;
       }, { s, TILE });
       await wait(real(s.goto || s.stage ? 3500 : 600));
       if (s.panTo) {
@@ -217,7 +219,6 @@ async function measureFps(browser: any, dir: string): Promise<number> {
     const txt = path.join(dir, `text${i}.png`);
     const dur = s.ms / 1000, fade = Math.min(0.25, dur / 4);
     let vf = `[0:v]scale=${OW}:${OH}:flags=neighbor${s.dim ? ",eq=brightness=-0.08:saturation=0.8" : ""},format=yuva420p`;
-    vf += i === 0 ? "" : `,fade=t=in:st=0:d=0.12`;
     vf += i === reel.shots.length - 1 ? `,fade=t=out:st=${(dur - 0.5).toFixed(2)}:d=0.5` : "";
     const args = ["-y", "-loglevel", "error", "-framerate", String(FPS), "-i", path.join(dir, `f${i}`, "%04d.png")];
     if (existsSync(txt)) {
