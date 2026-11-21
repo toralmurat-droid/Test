@@ -35,6 +35,7 @@ import { BADLANDS_H, BADLANDS_Y0, DESERT_H, DESERT_Y0, MOORS_H, MOORS_Y0, SINKHO
 import { cityAt } from "../../shared/capitals";
 import { CITY_LOOK } from "./cityArt";
 import { isCrownRim } from "../../shared/crown";
+import { CRW, wallFrame, wallKey } from "./crownWalls";
 import { ARCHES, BR, isBadlandsRim } from "../../shared/badlands";
 import { barrowTexture, birchTexture, boneHeapTexture, graniteCliffTexture, origin, standingStoneTexture } from "./moorsArt";
 import { BRAZIER_FRAMES, brazierTexture, crownCliffTexture, origin as crOrigin, spireTexture, statueTexture } from "./crownArt";
@@ -1059,6 +1060,10 @@ function isoCrown(scene: Phaser.Scene, t: number, tx: number, ty: number, at: (x
     return true;
   }
   const place = (s: Parameters<typeof crOrigin>[0] & { key: string }) => { const o = crOrigin(s); staticObj(scene, scene.add.image(cx, cy, s.key).setOrigin(o.x, o.y).setDepth(cy)); return true; };
+  if (t === T.WALL_STONE && scene.textures.exists(CRW.key)) { // the Keep's curtain wall and the Throne Hall's walls: baked 3D pieces (crownWalls.ts)
+    const f = wallFrame(wallKey(tx, ty, (x, y) => id(at(x, y))));
+    if (f >= 0) { staticObj(scene, scene.add.image(cx, cy, CRW.key, f).setOrigin(CRW.ox / CRW.w, CRW.oy / CRW.h).setScale(1 / CRW.tx).setDepth(cy)); return true; }
+  }
   if (t === T.STATUE) return place(statueTexture(scene, v));
   if (t === T.SPIRE) return place(spireTexture(scene, v));
   if (t === T.BRAZIER) {
