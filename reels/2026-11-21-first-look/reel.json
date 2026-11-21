@@ -1,0 +1,115 @@
+{
+ "caption": "Pixel Town Brawl: a dark online pixel-art RPG you play free in your browser. Vampire blood magic, Summoner black holes, monsters, quests and clan wars. Play now at play.fmtpa.ch\n\n#pixelart #indiegame #gamedev #rpg #browsergame #mmorpg #indiedev #pixelgame",
+ "music": "blob-slayer.mp3",
+ "musicStart": 0,
+ "shots": [
+  {
+   "cls": "vampire",
+   "time": "dusk",
+   "goto": [
+    80,
+    63
+   ],
+   "look": [
+    74,
+    56
+   ],
+   "panTo": [
+    80,
+    61
+   ],
+   "zoom": 2.5,
+   "ms": 4500,
+   "text": "Pixel Town Brawl\nA dark pixel RPG in your browser"
+  },
+  {
+   "cls": "vampire",
+   "time": "day",
+   "stage": true,
+   "zoom": 3.5,
+   "casts": [
+    {
+     "id": "v_exsang",
+     "at": 250
+    }
+   ],
+   "ms": 2800,
+   "text": "Play the Vampire",
+   "grade": false
+  },
+  {
+   "cls": "vampire",
+   "time": "day",
+   "stage": true,
+   "zoom": 3.5,
+   "casts": [
+    {
+     "id": "v_tide",
+     "at": 200
+    }
+   ],
+   "ms": 2600,
+   "grade": false
+  },
+  {
+   "cls": "vampire",
+   "time": "day",
+   "stage": true,
+   "zoom": 3.5,
+   "casts": [
+    {
+     "id": "v_brides",
+     "at": 200
+    }
+   ],
+   "ms": 3400,
+   "grade": false
+  },
+  {
+   "cls": "summoner",
+   "time": "day",
+   "stage": true,
+   "zoom": 3.5,
+   "casts": [
+    {
+     "id": "su_blackhole",
+     "at": 250
+    }
+   ],
+   "ms": 3000,
+   "text": "...or the Summoner",
+   "grade": false
+  },
+  {
+   "cls": "summoner",
+   "time": "day",
+   "stage": true,
+   "zoom": 3.5,
+   "casts": [
+    {
+     "id": "su_colossus",
+     "at": 250
+    }
+   ],
+   "ms": 3600,
+   "grade": false
+  },
+  {
+   "cls": "summoner",
+   "time": "day",
+   "goto": [
+    80,
+    63
+   ],
+   "look": [
+    80,
+    60
+   ],
+   "zoom": 2.5,
+   "ms": 3200,
+   "dim": true,
+   "text": "Free to play\nplay.fmtpa.ch",
+   "textAt": "center"
+  }
+ ]
+}
