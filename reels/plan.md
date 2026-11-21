@@ -16,6 +16,19 @@ and send a weekly report.
 - End: place name + play.fmtpa.ch, small, over moving gameplay. Caption: casual 1-2 lines in a player's voice + "link in bio" + 8-10 hashtags.
 - Bright enough on a phone: skill shots in day without colour grade; dusk/night only for mood shots.
 
+## What works (research 2026-11-21: howtomarketagame, presskit.gg, 80.lv Indie Game Joe, HypeHype, CloutBoost)
+- PREMISE HOOK beats genre pitch: lead with the one weird rule/mechanic in a sentence ("this village has one rule:
+  no magic", "my vampire eats monsters to steal their powers", "skeletons only come out at night"). Never
+  "cozy pixel-art MMO with ..." (genre-only pitches flop).
+- Show, don't sell; homemade beats polished; unscripted funny/fail moments beat staged ones. Fails and deaths are content.
+- Structures that work: premise -> 2-3 quick beats -> payoff; setup that pays off at the end; before/after or
+  day/night hard cut; seamless loop (loops count as views); one character per video; reply-to-comment videos.
+- End on a question to pull comments ("would you have tried it?", "which class next?"), not a CTA banner.
+- 12-25 s; show the coolest thing in the first 2 s; no logos/intros/slow pans.
+- Devlog voice by the maker performs best (pending Murat's decision on persona).
+- Captions short; 3-5 hashtags (mix 1-2 broad + niche). Cross-post the same cut to TikTok/Shorts later (no watermark).
+- Don't pay for ads; boost only organic winners later.
+
 ## Rhythm
 - First month (until 2026-12-21): one reel EVERY day, weekends included, around 18:00 Zurich (scheduled run 17:07). Then
   set the frequency from the data and note it here. Stats read before each run.
@@ -30,7 +43,9 @@ and send a weekly report.
 6. Satisfying loops: one skill on a big pack, seamless loop, no text.
 7. Dev/indie angle: "I'm building an MMO in the browser" (needs Murat's OK for voice/person).
 8. Questions to drive comments: "Which class should we add next?".
-Hooks to rotate: no download; free; pixel art; vampire; clan war; "made by one person" (ask Murat first).
+Premise hooks bank: no magic in the village (outlaw + guards); vampire Devour eats monsters / Bite makes thralls;
+undead only at night; casting into a crowd of AI clan soldiers starts a war; shrine with a random boon;
+broken bridges; tree ambushers drop on you in Redfang woods; portal stones; mother blob splits; waygate to a desert.
 
 ## Loop each run
 0. If journal.md has a QUEUED reel, post that one (step 4) instead of making a new one.
