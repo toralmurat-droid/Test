@@ -29,6 +29,7 @@ and send a weekly report.
 Hooks to rotate: no download; free; pixel art; vampire; clan war; "made by one person" (ask Murat first).
 
 ## Loop each run
+0. If journal.md has a QUEUED reel, post that one (step 4) instead of making a new one.
 1. Run the workflow with action `stats`, read reels/stats.json, note numbers in journal.md.
 2. Decide: keep what beats the median, drop what is under it, try one new idea.
 3. Render (npm run build; npx tsx tools/reels/render.ts reels/<slug>/reel.json, ~15 min), check frames.
