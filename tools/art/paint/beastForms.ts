@@ -246,6 +246,12 @@ function render(model: Model, yaw: number): Frame {
 type WolfPose = { gait: number; run: number; bob: number; lean: number; headUp: number; jaw: number; reach: number; crouch: number; tail: number; breathe: number };
 const W0: WolfPose = { gait: 0, run: 0, bob: 0, lean: 0, headUp: 0, jaw: 0, reach: 0, crouch: 0, tail: 0, breathe: 0 };
 
+/** Gallop footfalls (fraction of a stride) for hind near, hind far, fore near, fore far; and how long a paw stays down. */
+const GALLOP = [0, 0.12, 0.42, 0.54], GALLOP_STANCE = 0.3;
+/** The gallop's body motion over one stride: one gentle rise and fall (highest in the gathered flight after the front
+ * feet push off), and the back rocking: rump high as the hind feet land, chest high as the front feet do. */
+const gallopBody = (k: number) => ({ bob: 0.45 + 0.45 * Math.cos(2 * Math.PI * (k - 0.78)), lean: 0.045 * Math.sin(2 * Math.PI * (k - 0.2)) });
+
 function wolf(pose: Partial<WolfPose>): Model {
   const P = { ...W0, ...pose };
   const prims: Prim[] = [];
@@ -298,9 +304,23 @@ function wolf(pose: Partial<WolfPose>): Model {
     { x: -8, s: 1, front: false, ph: 0.5 }, { x: -8, s: -1, front: false, ph: 0 },
   ];
   for (const L of legs) {
-    const ph = P.gait + (P.run > 0.5 ? (L.front ? 0 : 0.5) + (L.s > 0 ? 0.08 : 0) : L.ph);
-    const sw = Math.sin(ph * Math.PI * 2) * (3.6 + P.run * 2.2) * (P.gait || P.run ? 1 : 0);
-    const up = Math.max(0, Math.cos(ph * Math.PI * 2)) * (1.6 + P.run * 1.4) * (P.gait || P.run ? 1 : 0);
+    let sw: number, up: number;
+    if (P.run > 0.5) {
+      // a real gallop (Murat 2026-11-21: the old bound bounced like a hop): the hind feet land one after the other,
+      // then the front ones; each paw stays planted on the ground while the body passes over it (it slides back
+      // under the hip at running speed), then lifts, tucks and reaches forward
+      const t = (((P.gait + GALLOP[L.front ? (L.s > 0 ? 2 : 3) : (L.s > 0 ? 0 : 1)]) % 1) + 1) % 1, A = L.front ? 6.6 : 6.0;
+      if (t < GALLOP_STANCE) { sw = A * (1 - 2 * t / GALLOP_STANCE); up = 0; }
+      else {
+        const q = (t - GALLOP_STANCE) / (1 - GALLOP_STANCE);
+        sw = -A + 2 * A * (1 - Math.cos(Math.PI * q)) / 2;
+        up = Math.sin(Math.PI * Math.pow(q, 0.8)) * (L.front ? 3.6 : 3.0);
+      }
+    } else {
+      const ph = P.gait + L.ph;
+      sw = Math.sin(ph * Math.PI * 2) * (3.6 + P.run * 2.2) * (P.gait || P.run ? 1 : 0);
+      up = Math.max(0, Math.cos(ph * Math.PI * 2)) * (1.6 + P.run * 1.4) * (P.gait || P.run ? 1 : 0);
+    }
     const hip = at(L.x, L.s * 3.4, bz - 1);
     const paw: V = [hip[0] + sw + (L.front ? 0.6 : -0.6) + (L.front ? P.reach * 0.3 : -P.reach * 0.2), L.s * 3.6, 0.9 + up];
     const knee: V = L.front
@@ -380,7 +400,7 @@ const loopN = (n: number, f: (k: number) => Model) => Array.from({ length: n }, 
 function wolfAnims(): AnimSpec[] {
   return [
     { name: "idle", fps: 5, loop: true, poses: loopN(4, (k) => wolf({ breathe: Math.sin(k * Math.PI * 2), tail: Math.sin(k * Math.PI * 2) * 0.6, headUp: Math.sin(k * Math.PI * 2) * 0.03 })) },
-    { name: "run", fps: 13, loop: true, poses: loopN(6, (k) => wolf({ gait: k, run: 1, bob: Math.abs(Math.sin(k * Math.PI * 2)) * 1.2, lean: Math.sin(k * Math.PI * 2) * 0.06, tail: k * Math.PI * 2, headUp: -0.06 })) },
+    { name: "run", fps: 16, loop: true, poses: loopN(8, (k) => wolf({ gait: k, run: 1, ...gallopBody(k), tail: Math.sin(k * Math.PI * 2) * 0.5, headUp: -0.06 + 0.03 * Math.sin(2 * Math.PI * (k - 0.6)) })) },
     { name: "bite", fps: 14, loop: false, poses: [
       wolf({ crouch: 1.6, reach: -1.5, headUp: -0.12, jaw: 0.2 }),
       wolf({ reach: 3.5, bob: 1.2, lean: 0.08, headUp: 0.02, jaw: 0.75, run: 0.4, gait: 0.25 }),

@@ -1158,7 +1158,7 @@ export function renderFrame(hero: Hero, p: Pose, withShadow = true, flash = 0): 
       const ux = lean + (p.run && p.dir === "right" ? 1 : 0);
       return {
         hand: [hp[0] + ux, hp[1] + ly], ang: weaponAngle(p, hero), mv: moveOf(hero, p),
-        prevAng: (i) => weaponAngle({ ...p, attack: i, attackT: undefined }, hero), hasShieldMove: !!hero.shield,
+        prevAng: (i) => weaponAngle({ ...p, attack: i, attackT: undefined }, hero), hasShieldMove: !!hero.shield, kind: hero.weaponKind,
       };
     };
     if (diagRec) { diagRec.push({ p, info: infoOf(p) }); return mk(); }

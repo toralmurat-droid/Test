@@ -21,7 +21,7 @@ interface PoseLike {
 /** A 3/4 (diagonal) frame: the same pose facing right, blended with the down/up one. */
 export interface DiagAlt { p: PoseLike; info: FrameInfo; diag: "downright" | "upright" }
 export interface MoveLike { kind: string; fx?: number }
-export interface FrameInfo { hand: P; ang: number; mv: MoveLike; prevAng: (phase: number) => number; hasShieldMove: boolean }
+export interface FrameInfo { hand: P; ang: number; mv: MoveLike; prevAng: (phase: number) => number; hasShieldMove: boolean; /** the sheet's weapon kind (a stance sheet's, not the class's) */ kind?: string }
 
 /** Supersampling: frames are painted SS times bigger, then scaled down. */
 const SS = 2;
@@ -2366,6 +2366,15 @@ function swing3Of(r: Rig, p: PoseLike): Swing3 | undefined {
   if (p.move === "a5") return { kind: "sweep", t };
   return { kind: sw[3] >= sw[0] ? "slash" : "back", t };
 }
+/**
+ * How a running body carries its weapon (body3d.ts runJoints). Keyed on the sheet's own weapon kind (a hero's
+ * class weapon, never the item worn), so a gear overlay is always drawn on the same arm as the body under it.
+ */
+const CARRIED: Partial<Record<string, "up" | "fwd">> = { katana: "up", sword: "up", axe: "up", hammer: "up", pick: "up", mace: "up", dagger: "up", boneblade: "up", spade: "up", spear: "fwd" };
+function carryOf(L: Look, p: PoseLike, kind?: string): "up" | "fwd" | undefined {
+  if (p.noWeapon || p.hand || (L.weapon === "none" && !L.weaponKind)) return undefined; // empty-handed monsters run free
+  return CARRIED[kind ?? L.weaponKind ?? L.weapon];
+}
 /** The blade's arc as a ribbon of its recent tip positions, brightest at the hit (only for weapons that have a blade). */
 function swingTrail(c: C2, r: Rig, sw: SwingOut) {
   const L = r.L, wpn = L.weapon;
@@ -2409,7 +2418,7 @@ function paint3DPix(r: Rig, p: PoseLike, S: number, flash: number, withShadow: b
     head: r.head, nearS: r.nearS, farS: r.farS, nearE: r.nearE, farE: r.farE, nearH: r.nearH, farH: r.farH,
     hips: r.hips, knees: r.knees, feet: r.feet,
     stride: p.stride, phase: p.phase, run: p.run, t: p.t, attack: p.attack, crouch: p.crouch, headDx: p.headDx ?? 0,
-    moving: motion(r), wave: wavePh(r), blink: p.expr === "blink" || p.expr === "x", swing: swing3Of(r, p),
+    moving: motion(r), wave: wavePh(r), blink: p.expr === "blink" || p.expr === "x", swing: swing3Of(r, p), carry: p.run ? carryOf(r.L, p, r.info.kind) : undefined, hero: !!HERO_BODIES[r.name],
   });
   const m = render3D(model, F);
   if (m.swing) {
