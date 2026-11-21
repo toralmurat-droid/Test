@@ -1,0 +1,64 @@
+# Posts one rendered reel (reels/<slug>/reel.mp4, caption in reel.json) to Instagram @fmtpa.
+# Started by hand only: Actions > Instagram reel > Run workflow. Leave "publish" unticked for a dry run (checks the
+# token and the account, posts nothing). A post is public: only post a reel Murat has watched and approved.
+# Needs the repo secret INSTAGRAM_TOKEN (long-lived user token, ~60 days: renew it before it runs out).
+name: Instagram reel
+
+on:
+  workflow_dispatch:
+    inputs:
+      reel:
+        description: "Reel folder, e.g. reels/2026-11-21-first-look"
+        required: true
+        type: string
+      publish:
+        description: "Really post it (unticked = dry run)"
+        type: boolean
+        default: false
+      caption:
+        description: "Caption (empty = the one in reel.json)"
+        type: string
+        default: ""
+      force:
+        description: "Post again even if this reel was already posted"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: instagram-reel
+  cancel-in-progress: false
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/relaxed-wozniak-cjs85z
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Post the reel
+        env:
+          INSTAGRAM_TOKEN: ${{ secrets.INSTAGRAM_TOKEN }}
+          REEL: ${{ inputs.reel }}
+          CAPTION: ${{ inputs.caption }}
+          FORCE: ${{ inputs.force }}
+          PUBLISH: ${{ inputs.publish }}
+        run: |
+          case "$REEL" in reels/*) ;; *) echo "::error::reel must be a folder under reels/"; exit 1;; esac
+          if [ "$PUBLISH" = "true" ]; then node tools/reels/publish.mjs "$REEL" --publish; else node tools/reels/publish.mjs "$REEL"; fi
+      - name: Remember it was posted
+        if: inputs.publish
+        env:
+          REEL: ${{ inputs.reel }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add "$REEL/posted.json"
+          git commit -m "Reel posted: $REEL [no patch note]"
+          for i in 1 2 3; do git pull --rebase -q origin claude/relaxed-wozniak-cjs85z && git push -q origin HEAD:claude/relaxed-wozniak-cjs85z && break; sleep 5; done

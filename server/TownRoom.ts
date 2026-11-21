@@ -1150,6 +1150,9 @@ export class TownRoom extends Room<TownState> {
       // Skill clip capture only (tools/skill-clips, SKILL_CAPTURE=1, never set on the live server): a fresh stage per clip
       const stage = process.env.SKILL_CAPTURE === "1" && text.trim().match(/^\/stage(\s+weak)?$/i);
       if (stage) return this.stageCapture(client.sessionId, !!stage[1]);
+      // Reel capture only (tools/reels, same SKILL_CAPTURE=1 gate): put the hero on a tile for the next shot
+      const go = process.env.SKILL_CAPTURE === "1" && text.trim().match(/^\/goto\s+(\d+)\s+(\d+)$/i);
+      if (go) { p.x = (Number(go[1]) + 0.5) * TILE; p.y = (Number(go[2]) + 0.5) * TILE; p.dead = false; p.hp = p.maxHp; return; }
       const tp = process.env.NODE_ENV !== "production" && text.trim().match(/^\/tp\s+(\d+)\s+(\d+)$/i); // dev servers only: jump to a tile
       if (tp) { p.x = (Number(tp[1]) + 0.5) * TILE; p.y = (Number(tp[2]) + 0.5) * TILE; return; }
       // Secret cheat (Murat 2026-11-13): wakes the waygate to Act 2 for this hero, on the live server too. The code is
