@@ -200,7 +200,7 @@ export class WarTroops {
     if (this.rallied.size > 512) for (const [k, at] of this.rallied) if (now - at > H.rallyEveryMs) this.rallied.delete(k);
     const out: string[] = [];
     for (const [oid, o] of this.h.mobsInBox(w.x, w.y, H.rallyPx)) {
-      if (oid === wid || o.kind !== "trooper" || o.dead || o.hidden || Math.hypot(o.x - w.x, o.y - w.y) > H.rallyPx) continue;
+      if (oid === wid || o.kind !== "trooper" || o.dead || o.hidden || o.broken || Math.hypot(o.x - w.x, o.y - w.y) > H.rallyPx) continue;
       const k = parseTroop(o.weapon), f = this.roleCtx.fighter!(oid);
       if (!k || k.clan !== clan || k.object || !f) continue;
       f.call = heroId; f.callUntil = now + H.rallyMs; f.nextPick = 0; if (f.shun === heroId) f.shunUntil = 0;
