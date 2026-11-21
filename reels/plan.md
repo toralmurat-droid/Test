@@ -13,7 +13,8 @@ and send a weekly report.
 - Bright enough on a phone: skill shots in day without colour grade; dusk/night only for mood shots.
 
 ## Rhythm
-- 3 reels a week: Tue, Thu, Sat around 18:00 Zurich. Stats read before each run.
+- First month (until 2026-12-21): one reel every weekday around 18:00 Zurich (scheduled run Mon-Fri 17:07). Then
+  set the frequency from the data and note it here. Stats read before each run.
 - Judge a reel at 48 h (views, avg watch time, likes+comments+shares+saves per view, follows).
 
 ## Formats to test (one variable at a time)
@@ -32,4 +33,4 @@ Hooks to rotate: no download; free; pixel art; vampire; clan war; "made by one p
 2. Decide: keep what beats the median, drop what is under it, try one new idea.
 3. Render (npm run build; npx tsx tools/reels/render.ts reels/<slug>/reel.json, ~15 min), check frames.
 4. Push the folder to claude/reels-media, run the workflow with action `post`.
-5. Weekly (Sat): short report to Murat: posts, best/worst, followers, next tests.
+5. Weekly (Fri): short report to Murat: posts, best/worst, followers, next tests.
