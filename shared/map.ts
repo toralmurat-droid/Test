@@ -206,6 +206,21 @@ const MW = MAP_W, MH = FULL_H, TS = TILE;
 const SMALL_OBJECTS = new Set<number>([T.STUMP]);
 /** Half-size in px of a small object's solid core (centred in its tile). Bigger than a hero's feet box (5). */
 export const SMALL_CORE = 7;
+/**
+ * Living trees (oak, pine, palm) block only a round trunk of this radius (px) round their tile's centre, not the whole
+ * tile (Murat 2026-11-21: the forests were still hard to get through). Two trees side by side still close the way
+ * (the gap, 32 - 2 * 12 = 8 px, is narrower than a hero's 10 px feet box), so tree walls and the forest look stay; but
+ * two trees touching only corner to corner leave a gap a hero slips through diagonally, and heroes round a trunk
+ * instead of snagging on a square tile corner.
+ */
+export const TRUNK_R = 12;
+/**
+ * In the Whispering Woods and the Thornwood, about a third of the trees standing in a clump are slim (this radius):
+ * a hero squeezes past them even beside another tree, so winding ways open between the trunks while every tree
+ * stays where it was (the map and everything placed on it are unchanged).
+ */
+export const SLIM_TRUNK_R = 8;
+const TRUNK_OBJECTS = new Set<number>([T.TREE, T.PINE, T.PALM]);
 export const NATURE = new Set<number>([T.TREE, T.PINE, T.BUSH, T.ROCK, T.STUMP]);
 
 function buildWorld() {
@@ -1226,7 +1241,18 @@ export const OBJECTS = WORLD.objects;
 SOLID = new Uint8Array(MW * MH);
 for (let ty = 0; ty < MH; ty++) for (let tx = 0; tx < MW; tx++) {
   const o = OBJECTS[ty][tx];
-  SOLID[ty * MW + tx] = GROUND[ty][tx] === T.WATER ? 1 : o === EMPTY || WALKABLE_OBJECTS.has(o) ? 0 : SMALL_OBJECTS.has(o) ? 2 : 1;
+  SOLID[ty * MW + tx] = GROUND[ty][tx] === T.WATER ? 1 : o === EMPTY || WALKABLE_OBJECTS.has(o) ? 0 : SMALL_OBJECTS.has(o) ? 2 : TRUNK_OBJECTS.has(o) ? 3 : 1;
+}
+{ // slim trunks in the thick of the woods (SLIM_TRUNK_R); the border forest stays as it was
+  const tree = (x: number, y: number) => { const o = OBJECTS[y]?.[x]; return o === T.TREE || o === T.PINE; };
+  const slim: number[] = [];
+  for (const r of WORLD.areas.filter((a) => a.name === "Whispering Woods" || a.name === "Thornwood"))
+    for (let y = Math.max(9, r.y); y < Math.min(WORLD_H - 9, r.y + r.h); y++) for (let x = Math.max(9, r.x); x < Math.min(MW - 9, r.x + r.w); x++) {
+      if (!tree(x, y) || SOLID[y * MW + x] !== 3) continue;
+      const n4 = +tree(x + 1, y) + +tree(x - 1, y) + +tree(x, y + 1) + +tree(x, y - 1);
+      if (n4 >= 2 && hash(x, y, 241) < 0.35) slim.push(y * MW + x);
+    }
+  for (const k of slim) SOLID[k] = 4;
 }
 export const AREAS = WORLD.areas;
 /** The land highways' paved tiles (shared/highways.ts; row * MAP_W + x): the maps draw them in their own colour. */
@@ -1460,9 +1486,15 @@ export function isSolidTile(tx: number, ty: number): boolean {
   return (o !== EMPTY && !WALKABLE_OBJECTS.has(o)) || GROUND[ty][tx] === T.WATER;
 }
 
-/** True for a tile that only blocks a small core (a stump): a hero can pass along its sides and past its corners. */
+/** True for a tile that only blocks a small core (a stump, a tree trunk): a hero can pass past its corners. */
 export function isSmallObstacleTile(tx: number, ty: number): boolean {
-  return !!SOLID && tx >= 0 && ty >= 0 && tx < MAP_W && ty < FULL_H && SOLID[ty * MAP_W + tx] === 2;
+  return !!SOLID && tx >= 0 && ty >= 0 && tx < MAP_W && ty < FULL_H && SOLID[ty * MAP_W + tx] >= 2;
+}
+
+/** Map collision at a point for placing things (spawns, quest objects, chests, props...): a tree fills its whole tile. */
+/** True for a slim tree in the thick of the woods (SLIM_TRUNK_R): a hero walks through its tile, round the trunk. */
+export function isSlimTrunkTile(tx: number, ty: number): boolean {
+  return !!SOLID && tx >= 0 && ty >= 0 && tx < MW && ty < MH && SOLID[ty * MW + tx] === 4;
 }
 
 export function isSolidAt(px: number, py: number): boolean {
@@ -1470,6 +1502,20 @@ export function isSolidAt(px: number, py: number): boolean {
   if (SOLID && tx >= 0 && ty >= 0 && tx < MW && ty < MH && SOLID[ty * MW + tx] === 2)
     return Math.abs(px - (tx + 0.5) * TS) < SMALL_CORE && Math.abs(py - (ty + 0.5) * TS) < SMALL_CORE;
   return isSolidTile(tx, ty);
+}
+
+/**
+ * Map collision at a point for bodies walking (shared/movement.ts): like isSolidAt, but a tree only blocks its round
+ * trunk (TRUNK_R). Kept apart from isSolidAt so everything placed on the map at start stays exactly where it was.
+ */
+export function isWalkSolidAt(px: number, py: number): boolean {
+  const tx = Math.floor(px / TS), ty = Math.floor(py / TS);
+  const v = SOLID && tx >= 0 && ty >= 0 && tx < MW && ty < MH ? SOLID[ty * MW + tx] : 0;
+  if (v >= 3) {
+    const dx = px - (tx + 0.5) * TS, dy = py - (ty + 0.5) * TS, r = v === 3 ? TRUNK_R : SLIM_TRUNK_R;
+    return dx * dx + dy * dy < r * r;
+  }
+  return isSolidAt(px, py);
 }
 
 /** Name of the area at a pixel position (first match wins, so specific areas come first). */

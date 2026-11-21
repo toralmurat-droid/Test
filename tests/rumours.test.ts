@@ -167,6 +167,9 @@ test("missing: Mags only, bad input ignored; reach, own ambusher, use; gold and 
     assert.ok(Math.hypot(m.x - reach.at!.x, m.y - reach.at!.y) <= (RUMOURS.ambushNear[1] + 1) * TILE);
     room.hitTarget(c.sessionId, mid, m.maxHp * 10, [0, 0]);
     await until(() => p.rumour.stage === 3, "ambusher down");
+    // the ambusher's gold drop can land within pickup reach of the object (it rises 3-6 tiles from the sighting, the
+    // object stands 6 away): sweep it up so the gold check below counts the reward only
+    room.state.items.forEach((it: any, id: string) => { if (it.kind === "gold") room.state.items.delete(id); });
     // use: too far, then close
     const o = r.steps[2].objects![0];
     at(p, o.x + 6 * TILE, o.y);

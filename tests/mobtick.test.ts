@@ -64,7 +64,7 @@ test("fastFields refuses accessors that do not work the way it assumes", () => {
 
 // ---- standing still (shared/movement.ts) ----
 
-const ASSIST = 13;
+const ASSIST = 18; // shared/movement.ts (round tree trunks, 2026-11-21)
 function oldSidestep(clearAt: (o: number) => boolean, canMove: (o: number) => boolean, step: number): number {
   for (let k = 1; k <= ASSIST; k++) for (const s of [1, -1]) { if (!clearAt(s * k)) continue; const d = s * Math.min(step, k); return canMove(d) ? d : 0; }
   return 0;
@@ -75,6 +75,7 @@ function oldMoveStep(x: number, y: number, input: InputState, dtSec: number, spe
   if (dx && dy) { dx *= Math.SQRT1_2; dy *= Math.SQRT1_2; }
   const v = (dx || dy) ? inputDir(input) : undefined;
   if (v) [dx, dy] = v;
+  const x0 = x, y0 = y;
   const nx = x + dx * speed * dtSec, ny = y + dy * speed * dtSec;
   const bx = blocked(nx, y);
   if (!bx) x = nx;
@@ -84,6 +85,15 @@ function oldMoveStep(x: number, y: number, input: InputState, dtSec: number, spe
   const step = speed * dtSec;
   if (bx && Math.abs(dy) < 0.4 * Math.abs(dx)) y += oldSidestep((o) => !blocked(nx, y + o) && !blocked(x, y + o), (o) => !blocked(x, y + o), step);
   else if (by && Math.abs(dx) < 0.4 * Math.abs(dy)) x += oldSidestep((o) => !blocked(x + o, ny) && !blocked(x + o, y), (o) => !blocked(x + o, y), step);
+  if ((bx || by) && (x - x0) * dx + (y - y0) * dy < 0.5 * step) { // the rounding assist
+    let best = (x - x0) * dx + (y - y0) * dy, bx2 = x, by2 = y;
+    for (const a of [0.4, -0.4, 0.8, -0.8, 1.2, -1.2]) {
+      const c = Math.cos(a), s = Math.sin(a), rx = dx * c - dy * s, ry = dx * s + dy * c;
+      const tx = x0 + rx * step, ty = y0 + ry * step, prog = (tx - x0) * dx + (ty - y0) * dy;
+      if (prog > best + 1e-9 && !blocked(tx, ty)) { best = prog; bx2 = tx; by2 = ty; }
+    }
+    x = bx2; y = by2;
+  }
   return { x, y, moving: dx !== 0 || dy !== 0 };
 }
 

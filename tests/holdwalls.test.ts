@@ -317,7 +317,7 @@ test("hold walls: patrol routes, gate spots and guard posts lie outside every cl
             let x2 = g0.x, y2 = g0.y;
             for (let i = 0; i < 600 && Math.hypot(s.x - x2, s.y - y2) > 4; i++) {
               const to = fortDetour(x2, y2, s.x, s.y), dx = to.x - x2, dy = to.y - y2, d = Math.hypot(dx, dy);
-              ({ x: x2, y: y2 } = moveStep(x2, y2, dirInput(dx, dy), 0.05, Math.min(TROOP.speed * 3, d / 0.1)));
+              ({ x: x2, y: y2 } = moveStep(x2, y2, dirInput(dx, dy), 0.1, Math.min(TROOP.speed * 3, d / 0.1))); // the same walk as above
             }
             assert.ok(Math.hypot(s.x - x2, s.y - y2) > 4, `${t.name} (${k}, tier ${tier}): a guard got stuck on the fort on the way to (${s.x.toFixed(0)},${s.y.toFixed(0)}), at (${x.toFixed(0)},${y.toFixed(0)})`);
             setHoldOwners(allOwned(k), allTier(tier));
