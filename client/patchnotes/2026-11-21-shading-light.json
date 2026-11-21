@@ -1,5 +1,6 @@
 {
   "date": "2026-11-21",
+  "pr": 587,
   "title": "Better light on heroes and monsters",
   "changes": [
     "Heroes and monsters are lit more like the rest of the world: clear lit and shadow sides from the same upper-left light as the village props.",
