@@ -28,10 +28,17 @@ async function api(method, url, body) {
 }
 
 async function account() {
-  const pages = (await api("GET", "/me/accounts?fields=name,instagram_business_account{id,username,followers_count,media_count}")).data ?? [];
+  const F = "id,username,followers_count,media_count";
+  const pages = (await api("GET", `/me/accounts?fields=name,instagram_business_account{${F}}`)).data ?? [];
   const accts = pages.map((p) => p.instagram_business_account).filter(Boolean);
+  // Pages owned by a business portfolio may not list here: the token's granted Instagram ids are in debug_token
+  try {
+    const d = (await api("GET", `/debug_token?input_token=${encodeURIComponent(TOKEN)}`)).data;
+    const ids = new Set((d?.granular_scopes ?? []).filter((g) => g.scope.startsWith("instagram")).flatMap((g) => g.target_ids ?? []));
+    for (const id of ids) if (!accts.some((a) => a.id === id)) { try { accts.push(await api("GET", `/${id}?fields=${F}`)); } catch { /* not an IG user */ } }
+  } catch { /* debug_token not readable */ }
   const ig = accts.find((a) => a.username?.toLowerCase() === WANT) ?? (accts.length === 1 ? accts[0] : undefined);
-  if (!ig) throw new Error(`no Instagram account @${WANT} found on the token's Pages (found: ${accts.map((a) => "@" + a.username).join(", ") || "none"})`);
+  if (!ig) throw new Error(`no Instagram account @${WANT} found (Pages on the token: ${pages.map((p) => p.name).join(", ") || "none"}; Instagram accounts: ${accts.map((a) => "@" + a.username).join(", ") || "none"}). In Graph API Explorer, make the token again and tick the Facebook Page and the Instagram account when asked.`);
   return ig;
 }
 
