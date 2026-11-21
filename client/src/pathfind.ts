@@ -1,6 +1,6 @@
 import { MAP_H, MAP_W, TILE } from "../../shared/constants";
 import { blocked } from "../../shared/movement";
-import { isSmallObstacleTile } from "../../shared/map";
+import { isSlimTrunkTile, isSmallObstacleTile } from "../../shared/map";
 
 export type Pt = { x: number; y: number };
 
@@ -114,13 +114,16 @@ export function findPath(from: Pt, to: Pt, maxNodes = 6000): Pt[] {
       }
     }
     if (bi >= 0) { gi = bi; gj = bj; }
-    goalFree = false;
+    // A free spot in a tree's or stump's tile (beside the trunk): walk on to it from that tile if the way is clear
+    goalFree &&= isSmallObstacleTile(tile(to.x, MAP_W), tile(to.y, MAP_H)) && clearLine({ x: (gi + 0.5) * TILE, y: (gj + 0.5) * TILE }, to);
   }
   const goal = gj * MAP_W + gi;
   if (start === goal) return [...(lead ? [lead] : []), ...(goalFree ? [{ x: to.x, y: to.y }] : [])];
 
-  const isFree = (i: number, j: number) => i >= 0 && j >= 0 && i < MAP_W && j < MAP_H && (walk[j * MAP_W + i] === 1 || j * MAP_W + i === start);
+  // A slim tree's tile counts as a way through (the hero walks round its trunk), a little dearer than open ground
+  const isFree = (i: number, j: number) => i >= 0 && j >= 0 && i < MAP_W && j < MAP_H && (walk[j * MAP_W + i] === 1 || j * MAP_W + i === start || isSlimTrunkTile(i, j));
   const passable = (i: number, j: number) => isFree(i, j) || isSmallObstacleTile(i, j);
+  const roomy = (i: number, j: number) => i >= 0 && j >= 0 && i < MAP_W && j < MAP_H && walk[j * MAP_W + i] === 1;
   const h = (i: number, j: number) => {
     const dx = Math.abs(i - gi), dy = Math.abs(j - gj);
     return Math.max(dx, dy) + (SQ2 - 1) * Math.min(dx, dy);
@@ -148,10 +151,12 @@ export function findPath(from: Pt, to: Pt, maxNodes = 6000): Pt[] {
       if (!isFree(ni, nj)) continue;
       // No squeezing past a corner, except a stump's: it only blocks the middle of its tile, a hero passes it diagonally
       if (di && dj && (!passable(i + di, j) || !passable(i, j + dj))) continue;
+      // A gap between two trees touching corner to corner has no room for a slim trunk at either end of it
+      if (di && dj && (isSlimTrunkTile(i, j) || isSlimTrunkTile(ni, nj)) && !roomy(i + di, j) && !roomy(i, j + dj)) continue;
       const k = nj * MAP_W + ni;
       if (!seen(k)) { S.stamp[k] = run; S.g[k] = Infinity; S.closed[k] = 0; }
       if (S.closed[k]) continue;
-      const ng = gn + c;
+      const ng = gn + c + (isSlimTrunkTile(ni, nj) ? 0.5 : 0);
       if (ng < S.g[k]) { S.g[k] = ng; S.parent[k] = n; open.push(ng + h(ni, nj), k); }
     }
   }
@@ -161,12 +166,29 @@ export function findPath(from: Pt, to: Pt, maxNodes = 6000): Pt[] {
   cells.reverse();
   // Tile centres, keeping only the turns
   const pts: Pt[] = lead ? [lead] : [];
+  const from0 = { x: (si + 0.5) * TILE, y: (sj + 0.5) * TILE };
   let pdx = 0, pdy = 0, prev = start;
   for (let k = 0; k < cells.length; k++) {
     const c = cells[k];
     const dx = (c % MAP_W) - (prev % MAP_W), dy = Math.floor(c / MAP_W) - Math.floor(prev / MAP_W);
+    const ci = c % MAP_W, cj = Math.floor(c / MAP_W), cx = (ci + 0.5) * TILE, cy = (cj + 0.5) * TILE;
+    if (isSlimTrunkTile(ci, cj)) {
+      // Round the trunk: the waypoint goes beside it, on the free side across the way the route runs
+      const l = Math.hypot(dx, dy) || 1, from = pts[pts.length - 1] ?? from0;
+      const side: Pt[] = [];
+      for (const r of [14, 16, 18]) for (const s of [1, -1]) { const p = { x: cx - dy / l * r * s, y: cy + dx / l * r * s }; if (!blocked(p.x, p.y)) side.push(p); }
+      // best side: reachable in a straight line from the last waypoint and on to the next tile, on the inside of a turn
+      const nc = cells[k + 1], nx = nc === undefined ? undefined : { x: ((nc % MAP_W) + 0.5) * TILE, y: (Math.floor(nc / MAP_W) + 0.5) * TILE };
+      const tx = nx ? (nx.x - cx) / TILE - dx : 0, ty = nx ? (nx.y - cy) / TILE - dy : 0;
+      const score = (p: Pt) => (clearLine(from, p) ? 4 : 0) + (nx && clearLine(p, nx) ? 2 : 0) + ((p.x - cx) * tx + (p.y - cy) * ty > 0 ? 1 : 0);
+      let pick: Pt | undefined, ps = -1;
+      for (const p of side) { const v = score(p); if (v > ps) { ps = v; pick = p; } }
+      pts.push(pick ?? { x: cx, y: cy });
+      pdx = NaN; pdy = NaN; prev = c;
+      continue;
+    }
     if (pts.length && dx === pdx && dy === pdy) pts.pop();
-    pts.push({ x: ((c % MAP_W) + 0.5) * TILE, y: (Math.floor(c / MAP_W) + 0.5) * TILE });
+    pts.push({ x: cx, y: cy });
     pdx = dx; pdy = dy; prev = c;
   }
   if (found && goalFree) pts.push({ x: to.x, y: to.y });
