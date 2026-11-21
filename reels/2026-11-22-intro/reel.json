@@ -1,0 +1,186 @@
+{
+ "caption": "Pixel Town Brawl: a dark pixel-art world you share with everyone online. clan wars, monsters that hit back, whole lands behind portals, and the players decide what gets built next ⚔️\n\nwhich class would you pick first?\n\nplay.fmtpa.ch (link in bio)\n\n#pixelart #indiegame #mmorpg #browsergame #multiplayer",
+ "music": "blob-slayer.mp3",
+ "musicStart": 8.6,
+ "shots": [
+  {
+   "cls": "vampire",
+   "time": "day",
+   "goto": [
+    186,
+    22
+   ],
+   "route": [
+    [
+     204,
+     22
+    ]
+   ],
+   "ms": 2300,
+   "casts": [
+    {
+     "id": "v_bats",
+     "at": 150,
+     "aim": "mob"
+    },
+    {
+     "id": "v_lance",
+     "at": 1300,
+     "aim": "mob"
+    }
+   ],
+   "text": "a pixel world at war",
+   "grade": false,
+   "zoom": 3,
+   "textStyle": "voice"
+  },
+  {
+   "cls": "wizard",
+   "time": "day",
+   "goto": [
+    97,
+    21
+   ],
+   "route": [
+    [
+     108,
+     21
+    ]
+   ],
+   "ms": 2200,
+   "casts": [
+    {
+     "id": "w_storm",
+     "at": 100,
+     "aim": "mob"
+    },
+    {
+     "id": "w_blizzard",
+     "at": 900,
+     "aim": "mob"
+    }
+   ],
+   "text": "pick your magic",
+   "grade": false,
+   "zoom": 3,
+   "textStyle": "voice"
+  },
+  {
+   "cls": "summoner",
+   "time": "day",
+   "goto": [
+    97,
+    21
+   ],
+   "route": [
+    [
+     107,
+     21
+    ]
+   ],
+   "ms": 2600,
+   "casts": [
+    {
+     "id": "su_colossus",
+     "at": 150,
+     "aim": "mob"
+    }
+   ],
+   "text": "raise a colossus",
+   "grade": false,
+   "zoom": 3,
+   "textStyle": "voice"
+  },
+  {
+   "cls": "vampire",
+   "time": "day",
+   "goto": [
+    259,
+    77
+   ],
+   "route": [
+    [
+     271,
+     77
+    ]
+   ],
+   "ms": 2200,
+   "casts": [
+    {
+     "id": "v_exsang",
+     "at": 200,
+     "aim": "mob"
+    },
+    {
+     "id": "attack",
+     "at": 1600,
+     "aim": "mob"
+    }
+   ],
+   "text": "or feed on monsters",
+   "grade": false,
+   "zoom": 3,
+   "textStyle": "voice"
+  },
+  {
+   "cls": "vampire",
+   "time": "day",
+   "goto": [
+    138,
+    402
+   ],
+   "route": [
+    [
+     160,
+     402
+    ]
+   ],
+   "ms": 2400,
+   "text": "whole lands behind portals",
+   "grade": false,
+   "zoom": 3,
+   "textStyle": "voice"
+  },
+  {
+   "cls": "vampire",
+   "time": "dusk",
+   "goto": [
+    70,
+    61
+   ],
+   "route": [
+    [
+     88,
+     61
+    ]
+   ],
+   "ms": 2400,
+   "text": "all of it online,\ntogether",
+   "zoom": 3,
+   "textStyle": "voice"
+  },
+  {
+   "cls": "vampire",
+   "time": "dusk",
+   "goto": [
+    91,
+    61
+   ],
+   "route": [
+    [
+     80,
+     62
+    ],
+    [
+     74,
+     62
+    ]
+   ],
+   "ms": 2600,
+   "text": "Pixel Town Brawl\nplay.fmtpa.ch",
+   "textAt": "center",
+   "textStyle": "title",
+   "zoom": 3
+  }
+ ]
+}

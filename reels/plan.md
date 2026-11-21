@@ -14,8 +14,9 @@ and send a weekly report.
   "the next skills come from player ideas") and give it its own reels (type Community).
 - 9:16, 7-20 s, first frame already in action (no logo or slow intro). Hook text in the first second, 3-6 words.
 - Hero always moving: walking routes, casting into real monster packs, battles. Cut every 1.5-2.5 s, on the beat.
-- Music: game tracks (all allowed), start at a strong part (blob-slayer.mp3 drop at 8.6 s).
-- Text: few words, game pixel font, top third (IG UI covers the bottom fifth and the right edge).
+- Music: game tracks (all allowed), start at a strong part (blob-slayer.mp3 drop at 8.6 s). NO fade-out at the end
+  (Murat 2026-11-21): music and picture run to the last frame (render.ts no longer fades), which also loops better.
+- Text: lowercase voice, but place and game names Capitalized (Kel Ashar, Oakvale, Pixel Town Brawl; Murat 2026-11-21). Few words, game pixel font, top third (IG UI covers the bottom fifth and the right edge).
 - End: place name + play.fmtpa.ch, small, over moving gameplay. Caption: casual 1-2 lines in a player's voice + "link in bio" + 8-10 hashtags.
 - Bright enough on a phone: skill shots in day without colour grade; dusk/night only for mood shots.
 
