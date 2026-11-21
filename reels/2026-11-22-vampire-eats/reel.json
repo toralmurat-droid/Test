@@ -1,5 +1,5 @@
 {
- "caption": "added a skill to my browser MMO: the vampire eats monsters. blobs make him tougher, bandits make him hit harder, and it stacks forever \ud83e\ude78\n\nwhat should he eat next?\n\nplay.fmtpa.ch (link in bio)\n\n#pixelart #indiegame #mmorpg #gamedev #indiedev",
+ "caption": "the vampire in Pixel Town Brawl eats monsters: blobs make him tougher, bandits make him hit harder, and it stacks forever 🩸 the next skills come from player ideas, so...\n\nwhat should he eat next?\n\nplay.fmtpa.ch (link in bio)\n\n#pixelart #indiegame #mmorpg #browsergame #multiplayer",
  "music": "blob-slayer.mp3",
  "musicStart": 8.6,
  "shots": [
@@ -17,7 +17,7 @@
      "aim": "mob"
     }
    ],
-   "text": "i gave my vampire the\npower to eat monsters",
+   "text": "the vampire can\neat monsters",
    "textStyle": "voice",
    "route": [
     [
@@ -40,7 +40,7 @@
      "aim": "mob"
     }
    ],
-   "text": "each blob makes him\ntougher. for good.",
+   "text": "every blob makes\nhim tougher. for good.",
    "textStyle": "voice",
    "route": [
     [
@@ -63,7 +63,7 @@
      "aim": "mob"
     }
    ],
-   "text": "and a bite turns them\ninto his thralls",
+   "text": "a bite turns them\ninto thralls",
    "textStyle": "voice",
    "route": [
     [

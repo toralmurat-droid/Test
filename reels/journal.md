@@ -14,7 +14,7 @@ One entry per reel: idea, hook, what we test, numbers after 48 h, lesson.
 
 ## DROPPED: reels/2026-11-24-world-tour - Murat: 'How big is this browser MMO?' text feels robotic, like a pay-to-win ad. Lesson: creator voice, one biome, discovery feel.
 
-## REWORK (2026-11-21, maker's voice per Murat's decision): earlier reels superseded, nothing posted yet.
+## REWORK 2 (2026-11-21 15:00): maker voice dropped (Murat: icky) -> neutral voice + multiplayer angle; types: A gameplay, B characters, C exploration.
 - PENDING OK: reels/2026-11-21-village-rule (reel 1, Sat 21 18:00) - premise hook "this village has one rule: no magic", hero chased by villagers.
 - PENDING OK: reels/2026-11-22-vampire-eats (reel 2, Sun 22 18:00) - Devour eats blobs, Bite thralls, Thornwood fight; ends on "what should he eat next?".
 - PENDING OK: reels/2026-11-23-desert-find (reel 3, Mon 23 18:00) - desert behind a portal, Kel Ashar end card.

@@ -1,5 +1,5 @@
 {
- "caption": "i hid a whole desert act behind a portal south of the first village in my browser MMO. market town, oasis, giant scorpions \ud83e\udd82\n\nwould you go explore it?\n\nplay.fmtpa.ch (link in bio)\n\n#pixelart #indiegame #mmorpg #gamedev #indiedev",
+ "caption": "south of the first village there's a portal to a whole desert act: market town, oasis, giant scorpions 🦂 explore it alone or bring your party.\n\nwould you go in?\n\nplay.fmtpa.ch (link in bio)\n\n#pixelart #indiegame #mmorpg #browsergame #multiplayer",
  "music": "kel-ashar-tune.mp3",
  "musicStart": 3.6,
  "shots": [
@@ -19,7 +19,7 @@
    ],
    "zoom": 3,
    "ms": 3000,
-   "text": "i hid a whole desert\nbehind a portal in my game",
+   "text": "there's a whole desert\nbehind a portal",
    "textStyle": "voice"
   },
   {
@@ -38,7 +38,7 @@
    ],
    "zoom": 3,
    "ms": 2600,
-   "text": "there's a market town\nback here",
+   "text": "a market town\nback here",
    "textStyle": "voice"
   },
   {

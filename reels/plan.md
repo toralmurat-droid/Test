@@ -5,10 +5,13 @@ Owner: Claude (scheduled promotion runs). Murat approved reels 1-3 one by one; f
 and send a weekly report.
 
 ## Rules for every reel
-- VOICE (Murat 2026-11-21): sound like a real player/creator sharing a find, never like an ad. Casual, personal,
-  lowercase is fine, discovery feel, overlay text with textStyle "voice" ("went through a portal... and there's a whole desert town back here").
-  No ad-speak ("How big is this browser MMO?", "Play now!", "Free to play!" banners, superlatives). One biome or
-  one moment per reel works better than a feature list. The end card is just the place name + play.fmtpa.ch.
+- VOICE (Murat 2026-11-21, updated): GENERIC, neutral, casual voice. NO first person ("i", "my game", maker/devlog voice
+  felt icky to Murat) and NO ad-speak ("How big is this browser MMO?", "Play now!", "Free to play!", superlatives).
+  Describe what happens like a caption on a clip: "this village has one rule", "the vampire can eat monsters".
+  Lowercase, textStyle "voice", one biome/moment per reel, end card = place name + play.fmtpa.ch.
+- CORE THEME (Murat 2026-11-21): the game is natively MULTIPLAYER, in play AND in how it is made: players shape it,
+  from builders to suggesters (in-game /idea requests become features). Weave it into captions ("bring your party",
+  "the next skills come from player ideas") and give it its own reels (type Community).
 - 9:16, 7-20 s, first frame already in action (no logo or slow intro). Hook text in the first second, 3-6 words.
 - Hero always moving: walking routes, casting into real monster packs, battles. Cut every 1.5-2.5 s, on the beat.
 - Music: game tracks (all allowed), start at a strong part (blob-slayer.mp3 drop at 8.6 s).
@@ -25,7 +28,7 @@ and send a weekly report.
   day/night hard cut; seamless loop (loops count as views); one character per video; reply-to-comment videos.
 - End on a question to pull comments ("would you have tried it?", "which class next?"), not a CTA banner.
 - 12-25 s; show the coolest thing in the first 2 s; no logos/intros/slow pans.
-- Devlog voice by the maker performs best (pending Murat's decision on persona).
+- Devlog voice tested and REJECTED by Murat (icky); use the generic voice.
 - Captions short; 3-5 hashtags (mix 1-2 broad + niche). Cross-post the same cut to TikTok/Shorts later (no watermark).
 - Don't pay for ads; boost only organic winners later.
 
@@ -34,6 +37,16 @@ and send a weekly report.
   set the frequency from the data and note it here. Stats read before each run.
 - Judge a reel at 48 h (views, avg watch time, likes+comments+shares+saves per view, follows).
 
+## Reel types (rotate; never the same type twice in a row, each type at least once a week)
+- CHARACTERS: one class and its signature skills (vampire Devour/Bite, wizard, summoner, songweaver).
+- MOBS: one monster or boss and what makes it nasty (Mother Blob splits, tree ambushers, Hollow King, sphinx).
+- GAMEPLAY: one rule or moment (no magic in the village, clan war battles, shrine boon, night undead).
+- EXPLORATION: walking around one biome/place (desert, moors, badlands, sinkholes, Crown, Oakvale at dusk).
+- COMMUNITY: multiplayer + players shaping the game (/idea requests that shipped, parties, trading, PvP).
+- UPDATES: what's new from client/patchnotes/ ("new this week").
+Order so far: A village rule (gameplay) -> B vampire eats (characters) -> C desert (exploration) -> next: mobs, community, updates.
+Log each reel's type in journal.md and compare types at 48 h.
+
 ## Formats to test (one variable at a time)
 1. "Runs in your browser" montage (hook = no download).            [reel 1]
 2. POV / class fantasy: "POV: you main a vampire" (one class, its best skills).
@@ -41,7 +54,7 @@ and send a weekly report.
 4. One biome told as a discovery (desert, moors, badlands, sinkholes, Crown), creator voice.
 5. Update posts: new feature from the latest patch notes (client/patchnotes/), "new this week".
 6. Satisfying loops: one skill on a big pack, seamless loop, no text.
-7. Dev/indie angle: "I'm building an MMO in the browser" (needs Murat's OK for voice/person).
+7. Community angle: a player /idea that became a feature (no first person).
 8. Questions to drive comments: "Which class should we add next?".
 Premise hooks bank: no magic in the village (outlaw + guards); vampire Devour eats monsters / Bite makes thralls;
 undead only at night; casting into a crowd of AI clan soldiers starts a war; shrine with a random boon;

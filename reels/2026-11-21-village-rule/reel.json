@@ -1,5 +1,5 @@
 {
- "caption": "i'm making a browser MMO and the first village has exactly one rule: no magic. i tested it myself. it went about as well as you'd expect \ud83d\udc80\n\nwould you have tried it?\n\nplay.fmtpa.ch (link in bio)\n\n#pixelart #indiegame #mmorpg #gamedev #indiedev",
+ "caption": "the first village in Pixel Town Brawl has one rule: no magic. every new player tests it once 💀\n\nwould you have tried it?\n\nplay.fmtpa.ch (link in bio)\n\n#pixelart #indiegame #mmorpg #browsergame #multiplayer",
  "music": "hearth-of-oakvale.mp3",
  "musicStart": 9.5,
  "shots": [
@@ -19,7 +19,7 @@
    ],
    "zoom": 3,
    "ms": 2600,
-   "text": "in my game this village\nhas one rule",
+   "text": "this village has\none rule",
    "textStyle": "voice"
   },
   {
@@ -55,7 +55,7 @@
      "aim": "mob"
     }
    ],
-   "text": "so i tested it myself",
+   "text": "someone cast a spell\nanyway",
    "textStyle": "voice"
   },
   {
@@ -74,7 +74,7 @@
      58
     ]
    ],
-   "text": "...the whole village\ncame for me",
+   "text": "...the whole village\nshowed up",
    "textStyle": "voice"
   }
  ]
