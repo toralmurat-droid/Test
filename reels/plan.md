@@ -6,7 +6,7 @@ and send a weekly report.
 
 ## Rules for every reel
 - VOICE (Murat 2026-11-21): sound like a real player/creator sharing a find, never like an ad. Casual, personal,
-  lowercase is fine, discovery feel ("went through a portal... and there's a whole desert town back here").
+  lowercase is fine, discovery feel, overlay text with textStyle "voice" ("went through a portal... and there's a whole desert town back here").
   No ad-speak ("How big is this browser MMO?", "Play now!", "Free to play!" banners, superlatives). One biome or
   one moment per reel works better than a feature list. The end card is just the place name + play.fmtpa.ch.
 - 9:16, 7-20 s, first frame already in action (no logo or slow intro). Hook text in the first second, 3-6 words.
