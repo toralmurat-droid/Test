@@ -8,7 +8,7 @@
  "texelsPerPx": 1.5,
  "forms": {
   "wolf": {
-   "columns": 6,
+   "columns": 8,
    "anims": {
     "idle_down": {
      "frames": [
@@ -22,35 +22,25 @@
     },
     "idle_downright": {
      "frames": [
-      6,
-      7,
       8,
-      9
+      9,
+      10,
+      11
      ],
      "fps": 5,
      "loop": true
     },
     "idle_right": {
      "frames": [
-      12,
-      13,
-      14,
-      15
+      16,
+      17,
+      18,
+      19
      ],
      "fps": 5,
      "loop": true
     },
     "idle_upright": {
-     "frames": [
-      18,
-      19,
-      20,
-      21
-     ],
-     "fps": 5,
-     "loop": true
-    },
-    "idle_up": {
      "frames": [
       24,
       25,
@@ -60,74 +50,50 @@
      "fps": 5,
      "loop": true
     },
+    "idle_up": {
+     "frames": [
+      32,
+      33,
+      34,
+      35
+     ],
+     "fps": 5,
+     "loop": true
+    },
     "idle_upleft": {
      "frames": [
-      30,
-      31,
-      32,
-      33
+      40,
+      41,
+      42,
+      43
      ],
      "fps": 5,
      "loop": true
     },
     "idle_left": {
      "frames": [
-      36,
-      37,
-      38,
-      39
+      48,
+      49,
+      50,
+      51
      ],
      "fps": 5,
      "loop": true
     },
     "idle_downleft": {
      "frames": [
-      42,
-      43,
-      44,
-      45
+      56,
+      57,
+      58,
+      59
      ],
      "fps": 5,
      "loop": true
     },
     "run_down": {
      "frames": [
-      48,
-      49,
-      50,
-      51,
-      52,
-      53
-     ],
-     "fps": 13,
-     "loop": true
-    },
-    "run_downright": {
-     "frames": [
-      54,
-      55,
-      56,
-      57,
-      58,
-      59
-     ],
-     "fps": 13,
-     "loop": true
-    },
-    "run_right": {
-     "frames": [
-      60,
-      61,
-      62,
-      63,
       64,
-      65
-     ],
-     "fps": 13,
-     "loop": true
-    },
-    "run_upright": {
-     "frames": [
+      65,
       66,
       67,
       68,
@@ -135,47 +101,41 @@
       70,
       71
      ],
-     "fps": 13,
+     "fps": 16,
      "loop": true
     },
-    "run_up": {
+    "run_downright": {
      "frames": [
       72,
       73,
       74,
       75,
       76,
-      77
+      77,
+      78,
+      79
      ],
-     "fps": 13,
+     "fps": 16,
      "loop": true
     },
-    "run_upleft": {
+    "run_right": {
      "frames": [
-      78,
-      79,
       80,
       81,
       82,
-      83
-     ],
-     "fps": 13,
-     "loop": true
-    },
-    "run_left": {
-     "frames": [
+      83,
       84,
       85,
       86,
-      87,
-      88,
-      89
+      87
      ],
-     "fps": 13,
+     "fps": 16,
      "loop": true
     },
-    "run_downleft": {
+    "run_upright": {
      "frames": [
+      88,
+      89,
       90,
       91,
       92,
@@ -183,165 +143,221 @@
       94,
       95
      ],
-     "fps": 13,
+     "fps": 16,
      "loop": true
     },
-    "bite_down": {
+    "run_up": {
      "frames": [
       96,
       97,
       98,
-      99
+      99,
+      100,
+      101,
+      102,
+      103
+     ],
+     "fps": 16,
+     "loop": true
+    },
+    "run_upleft": {
+     "frames": [
+      104,
+      105,
+      106,
+      107,
+      108,
+      109,
+      110,
+      111
+     ],
+     "fps": 16,
+     "loop": true
+    },
+    "run_left": {
+     "frames": [
+      112,
+      113,
+      114,
+      115,
+      116,
+      117,
+      118,
+      119
+     ],
+     "fps": 16,
+     "loop": true
+    },
+    "run_downleft": {
+     "frames": [
+      120,
+      121,
+      122,
+      123,
+      124,
+      125,
+      126,
+      127
+     ],
+     "fps": 16,
+     "loop": true
+    },
+    "bite_down": {
+     "frames": [
+      128,
+      129,
+      130,
+      131
      ],
      "fps": 14,
      "loop": false
     },
     "bite_downright": {
      "frames": [
-      102,
-      103,
-      104,
-      105
+      136,
+      137,
+      138,
+      139
      ],
      "fps": 14,
      "loop": false
     },
     "bite_right": {
      "frames": [
-      108,
-      109,
-      110,
-      111
+      144,
+      145,
+      146,
+      147
      ],
      "fps": 14,
      "loop": false
     },
     "bite_upright": {
      "frames": [
-      114,
-      115,
-      116,
-      117
+      152,
+      153,
+      154,
+      155
      ],
      "fps": 14,
      "loop": false
     },
     "bite_up": {
      "frames": [
-      120,
-      121,
-      122,
-      123
+      160,
+      161,
+      162,
+      163
      ],
      "fps": 14,
      "loop": false
     },
     "bite_upleft": {
      "frames": [
-      126,
-      127,
-      128,
-      129
+      168,
+      169,
+      170,
+      171
      ],
      "fps": 14,
      "loop": false
     },
     "bite_left": {
      "frames": [
-      132,
-      133,
-      134,
-      135
+      176,
+      177,
+      178,
+      179
      ],
      "fps": 14,
      "loop": false
     },
     "bite_downleft": {
      "frames": [
-      138,
-      139,
-      140,
-      141
+      184,
+      185,
+      186,
+      187
      ],
      "fps": 14,
      "loop": false
     },
     "howl_down": {
      "frames": [
-      144,
-      145,
-      146,
-      147
+      192,
+      193,
+      194,
+      195
      ],
      "fps": 8,
      "loop": false
     },
     "howl_downright": {
      "frames": [
-      150,
-      151,
-      152,
-      153
+      200,
+      201,
+      202,
+      203
      ],
      "fps": 8,
      "loop": false
     },
     "howl_right": {
      "frames": [
-      156,
-      157,
-      158,
-      159
+      208,
+      209,
+      210,
+      211
      ],
      "fps": 8,
      "loop": false
     },
     "howl_upright": {
      "frames": [
-      162,
-      163,
-      164,
-      165
+      216,
+      217,
+      218,
+      219
      ],
      "fps": 8,
      "loop": false
     },
     "howl_up": {
      "frames": [
-      168,
-      169,
-      170,
-      171
+      224,
+      225,
+      226,
+      227
      ],
      "fps": 8,
      "loop": false
     },
     "howl_upleft": {
      "frames": [
-      174,
-      175,
-      176,
-      177
+      232,
+      233,
+      234,
+      235
      ],
      "fps": 8,
      "loop": false
     },
     "howl_left": {
      "frames": [
-      180,
-      181,
-      182,
-      183
+      240,
+      241,
+      242,
+      243
      ],
      "fps": 8,
      "loop": false
     },
     "howl_downleft": {
      "frames": [
-      186,
-      187,
-      188,
-      189
+      248,
+      249,
+      250,
+      251
      ],
      "fps": 8,
      "loop": false

@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-21",
+  "patch": 366,
+  "title": "Easier paths through the forests",
+  "changes": [
+    "Trees now only block their trunk, not a whole square: you round them smoothly and slip between trees that only touch at a corner.",
+    "Deep in the Whispering Woods and the Thornwood, many trunks are slim enough to squeeze past, so winding ways open through the thick forest.",
+    "Clicking to walk through a forest takes a much more direct route, and a click right beside a trunk walks you there."
+  ]
+}

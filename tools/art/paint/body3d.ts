@@ -38,6 +38,11 @@ export interface Rig3 {
   moving: number; wave: number; blink: boolean;
   /** a weapon swing built in 3D (body.ts swing3Of): the arc, and where on it this frame is */
   swing?: Swing3;
+  /** a melee weapon carried at the ready while running (Murat 2026-11-21): "up" blade raised by the shoulder, "fwd" a spear's point forward */
+  carry?: "up" | "fwd";
+  /** a hero sheet: its kit and found gear are drawn as overlays of these same poses, so no arm may move for an item
+   * (a shield): the off arm swings free at a run and never takes a two-handed grip */
+  hero?: boolean;
 }
 
 // ---- materials: ramps built from a single colour with the house hue shift (cool shadows, warm lights) ---------
@@ -129,7 +134,7 @@ interface Built { prims: Prim[]; eyes: V3[]; eyeCol: number; handNear: V3; handF
  * of ground at the speed where the feet do not slide (the client scales the animation to the hero's real speed).
  */
 export const RUN_STANCE = 0.32, RUN_A = 5.6;
-function runJoints(ph: number, f: P, s: P, hips: V3[], nearS0: V3, farS0: V3, head0: V3, lean: number, shield = false) {
+function runJoints(ph: number, f: P, s: P, hips: V3[], nearS0: V3, farS0: V3, head0: V3, lean: number, shield: boolean | "hero" = false, carry?: "up" | "fwd") {
   const fw = (p: V3, k: number, up = 0): V3 => [p[0] + f[0] * k, p[1] + f[1] * k, p[2] + up];
   const nearS = fw(nearS0, lean, -0.3), farS = fw(farS0, lean, -0.3), head = fw(head0, lean * 1.25, -0.35);
   const t0 = (((ph / (2 * Math.PI)) % 1) + 1) % 1;
@@ -169,9 +174,23 @@ function runJoints(ph: number, f: P, s: P, hips: V3[], nearS0: V3, farS0: V3, he
     return [E, Hd];
   };
   const c = Math.cos(2 * Math.PI * t0);
-  // a shield arm stays up in front as a guard instead of pumping
-  const [nearE, nearH] = arm(nearS, -c, 0.6, 1), [farE, farH] = shield ? arm(farS, 0.35 + c * 0.15, 1, -1) : arm(farS, c, 0.85, -1);
-  return { feet, knees, nearS, farS, head, nearE, nearH, farE, farH };
+  const W = (a: number, si: number, up: number): V3 => [f[0] * a + s[0] * si, f[1] * a + s[1] * si, up];
+  const reach = (S: V3, a: number, si: number, up: number, pole: V3) => ik3(S, [S[0] + W(a, si, up)[0], S[1] + W(a, si, up)[1], S[2] + up], 3.9, 3.7, pole);
+  let [nearE, nearH] = arm(nearS, -c, 0.6, 1);
+  // a shield is held close in at the side, elbow bent, swinging only a little with the stride (Murat 2026-11-21:
+  // held out in front as a guard it looked unnatural); it stays where the walk carries it, just tucked higher
+  // A hero's off arm always runs this way (a shield worn on it is an overlay of the same pose), only pumping a bit more
+  const [farE, farH] = shield === true ? reach(farS, 0.15 + 0.35 * c, -0.35, -5.0 + 0.25 * Math.abs(c), W(-1, -0.6, -0.6))
+    : shield === "hero" ? reach(farS, 0.3 + 0.9 * c, -0.35, -5.0 + 0.4 * Math.max(0, c), W(-1, -0.6, -0.6)) : arm(farS, c, 0.85, -1);
+  // a melee weapon swings with its arm like any running arm, but stays gripped: the blade angled forward and up
+  // from the fist instead of hanging at the hip (Murat 2026-11-21: "still wield their equipment"); a spear points forward
+  let blade: V3 | undefined;
+  if (carry) {
+    [nearE, nearH] = reach(nearS, 1.15 - 1.0 * c, 0.8, -4.7 + 0.45 * c, W(-0.8, 1, -0.8));
+    const b = carry === "fwd" ? W(0.85, 0.1, 0.5) : W(0.62 - 0.1 * c, 0.15, 0.72 + 0.12 * c), n = Math.hypot(...b);
+    blade = [b[0] / n, b[1] / n, b[2] / n];
+  }
+  return { feet, knees, nearS, farS, head, nearE, nearH, farE, farH, blade };
 }
 
 // ---- weapon swings in 3D -----------------------------------------------------------------------------------------
@@ -238,6 +257,12 @@ function ik3(a: V3, b: V3, l1: number, l2: number, pole: V3): [V3, V3] {
   const pl = Math.hypot(px, py, pz) || 1; px /= pl; py /= pl; pz /= pl;
   const x = (l1 * l1 - l2 * l2 + D * D) / (2 * D), h = Math.sqrt(Math.max(0, l1 * l1 - x * x));
   return [[a[0] + ux * x + px * h, a[1] + uy * x + py * h, a[2] + uz * x + pz * h], end];
+}
+/** A carried blade on screen, for the painter (same shape as a swing's, without a trail). */
+function carryBlade(h: V3, bl: V3, chestD: number): SwingOut {
+  const scr = (p: V3): P => [p[0], 29 - (p[1] * SIN + p[2] * COS)];
+  const a = scr(h), b = scr([h[0] + bl[0], h[1] + bl[1], h[2] + bl[2]]);
+  return { ang: Math.atan2(b[1] - a[1], b[0] - a[0]) * 180 / Math.PI, behind: h[1] > chestD + 0.8, trail: [], k: clamp(Math.hypot(bl[0], bl[1] * SIN + bl[2] * COS), 0.4, 1) };
 }
 function swingJoints(sw: Swing3, f: P, s: P, hips: V3[], feet0: V3[], nearS0: V3, farS0: V3, head0: V3, shield = false) {
   const W = (v: B3): V3 => [f[0] * v[0] + s[0] * v[1], f[1] * v[0] + s[1] * v[1], v[2]];
@@ -309,15 +334,17 @@ export function build3D(L: Look, w: Dress3D, r: Rig3): Built {
   let feet = [0, 1].map((i) => { const ft = r.feet[i]; const d = footD[i]; return [ft[0], d, Math.max(0.9, (29 - ft[1]) / COS - (r.dir === "right" ? 0 : d * 0.25))] as V3; });
   let knees = [0, 1].map((i) => { const k = lift(r.knees[i], (hipD[i] + footD[i]) / 2 + dep(0.9, 0)); return k; });
   let head = lift([r.head[0], r.head[1] + 0.7], dep(0.2, 0));
+  let carryOut: SwingOut | undefined;
   if (r.run && r.phase !== undefined && !atk) {
     // a real run in 3D, the same for every facing (Murat 2026-11-19: "running, not shuffling")
-    const J = runJoints(r.phase, f, s, hips, nearS, farS, head, r.dir === "right" ? 0.5 : 1.3, !!L.shield && L.shield.style !== "book");
+    const J = runJoints(r.phase, f, s, hips, nearS, farS, head, r.dir === "right" ? 0.5 : 1.3, r.hero ? "hero" : !!L.shield && L.shield.style !== "book", r.carry);
     ({ feet, knees, nearS, farS, head, nearE, nearH, farE, farH } = J);
+    if (J.blade) carryOut = carryBlade(nearH, J.blade, (nearS[1] + farS[1]) / 2);
   }
   let swingOut: SwingOut | undefined;
   if (r.swing && atk) {
     // a full-body weapon swing in 3D (Murat 2026-11-19: "a proper swing ... think in 3D, then isometric")
-    const J = swingJoints(r.swing, f, s, hips, feet, nearS, farS, head, !!L.shield && L.shield.style !== "book");
+    const J = swingJoints(r.swing, f, s, hips, feet, nearS, farS, head, !!r.hero || (!!L.shield && L.shield.style !== "book"));
     ({ feet, knees, nearS, farS, head, nearE, nearH, farE, farH } = J);
     swingOut = J.out;
   }
@@ -585,7 +612,7 @@ export function build3D(L: Look, w: Dress3D, r: Rig3): Built {
       P.push(custom(cb[0], cb[1], (x, y, z) => collarD(x, y, z, 0.3) + 0.05, lin, 0.1));
     }
   }
-  return { prims: P, eyes, eyeCol: L.eyeGlow ?? L.eye ?? 0x1a1418, handNear: nearH, handFar: farH, swing: swingOut };
+  return { prims: P, eyes, eyeCol: L.eyeGlow ?? L.eye ?? 0x1a1418, handNear: nearH, handFar: farH, swing: swingOut ?? carryOut };
 }
 
 

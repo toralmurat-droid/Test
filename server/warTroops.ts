@@ -25,6 +25,7 @@ import type { HoldTier } from "../shared/war/holdTiers";
 import { RENOWN_RANKS, rankOf } from "../shared/war/renown";
 import { TERRITORIES } from "../shared/war/territories";
 import { columnLead, parseTroop, roleOf, TROOP_ROLE, troopLevel, troopStats, troopName, troopStance, troopWeapon, WAR_TROOPS, type TroopRole, type TroopStance } from "../shared/war/troops";
+import { HOLD_FALL } from "../shared/war/holdFall";
 import { bowRange, called, chargeBreak, giveUpStep, newCharge, roleVs, shotClear, shunned, wallPost, type Call, type Charge, type GiveUp } from "../shared/war/troopRoles";
 import type { WarView } from "../shared/war/view";
 import { rallyRenown, targetsOf } from "../shared/war/rules";
@@ -178,9 +179,34 @@ export class WarTroops {
   hit(heroId: string, m: TroopMob, id?: string, now = Date.now()) {
     const tr = parseTroop(m.weapon);
     if (!tr || this.stance(tr.clan, heroId) !== "enemy") return;
+    if (tr.part === "work") { if (id) this.rally(id, m, tr.clan, heroId, now); return; } // (a Hold's work stands still: its soldiers answer)
     m.target = heroId;
     const f = id && tr.role === "pike" ? this.roleCtx.fighter!(id) : undefined, g = f && this.roleCtx.ground!(id!), p = this.h.hero(heroId);
     if (f && g && p) pikeCall(this.roleCtx, m, id!, f, g, heroId, p.x, p.y, now);
+  }
+
+  /** When each work last rallied its soldiers (HOLD_FALL.rallyEveryMs). */
+  private rallied = new Map<string, number>();
+
+  /**
+   * Hero `heroId` struck work `wid` of clan `clan`'s Hold: every soldier of that clan within HOLD_FALL.rallyPx of it
+   * (patrols and the other modules' troops alike) is called onto the hero (Fighter.call: pick favours them and sees them
+   * from farther), so the garrison turns on the wrecker together. Returns who was called.
+   */
+  rally(wid: string, w: TroopMob, clan: ClanKey, heroId: string, now = Date.now()): string[] {
+    const H = HOLD_FALL, last = this.rallied.get(wid) ?? -Infinity;
+    if (now - last < H.rallyEveryMs) return [];
+    this.rallied.set(wid, now);
+    if (this.rallied.size > 512) for (const [k, at] of this.rallied) if (now - at > H.rallyEveryMs) this.rallied.delete(k);
+    const out: string[] = [];
+    for (const [oid, o] of this.h.mobsInBox(w.x, w.y, H.rallyPx)) {
+      if (oid === wid || o.kind !== "trooper" || o.dead || o.hidden || o.broken || Math.hypot(o.x - w.x, o.y - w.y) > H.rallyPx) continue;
+      const k = parseTroop(o.weapon), f = this.roleCtx.fighter!(oid);
+      if (!k || k.clan !== clan || k.object || !f) continue;
+      f.call = heroId; f.callUntil = now + H.rallyMs; f.nextPick = 0; if (f.shun === heroId) f.shunUntil = 0;
+      out.push(oid);
+    }
+    return out;
   }
 
   /** Is this one of the patrol troopers (a land's column or guards)? */

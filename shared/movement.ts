@@ -1,5 +1,5 @@
 import { InputState, inputDir, PLAYER_RADIUS, PLAYER_SPEED, TILE } from "./constants";
-import { isSolidAt as mapSolidAt } from "./map";
+import { isWalkSolidAt as mapSolidAt } from "./map";
 import { isDecorSolidAt } from "./npcs";
 import { holdWallPx } from "./war/holdWalls";
 
@@ -21,10 +21,12 @@ export function bodySolidAt(x: number, y: number): boolean {
 /** True when a hero's feet box at (x, y) overlaps a wall, water or a solid prop. */
 export function blocked(x: number, y: number): boolean {
   const r = PLAYER_RADIUS;
-  // Check feet-box corners
+  // Check feet-box corners, and the middles of its sides against the map: a round tree trunk can poke into a side
+  // between two corners (walls, stumps and props are square and at least as big as the box, the corners catch them)
   return (
     isSolidAt(x - r, y - r) || isSolidAt(x + r, y - r) ||
-    isSolidAt(x - r, y + r) || isSolidAt(x + r, y + r)
+    isSolidAt(x - r, y + r) || isSolidAt(x + r, y + r) ||
+    mapSolidAt(x - r, y) || mapSolidAt(x + r, y) || mapSolidAt(x, y - r) || mapSolidAt(x, y + r)
   );
 }
 
@@ -47,8 +49,10 @@ export function nearestFree(x: number, y: number, maxTiles = 6): { x: number; y:
   return best;
 }
 
-/** How far aside (px) a hero looks for a way round an edge it walks into: a stump's core plus the feet box. */
-const ASSIST = 13;
+/** How far aside (px) a hero looks for a way round an edge it walks into: a tree trunk's radius plus the feet box. */
+const ASSIST = 18;
+/** Turns (radians) the rounding assist in moveStep tries, nearest first. */
+const TURNS = [0.4, -0.4, 0.8, -0.8, 1.2, -1.2];
 /** Sideways shift (at most `step`) toward the nearer side where the way ahead opens up, or 0. */
 function sidestep(clearAt: (o: number) => boolean, canMove: (o: number) => boolean, step: number): number {
   for (let k = 1; k <= ASSIST; k++) {
@@ -71,6 +75,7 @@ export function moveStep(x: number, y: number, input: InputState, dtSec: number,
   // Point-and-click walks at its exact angle (only while a key direction says it is walking at all)
   const v = (dx || dy) ? inputDir(input) : undefined;
   if (v) [dx, dy] = v;
+  const x0 = x, y0 = y;
   const nx = x + dx * speed * dtSec;
   const ny = y + dy * speed * dtSec;
   // Resolve axes separately so players slide along walls
@@ -85,5 +90,16 @@ export function moveStep(x: number, y: number, input: InputState, dtSec: number,
   const step = speed * dtSec;
   if (bx && Math.abs(dy) < 0.4 * Math.abs(dx)) y += sidestep((o) => !blocked(nx, y + o) && !blocked(x, y + o), (o) => !blocked(x, y + o), step);
   else if (by && Math.abs(dx) < 0.4 * Math.abs(dy)) x += sidestep((o) => !blocked(x + o, ny) && !blocked(x + o, y), (o) => !blocked(x + o, y), step);
+  // Rounding assist (any angle): still held up (less than half a step made), try the step turned a little either way,
+  // so a hero glides round a trunk and into the gap between two trees touching corner to corner
+  if ((bx || by) && (x - x0) * dx + (y - y0) * dy < 0.5 * step) {
+    let best = (x - x0) * dx + (y - y0) * dy, bx2 = x, by2 = y;
+    for (const a of TURNS) {
+      const c = Math.cos(a), s = Math.sin(a), rx = dx * c - dy * s, ry = dx * s + dy * c;
+      const tx = x0 + rx * step, ty = y0 + ry * step, prog = (tx - x0) * dx + (ty - y0) * dy;
+      if (prog > best + 1e-9 && !blocked(tx, ty)) { best = prog; bx2 = tx; by2 = ty; }
+    }
+    x = bx2; y = by2;
+  }
   return { x, y, moving: dx !== 0 || dy !== 0 };
 }

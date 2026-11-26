@@ -44,6 +44,8 @@ interface Shot {
   /** text laid over the shot */
   text?: string;
   textAt?: "top" | "center";
+  /** "voice": every line the same middle size, like a creator's caption (default "title": big first line) */
+  textStyle?: "title" | "voice";
   /** darken the frame (end card) */
   dim?: boolean;
 }
@@ -58,13 +60,15 @@ async function textCards(browser: any, reel: Reel, dir: string) {
     .box{position:absolute;left:70px;right:70px;text-align:center;color:#f1d9a0;font-family:T;font-size:84px;line-height:1.15;
       text-shadow:0 6px 0 #1a0f08,6px 0 0 #1a0f08,-6px 0 0 #1a0f08,0 -6px 0 #1a0f08,6px 6px 0 #1a0f08,-6px 6px 0 #1a0f08,6px -6px 0 #1a0f08,-6px -6px 0 #1a0f08}
     .box small{display:block;font-family:X;font-size:52px;color:#e8e0cc;margin-top:24px}
+    .voice{font-size:62px;line-height:1.3}
     .top{top:300px}.center{top:50%;transform:translateY(-50%)}`;
   const page = await browser.newPage({ viewport: { width: OW, height: OH } });
   for (const [i, s] of reel.shots.entries()) {
     if (!s.text) continue;
     const [head, ...rest] = s.text.split("\n");
     const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;");
-    await page.setContent(`<style>${css}</style><div class="box ${s.textAt ?? "top"}">${esc(head)}${rest.length ? `<small>${rest.map(esc).join("<br>")}</small>` : ""}</div>`);
+    const body = s.textStyle === "voice" ? [head, ...rest].map(esc).join("<br>") : `${esc(head)}${rest.length ? `<small>${rest.map(esc).join("<br>")}</small>` : ""}`;
+    await page.setContent(`<style>${css}</style><div class="box ${s.textAt ?? "top"} ${s.textStyle ?? ""}">${body}</div>`);
     await page.evaluate(() => (document as any).fonts.ready);
     await page.screenshot({ path: path.join(dir, `text${i}.png`), omitBackground: true });
   }
@@ -77,7 +81,7 @@ async function session(browser: any, SLOW: number, shots: [number, Shot][], dir:
   const saves = mkdtempSync(path.join(tmpdir(), "reel-saves-"));
   const server = spawn("node", ["-r", path.join(ROOT, "tools/skill-clips/slowtime.cjs"), "server-dist/index.cjs"], {
     cwd: ROOT,
-    env: { ...process.env, NODE_ENV: "production", PORT: String(PORT), SLOW: String(SLOW), SKILL_CAPTURE: "1", SAVE_FILE: path.join(saves, "saves.json"), IDEAS_FILE: path.join(saves, "ideas.json"), DATABASE_URL: "" },
+    env: { ...process.env, NODE_ENV: "production", PORT: String(PORT), SLOW: String(SLOW), SKILL_CAPTURE: "1", DAY_TIME: first.time === "dusk" ? "0.685" : first.time ?? "day", SAVE_FILE: path.join(saves, "saves.json"), IDEAS_FILE: path.join(saves, "ideas.json"), DATABASE_URL: "" },
     stdio: ["ignore", "ignore", "inherit"],
   });
   const real = (ms: number) => ms / SLOW;
@@ -259,7 +263,6 @@ async function measureFps(browser: any, dir: string): Promise<number> {
     const txt = path.join(dir, `text${i}.png`);
     const dur = s.ms / 1000, fade = Math.min(0.25, dur / 4);
     let vf = `[0:v]scale=${OW}:${OH}:flags=neighbor${s.dim ? ",eq=brightness=-0.08:saturation=0.8" : ""},format=yuva420p`;
-    vf += i === reel.shots.length - 1 ? `,fade=t=out:st=${(dur - 0.5).toFixed(2)}:d=0.5` : "";
     const args = ["-y", "-loglevel", "error", "-framerate", String(FPS), "-i", path.join(dir, `f${i}`, "%04d.png")];
     if (existsSync(txt)) {
       args.push("-loop", "1", "-framerate", String(FPS), "-i", txt);
@@ -275,7 +278,7 @@ async function measureFps(browser: any, dir: string): Promise<number> {
   const mp4 = path.join(out, "reel.mp4");
   const music = reel.music ? path.join(ROOT, "client/public/assets/music", reel.music) : "";
   const args = ["-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", list];
-  if (music) args.push("-ss", String(reel.musicStart ?? 0), "-i", music, "-filter_complex", `[1:a]afade=t=in:st=0:d=0.3,afade=t=out:st=${(total - 1.5).toFixed(2)}:d=1.5,aresample=48000[a]`, "-map", "0:v", "-map", "[a]", "-c:a", "aac", "-b:a", "192k", "-ar", "48000");
+  if (music) args.push("-ss", String(reel.musicStart ?? 0), "-i", music, "-filter_complex", `[1:a]afade=t=in:st=0:d=0.3,aresample=48000[a]`, "-map", "0:v", "-map", "[a]", "-c:a", "aac", "-b:a", "192k", "-ar", "48000");
   args.push("-t", total.toFixed(3), "-c:v", "libx264", "-preset", "slow", "-crf", "18", "-profile:v", "high", "-pix_fmt", "yuv420p", "-r", String(FPS), "-movflags", "+faststart", mp4);
   execFileSync("ffmpeg", args);
   execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-ss", "1", "-i", mp4, "-frames:v", "1", "-q:v", "3", path.join(out, "cover.jpg")]);
