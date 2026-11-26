@@ -10,6 +10,7 @@
  * the camera, Z = height above the ground. The camera looks 30 degrees down: screen up V = D*sin30 + Z*cos30.
  */
 import { shade } from "../canvas";
+import { glint, light3, LIGHT, rampStep, sunAt } from "./light3d";
 import type { HeadGear, Look, TorsoKind } from "./look";
 
 type V3 = [number, number, number];
@@ -1048,10 +1049,6 @@ function triDist(p: V3, a: V3, b: V3, c: V3): number {
 }
 
 // ---- ray casting ------------------------------------------------------------------------------------------------
-const LIGHT: V3 = (() => { const v: V3 = [-0.55, -0.45, 0.72]; const l = Math.hypot(...v); return [v[0] / l, v[1] / l, v[2] / l]; })();
-const VIEW: V3 = [0, -COS, SIN]; // toward the camera
-const HALF: V3 = (() => { const v: V3 = [LIGHT[0] + VIEW[0], LIGHT[1] + VIEW[1], LIGHT[2] + VIEW[2]]; const l = Math.hypot(...v); return [v[0] / l, v[1] / l, v[2] / l]; })();
-const BAYER = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
 function hash3(x: number, y: number, z: number) { let h = (x * 374761393 + y * 668265263 + z * 1274126177) | 0; h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
 
 function scene(ps: Prim[], x: number, y: number, z: number, want: { m: Mat | null; tag: number } | null): number {
@@ -1136,15 +1133,15 @@ export function render3D(model: Built, fr: number | Frame3): Ray3Out {
       let nz = scene(ps2, x, y, z + e, null) - scene(ps2, x, y, z - e, null);
       const nl = Math.hypot(nx, ny, nz) || 1; nx /= nl; ny /= nl; nz /= nl;
       const ao = clamp(scene(ps2, x + nx * 1.3, y + ny * 1.3, z + nz * 1.3, null) / 1.3);
-      const dif = Math.max(0, nx * LIGHT[0] + ny * LIGHT[1] + nz * LIGHT[2]);
-      const sky = 0.5 + 0.5 * nz;
-      let v = (0.06 + dif * 0.74 + sky * 0.2) * (0.55 + 0.45 * ao);
-      if (m.spec) v += Math.pow(Math.max(0, nx * HALF[0] + ny * HALF[1] + nz * HALF[2]), 18) * m.spec * 0.9;
-      if (m.grain) v += (hash3(Math.round(x * 3), Math.round(y * 3), Math.round(z * 3)) - 0.5) * m.grain;
+      // self-shadow looks at every part (an arm's shade falls on the body even when the arm is off this ray). Monsters
+      // only: hero gear sheets are diffs against the bare hero, and a hat's shade on the body would leak into them.
+      const sun = m.glow || !monster ? 1 : sunAt((qx, qy, qz) => scene(ps, qx, qy, qz, null), [x + nx * 0.2, y + ny * 0.2, z + nz * 0.2], LIGHT);
+      const nn: V3 = [nx, ny, nz];
+      let v = light3(nn, ao, sun);
+      if (m.spec) v += glint(nn, 18) * m.spec * 0.9 * (0.3 + 0.7 * sun);
+      if (m.grain) v += (hash3(Math.round(x * 1.6), Math.round(y * 1.6), Math.round(z * 1.6)) - 0.5) * m.grain * 0.7;
       if (m.glow) v = Math.max(v, 0.62);
-      const n = m.ramp.length;
-      const bay = (BAYER[j & 3][i & 3] + 0.5) / 16 - 0.5;
-      const li = clamp(Math.floor(clamp(v) * n + bay * 0.6), 0, n - 1);
+      const li = rampStep(v, m.ramp.length, i, j);
       const c = m.ramp[li], a = (j * W + i) * 4;
       rgba[a] = (c >> 16) & 255; rgba[a + 1] = (c >> 8) & 255; rgba[a + 2] = c & 255; rgba[a + 3] = 255;
       tag[j * W + i] = want.tag; depth[j * W + i] = t;

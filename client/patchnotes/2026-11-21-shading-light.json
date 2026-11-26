@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-21",
+  "pr": 587,
+  "title": "Better light on heroes and monsters",
+  "changes": [
+    "Heroes and monsters are lit more like the rest of the world: clear lit and shadow sides from the same upper-left light as the village props.",
+    "On monsters, arms, hoods, shields and horns now cast real shade onto the body, and folds stay dark without greying the whole figure.",
+    "Shading is made of clean pixel clusters instead of speckled noise, and dark creatures keep a faint edge of light so they stay readable at night."
+  ]
+}

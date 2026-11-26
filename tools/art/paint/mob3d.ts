@@ -7,6 +7,7 @@
  * The result is ordinary pixel art in the old sheet format, baked at build time: the game pays nothing extra.
  */
 import { shade } from "../canvas";
+import { glint, light3, LIGHT, rampStep, sunAt, VIEW } from "./light3d";
 
 export type V3 = [number, number, number];
 const clamp = (v: number, a = 0, b = 1) => (v < a ? a : v > b ? b : v);
@@ -140,10 +141,6 @@ export interface Model {
   lift?: number;
 }
 
-const LIGHT: V3 = (() => { const v: V3 = [-0.55, -0.45, 0.72]; const l = Math.hypot(...v); return [v[0] / l, v[1] / l, v[2] / l]; })();
-const VIEW: V3 = [0, -COS, SIN];
-const HALF: V3 = (() => { const v: V3 = [LIGHT[0] + VIEW[0], LIGHT[1] + VIEW[1], LIGHT[2] + VIEW[2]]; const l = Math.hypot(...v); return [v[0] / l, v[1] / l, v[2] / l]; })();
-const BAYER = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
 /** Facings of the mob sheets (left = flipped right): yaw of the model's forward axis in the world. */
 export const YAW = { down: -Math.PI / 2, up: Math.PI / 2, right: 0 } as const;
 
@@ -203,18 +200,17 @@ export function renderMob(model: Model, yaw: number, w: number, h: number, oy: n
     const l = Math.hypot(nx, ny, nz) || 1;
     return [nx / l, ny / l, nz / l];
   };
+  const Lm: V3 = [LIGHT[0] * cy + LIGHT[1] * sy, -LIGHT[0] * sy + LIGHT[1] * cy, LIGHT[2]]; // the light in model space
   const shadeAt = (ps: Prim[], m: Mat, p: V3, i: number, j: number, inside = false): { li: number; nw: V3 } => {
     const n = norm(ps, p), nw = rotN(n);
     const ao = clamp(scene(ps, p[0] + n[0] * 1.1, p[1] + n[1] * 1.1, p[2] + n[2] * 1.1, null) / 1.1);
-    const dif = Math.max(0, nw[0] * LIGHT[0] + nw[1] * LIGHT[1] + nw[2] * LIGHT[2]);
-    const sky = 0.5 + 0.5 * nw[2];
-    let v = (0.03 + dif * 0.72 + sky * 0.15) * (0.45 + 0.55 * ao);
-    if (m.spec && !inside) v += Math.pow(Math.max(0, nw[0] * HALF[0] + nw[1] * HALF[1] + nw[2] * HALF[2]), m.shine) * m.spec;
-    if (m.grain) v += (hash3(Math.round(p[0] * 2.2), Math.round(p[1] * 2.2), Math.round(p[2] * 2.2)) - 0.5) * m.grain;
+    const sun = inside || m.emit >= 0.5 ? 1 : sunAt((x, y, z) => scene(ps, x, y, z, null), [p[0] + n[0] * 0.2, p[1] + n[1] * 0.2, p[2] + n[2] * 0.2], Lm);
+    let v = light3(nw, ao, sun);
+    if (m.spec && !inside) v += glint(nw, m.shine) * m.spec * (0.3 + 0.7 * sun);
+    if (m.grain) v += (hash3(Math.round(p[0] * 1.3), Math.round(p[1] * 1.3), Math.round(p[2] * 1.3)) - 0.5) * m.grain * 0.7;
     if (m.jelly && !inside) v += m.jelly * 0.22 * (1 - Math.abs(nw[0] * VIEW[0] + nw[1] * VIEW[1] + nw[2] * VIEW[2])); // light through the thin rim
     if (m.emit) v = Math.max(v, m.emit + (v - m.emit) * 0.4);
-    const N = m.ramp.length, bay = (BAYER[j & 3][i & 3] + 0.5) / 16 - 0.5;
-    return { li: clamp(Math.floor(clamp(v) * N + bay * 0.6), 0, N - 1), nw };
+    return { li: rampStep(v, m.ramp.length, i, j), nw };
   };
   const put = (a: number, c: number) => { body[a * 4] = (c >> 16) & 255; body[a * 4 + 1] = (c >> 8) & 255; body[a * 4 + 2] = c & 255; body[a * 4 + 3] = 255; };
   for (let j = 0; j < th; j++) {
